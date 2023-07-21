@@ -32,6 +32,7 @@ set(SRCS
   AtFRIBHDFUnpacker.cxx
   AtROOTUnpacker.cxx
   AtGRAWUnpacker.cxx
+  AtV2745Unpacker.cxx
 
   GETDecoder2/GETDecoder2.cxx
   GETDecoder2/GETFrameInfo.cxx
