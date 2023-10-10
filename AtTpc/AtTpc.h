@@ -79,6 +79,7 @@ public:
 
    /** From FairModule **/
    virtual void ConstructGeometry() override;
+   virtual void ConstructOpGeometry() override;
    virtual Bool_t CheckIfSensitive(std::string name) override;
 
    AtMCPoint *

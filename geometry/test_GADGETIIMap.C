@@ -3,10 +3,10 @@ void test_GADGETIIMap()
 
    gSystem->Load("libAtTpcMap.so");
    AtMap *gadget = new AtGadgetIIMap();
-   gadget->GenerateAtTpc();
-   gadget->SetGUIMode();
+   gadget->GeneratePadPlane();
+   // gadget->SetGUIMode();
 
-   TH2Poly *padplane = gadget->GetAtTpcPlane();
+   TH2Poly *padplane = gadget->GetPadPlane();
 
    for (auto i = 0; i < 20; ++i) {
 
@@ -14,5 +14,7 @@ void test_GADGETIIMap()
       std::cout << " Bin : " << bin << "\n";
    }
 
-   gPad->Update();
+   // gPad->Update();
+
+   padplane->Draw();
 }

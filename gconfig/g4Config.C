@@ -36,8 +36,8 @@ void Config()
    /// When more than one options are selected, they should be separated with '+'
    /// character: eg. stepLimit+specialCuts.
 
-   TG4RunConfiguration *runConfiguration =
-      new TG4RunConfiguration("geomRoot", "QGSP_FTFP_BERT", "stepLimiter+specialCuts+specialControls+stackPopper");
+   TG4RunConfiguration *runConfiguration = new TG4RunConfiguration(
+      "geomRoot", "FTFP_BERT_EMZ+optical", "stepLimiter+specialCuts+specialControls+stackPopper");
 
    /*TG4RunConfiguration* runConfiguration
     = new TG4RunConfiguration("geomRoot", "QGSP_BERT_HP_EMY", "stepLimiter+specialCuts+specialControls");*/

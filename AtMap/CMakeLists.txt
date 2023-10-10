@@ -18,6 +18,7 @@ AtTpcMap.cxx
 AtTpcProtoMap.cxx
 AtGadgetIIMap.cxx
 AtSpecMATMap.cxx
+AtOTPCMap.cxx
 )
 
 Set(DEPENDENCIES
