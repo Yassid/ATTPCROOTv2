@@ -9,11 +9,11 @@ void test_OTPCMap()
 
    for (auto i = 0; i < 20; ++i) {
 
-      Int_t bin = padplane->Fill(i + 0.5, -i - 0.5, i * 100);
+      Int_t bin = padplane->Fill(i + 0.5, i - 0.5, i * 100);
       std::cout << " Bin : " << bin << "\n";
    }
 
-   TArc *arc = new TArc(0.0, 0.0, 25.0);
+   TArc *arc = new TArc(0.0, 0.0, 125.0);
    arc->SetLineColor(kRed);
    arc->SetLineWidth(4);
    arc->SetFillStyle(0);

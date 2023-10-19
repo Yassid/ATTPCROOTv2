@@ -23,11 +23,11 @@ using XYPoint = ROOT::Math::XYPoint;
 
 AtOTPCMap::AtOTPCMap() : AtMap()
 {
-   AtPadCoord.resize(boost::extents[1024][4][2]);
+   AtPadCoord.resize(boost::extents[10240][4][2]);
    std::fill(AtPadCoord.data(), AtPadCoord.data() + AtPadCoord.num_elements(), 0);
    std::cout << " OTPC Map initialized " << std::endl;
    std::cout << " OTPC Pad Coordinates container initialized " << std::endl;
-   fNumberPads = 1012;
+   fNumberPads = 2813;
 }
 
 AtOTPCMap::~AtOTPCMap() = default;
@@ -41,10 +41,11 @@ void AtOTPCMap::GeneratePadPlane()
       return;
    }
 
-   Float_t pad_size = 2.0;      // mm
+   Float_t pad_size = 4.0;      // mm
    Float_t pad_spacing = 0.001; // mm
 
-   std::vector<int> pads_per_row{12, 12, 12, 11, 11, 10, 10, 9, 8, 7, 6, 3};
+   std::vector<int> pads_per_row{30, 30, 30, 30, 30, 30, 29, 29, 29, 29, 27, 27, 27, 27, 25,
+                                 25, 25, 25, 22, 22, 20, 20, 19, 19, 17, 17, 13, 13, 10, 7};
 
    int pad_num = 0;
 

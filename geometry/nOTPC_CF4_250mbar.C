@@ -204,7 +204,8 @@ TGeoVolume *create_detector()
    // gGeoMan->GetVolume(geoVersion)->AddNode(drift_volume,1, new TGeoTranslation(0,0,drift_length/2));
    drift_volume->SetLineColor(kCyan);
    gGeoMan->GetVolume(geoVersion)
-      ->AddNode(drift_volume, 1, new TGeoCombiTrans(0, 0, 0.0, new TGeoRotation("drift_volume", 0, tpc_rot, 0)));
+      ->AddNode(drift_volume, 1,
+                new TGeoCombiTrans(0, 0, active_volume_halflength, new TGeoRotation("drift_volume", 0, tpc_rot, 0)));
    drift_volume->SetTransparency(80);
 
    double fieldcage_innerradius = active_volume_radius;
@@ -215,16 +216,17 @@ TGeoVolume *create_detector()
       gGeoManager->MakeTube("field_cage", Epoxymat, active_volume_radius, fieldcage_outerradius, fieldcage_halflength);
    field_cage->SetLineColor(kOrange + 2);
    gGeoMan->GetVolume(geoVersion)
-      ->AddNode(field_cage, 2, new TGeoCombiTrans(0.0, 0.0, 0.0, new TGeoRotation("field_cage", 0, tpc_rot, 0)));
+      ->AddNode(field_cage, 2,
+                new TGeoCombiTrans(0.0, 0.0, active_volume_halflength, new TGeoRotation("field_cage", 0, tpc_rot, 0)));
    field_cage->SetTransparency(35);
 
-   TGeoVolume *moderator = gGeoManager->MakeTube("drift_volume_moderator", ModMat, 0, active_volume_radius, 50.0);
+   /*TGeoVolume *moderator = gGeoManager->MakeTube("drift_volume_moderator", ModMat, 0, active_volume_radius, 50.0);
 
    moderator->SetLineColor(kGray);
    moderator->SetTransparency(80);
    gGeoMan->GetVolume(geoVersion)
       ->AddNode(moderator, 3, new TGeoCombiTrans(0, 0, 100.0, new TGeoRotation("moderator", 0, tpc_rot, 0)));
-   drift_volume->SetTransparency(80);
+   drift_volume->SetTransparency(80);*/
 
    return drift_volume;
 }

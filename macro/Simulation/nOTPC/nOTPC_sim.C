@@ -1,4 +1,4 @@
-void nOTPC_sim(Int_t nEvents = 100, TString mcEngine = "TGeant4")
+void nOTPC_sim(Int_t nEvents = 1000, TString mcEngine = "TGeant4")
 {
 
    TString dir = getenv("VMCWORKDIR");
@@ -72,10 +72,10 @@ void nOTPC_sim(Int_t nEvents = 100, TString mcEngine = "TGeant4")
    Double_t NomEnergy = 30;
 
    auto boxGen = new FairBoxGenerator(1000020040, 1);
-   boxGen->SetXYZ(0, 0, -100.);
-   boxGen->SetThetaRange(0., 3.);
+   boxGen->SetXYZ(0, 0, 0.);
+   boxGen->SetThetaRange(15, 15.);
    boxGen->SetPhiRange(0., 360.);
-   boxGen->SetEkinRange(0.005486, 0.005486); // range GeV
+   boxGen->SetEkinRange(0.005486 * 3, 0.005486 * 3); // range GeV
 
    primGen->AddGenerator(boxGen);
 
