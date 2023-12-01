@@ -1,5 +1,5 @@
-/home/software_dev/data/tests/run_372/dig_21247_prova.bin
-/home/software_dev/data/tests/run_372/dig_22642_prova.bin
-/home/software_dev/data/tests/run_372/dig_22643_prova.bin
-/home/software_dev/data/tests/run_372/dig_22645_prova.bin
-/home/software_dev/data/tests/run_372/dig_22644_prova.bin
+/media/yassid/EXTERNAL_USB/NUMEN_Analysis_tracker/Raw_data/run_372/dig_21247_prova.bin
+/media/yassid/EXTERNAL_USB/NUMEN_Analysis_tracker/Raw_data/run_372/dig_22642_prova.bin
+/media/yassid/EXTERNAL_USB/NUMEN_Analysis_tracker/Raw_data/run_372/dig_22643_prova.bin
+/media/yassid/EXTERNAL_USB/NUMEN_Analysis_tracker/Raw_data/run_372/dig_22645_prova.bin
+/media/yassid/EXTERNAL_USB/NUMEN_Analysis_tracker/Raw_data/run_372/dig_22644_prova.bin

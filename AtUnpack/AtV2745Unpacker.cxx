@@ -3,6 +3,7 @@
 #include "AtMap.h"
 #include "AtPad.h"
 #include "AtPadBase.h" // for AtPadBase
+#include "AtPadV2745.h"
 #include "AtPadValue.h"
 #include "AtRawEvent.h"
 #include "AtTpcMap.h"
@@ -68,7 +69,7 @@ void AtV2745Unpacker::ProcessFile(dataidpair *datawithid)
    data = (struct data *)block;
 
    std::lock_guard<std::mutex> lk(fRawEventMutex);
-   LOG(info) << dataid << "  " << (UShort_t)(data->Channel) << " " << (ULong64_t)(data->Coarse_Time_micros * 1.0E6)
+   LOG(info) << dataid << "  " << (UShort_t)(data->Channel) << " " << (ULong64_t)(data->Coarse_Time_micros * us_to_ps)
              << "  " << (UShort_t)(data->Energy) << "   "
              << "i"
              << "\n";
@@ -76,9 +77,23 @@ void AtV2745Unpacker::ProcessFile(dataidpair *datawithid)
 
 AtPad *AtV2745Unpacker::createPad(const struct data &block)
 {
-   auto channel = (UShort_t)(block.Channel);
-   auto pad = fRawEvent->AddAuxPad(std::to_string(channel)).first;
-   pad->AddAugment("Channel", std::make_unique<AtPadValue>(channel));
+
+   AtV2745Block v2745_block;
+   v2745_block.channel = (UShort_t)(block.Channel);
+   v2745_block.charge = (UShort_t)(block.Energy);
+   v2745_block.time_ps =
+      (ULong64_t)(us_to_ps * block.Coarse_Time_micros) + ULong64_t((Double_t)(block.Fine_Time_int) * fineTS_to_ps);
+   v2745_block.coarse_time_int = block.Coarse_Time_micros;
+   v2745_block.fine_time_int = (UShort_t)(block.Fine_Time_int);
+   auto LoPFlags0 = (UInt_t)(block.LoPFlags);
+   auto HiPFlags0 = (UInt_t)(block.HiPFlags);
+   v2745_block.flags = LoPFlags0 << 16;
+   v2745_block.flags += HiPFlags0;
+
+   // TODO BoardID, row, column
+
+   auto pad = fRawEvent->AddAuxPad(std::to_string(v2745_block.channel)).first;
+   pad->AddAugment("Block", std::make_unique<AtPadV2745>(v2745_block));
    return pad;
 }
 
@@ -110,9 +125,16 @@ void AtV2745Unpacker::ProcessInputFile()
    while (dataFileWithPath.ReadLine(listFile)) {
       auto id = GetBoardID(dataFileWithPath.Data());
 
-      LOG(info) << " Added file : " << dataFileWithPath << " for board ID " << id << "\n";
+      LOG(info) << " Adding file : " << dataFileWithPath << " for board ID " << id << "\n";
 
       std::ifstream dataFile(dataFileWithPath.Data(), std::ios::binary);
+
+      if (dataFile.fail()) {
+         std::cerr << " File not found. Exiting... "
+                   << "\n";
+         std::exit(0);
+      }
+
       std::unique_ptr<dataidpair> datanid_ptr = std::make_unique<dataidpair>(std::make_pair(std::move(dataFile), id));
       fBinaryDataFiles.push_back(std::move(datanid_ptr));
       ++numFiles;

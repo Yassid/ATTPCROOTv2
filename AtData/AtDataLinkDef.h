@@ -6,6 +6,7 @@
 #pragma link off all functions;
 
 #pragma link C++ struct AtPadReference + ;
+#pragma link C++ struct AtV2745Block + ;
 #pragma link C++ struct AtElectronicReference + ;
 
 #pragma link C++ class AtPadBase + ;
@@ -15,6 +16,7 @@
 #pragma link C++ class AtPadArray + ;
 #pragma link C++ class AtPadValue + ;
 #pragma link C++ class AtPulserInfo + ;
+#pragma link C++ class AtPadV2745 + ;
 
 #pragma link C++ class AtBaseEvent + ;
 #pragma link C++ class AtRawEvent + ;

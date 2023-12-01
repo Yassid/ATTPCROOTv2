@@ -54,6 +54,9 @@ private:
    datanID fBinaryDataFiles;
    Long64_t fNumBlocks; // Number of blocks from V2745 to unpack
 
+   const Double_t us_to_ps = 1.0e6;               // Conversion factor micros -> ps
+   const Double_t fineTS_to_ps = 8000.0 / 1024.0; // Conversion factor fine timestamp -> ps (8 ns over 1024 bins)
+
    void ProcessInputFile();
    Int_t GetBoardID(std::string fileName);
 

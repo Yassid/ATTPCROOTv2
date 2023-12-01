@@ -25,6 +25,7 @@ set(SRCS
   AtPadValue.cxx
   AtPulserInfo.cxx
   AtPadReference.cxx
+  AtPadV2745.cxx
 
   AtBaseEvent.cxx
   AtRawEvent.cxx
