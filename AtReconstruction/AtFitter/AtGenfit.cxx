@@ -43,6 +43,19 @@
 #include <iostream>
 #include <tuple>
 #include <utility>
+#include <KalmanFitStatus.h>          // for KalmanFitStatus
+#include <Math/Vector3D.h>            // for DisplacementVector3D
+#include <Math/Vector3Dfwd.h>         // for XYZVector
+#include <Track.h>                    // for Track
+#include <ext/alloc_traits.h>         // for __alloc_traits<>::value_type
+#include <cmath>                     // for sqrt
+#include <cstddef>                    // for size_t
+#include <exception>                  // for exception
+#include <iterator>                   // for back_insert_iterator, back_inse...
+#include "AtFormat.h"                 // for cNORMAL, cYELLOW, cRED, cGREEN
+#include "AtHit.h"                    // for AtHit::XYZPoint, AtHit
+#include "AtKinematics.h"             // for AtKinematics
+#include "AtTrackTransformer.h"       // for AtTrackTransformer
 
 using XYZPoint = ROOT::Math::XYZPoint;
 
@@ -326,12 +339,12 @@ std::vector<std::unique_ptr<AtFittedTrack>> AtFITTER::AtGenfit::ProcessTracks(st
          AtTrack *trA = *(itA);
          std::cout << " Processing track : " << trA->GetTrackID() << "\n";
 
-         auto itB = std::copy_if(itA + 1, candTrackPool.end(), std::back_inserter(candToMergePool),
+         std::copy_if(itA + 1, candTrackPool.end(), std::back_inserter(candToMergePool),
                                  [&trA, this](AtTrack *track) { return CompareTracks(trA, track); });
 
          if (candToMergePool.size() > 0) { // Merge if matches are found
             candToMergePool.push_back(trA);
-            Bool_t merged = MergeTracks(&candToMergePool, &mergedTrackPool, fEnableSingleVertexTrack, fClusterRadius,
+            MergeTracks(&candToMergePool, &mergedTrackPool, fEnableSingleVertexTrack, fClusterRadius,
                                         fClusterSize); // NB: Reclustering is also performed here
 
          } else {
@@ -354,7 +367,7 @@ std::vector<std::unique_ptr<AtFittedTrack>> AtFITTER::AtGenfit::ProcessTracks(st
    std::cout << "    Tracks prepared. Proceeding with fits. " << cNORMAL << "\n";
    std::cout << "\n";
 
-   eventMultiplicity = mergedTrackPool.size();
+   
 
    // Fitting track candidates
    for (auto track : mergedTrackPool) {
@@ -374,7 +387,7 @@ std::vector<std::unique_ptr<AtFittedTrack>> AtFITTER::AtGenfit::ProcessTracks(st
       std::cout << "      Merged track - Theta : " << theta * TMath::RadToDeg() << " Phi : " << phi * TMath::RadToDeg()
                 << "\n";
 
-      auto hitClusterArray = track.GetHitClusterArray();
+      auto hitClusts = track.GetHitClusterArray();
       AtHitCluster iniCluster;
       Double_t zIniCal = 0;
       ROOT::Math::XYZPoint iniPos;
@@ -393,11 +406,11 @@ std::vector<std::unique_ptr<AtFittedTrack>> AtFITTER::AtGenfit::ProcessTracks(st
 
       if (thetaConv < 90.0) {
          iniCluster =
-            hitClusterArray->back(); // NB: Use back because We do not reverse the cluster vector like in AtGenfit!
+            hitClusts->back(); // NB: Use back because We do not reverse the cluster vector like in AtGenfit!
          iniPos = iniCluster.GetPosition();
          zIniCal = 1000.0 - iniPos.Z();
       } else if (thetaConv > 90.0) {
-         iniCluster = hitClusterArray->front();
+         iniCluster = hitClusts->front();
          iniPos = iniCluster.GetPosition();
          zIniCal = iniPos.Z();
       }
@@ -423,14 +436,14 @@ std::vector<std::unique_ptr<AtFittedTrack>> AtFITTER::AtGenfit::ProcessTracks(st
       std::vector<Int_t> pdgCandFit;
       if (thetaConv > 90) {
 
-         switch (fExpNum) {
+         switch (fExpNum) { // NOLINT
          case e20020: pdgCandFit.push_back(1000010020); break;
          case e20009: pdgCandFit.push_back(2212); break;
          }
 
       } else if (thetaConv < 90 && thetaConv > 10) {
 
-         switch (fExpNum) {
+         switch (fExpNum) { 
          case e20020: pdgCandFit.push_back(1000020040); break;
          case e20009: pdgCandFit.push_back(1000010020); break;
          case a1954: pdgCandFit.push_back(2212); break;
@@ -442,7 +455,7 @@ std::vector<std::unique_ptr<AtFittedTrack>> AtFITTER::AtGenfit::ProcessTracks(st
 
       } else if (thetaConv < 10) {
 
-         switch (fExpNum) {
+         switch (fExpNum) { // NOLINT
          case e20009:
             pdgCandFit.push_back(1000040100);
             break;
@@ -509,13 +522,13 @@ std::vector<std::unique_ptr<AtFittedTrack>> AtFITTER::AtGenfit::ProcessTracks(st
          // Reset variables assigned in fitting
          pVal = -1;
          trackLength = 0;
-         xiniFitXtr = -1000.0;
-         yiniFitXtr = -1000.0;
-         ziniFitXtr = -1E4;
-         xiniFit = -1000.0;
+         xiniFitXtr = -1000.0; // NOLINT
+         yiniFitXtr = -1000.0; // NOLINT
+         ziniFitXtr = -1E4; // NOLINT
+         xiniFit = -1000.0; 
          yiniFit = -1000.0;
          ziniFit = -1E4;
-         POCAXtr = -1000.0;
+         POCAXtr = -1000.0; // NOLINT
          EFit = -10.0;
          EFitXtr = -10.0;
          AFit = 0.0;
@@ -528,7 +541,7 @@ std::vector<std::unique_ptr<AtFittedTrack>> AtFITTER::AtGenfit::ProcessTracks(st
          Double_t dedx = 0;
 
          // Energy loss from ADC
-         auto hitClusterArray = track.GetHitClusterArray();
+         auto hitClusterArray = track.GetHitClusterArray(); // NOLINT
          std::size_t cnt = 0;
 
          if (thetaConv < 90) {
@@ -628,13 +641,13 @@ std::vector<std::unique_ptr<AtFittedTrack>> AtFITTER::AtGenfit::ProcessTracks(st
 
                         if (distPOCA < POCA) {
                            POCA = distPOCA;
-                           POCAXtr = distPOCA;
+                           POCAXtr = distPOCA; // NOLINT
                            mom_ext = mom_ext_buff;
                            pos_ext = pos_ext_buff;
                            distXtr = iStep * stepXtr;
                            ++minCnt;
                            minCntExt = 0;
-                           nSteps = iStep;
+                           nSteps = iStep; // NOLINT
                         } else {
 
                            break;
@@ -650,9 +663,9 @@ std::vector<std::unique_ptr<AtFittedTrack>> AtFITTER::AtGenfit::ProcessTracks(st
 
                   // mom_res = mom_ext;
                   // pos_res = pos_ext;
-                  xiniFitXtr = pos_ext.X();
-                  yiniFitXtr = pos_ext.Y();
-                  ziniFitXtr = pos_ext.Z();
+                  xiniFitXtr = pos_ext.X(); // NOLINT
+                  yiniFitXtr = pos_ext.Y(); // NOLINT
+                  ziniFitXtr = pos_ext.Z(); // NOLINT
 
                   // std::cout << cYELLOW << " Extrapolation: Total Momentum : " << mom_ext.Mag()
                   // << " - Position : " << pos_ext.X() << "  " << pos_ext.Y() << "  " << pos_ext.Z()
@@ -1019,7 +1032,7 @@ std::vector<AtTrack *> AtFITTER::AtGenfit::FindSingleTracks(std::vector<AtTrack 
          std::cout << " Track A Phi : " << trA->GetGeoPhi() * TMath::RadToDeg()
                    << " - Track B : " << trB->GetGeoPhi() * TMath::RadToDeg() << "\n";
 
-         Double_t centerDistance = CenterDistance(trA, trB);
+         Double_t centerDistance = CenterDistance(trA, trB); // NOLINT
       }
    }
 
@@ -1098,8 +1111,8 @@ Bool_t AtFITTER::AtGenfit::CompareTracks(AtTrack *trA, AtTrack *trB)
                endClusterB = trB->GetHitClusterArray()->front();
                iniA = 1000.0 - iniClusterA.GetPosition().Z();
                iniB = 1000.0 - iniClusterB.GetPosition().Z();
-               endA = 1000.0 - endClusterA.GetPosition().Z();
-               endB = 1000.0 - endClusterB.GetPosition().Z();
+               endA = 1000.0 - endClusterA.GetPosition().Z(); // NOLINT
+               endB = 1000.0 - endClusterB.GetPosition().Z(); // NOLINT
 
             } else if (trA->GetGeoTheta() * TMath::RadToDeg() > 90) {
                iniClusterA = trA->GetHitClusterArray()->front();
@@ -1108,8 +1121,8 @@ Bool_t AtFITTER::AtGenfit::CompareTracks(AtTrack *trA, AtTrack *trB)
                endClusterB = trB->GetHitClusterArray()->back();
                iniA = iniClusterA.GetPosition().Z();
                iniB = iniClusterB.GetPosition().Z();
-               endA = endClusterA.GetPosition().Z();
-               endB = endClusterB.GetPosition().Z();
+               endA = endClusterA.GetPosition().Z(); // NOLINT
+               endB = endClusterB.GetPosition().Z(); // NOLINT
             }
             // std::cout<<" Track A Ini : "<<iniA<<"\n";
             // std::cout<<" Track B Ini : "<<iniB<<"\n";
@@ -1117,12 +1130,12 @@ Bool_t AtFITTER::AtGenfit::CompareTracks(AtTrack *trA, AtTrack *trB)
             // std::cout<<" Track B End : "<<endB<<"\n";
 
             if (iniA < iniB) {
-               dist = std::sqrt((endClusterA.GetPosition() - iniClusterB.GetPosition()).Mag2());
-               distR = TMath::Sqrt(TMath::Power(endClusterA.GetPosition().X() - iniClusterB.GetPosition().X(), 2) +
+               dist = std::sqrt((endClusterA.GetPosition() - iniClusterB.GetPosition()).Mag2()); // NOLINT
+               distR = TMath::Sqrt(TMath::Power(endClusterA.GetPosition().X() - iniClusterB.GetPosition().X(), 2) + // NOLINT
                                    TMath::Power(endClusterA.GetPosition().Y() - iniClusterB.GetPosition().Y(), 2));
             } else {
-               dist = std::sqrt((endClusterB.GetPosition() - iniClusterA.GetPosition()).Mag2());
-               distR = TMath::Sqrt(TMath::Power(iniClusterA.GetPosition().X() - endClusterB.GetPosition().X(), 2) +
+               dist = std::sqrt((endClusterB.GetPosition() - iniClusterA.GetPosition()).Mag2()); // NOLINT
+               distR = TMath::Sqrt(TMath::Power(iniClusterA.GetPosition().X() - endClusterB.GetPosition().X(), 2) + // NOLINT
                                    TMath::Power(iniClusterA.GetPosition().Y() - endClusterB.GetPosition().Y(), 2));
             }
 
@@ -1149,12 +1162,12 @@ Bool_t AtFITTER::AtGenfit::CheckOverlap(AtTrack *trA, AtTrack *trB)
 
    Int_t iTBMatch = 0;
 
-   for (auto itA = hitArrayA.begin(); itA != hitArrayA.end(); ++itA) {
+   for (auto & itA : hitArrayA) {
 
       std::vector<Int_t> iTBMatches;
       auto itB = hitArrayB.begin();
       while ((itB = std::find_if(itB, hitArrayB.end(), [&itA](std::unique_ptr<AtHit> &hitB) {
-                 return hitB->GetTimeStamp() == (*itA)->GetTimeStamp();
+                 return hitB->GetTimeStamp() == itA->GetTimeStamp();
               })) != hitArrayB.end()) {
 
          iTBMatches.push_back(std::distance(hitArrayB.begin(), itB));

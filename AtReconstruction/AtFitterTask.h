@@ -8,41 +8,22 @@
 #ifndef ATFITTERTASK
 #define ATFITTERTASK
 
-#include "AtFormat.h"
-#include "AtKinematics.h"
-#include "AtParsers.h"
+
 
 #include <FairTask.h>
 
 #include <Rtypes.h>
-#include "EventDisplay.h"
-#include "Exception.h"
-#include "FairLogger.h"
-#include "FairRootManager.h"
-#include "FairRun.h"
-#include "FairRunAna.h"
 
 #include <cstddef>
-#include <string>
-#include <vector>
-
+#include <TClonesArray.h>  // for TClonesArray
+#include <TString.h>       // for TString
+#include <memory>          // for unique_ptr
+#include "AtFitter.h"      // for AtFitter
 class AtDigiPar;
-class FairLogger;
 class TBuffer;
 class TClass;
-class TClonesArray;
 class TMemberInspector;
-class AtTrack;
 
-namespace AtTools {
-class AtTrackTransformer;
-} // namespace AtTools
-namespace AtFITTER {
-class AtFitter;
-} // namespace AtFITTER
-namespace genfit {
-class Track;
-} // namespace genfit
 
 class AtFitterTask : public FairTask {
 

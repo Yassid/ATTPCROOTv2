@@ -6,7 +6,9 @@
 #include "AtTrack.h"
 
 #include <Rtypes.h>
-#include <TNamed.h>
+#include <FairLogger.h>     // for Logger, LOG
+#include <memory>           // for unique_ptr
+#include <utility>          // for move
 #include <TVector3.h>
 
 #include <vector>

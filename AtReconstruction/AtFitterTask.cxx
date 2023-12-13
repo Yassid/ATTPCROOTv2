@@ -2,8 +2,6 @@
 
 #include "AtDigiPar.h"
 #include "AtFitter.h"
-#include "AtGenfit.h"
-#include "AtParsers.h"
 #include "AtPatternEvent.h"
 #include "AtTrackingEvent.h"
 
@@ -15,13 +13,14 @@
 
 #include <TClonesArray.h>
 #include <TObject.h>
-#include <Track.h>
 
-#include <algorithm>
+
 #include <iostream>
 
+#include <utility>            // for move
+#include <vector>             // for vector
+#include "AtFittedTrack.h"    // for AtFittedTrack
 class AtTrack;
-class AtFittedTrack;
 
 ClassImp(AtFitterTask);
 

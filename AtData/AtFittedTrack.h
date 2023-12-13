@@ -1,19 +1,14 @@
 #ifndef ATFITTEDTRACK_H
 #define ATFITTEDTRACK_H
 
-#include <Math/Point3D.h>
-#include <Math/Point3Dfwd.h>
+
 #include <Math/Vector3D.h>
 #include <Math/Vector3Dfwd.h>
 #include <Rtypes.h>
-#include <TMath.h>
 #include <TObject.h>
 
-#include <algorithm>
-#include <iostream>
-#include <memory>
-#include <utility>
-#include <vector>
+#include <string>              // for string
+#include <tuple>               // for tuple
 
 class TBuffer;
 class TClass;
@@ -64,7 +59,7 @@ private:
    Int_t fTrackPoints{0};
 
 public:
-   AtFittedTrack();
+   AtFittedTrack() = default;
    ~AtFittedTrack() = default;
 
    inline void SetTrackID(Int_t trackid) { fTrackID = trackid; }

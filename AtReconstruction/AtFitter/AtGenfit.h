@@ -1,57 +1,29 @@
 #ifndef ATGENFIT_H
 #define ATGENFIT_H
 
-#include "AtFitter.h"
-#include "AtFormat.h"
-#include "AtKinematics.h"
-#include "AtParsers.h"
-
-#include <Rtypes.h>
-#include <TMath.h> // for DegToRad
-#include <Track.h>
-
-#include "AbsFitterInfo.h"
-#include "AbsKalmanFitter.h"
-#include "ConstField.h"
-#include "DAF.h"
-#include "EventDisplay.h"
-#include "Exception.h"
-#include "FairLogger.h"
-#include "FairRootManager.h"
-#include "FairRun.h"
-#include "FairRunAna.h"
-#include "FieldManager.h"
-#include "FitStatus.h"
-#include "KalmanFitStatus.h"
-#include "KalmanFitterInfo.h"
-#include "KalmanFitterRefTrack.h"
-#include "MaterialEffects.h"
-#include "MeasuredStateOnPlane.h"
-#include "MeasurementFactory.h"
-#include "MeasurementOnPlane.h"
-#include "MeasurementProducer.h"
-
-#include <memory>
-#include <string>
-#include <utility>
-#include <vector>
-
-class AtHitCluster;
-class AtTrack;
-class TBuffer;
-class TClass;
-class TClonesArray;
-class TMemberInspector;
-
-namespace genfit {
-class AbsKalmanFitter;
-class AbsMeasurement;
-class AtSpacepointMeasurement;
-template <class hit_T, class measurement_T>
-class MeasurementProducer;
-template <class measurement_T>
-class MeasurementFactory;
-} // namespace genfit
+#include <Rtypes.h>    // for Int_t, Float_t, Bool_t, Double_t, THashConsist...
+#include <TMath.h>     // for DegToRad
+#include <memory>      // for shared_ptr, unique_ptr
+#include <string>      // for string
+#include <utility>     // for move
+#include <vector>      // for vector
+#include "AtFitter.h"  // for AtFitter
+#include "AtParsers.h" // IWYU pragma: keep
+class AtFittedTrack;
+class AtHitCluster;  // lines 39-39
+class AtTrack;  // lines 40-40
+class TBuffer;  // lines 41-41
+class TClass;  // lines 42-42
+class TClonesArray;  // lines 43-43
+class TMemberInspector;  // lines 44-44
+namespace AtTools { class AtKinematics; }
+namespace AtTools { class AtTrackTransformer; }
+namespace genfit { class AbsKalmanFitter; }  // lines 47-47
+namespace genfit { class AbsMeasurement; }  // lines 48-48
+namespace genfit { class AtSpacepointMeasurement; }  // lines 49-49
+namespace genfit { class Track; }
+namespace genfit { template <class hit_T, class measurement_T> class MeasurementProducer; }  // lines 50-51
+namespace genfit { template <class measurement_T> class MeasurementFactory; }  // lines 52-53
 
 namespace AtFITTER {
 
@@ -77,14 +49,14 @@ private:
    Float_t fGasMediumDensity{};   //<! Medium density in mg/cm3
    Double_t fPhiOrientation{0};   //<! Phi angle orientation for fit
    std::string fIonName;          //<! Name of ion to fit
-   Bool_t fNoMaterialEffects;     //<! Disable material effects in GENFIT
+   Bool_t fNoMaterialEffects{true};     //<! Disable material effects in GENFIT
    Bool_t fEnableMerging{0};
    Bool_t fEnableSingleVertexTrack{0};
    Bool_t fEnableReclustering{0};
    Double_t fClusterSize{0};
    Double_t fClusterRadius{0};
 
-   std::vector<AtTools::IonFitInfo> *ionList;
+   std::vector<AtTools::IonFitInfo> *ionList{nullptr};
    std::unique_ptr<AtTools::AtTrackTransformer> fTrackTransformer;
    std::shared_ptr<AtTools::AtKinematics> fKinematics;
 
