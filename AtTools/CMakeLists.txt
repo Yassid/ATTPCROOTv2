@@ -18,7 +18,7 @@ set(SRCS
   AtRadialChargeModel.cxx
   AtEDistortionModel.cxx
   AtVirtualTerminal.cxx
-  AtKinematics.cxx
+  
 
   AtFormat.cxx
   AtSpline.cxx

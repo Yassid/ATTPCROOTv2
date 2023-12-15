@@ -42,4 +42,24 @@
 #pragma link C++ function AtPatterns::CreatePattern;
 
 #pragma link C++ class MCFitter::AtMCResult + ;
+
+#pragma link C++ namespace AtTools;
+#pragma link C++ namespace AtTools::Kinematics;
+#pragma link C++ namespace AtTools::pdg;
+
+#pragma link C++ function AtTools::Kinematics::GetGamma;
+#pragma link C++ function AtTools::Kinematics::GetVelocity;
+#pragma link C++ function AtTools::Kinematics::GetBeta;
+#pragma link C++ function AtTools::Kinematics::GetRelMom;
+#pragma link C++ function AtTools::Kinematics::AtoE;
+#pragma link C++ function AtTools::Kinematics::EtoA;
+
+#pragma link C++ function AtTools::pdg::IsPseudoParticle;
+#pragma link C++ function AtTools::pdg::IsIon;
+#pragma link C++ function AtTools::pdg::PdgToIon;
+#pragma link C++ function AtTools::pdg::PdgToZ;
+#pragma link C++ function AtTools::pdg::PdgToA;
+#pragma link C++ function AtTools::pdg::IsProton;
+#pragma link C++ function AtTools::pdg::IsNeutron;
+
 #endif

@@ -36,7 +36,7 @@ public:
    {
       fFittedTrackArray.push_back(std::move(ptr));
       if (fFittedTrackArray.back()->GetTrackID() == -1)
-         fFittedTrackArray.back()->SetTrackID(fFittedTrackArray.size() - 1);
+         fFittedTrackArray.back()->SetUniqueID(fFittedTrackArray.size() - 1);
       LOG(debug) << "Adding Track with ID " << fFittedTrackArray.back()->GetTrackID() << " to event " << fEventID;
 
       return *(fFittedTrackArray.back());

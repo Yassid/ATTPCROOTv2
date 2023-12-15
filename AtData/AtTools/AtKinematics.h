@@ -75,6 +75,19 @@ double AtoE(double Amu);
 double EtoA(double mass);
 
 template <class Vector>
+double GetGamma(Vector p)
+{
+   return std::sqrt(p.P()/p.M() + 1);
+}
+
+template <class Vector>
+double GetKineticEnergy(Vector p)
+{
+   return (GetGamma(p)-1)*p.M();
+
+}
+
+template <class Vector>
 ROOT::Math::PxPyPzEVector Get4Vector(Vector mom, double m)
 {
    return {mom.X(), mom.Y(), mom.Z(), std::sqrt(mom.Mag2() + m * m)};

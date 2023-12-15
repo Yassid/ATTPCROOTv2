@@ -54,6 +54,9 @@ set(SRCS
   AtPattern/AtPatternTypes.cxx
 
   AtFittedTrack.cxx
+
+  AtTools/AtKinematics.cxx
+  AtTools/AtPDGUtil.cxx
   
   )
 
@@ -61,5 +64,5 @@ generate_target_and_root_library(${LIBRARY_NAME}
   LINKDEF ${LINKDEF}
   SRCS ${SRCS}
   DEPS_PUBLIC ${DEPENDENCIES}
-  INCLUDE_DIR ${CMAKE_SOURCE_DIR}/AtData/AtPattern
+  INCLUDE_DIR ${CMAKE_SOURCE_DIR}/AtData/AtPattern ${CMAKE_SOURCE_DIR}/AtData/AtTools
   )
