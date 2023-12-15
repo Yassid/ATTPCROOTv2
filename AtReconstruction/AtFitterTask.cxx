@@ -1,6 +1,7 @@
 #include "AtFitterTask.h"
 
 #include "AtDigiPar.h"
+#include "AtFittedTrack.h" // for AtFittedTrack
 #include "AtFitter.h"
 #include "AtPatternEvent.h"
 #include "AtTrackingEvent.h"
@@ -14,12 +15,9 @@
 #include <TClonesArray.h>
 #include <TObject.h>
 
-
 #include <iostream>
-
-#include <utility>            // for move
-#include <vector>             // for vector
-#include "AtFittedTrack.h"    // for AtFittedTrack
+#include <utility> // for move
+#include <vector>  // for vector
 class AtTrack;
 
 ClassImp(AtFitterTask);
@@ -59,9 +57,9 @@ InitStatus AtFitterTask::Init()
       return kERROR;
    }
 
-      ioMan->Register(fOutputBranchName, "AtTPC", &fTrackingEventArray, fIsPersistence);
+   ioMan->Register(fOutputBranchName, "AtTPC", &fTrackingEventArray, fIsPersistence);
 
-      return kSUCCESS;
+   return kSUCCESS;
 }
 
 void AtFitterTask::SetParContainers()
@@ -105,4 +103,3 @@ void AtFitterTask::Exec(Option_t *option)
 
    ++fEventCnt;
 }
-

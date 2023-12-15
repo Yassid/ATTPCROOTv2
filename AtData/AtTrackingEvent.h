@@ -5,12 +5,13 @@
 #include "AtFittedTrack.h"
 #include "AtTrack.h"
 
+#include <FairLogger.h> // for Logger, LOG
+
 #include <Rtypes.h>
-#include <FairLogger.h>     // for Logger, LOG
-#include <memory>           // for unique_ptr
-#include <utility>          // for move
 #include <TVector3.h>
 
+#include <memory>  // for unique_ptr
+#include <utility> // for move
 #include <vector>
 
 class TBuffer;

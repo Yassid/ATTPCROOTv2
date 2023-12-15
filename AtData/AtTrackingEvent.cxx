@@ -4,7 +4,7 @@
 #include <TVector3.h>
 
 #include <algorithm>
-#include <string>      // for string
+#include <string> // for string
 
 ClassImp(AtTrackingEvent);
 

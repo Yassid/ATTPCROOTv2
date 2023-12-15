@@ -62,23 +62,21 @@ protected:
    Int_t fTrackID;      //< Track ID from pattern recognition
    Int_t fUniqueID{-1}; //< Unique ID. Set when added to AtTrackingEvent
 
-   
-   
    AtFitter::FitStats fFitStats;
 
    // Results of fitting method used
    XYZEVector fMomentum; //< 4-Momentum of track from fit (MeV)
    XYZPoint fInitialPos; //< Initial position of track in detector (mm)
-AtFitter::TrackProp fTrackProp;
+   AtFitter::TrackProp fTrackProp;
 
    // Estimates of track parameters from geometry of track
    XYZEVector fMomentumGeo; //< 4-Momentum estimate from geometry of track (MeV)
    XYZPoint fInitialPosGeo; //< Initial position of track estimated from geometry (mm)
-AtFitter::TrackPropGeo fTrackPropGeo;
+   AtFitter::TrackPropGeo fTrackPropGeo;
 
    XYZEVector fMomentumXtr; //< 4-Momentum estimate extrapolated to (0,0) (MeV)
    XYZPoint fInitialPosXtr; //< Initial position of track extrapolated to (0,0) (mm)
-AtFitter::TrackPropExtr fTrackPropExtr;
+   AtFitter::TrackPropExtr fTrackPropExtr;
    /*
      Float_t fEnergy{0};
      Float_t fTheta{0};
@@ -123,15 +121,15 @@ public:
    void SetExtr(XYZEVector vec, XYZPoint point, AtFitter::TrackPropExtr prop);
 
    const Int_t GetTrackID() { return fTrackID; }
-   const int GetID() { return fUniqueID;}
+   const int GetID() { return fUniqueID; }
    AtFitter::FitStats GetStats();
 
-   [[deprecated("Use getters for 4 momentum, 3 momentum, or energy")]]
-   const std::tuple<Float_t, Float_t, Float_t, Float_t, Float_t, Float_t, Float_t> GetEnergyAngles();
-   
-   [[deprecated("Use getters for track properties")]]
-   const std::tuple<Int_t, Float_t, Float_t, Float_t, std::string> GetTrackProperties();
+   [[deprecated("Use getters for 4 momentum, 3 momentum, or energy")]] const std::tuple<
+      Float_t, Float_t, Float_t, Float_t, Float_t, Float_t, Float_t>
+   GetEnergyAngles();
 
+   [[deprecated("Use getters for track properties")]] const std::tuple<Int_t, Float_t, Float_t, Float_t, std::string>
+   GetTrackProperties();
 
    ClassDef(AtFittedTrack, 2);
 };

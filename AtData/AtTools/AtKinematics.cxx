@@ -245,10 +245,10 @@ namespace AtTools::Kinematics {
 std::pair<double, double> GetMomFromBrho(double M, double Z, Double_t brho)
 {
 
-   const double M_Ener = AtoE(M) / 1000.0; // mass in GeV
+   const double M_Ener = AtoE(M) / 1000.0;      // mass in GeV
    Double_t p = brho * Z * (2.99792458 / 10.0); // In GeV
    Double_t E = TMath::Sqrt(TMath::Power(p, 2) + TMath::Power(M_Ener, 2)) - M_Ener;
-    return {p, E};
+   return {p, E};
 }
 /**
  * Get gamma for fragment 1 in a system decaying into two fragments with total KE

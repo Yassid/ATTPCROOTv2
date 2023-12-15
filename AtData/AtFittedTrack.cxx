@@ -1,9 +1,8 @@
 #include "AtFittedTrack.h"
-#include "AtTools/AtKinematics.h"
 
 #include <Rtypes.h>
 
-
+#include "AtTools/AtKinematics.h"
 
 ClassImp(AtFittedTrack);
 
@@ -16,7 +15,8 @@ const std::tuple<Float_t, Float_t, Float_t, Float_t, Float_t, Float_t, Float_t> 
    double fEnergyXtr = GetKineticEnergy(fMomentumXtr);
    double fEnergyPRA = GetKineticEnergy(fMomentumGeo);
 
-   return std::forward_as_tuple(fEnergy, fEnergyXtr, fMomentum.Theta(), fMomentum.Phi(), fEnergyPRA, fMomentumGeo.Theta(), fMomentumGeo.Phi());
+   return std::forward_as_tuple(fEnergy, fEnergyXtr, fMomentum.Theta(), fMomentum.Phi(), fEnergyPRA,
+                                fMomentumGeo.Theta(), fMomentumGeo.Phi());
 }
 
 AtFitter::FitStats AtFittedTrack::GetStats()
@@ -26,5 +26,6 @@ AtFitter::FitStats AtFittedTrack::GetStats()
 
 const std::tuple<Int_t, Float_t, Float_t, Float_t, std::string> AtFittedTrack::GetTrackProperties()
 {
-   return std::forward_as_tuple(fTrackPropGeo.charge, fTrackPropGeo.brho, fTrackPropGeo.eloss, fTrackPropGeo.dedx, std::to_string(fTrackProp.pdg));
+   return std::forward_as_tuple(fTrackPropGeo.charge, fTrackPropGeo.brho, fTrackPropGeo.eloss, fTrackPropGeo.dedx,
+                                std::to_string(fTrackProp.pdg));
 }

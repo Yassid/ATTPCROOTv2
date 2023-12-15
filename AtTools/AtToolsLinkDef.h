@@ -62,6 +62,4 @@
 #pragma link C++ function AtTools::GetDriftTB;
 #pragma link C++ function AtTools::SplitString;
 
-
-
 #endif

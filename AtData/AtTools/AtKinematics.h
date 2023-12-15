@@ -77,14 +77,13 @@ double EtoA(double mass);
 template <class Vector>
 double GetGamma(Vector p)
 {
-   return std::sqrt(p.P()/p.M() + 1);
+   return std::sqrt(p.P() / p.M() + 1);
 }
 
 template <class Vector>
 double GetKineticEnergy(Vector p)
 {
-   return (GetGamma(p)-1)*p.M();
-
+   return (GetGamma(p) - 1) * p.M();
 }
 
 template <class Vector>

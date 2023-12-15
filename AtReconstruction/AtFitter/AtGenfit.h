@@ -1,29 +1,49 @@
 #ifndef ATGENFIT_H
 #define ATGENFIT_H
 
-#include <Rtypes.h>    // for Int_t, Float_t, Bool_t, Double_t, THashConsist...
-#include <TMath.h>     // for DegToRad
-#include <memory>      // for shared_ptr, unique_ptr
-#include <string>      // for string
-#include <utility>     // for move
-#include <vector>      // for vector
 #include "AtFitter.h"  // for AtFitter
 #include "AtParsers.h" // IWYU pragma: keep
+
+#include <Rtypes.h> // for Int_t, Float_t, Bool_t, Double_t, THashConsist...
+#include <TMath.h>  // for DegToRad
+
+#include <memory>  // for shared_ptr, unique_ptr
+#include <string>  // for string
+#include <utility> // for move
+#include <vector>  // for vector
 class AtFittedTrack;
-class AtHitCluster;  // lines 39-39
-class AtTrack;  // lines 40-40
-class TBuffer;  // lines 41-41
-class TClass;  // lines 42-42
-class TClonesArray;  // lines 43-43
-class TMemberInspector;  // lines 44-44
-namespace AtTools { class AtKinematics; }
-namespace AtTools { class AtTrackTransformer; }
-namespace genfit { class AbsKalmanFitter; }  // lines 47-47
-namespace genfit { class AbsMeasurement; }  // lines 48-48
-namespace genfit { class AtSpacepointMeasurement; }  // lines 49-49
-namespace genfit { class Track; }
-namespace genfit { template <class hit_T, class measurement_T> class MeasurementProducer; }  // lines 50-51
-namespace genfit { template <class measurement_T> class MeasurementFactory; }  // lines 52-53
+class AtHitCluster;     // lines 39-39
+class AtTrack;          // lines 40-40
+class TBuffer;          // lines 41-41
+class TClass;           // lines 42-42
+class TClonesArray;     // lines 43-43
+class TMemberInspector; // lines 44-44
+namespace AtTools {
+class AtKinematics;
+}
+namespace AtTools {
+class AtTrackTransformer;
+}
+namespace genfit {
+class AbsKalmanFitter;
+} // namespace genfit
+namespace genfit {
+class AbsMeasurement;
+} // namespace genfit
+namespace genfit {
+class AtSpacepointMeasurement;
+} // namespace genfit
+namespace genfit {
+class Track;
+}
+namespace genfit {
+template <class hit_T, class measurement_T>
+class MeasurementProducer;
+} // namespace genfit
+namespace genfit {
+template <class measurement_T>
+class MeasurementFactory;
+} // namespace genfit
 
 namespace AtFITTER {
 
@@ -35,21 +55,21 @@ private:
    Int_t fPDGCode{2212}; //<! Particle PGD code
    Int_t fTPCDetID{0};
    Int_t fFitDirection{0};
-   Float_t fMaxBrho;              //<! Max Brho allowed in Tm
-   Float_t fMinBrho;              //<! Min Brho allowed in Tm
-   Int_t fMaxIterations;          //<! Max iterations for fitter
-   Int_t fMinIterations;          //<! Min iterations for fitter
-   Float_t fMagneticField;        //<! Constant magnetic field along Z in T
-   Float_t fMass{1.00727647};     //<! Particle mass in atomic mass unit
-   Int_t fAtomicNumber{1};        //<! Particle Atomic number Z
-   Float_t fNumFitPoints{0.90};   //<! % of processed track points for fit
-   Int_t fVerbosity{0};           //<! Fit verbosity
-   std::string fEnergyLossFile;   //<! Energy loss file
-   Bool_t fSimulationConv{false}; //<! Switch to simulation convention
-   Float_t fGasMediumDensity{};   //<! Medium density in mg/cm3
-   Double_t fPhiOrientation{0};   //<! Phi angle orientation for fit
-   std::string fIonName;          //<! Name of ion to fit
-   Bool_t fNoMaterialEffects{true};     //<! Disable material effects in GENFIT
+   Float_t fMaxBrho;                //<! Max Brho allowed in Tm
+   Float_t fMinBrho;                //<! Min Brho allowed in Tm
+   Int_t fMaxIterations;            //<! Max iterations for fitter
+   Int_t fMinIterations;            //<! Min iterations for fitter
+   Float_t fMagneticField;          //<! Constant magnetic field along Z in T
+   Float_t fMass{1.00727647};       //<! Particle mass in atomic mass unit
+   Int_t fAtomicNumber{1};          //<! Particle Atomic number Z
+   Float_t fNumFitPoints{0.90};     //<! % of processed track points for fit
+   Int_t fVerbosity{0};             //<! Fit verbosity
+   std::string fEnergyLossFile;     //<! Energy loss file
+   Bool_t fSimulationConv{false};   //<! Switch to simulation convention
+   Float_t fGasMediumDensity{};     //<! Medium density in mg/cm3
+   Double_t fPhiOrientation{0};     //<! Phi angle orientation for fit
+   std::string fIonName;            //<! Name of ion to fit
+   Bool_t fNoMaterialEffects{true}; //<! Disable material effects in GENFIT
    Bool_t fEnableMerging{0};
    Bool_t fEnableSingleVertexTrack{0};
    Bool_t fEnableReclustering{0};

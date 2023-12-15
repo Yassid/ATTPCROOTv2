@@ -8,22 +8,20 @@
 #ifndef ATFITTERTASK
 #define ATFITTERTASK
 
-
+#include "AtFitter.h" // for AtFitter
 
 #include <FairTask.h>
 
 #include <Rtypes.h>
+#include <TClonesArray.h> // for TClonesArray
+#include <TString.h>      // for TString
 
 #include <cstddef>
-#include <TClonesArray.h>  // for TClonesArray
-#include <TString.h>       // for TString
-#include <memory>          // for unique_ptr
-#include "AtFitter.h"      // for AtFitter
+#include <memory> // for unique_ptr
 class AtDigiPar;
 class TBuffer;
 class TClass;
 class TMemberInspector;
-
 
 class AtFitterTask : public FairTask {
 
@@ -39,7 +37,6 @@ public:
    virtual InitStatus Init();
    virtual void SetParContainers();
    virtual void Exec(Option_t *opt);
-
 
 private:
    TString fInputBranchName;
