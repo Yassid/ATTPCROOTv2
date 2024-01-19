@@ -17,7 +17,7 @@ std::pair<int, int> PdgToIon(int pdgc)
    return std::pair<int, int>(PdgToA(pdgc), PdgToZ(pdgc));
 }
 
-int PdgToZ(int pdgc)
+constexpr int PdgToZ(int pdgc)
 {
    if (pdgc == kProton)
       return 1;
@@ -27,7 +27,7 @@ int PdgToZ(int pdgc)
    return Z;
 }
 
-int PdgToA(int pdgc)
+constexpr int PdgToA(int pdgc)
 {
    if (pdgc == kProton || pdgc == kNeutron)
       return 1;
@@ -35,7 +35,7 @@ int PdgToA(int pdgc)
    return A;
 }
 
-int IonPdgCode(int A, int Z, int L, int I)
+constexpr int IonPdgCode(int A, int Z, int L, int I)
 {
    if (A == 1)
       if (Z == 1)
@@ -46,11 +46,11 @@ int IonPdgCode(int A, int Z, int L, int I)
    return 1000000000 + L * 100000000 + Z * 10000 + A * 10 + I;
 }
 
-bool IsProton(int pdgc)
+constexpr bool IsProton(int pdgc)
 {
    return pdgc == kProton || pdgc == IonPdgCode(1, 1);
 }
-bool IsNeutron(int pdgc)
+constexpr bool IsNeutron(int pdgc)
 {
    return pdgc == kNeutron || pdgc == IonPdgCode(1, 0);
 }

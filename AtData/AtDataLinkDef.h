@@ -59,6 +59,7 @@
 #pragma link C++ function AtTools::pdg::PdgToIon;
 #pragma link C++ function AtTools::pdg::PdgToZ;
 #pragma link C++ function AtTools::pdg::PdgToA;
+#pragma link C++ function AtTools::pdg::IonPdgCode;
 #pragma link C++ function AtTools::pdg::IsProton;
 #pragma link C++ function AtTools::pdg::IsNeutron;
 

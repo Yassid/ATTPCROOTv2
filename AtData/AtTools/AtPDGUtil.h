@@ -16,19 +16,21 @@ bool IsIon(int pdgc);
 // Note: PDG codes for nuclear targets can be computed using pdg::IonPdgCode(A,Z)
 // PDG2006 convention: 10LZZZAAAI
 std::pair<int, int> PdgToIon(int pdgc); //< Returns <A,Z>.
-int PdgToZ(int pdgc);
-int PdgToA(int pdgc);
-int IonPdgCode(int A, int Z, int L = 0, int I = 0);
+constexpr int PdgToZ(int pdgc);
+constexpr int PdgToA(int pdgc);
+constexpr int IonPdgCode(int A, int Z, int L = 0, int I = 0);
 
-bool IsProton(int pdgc);
-bool IsNeutron(int pdgc);
+constexpr bool IsProton(int pdgc);
+constexpr bool IsNeutron(int pdgc);
 
-const int kElectron = 11;
-const int kPositron = -11;
+constexpr int kElectron = 11;
+constexpr int kPositron = -11;
 
-const int kProton = 2212;
-const int kNeutron = 2112;
-const int kPdgDeuteron = 1000010020;
+constexpr int kProton = 2212;
+constexpr int kNeutron = 2112;
+constexpr int kDeuteron = 1*10000+2*10;
+constexpr int kAlpha= 2*10000+4*10;
+
 
 } // namespace pdg
 } // namespace AtTools

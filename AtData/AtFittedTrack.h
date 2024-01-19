@@ -22,19 +22,19 @@ struct FitStats {
 
    Double_t pval;    //< P-Value of fit
    Double_t chi2;    //< Chi2 of fit in forward direction
-   Double_t bchi2;   //< Chi2 of fit in backwards direction
+   Double_t bchi2;   //< Chi2 of fit in backwards direction (nan if not defined)
    Double_t ndf;     //< Degrees of freedom of fit in forward direction
-   Double_t bndf;    //< NDegrees of freedom of fit in backward direction
+   Double_t bndf;    //< NDegrees of freedom of fit in backward direction (nan if not defined)
    Bool_t converged; //< Fit converged
 };
 
 struct TrackProp {
+   Int_t charge;   //< Charge state of particle
    Int_t pdg;            //< Particle ID in PDG code
    Double_t tracklength; //< Length of track from fit (mm)
 };
 
 struct TrackPropGeo {
-   Int_t charge;   //< Charge state of particle
    Double_t brho;  //< Rigidity (nan if not defined)
    Double_t eloss; //< Average energy loss per hit
    Double_t dedx;  //< Estimation of average dedx from track
