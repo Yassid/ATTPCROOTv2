@@ -21,6 +21,7 @@ struct AtV2745Block {
    UShort_t fine_time_int;
    UShort_t board;
    UShort_t charge;
+   UShort_t energy_short; // Check!
    UInt_t flags;
    UShort_t pads;
    Double_t charge_cal;

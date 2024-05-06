@@ -63,6 +63,7 @@ set(SRCS
   AtFilter/AtFilterFPN.cxx
   AtFilter/AtSCACorrect.cxx
 
+  AtMAGNEXParsingTask.cxx
   AtPSAtask.cxx
   AtFilterTask.cxx
   AtAuxFilterTask.cxx
