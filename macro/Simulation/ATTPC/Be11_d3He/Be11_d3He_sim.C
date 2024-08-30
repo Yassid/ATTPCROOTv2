@@ -1,18 +1,34 @@
-void C12C12_decay(Int_t nEvents = 100, TString mcEngine = "TGeant4")
+
+void Be11_d3He_sim(Int_t nEvents = 100, TString mcEngine = "TGeant4")
 {
+
+   srand((unsigned)time(NULL));
+   UInt_t seed = (float)rand() / RAND_MAX * 100000;
+   gRandom->SetSeed(seed);
 
    TString dir = getenv("VMCWORKDIR");
 
+   int TMin;
+   int TMax;
+   std::ifstream ifs{"./theta.txt"};
+   ifs >> TMin >> TMax;
+   ifs.close();
+
+   Double_t thetaMin = double(10);
+   Double_t thetaMax = double(50);
+
    // Output file name
-   TString outFile = "./data/attpcsim_C12C12.root";
+   TString outFile = TString::Format("./data_angles/sim_\%d", TMin) + TString::Format("_\%d.root", TMax);
 
    // Parameter file name
-   TString parFile = "./data/attpcpar_C12C12.root";
+   TString parFile = "./data/attpcpar_in.root";
 
    // -----   Timer   --------------------------------------------------------
    TStopwatch timer;
    timer.Start();
    // ------------------------------------------------------------------------
+
+   // gSystem->Load("libAtGen.so");
 
    // -----   Create simulation run   ----------------------------------------
    FairRunSim *run = new FairRunSim();
@@ -38,7 +54,7 @@ void C12C12_decay(Int_t nEvents = 100, TString mcEngine = "TGeant4")
    run->AddModule(pipe);*/
 
    FairDetector *ATTPC = new AtTpc("ATTPC", kTRUE);
-   ATTPC->SetGeometryFileName("ATTPC_He600torr_v2.root");
+   ATTPC->SetGeometryFileName("ATTPC_C4D10_400torr.root");
    // ATTPC->SetModifyGeometry(kTRUE);
    run->AddModule(ATTPC);
 
@@ -46,33 +62,40 @@ void C12C12_decay(Int_t nEvents = 100, TString mcEngine = "TGeant4")
 
    // -----   Magnetic field   -------------------------------------------
    // Constant Field
-   AtConstField *fMagField = new AtConstField();
-   fMagField->SetField(0., 0., 0.);                       // values are in kG
-   fMagField->SetFieldRegion(-50, 50, -50, 50, -10, 230); // values are in cm
-                                                          //  (xmin,xmax,ymin,ymax,zmin,zmax)
-   run->SetField(fMagField);
+
+   /*
+    AtConstField *fMagField = new AtConstField();
+    fMagField->SetField(0., 0., 30.);                      // values are in kG
+    fMagField->SetFieldRegion(-50, 50, -50, 50, -10, 230); // values are in cm
+                                                           //  (xmin,xmax,ymin,ymax,zmin,zmax)
+    run->SetField(fMagField);
+ */
+
    // --------------------------------------------------------------------
 
    // -----   Create PrimaryGenerator   --------------------------------------
    FairPrimaryGenerator *primGen = new FairPrimaryGenerator();
 
-   // Beam Information
-   Int_t z = 6;  // Atomic number
-   Int_t a = 12; // Mass number
+   // Beam Information  11Be 25MeV/n
+   Int_t z = 4;  // Atomic number
+   Int_t a = 11; // Mass number
    Int_t q = 0;  // Charge State
    Int_t m = 1;  // Multiplicity  NOTE: Due the limitation of the TGenPhaseSpace accepting only pointers/arrays the
                  // maximum multiplicity has been set to 10 particles.
-   Double_t px = 0.000 / a; // X-Momentum / per nucleon!!!!!!
-   Double_t py = 0.000 / a; // Y-Momentum / per nucleon!!!!!!
-   Double_t pz = 1.189 / a; // Z-Momentum / per nucleon!!!!!!
+   Double_t px = 0.000 / a;      // X-Momentum / per nucleon!!!!!!
+   Double_t py = 0.000 / a;      // Y-Momentum / per nucleon!!!!!!
+   Double_t pz = 2.31971785 / a; // Z-Momentum / per nucleon!!!!!!
    Double_t BExcEner = 0.0;
-   Double_t Bmass = 12.0;
-   Double_t NomEnergy = 40.0;
+   Double_t Bmass = 11.0216611;
+   Double_t NomEnergy = 20;
 
-   AtTPCIonGenerator *ionGen = new AtTPCIonGenerator("Ion", z, a, q, m, px, py, pz, BExcEner, Bmass, NomEnergy);
-   ionGen->SetSpotRadius(0, -100, 0);
+   AtTPCIonGenerator *ionGen =
+      new AtTPCIonGenerator("Ion", z, a, q, m, px, py, pz, BExcEner, Bmass,
+                            NomEnergy); // set eloss=0.0, reaction will happen at the beam entrance point.
+   ionGen->SetSpotRadius(0, -100, 0);   // beam entrance point(maybe)
    // add the ion generator
 
+   // primGen->SetBeam(10,0,0);
    primGen->AddGenerator(ionGen);
 
    // primGen->SetBeam(1,1,0,0); //These parameters change the position of the vertex of every track
@@ -95,94 +118,55 @@ void C12C12_decay(Int_t nEvents = 100, TString mcEngine = "TGeant4")
 
    mult = 4; // Number of Nuclei involved in the reaction (Should be always 4) THIS DEFINITION IS MANDATORY (and the
              // number of particles must be the same)
-   ResEner = 40.0; // MeV
+             // ResEner = 25; // MeV
 
    // ---- Beam ----
-   Zp.push_back(z); // 40Ar TRACKID=0
+   Zp.push_back(z); // 11Be TRACKID=0
    Ap.push_back(a); //
    Qp.push_back(q);
    Pxp.push_back(px);
    Pyp.push_back(py);
    Pzp.push_back(pz);
-   Mass.push_back(12.0); // uma
+   Mass.push_back(11.0216611); // uma
    ExE.push_back(BExcEner);
 
    // ---- Target ----
-   Zp.push_back(6);  // p
-   Ap.push_back(12); //
-   Qp.push_back(0);  //
+   Zp.push_back(1); // d
+   Ap.push_back(2); //
+   Qp.push_back(0); //
    Pxp.push_back(0.0);
    Pyp.push_back(0.0);
    Pzp.push_back(0.0);
-   Mass.push_back(12.0); // uma
-   ExE.push_back(0.0);   // In MeV
+   Mass.push_back(2.014101777844); // uma
+   ExE.push_back(0.0);             // In MeV
 
    //--- Scattered -----
-   Zp.push_back(6);  //
-   Ap.push_back(12); //
+   Zp.push_back(3);  // 10Li
+   Ap.push_back(10); //
    Qp.push_back(0);
    Pxp.push_back(0.0);
    Pyp.push_back(0.0);
    Pzp.push_back(0.0);
-   Mass.push_back(12.0); // uma
-   ExE.push_back(7.5);
+   Mass.push_back(10.035483);
+   ExE.push_back(0.0);
 
    // ---- Recoil -----
-   Zp.push_back(6);  //
-   Ap.push_back(12); //
-   Qp.push_back(0);  //
+   Zp.push_back(2); // 3He
+   Ap.push_back(3); //
+   Qp.push_back(0); //
    Pxp.push_back(0.0);
    Pyp.push_back(0.0);
    Pzp.push_back(0.0);
-   Mass.push_back(12.0); // uma
-   ExE.push_back(7.5);   // In MeV
+   Mass.push_back(3.0160293219); // uma
+   ExE.push_back(0.0);           // In MeV
 
-   Double_t ThetaMinCMS = 20.0;
-   Double_t ThetaMaxCMS = 80.0;
+   Double_t ThetaMinCMS = thetaMin;
+   Double_t ThetaMaxCMS = thetaMax;
 
    AtTPC2Body *TwoBody =
       new AtTPC2Body("TwoBody", &Zp, &Ap, &Qp, mult, &Pxp, &Pyp, &Pzp, &Mass, &ExE, ResEner, ThetaMinCMS, ThetaMaxCMS);
-   TwoBody->SetSequentialDecay(kTRUE);
+
    primGen->AddGenerator(TwoBody);
-
-   Int_t zB;
-   Int_t aB;
-   Double_t massDecayB;
-   Double_t massTarget;
-
-   zB = 6; // 16O
-   aB = 12;
-   massDecayB = 12.0;
-   massTarget = 0.0;
-
-   DecayIon scatter;
-   scatter.multiplicity = 3;
-   scatter.exEnergy = 7.4;
-   scatter.trackID = 0;
-   scatter.parentMass = 12.0 * 0.931494;
-   DecayIon recoil;
-   recoil.multiplicity = 3;
-   recoil.exEnergy = 7.4;
-   recoil.trackID = 1;
-   recoil.parentMass = 12.0 * 0.931494;
-
-   for (auto i = 0; i < scatter.multiplicity; i++) {
-      scatter.z.push_back(2);
-      scatter.a.push_back(4);
-      scatter.q.push_back(0);
-      scatter.mass.push_back(4.00260325415);
-   }
-
-   for (auto i = 0; i < recoil.multiplicity; i++) {
-      recoil.z.push_back(2);
-      recoil.a.push_back(4);
-      recoil.q.push_back(0);
-      recoil.mass.push_back(4.00260325415);
-   }
-
-   AtTPCReactionDecay *decay = new AtTPCReactionDecay(scatter, recoil, zB, aB, massDecayB, massTarget);
-
-   primGen->AddGenerator(decay);
 
    run->SetGenerator(primGen);
 

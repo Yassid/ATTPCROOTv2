@@ -35,6 +35,9 @@ struct DecayIon {
    Double_t spEnergy;
    TVector3 momentum;
    Int_t trackID;
+   Double_t parentMass;
+   Int_t parentMultiplicity;
+   Int_t daughterMultiplicity;
 };
 
 class AtTPCReactionDecay : public AtReactionGenerator {
@@ -60,7 +63,8 @@ private:
    std::vector<TString> fPType;
 
    void RegisterIons(DecayIon &ion);
-   std::vector<TLorentzVector> GetDecay(DecayIon &ion);
+   std::vector<TLorentzVector> GetSimultaneousDecay(DecayIon &ion);
+   std::vector<TLorentzVector> GetSequentialDecay(DecayIon &ion);
    bool PropagateIons(std::vector<TLorentzVector>, FairPrimaryGenerator *primGen);
 
 public:
