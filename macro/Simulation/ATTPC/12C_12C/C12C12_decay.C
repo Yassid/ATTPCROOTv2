@@ -156,11 +156,13 @@ void C12C12_decay(Int_t nEvents = 100, TString mcEngine = "TGeant4")
    massTarget = 0.0;
 
    DecayIon scatter;
+   scatter.sequentialDecay = false;
    scatter.multiplicity = 3;
    scatter.exEnergy = 7.4;
    scatter.trackID = 0;
    scatter.parentMass = 12.0 * 0.931494;
    DecayIon recoil;
+   recoil.sequentialDecay = false;
    recoil.multiplicity = 3;
    recoil.exEnergy = 7.4;
    recoil.trackID = 1;
@@ -171,6 +173,7 @@ void C12C12_decay(Int_t nEvents = 100, TString mcEngine = "TGeant4")
       scatter.a.push_back(4);
       scatter.q.push_back(0);
       scatter.mass.push_back(4.00260325415);
+      scatter.decays.push_back(0);
    }
 
    for (auto i = 0; i < recoil.multiplicity; i++) {
@@ -178,6 +181,7 @@ void C12C12_decay(Int_t nEvents = 100, TString mcEngine = "TGeant4")
       recoil.a.push_back(4);
       recoil.q.push_back(0);
       recoil.mass.push_back(4.00260325415);
+      recoil.decays.push_back(0);
    }
 
    AtTPCReactionDecay *decay = new AtTPCReactionDecay(scatter, recoil, zB, aB, massDecayB, massTarget);

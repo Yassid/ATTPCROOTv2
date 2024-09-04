@@ -30,12 +30,14 @@ struct DecayIon {
    std::vector<Int_t> a;
    std::vector<Int_t> q;
    std::vector<Double_t> mass;
+   std::vector<Bool_t> decays;
    Int_t multiplicity;
    Double_t exEnergy;
    Double_t spEnergy;
    TVector3 momentum;
    Int_t trackID;
    Double_t parentMass;
+   Bool_t sequentialDecay{false};
    Int_t parentMultiplicity;
    Int_t daughterMultiplicity;
 };
@@ -57,6 +59,7 @@ private:
    Double_t fVx, fVy, fVz;
    Int_t fNumIons{0};
    Int_t fNumTracks{0};
+   Bool_t fSequentialDecay{false};
 
    std::vector<std::unique_ptr<FairIon>> fIon;
    std::vector<std::unique_ptr<FairParticle>> fParticle;
@@ -74,6 +77,8 @@ public:
    virtual ~AtTPCReactionDecay() = default;
 
    virtual Bool_t GenerateReaction(FairPrimaryGenerator *primGen) override;
+
+   void SetSequentialDecay(Bool_t seq) { fSequentialDecay = seq; }
 
    ClassDefOverride(AtTPCReactionDecay, 1)
 };

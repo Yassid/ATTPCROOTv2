@@ -36,6 +36,8 @@ AtTPCReactionDecay::AtTPCReactionDecay(DecayIon &scatter, DecayIon &recoil, Int_
 Bool_t AtTPCReactionDecay::GenerateReaction(FairPrimaryGenerator *primGen)
 {
 
+   LOG(info) << cYELLOW << " =======  AtTPCReactionDecay - Generating decay  ========= " << cNORMAL << "\n";
+
    fNumTracks = 0;
 
    fScatter.exEnergy = AtVertexPropagator::Instance()->GetScatterEx() / 1000.0;
@@ -47,8 +49,23 @@ Bool_t AtTPCReactionDecay::GenerateReaction(FairPrimaryGenerator *primGen)
    fVy = AtVertexPropagator::Instance()->GetVy();
    fVz = AtVertexPropagator::Instance()->GetVz();
 
-   auto scatterDecay = GetSimultaneousDecay(fScatter);
-   auto recoilDecay = GetSimultaneousDecay(fRecoil);
+   // auto scatterDecay = GetSimultaneousDecay(fScatter);
+   // auto recoilDecay = GetSimultaneousDecay(fRecoil);
+
+   std::vector<TLorentzVector> scatterDecay;
+   std::vector<TLorentzVector> recoilDecay;
+
+   if (fScatter.sequentialDecay) {
+      scatterDecay = GetSequentialDecay(fScatter);
+   } else {
+      scatterDecay = GetSimultaneousDecay(fScatter);
+   }
+
+   if (fRecoil.sequentialDecay) {
+      recoilDecay = GetSequentialDecay(fRecoil);
+   } else {
+      recoilDecay = GetSimultaneousDecay(fRecoil);
+   }
 
    PropagateIons(scatterDecay, primGen);
    PropagateIons(recoilDecay, primGen);
@@ -58,6 +75,8 @@ Bool_t AtTPCReactionDecay::GenerateReaction(FairPrimaryGenerator *primGen)
 
 std::vector<TLorentzVector> AtTPCReactionDecay::GetSequentialDecay(DecayIon &ion)
 {
+
+   LOG(info) << cYELLOW << "           Sequential decay. track ID : " << ion.trackID << cNORMAL << "\n";
 
    // 2 step sequential decay
    Double_t beta;
@@ -96,8 +115,9 @@ std::vector<TLorentzVector> AtTPCReactionDecay::GetSequentialDecay(DecayIon &ion
    for (auto i = 0; i < ion.parentMultiplicity; i++) {
       M_tot += ion.mass.at(i) * amu / 1000.0;
       mass[i] = ion.mass.at(i) * amu / 1000.0;
-      std::cout << ion.mass.at(i) * amu / 1000.0 << " " << M_tot << " " << fBeamMass << " " << fBeamMass - M_tot << " "
-                << ion.exEnergy << " " << sqrt(s) << " " << (sqrt(s) - M_tot) * 1000.0 << std::endl;
+      LOG(info) << cYELLOW << "           - Parent ion :  " << i << ".   " << ion.mass.at(i) * amu / 1000.0 << " "
+                << M_tot << " " << fBeamMass << " " << fBeamMass - M_tot << " " << ion.exEnergy << " " << sqrt(s) << " "
+                << (sqrt(s) - M_tot) * 1000.0 << cNORMAL << std::endl;
    }
 
    if (eventParent.SetDecay(fEnergyImpulsionLab_Total, ion.parentMultiplicity, mass)) {
@@ -105,7 +125,9 @@ std::vector<TLorentzVector> AtTPCReactionDecay::GetSequentialDecay(DecayIon &ion
 
       // NB Assume the first particle is the decaying ion daugther
       for (Int_t i = 1; i < ion.parentMultiplicity; i++) {
-         phaseSpaceMomentum.push_back(*eventParent.GetDecay(i));
+         phaseSpaceMomentum.push_back(
+            *eventParent.GetDecay(i)); // Propagate particles that won sequentially decay. This can be controlled with
+                                       // ion.decays.at(i) (Perhaps a better idea)
       }
 
       // Reset mass
@@ -115,12 +137,14 @@ std::vector<TLorentzVector> AtTPCReactionDecay::GetSequentialDecay(DecayIon &ion
 
       for (auto i = 0; i < ion.daughterMultiplicity; i++) {
          mass[i] = ion.mass.at(i + ion.parentMultiplicity) * amu / 1000.0;
+         LOG(info) << cYELLOW << "           - Daughter ion :  " << i + ion.parentMultiplicity << ".   "
+                   << ion.mass.at(i + ion.parentMultiplicity) * amu / 1000.0 << " " << cNORMAL << std::endl;
       }
 
       if (eventDaughter.SetDecay(*eventParent.GetDecay(0), ion.daughterMultiplicity, mass)) {
          eventDaughter.Generate();
          for (Int_t i = 0; i < ion.daughterMultiplicity; i++) {
-            phaseSpaceMomentum.push_back(*eventDaughter.GetDecay(i));
+            phaseSpaceMomentum.push_back(*eventDaughter.GetDecay(i)); // Same as before.
          }
       } else {
          LOG(info) << cYELLOW << "AtTPCIonDecay - Warning, kinematical conditions for daughter decay not fulfilled "
@@ -164,7 +188,8 @@ std::vector<TLorentzVector> AtTPCReactionDecay::GetSimultaneousDecay(DecayIon &i
 
    fImpulsionLab_beam = TVector3(ion.momentum.X(), ion.momentum.Y(), ion.momentum.Z());
    fEnergyImpulsionLab_beam = TLorentzVector(fImpulsionLab_beam, fBeamMass + fEnergy + ion.exEnergy);
-   fEnergyImpulsionLab_target = TLorentzVector(TVector3(0, 0, 0), fTargetMass); // NB This should be always 0 for decay
+   fEnergyImpulsionLab_target =
+      TLorentzVector(TVector3(0, 0, 0), fTargetMass); // NB: fTargetMass should be always 0 for decay
 
    fEnergyImpulsionLab_Total = fEnergyImpulsionLab_beam + fEnergyImpulsionLab_target;
 
@@ -241,9 +266,9 @@ bool AtTPCReactionDecay::PropagateIons(std::vector<TLorentzVector> phaseSpaceMom
 
       auto momentum = phaseSpaceMomentum.at(i);
 
-      std::cout << "-I- FairIonGenerator: Generating "
-                << " with mass " << thisPart->Mass() << " ions of type " << fIon.at(i)->GetName() << " (PDG code "
-                << pdgType << ")" << std::endl;
+      LOG(info) << cGREEN << "       -I- FairIonGenerator: Generating "
+                << " with mass " << thisPart->Mass() << " ions of type " << fIon.at(i + fNumTracks)->GetName()
+                << " (PDG code " << pdgType << ")" << cNORMAL << std::endl;
       // std::cout << "    Momentum(" << fPx.at(i) << ", " << fPy.at(i) << ", " << fPz.at(i)<< ") Gev from vertex (" <<
       // fVx << ", " << fVy<< ", " << fVz << ") cm" << std::endl;
 
@@ -267,6 +292,13 @@ void AtTPCReactionDecay::RegisterIons(DecayIon &ion)
    }
 
    for (Int_t i = 0; i < ion.multiplicity; ++i) {
+
+      if (ion.decays.at(i) == 1) {
+         LOG(info) << cYELLOW << "Ion " << i
+                   << " will decay and won't be registered for propagation. Mass: " << ion.mass.at(i) * amu / 1000.0
+                   << cNORMAL << std::endl;
+         continue;
+      }
 
       std::unique_ptr<FairIon> IonBuff = nullptr;
       std::unique_ptr<FairParticle> ParticleBuff = nullptr;
@@ -295,6 +327,8 @@ void AtTPCReactionDecay::RegisterIons(DecayIon &ion)
          ParticleBuff = std::make_unique<FairParticle>(2112, kNeutron);
          fPType.push_back("Neutron");
       }
+
+      // Filter out the ions that will not decay
       fIon.push_back(std::move(IonBuff));
       fParticle.push_back(std::move(ParticleBuff));
       fNumIons++;

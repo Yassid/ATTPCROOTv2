@@ -1,4 +1,4 @@
-void C12C12_decay(Int_t nEvents = 100, TString mcEngine = "TGeant4")
+void C12C12_decay_sequential(Int_t nEvents = 100, TString mcEngine = "TGeant4")
 {
 
    TString dir = getenv("VMCWORKDIR");
@@ -150,35 +150,81 @@ void C12C12_decay(Int_t nEvents = 100, TString mcEngine = "TGeant4")
    Double_t massDecayB;
    Double_t massTarget;
 
-   zB = 6; // 16O
+   zB = 6;
    aB = 12;
    massDecayB = 12.0;
    massTarget = 0.0;
 
    DecayIon scatter;
-   scatter.multiplicity = 3;
-   scatter.exEnergy = 7.4;
+   scatter.sequentialDecay = true;
+   scatter.multiplicity = 4; // Number of ions involved in the decay
+   scatter.exEnergy = 7.5;
    scatter.trackID = 0;
-   scatter.parentMass = 12.0 * 0.931494;
+   scatter.parentMass = 12.0 * 0.931494; // Mass of the scatter/recoil
+   scatter.parentMultiplicity = 2;       // Number of ions in the parent decay
+   scatter.daughterMultiplicity = 2;     // Number of ions in the daughter decay
    DecayIon recoil;
-   recoil.multiplicity = 3;
-   recoil.exEnergy = 7.4;
+   recoil.sequentialDecay = true;
+   recoil.multiplicity = 4;
+   recoil.exEnergy = 7.5;
    recoil.trackID = 1;
    recoil.parentMass = 12.0 * 0.931494;
+   recoil.parentMultiplicity = 2;
+   recoil.daughterMultiplicity = 2;
 
-   for (auto i = 0; i < scatter.multiplicity; i++) {
-      scatter.z.push_back(2);
-      scatter.a.push_back(4);
-      scatter.q.push_back(0);
-      scatter.mass.push_back(4.00260325415);
-   }
+   // Scatter Parent
+   scatter.z.push_back(2);
+   scatter.a.push_back(8);
+   scatter.q.push_back(0);
+   scatter.mass.push_back(8.00530510);
+   scatter.decays.push_back(1); // First ion on the list decays
 
-   for (auto i = 0; i < recoil.multiplicity; i++) {
-      recoil.z.push_back(2);
-      recoil.a.push_back(4);
-      recoil.q.push_back(0);
-      recoil.mass.push_back(4.00260325415);
-   }
+   scatter.z.push_back(2);
+   scatter.a.push_back(4);
+   scatter.q.push_back(0);
+   scatter.mass.push_back(4.00260325415);
+   scatter.decays.push_back(0);
+
+   // Scatter Daughter
+   scatter.z.push_back(2);
+   scatter.a.push_back(4);
+   scatter.q.push_back(0);
+   scatter.mass.push_back(4.00260325415);
+   scatter.decays.push_back(0);
+
+   scatter.z.push_back(2);
+   scatter.a.push_back(4);
+   scatter.q.push_back(0);
+   scatter.mass.push_back(4.00260325415);
+   scatter.decays.push_back(0);
+
+   ///////////////////////////////////////////////////////////////////
+
+   // Recoil Parent
+   recoil.z.push_back(2);
+   recoil.a.push_back(8);
+   recoil.q.push_back(0);
+   recoil.mass.push_back(8.00530510);
+   recoil.decays.push_back(1);
+
+   recoil.z.push_back(2);
+   recoil.a.push_back(4);
+   recoil.q.push_back(0);
+   recoil.mass.push_back(4.00260325415);
+   recoil.decays.push_back(0);
+
+   // Recoil Daughter
+   recoil.z.push_back(2);
+   recoil.a.push_back(4);
+   recoil.q.push_back(0);
+   recoil.mass.push_back(4.00260325415);
+   recoil.decays.push_back(0);
+
+   recoil.z.push_back(2);
+   recoil.a.push_back(4);
+   recoil.q.push_back(0);
+   recoil.mass.push_back(4.00260325415);
+   recoil.decays.push_back(0);
 
    AtTPCReactionDecay *decay = new AtTPCReactionDecay(scatter, recoil, zB, aB, massDecayB, massTarget);
 
