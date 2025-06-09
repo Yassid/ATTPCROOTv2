@@ -16,8 +16,6 @@
 #include "kf_util.h"
 #include "unscented_kalman_filter.h"
 
-#include <iostream>
-
 namespace kf {
 
 /// @brief Class for fitting tracks using the Unscented Kalman Filter (UKF) algorithm.
@@ -111,6 +109,7 @@ public:
    {
       // Calculate the process noise covariance matrix
       Matrix<DIM_V, DIM_V> matQ{Matrix<DIM_V, DIM_V>::Zero()};
+      matQ = m_matQ; // Use the stored process noise covariance matrix
 
       // TODO: Set the process noise covariance for angular straggle and energy loss.
       return matQ;
@@ -119,7 +118,7 @@ public:
    void updateAugWithProcessNoise()
    {
       auto processNoiseMean = calculateProcessNoiseMean();
-      m_matQ; // = calculateProcessNoiseCovariance();
+      m_matQ = calculateProcessNoiseCovariance();
 
       // Add the mean process noise to the augmented state vector
       for (int32_t i{0}; i < DIM_V; ++i) {
@@ -156,7 +155,6 @@ public:
    template <typename PredictionModelCallback>
    void predictUKF(PredictionModelCallback predictionModelFunc)
    {
-      setKappa(3 - DIM_A); // Set kappa for the augmented state vector and update the weights.
       updateAugmentedStateAndCovariance();
 
       // Calculate the sigma points for the augmented state vector and save in a matrix where each column is a sigma
@@ -214,44 +212,20 @@ public:
          util::copyToColumn<DIM_Z, SIGMA_DIM_A>(i, sigmaZ, Zi);
       }
 
-      std::cout << "Sigma Points for Measurement:" << std::endl;
-      // Print sigmaZ in CSV format
-      for (int32_t row = 0; row < DIM_Z; ++row) {
-         for (int32_t col = 0; col < SIGMA_DIM_A; ++col) {
-            std::cout << sigmaZ(row, col);
-            if (col < SIGMA_DIM_A - 1)
-               std::cout << ",";
-         }
-         std::cout << std::endl;
-      }
-
       // calculate the mean measurement vector and covariance matrix
       // from the sigma points.
       Vector<DIM_Z> vecZhat;
       Matrix<DIM_Z, DIM_Z> matPzz;
       calculateWeightedMeanAndCovariance<DIM_Z>(sigmaZ, vecZhat, matPzz);
 
-      std::cout << "Mean Measurement Vector (vecZhat):" << std::endl;
-      std::cout << vecZhat.transpose() << std::endl;
-      std::cout << "Measurement Covariance Matrix (matPzz):" << std::endl;
-      std::cout << matPzz << std::endl;
-
       // Add in the measurement noise covariance matrix to the measurement covariance matrix.
       matPzz += m_matR; // Add measurement noise covariance
-
-      std::cout << "S Matrix (matPzz):" << std::endl;
-      std::cout << matPzz << std::endl;
 
       // TODO: calculate cross correlation
       const Matrix<DIM_X, DIM_Z> matPxz{calculateCrossCorrelation(sigmaXx, m_vecX, sigmaZ, vecZhat)};
 
-      std::cout << "Cross Correlation Matrix (matPxz):" << std::endl;
-      std::cout << matPxz << std::endl;
-
       // kalman gain
       const Matrix<DIM_X, DIM_Z> matK{matPxz * matPzz.inverse()};
-      std::cout << "Kalman Gain (matK):" << std::endl;
-      std::cout << matK << std::endl;
 
       m_vecX += matK * (vecZ - vecZhat);
       m_matP -= matK * matPzz * matK.transpose();
