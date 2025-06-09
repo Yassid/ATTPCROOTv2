@@ -16,6 +16,8 @@
 #include "kf_util.h"
 #include "unscented_kalman_filter.h"
 
+#include <iostream>
+
 namespace kf {
 
 /// @brief Class for fitting tracks using the Unscented Kalman Filter (UKF) algorithm.
@@ -212,20 +214,44 @@ public:
          util::copyToColumn<DIM_Z, SIGMA_DIM_A>(i, sigmaZ, Zi);
       }
 
+      std::cout << "Sigma Points for Measurement:" << std::endl;
+      // Print sigmaZ in CSV format
+      for (int32_t row = 0; row < DIM_Z; ++row) {
+         for (int32_t col = 0; col < SIGMA_DIM_A; ++col) {
+            std::cout << sigmaZ(row, col);
+            if (col < SIGMA_DIM_A - 1)
+               std::cout << ",";
+         }
+         std::cout << std::endl;
+      }
+
       // calculate the mean measurement vector and covariance matrix
       // from the sigma points.
       Vector<DIM_Z> vecZhat;
       Matrix<DIM_Z, DIM_Z> matPzz;
       calculateWeightedMeanAndCovariance<DIM_Z>(sigmaZ, vecZhat, matPzz);
 
+      std::cout << "Mean Measurement Vector (vecZhat):" << std::endl;
+      std::cout << vecZhat.transpose() << std::endl;
+      std::cout << "Measurement Covariance Matrix (matPzz):" << std::endl;
+      std::cout << matPzz << std::endl;
+
       // Add in the measurement noise covariance matrix to the measurement covariance matrix.
       matPzz += m_matR; // Add measurement noise covariance
+
+      std::cout << "S Matrix (matPzz):" << std::endl;
+      std::cout << matPzz << std::endl;
 
       // TODO: calculate cross correlation
       const Matrix<DIM_X, DIM_Z> matPxz{calculateCrossCorrelation(sigmaXx, m_vecX, sigmaZ, vecZhat)};
 
+      std::cout << "Cross Correlation Matrix (matPxz):" << std::endl;
+      std::cout << matPxz << std::endl;
+
       // kalman gain
       const Matrix<DIM_X, DIM_Z> matK{matPxz * matPzz.inverse()};
+      std::cout << "Kalman Gain (matK):" << std::endl;
+      std::cout << matK << std::endl;
 
       m_vecX += matK * (vecZ - vecZhat);
       m_matP -= matK * matPzz * matK.transpose();

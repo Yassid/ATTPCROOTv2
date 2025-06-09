@@ -167,40 +167,49 @@ TEST_F(AtTrackFitterUKFTest, test_UKF_PredictionAndCorrection)
    ASSERT_NEAR(m_ukf.matP()(3, 2), 0.0F, FLOAT_EPSILON);
    ASSERT_NEAR(m_ukf.matP()(3, 3), 0.15F, FLOAT_EPSILON);
 
+   std::cout << "Sigma points after prediction:\n";
+   for (int32_t j{0}; j < kf::TrackFitterUKF<DIM_X, DIM_Z, DIM_V, DIM_N>::DIM_A; ++j) {
+      for (int32_t i{0}; i < kf::TrackFitterUKF<DIM_X, DIM_Z, DIM_V, DIM_N>::DIM_A * 2 + 1; ++i) {
+
+         std::cout << m_ukf.m_matSigmaXa(j, i) << ",";
+      }
+      std::cout << std::endl;
+   }
+
    m_ukf.correctUKF(funcH, z);
 
    // Expectations from the python results:
    // ======================================
    // x =
-   //     [ 2.554  0.356  0.252 -0.293]
+   //     [ 2.4758845   0.53327217  0.21649734 -0.21214576]
    // P =
-   //     [[ 0.01  -0.001  0.005 -0.    ]
-   //      [-0.001  0.01 - 0.     0.005 ]
-   //      [ 0.005 - 0.     0.129 - 0.  ]
-   //      [-0.     0.005 - 0.     0.129]]
+   // [[ 0.01433114 -0.01026142  0.00651178 -0.00465059]
+   //  [-0.01026142  0.0295458  -0.0046378   0.01344241]
+   //  [ 0.00651178 -0.0046378   0.13023154 -0.00210188]
+   //  [-0.00465059  0.01344241 -0.00210188  0.1333886 ]]
 
-   ASSERT_NEAR(m_ukf.vecX()[0], 2.554F, FLOAT_EPSILON);
-   ASSERT_NEAR(m_ukf.vecX()[1], 0.356F, FLOAT_EPSILON);
-   ASSERT_NEAR(m_ukf.vecX()[2], 0.252F, FLOAT_EPSILON);
-   ASSERT_NEAR(m_ukf.vecX()[3], -0.293F, FLOAT_EPSILON);
+   ASSERT_NEAR(m_ukf.vecX()[0], 2.4758845F, FLOAT_EPSILON);
+   ASSERT_NEAR(m_ukf.vecX()[1], 0.53327217F, FLOAT_EPSILON);
+   ASSERT_NEAR(m_ukf.vecX()[2], 0.21649734F, FLOAT_EPSILON);
+   ASSERT_NEAR(m_ukf.vecX()[3], -0.21214576F, FLOAT_EPSILON);
 
-   ASSERT_NEAR(m_ukf.matP()(0, 0), 0.01F, FLOAT_EPSILON);
-   ASSERT_NEAR(m_ukf.matP()(0, 1), -0.001F, FLOAT_EPSILON);
-   ASSERT_NEAR(m_ukf.matP()(0, 2), 0.005F, FLOAT_EPSILON);
-   ASSERT_NEAR(m_ukf.matP()(0, 3), 0.0F, FLOAT_EPSILON);
+   ASSERT_NEAR(m_ukf.matP()(0, 0), 0.01433114F, FLOAT_EPSILON);
+   ASSERT_NEAR(m_ukf.matP()(0, 1), -0.01026142F, FLOAT_EPSILON);
+   ASSERT_NEAR(m_ukf.matP()(0, 2), 0.00651178F, FLOAT_EPSILON);
+   ASSERT_NEAR(m_ukf.matP()(0, 3), -0.00465059F, FLOAT_EPSILON);
 
-   ASSERT_NEAR(m_ukf.matP()(1, 0), -0.001F, FLOAT_EPSILON);
-   ASSERT_NEAR(m_ukf.matP()(1, 1), 0.01F, FLOAT_EPSILON);
-   ASSERT_NEAR(m_ukf.matP()(1, 2), 0.0F, FLOAT_EPSILON);
-   ASSERT_NEAR(m_ukf.matP()(1, 3), 0.005F, FLOAT_EPSILON);
+   ASSERT_NEAR(m_ukf.matP()(1, 0), -0.01026142F, FLOAT_EPSILON);
+   ASSERT_NEAR(m_ukf.matP()(1, 1), 0.0295458F, FLOAT_EPSILON);
+   ASSERT_NEAR(m_ukf.matP()(1, 2), -0.0046378F, FLOAT_EPSILON);
+   ASSERT_NEAR(m_ukf.matP()(1, 3), 0.01344241F, FLOAT_EPSILON);
 
-   ASSERT_NEAR(m_ukf.matP()(2, 0), 0.005F, FLOAT_EPSILON);
-   ASSERT_NEAR(m_ukf.matP()(2, 1), 0.0F, FLOAT_EPSILON);
-   ASSERT_NEAR(m_ukf.matP()(2, 2), 0.129F, FLOAT_EPSILON);
-   ASSERT_NEAR(m_ukf.matP()(2, 3), 0.0F, FLOAT_EPSILON);
+   ASSERT_NEAR(m_ukf.matP()(2, 0), 0.00651178F, FLOAT_EPSILON);
+   ASSERT_NEAR(m_ukf.matP()(2, 1), -0.0046378F, FLOAT_EPSILON);
+   ASSERT_NEAR(m_ukf.matP()(2, 2), 0.13023154F, FLOAT_EPSILON);
+   ASSERT_NEAR(m_ukf.matP()(2, 3), -0.00210188F, FLOAT_EPSILON);
 
-   ASSERT_NEAR(m_ukf.matP()(3, 0), 0.0F, FLOAT_EPSILON);
-   ASSERT_NEAR(m_ukf.matP()(3, 1), 0.005F, FLOAT_EPSILON);
-   ASSERT_NEAR(m_ukf.matP()(3, 2), 0.0F, FLOAT_EPSILON);
-   ASSERT_NEAR(m_ukf.matP()(3, 3), 0.129F, FLOAT_EPSILON);
+   ASSERT_NEAR(m_ukf.matP()(3, 0), -0.00465059F, FLOAT_EPSILON);
+   ASSERT_NEAR(m_ukf.matP()(3, 1), 0.01344241F, FLOAT_EPSILON);
+   ASSERT_NEAR(m_ukf.matP()(3, 2), -0.00210188F, FLOAT_EPSILON);
+   ASSERT_NEAR(m_ukf.matP()(3, 3), 0.1333886F, FLOAT_EPSILON);
 }
