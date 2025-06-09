@@ -71,8 +71,7 @@ public:
    }
 
    ///
-   /// @brief adding measurement noise covariance R to the augmented state
-   /// covariance matPa in the third element of the diagonal.
+   /// @brief set the measurement noise covariance R to be used in the update step
    ///
    void setCovarianceR(const Matrix<DIM_N, DIM_N> &matR)
    {
@@ -270,11 +269,13 @@ private:
    Matrix<STATE_DIM, SIGMA_DIM>
    calculateSigmaPoints(const Vector<STATE_DIM> &vecXa, const Matrix<STATE_DIM, STATE_DIM> &matPa)
    {
-      setKappa(3 - STATE_DIM);                                          // Set kappa for the sigma points calculation
       const float32_t scalarMultiplier{std::sqrt(STATE_DIM + m_kappa)}; // sqrt(n + \kappa)
 
       // cholesky factorization to get matrix Pxx square-root
       Eigen::LLT<Matrix<STATE_DIM, STATE_DIM>> lltOfPa(matPa);
+      if (lltOfPa.info() != Eigen::Success) {
+         throw std::runtime_error("Cholesky decomposition failed, matrix is not positive definite.");
+      }
       Matrix<STATE_DIM, STATE_DIM> matSa{lltOfPa.matrixL()}; // sqrt(P_{a})
 
       matSa *= scalarMultiplier; // sqrt( (n + \kappa) * P_{a} )
