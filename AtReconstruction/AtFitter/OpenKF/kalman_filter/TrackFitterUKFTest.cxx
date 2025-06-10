@@ -1,8 +1,8 @@
-#include "kalman_filter/AtTrackFitterUKF.h"
+#include "kalman_filter/TrackFitterUKF.h"
 
 #include "gtest/gtest.h"
 
-class AtTrackFitterUKFTest : public testing::Test {
+class TrackFitterUKFExampleTest : public testing::Test {
 public:
    virtual void SetUp() override {}
    virtual void TearDown() override {}
@@ -46,7 +46,7 @@ public:
    }
 };
 
-TEST_F(AtTrackFitterUKFTest, test_UKF_Prediction)
+TEST_F(TrackFitterUKFExampleTest, Prediction)
 {
    kf::Vector<DIM_X> x;
    x << 2.0F, 1.0F, 0.0F, 0.0F;
@@ -107,7 +107,7 @@ TEST_F(AtTrackFitterUKFTest, test_UKF_Prediction)
    ASSERT_NEAR(m_ukf.matP()(3, 3), 0.15F, FLOAT_EPSILON);
 }
 
-TEST_F(AtTrackFitterUKFTest, test_UKF_PredictionAndCorrection)
+TEST_F(TrackFitterUKFExampleTest, PredictionAndCorrection)
 {
    kf::Vector<DIM_X> x;
    x << 2.0F, 1.0F, 0.0F, 0.0F;
@@ -167,15 +167,6 @@ TEST_F(AtTrackFitterUKFTest, test_UKF_PredictionAndCorrection)
    ASSERT_NEAR(m_ukf.matP()(3, 2), 0.0F, FLOAT_EPSILON);
    ASSERT_NEAR(m_ukf.matP()(3, 3), 0.15F, FLOAT_EPSILON);
 
-   std::cout << "Sigma points after prediction:\n";
-   for (int32_t j{0}; j < kf::TrackFitterUKF<DIM_X, DIM_Z, DIM_V, DIM_N>::DIM_A; ++j) {
-      for (int32_t i{0}; i < kf::TrackFitterUKF<DIM_X, DIM_Z, DIM_V, DIM_N>::DIM_A * 2 + 1; ++i) {
-
-         std::cout << m_ukf.m_matSigmaXa(j, i) << ",";
-      }
-      std::cout << std::endl;
-   }
-
    m_ukf.correctUKF(funcH, z);
 
    // Expectations from the python results:
@@ -212,4 +203,68 @@ TEST_F(AtTrackFitterUKFTest, test_UKF_PredictionAndCorrection)
    ASSERT_NEAR(m_ukf.matP()(3, 1), 0.01344241F, FLOAT_EPSILON);
    ASSERT_NEAR(m_ukf.matP()(3, 2), -0.00210188F, FLOAT_EPSILON);
    ASSERT_NEAR(m_ukf.matP()(3, 3), 0.1333886F, FLOAT_EPSILON);
+}
+
+class TrackFitterUKFPhysicsTest : public testing::Test {
+public:
+   virtual void SetUp() override {}
+   virtual void TearDown() override {}
+
+   static constexpr float FLOAT_EPSILON{0.001F};
+
+   static constexpr size_t DIM_X{6};
+   static constexpr size_t DIM_V{2};
+   static constexpr size_t DIM_Z{3};
+   static constexpr size_t DIM_N{3};
+
+   kf::TrackFitterUKF<DIM_X, DIM_Z, DIM_V, DIM_N> m_ukf;
+
+   /// @brief to propagate the state vector using the process model
+   /// @param x state vector
+   /// @param v process noise vector
+   /// @return propagated (unaugmented) state vector
+   static kf::Vector<DIM_X> funcF(const kf::Vector<DIM_X> &x, const kf::Vector<DIM_V> &v)
+   {
+      //TODO: This needs to be filled with an RK4 solver for the physics model
+      kf::Vector<DIM_X> y{x};
+      
+      // For now, we just return the state vector as is
+      return y;
+   }
+
+   /// @brief to apply the measurement model to the state vector
+   /// @param x the state vector of the system
+   /// @return the measurement vector
+   static kf::Vector<DIM_Z> funcH(const kf::Vector<DIM_X> &x)
+   {
+      kf::Vector<DIM_Z> y;
+      y[0] = x[0];
+      y[1] = x[1];
+      y[2] = x[2];
+
+      return y;
+   }
+};
+
+TEST_F(TrackFitterUKFPhysicsTest, PhysicsPrediction)
+{
+   // TODO: This needs to be filled with a proper physics test. 
+   kf::Vector<DIM_X> x; // Initial state vector
+
+   kf::Matrix<DIM_X, DIM_X> P; // Initial state vector covariance matrix
+
+   // Note: process noise is defined in the UKF class, so we don't need to set it here.
+
+   kf::Vector<DIM_Z> z; // Measurement vector to be used in the correction step
+   z << std::sqrt(5), std::atan2(1.f ,2.f);
+
+   kf::Matrix<DIM_N, DIM_N> R; // Covariance matrix for the measurement noise
+
+   m_ukf.vecX() = x;
+   m_ukf.matP() = P;
+
+   m_ukf.setCovarianceR(R);
+   m_ukf.predictUKF(funcF);
+
+
 }
