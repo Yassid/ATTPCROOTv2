@@ -225,9 +225,9 @@ public:
    /// @return propagated (unaugmented) state vector
    static kf::Vector<DIM_X> funcF(const kf::Vector<DIM_X> &x, const kf::Vector<DIM_V> &v)
    {
-      //TODO: This needs to be filled with an RK4 solver for the physics model
+      // TODO: This needs to be filled with an RK4 solver for the physics model
       kf::Vector<DIM_X> y{x};
-      
+
       // For now, we just return the state vector as is
       return y;
    }
@@ -248,7 +248,7 @@ public:
 
 TEST_F(TrackFitterUKFPhysicsTest, PhysicsPrediction)
 {
-   // TODO: This needs to be filled with a proper physics test. 
+   // TODO: This needs to be filled with a proper physics test.
    kf::Vector<DIM_X> x; // Initial state vector
 
    kf::Matrix<DIM_X, DIM_X> P; // Initial state vector covariance matrix
@@ -256,7 +256,7 @@ TEST_F(TrackFitterUKFPhysicsTest, PhysicsPrediction)
    // Note: process noise is defined in the UKF class, so we don't need to set it here.
 
    kf::Vector<DIM_Z> z; // Measurement vector to be used in the correction step
-   z << std::sqrt(5), std::atan2(1.f ,2.f);
+   z << std::sqrt(5), std::atan2(1.f, 2.f);
 
    kf::Matrix<DIM_N, DIM_N> R; // Covariance matrix for the measurement noise
 
@@ -265,6 +265,4 @@ TEST_F(TrackFitterUKFPhysicsTest, PhysicsPrediction)
 
    m_ukf.setCovarianceR(R);
    m_ukf.predictUKF(funcF);
-
-
 }
