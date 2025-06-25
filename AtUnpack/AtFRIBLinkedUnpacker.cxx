@@ -10,6 +10,7 @@
 
 #include <H5Apublic.h>
 #include <H5Gpublic.h>
+#include <H5Opublic.h>
 #include <H5Ppublic.h>
 
 ClassImp(AtFRIBLinkedHDFUnpacker);
@@ -48,14 +49,48 @@ void AtFRIBLinkedHDFUnpacker::setEventIDAndTimestamps()
    try {
 
       // Open the dataset associated with the internal event id
-      std::string dataset_name = TString::Format("event_%lld/get_traces", fDataEventID).Data();
-      auto dataset_dims = open_dataset(_group, dataset_name.c_str());
-      _dataset = std::get<0>(dataset_dims);
+      std::string obj_name = TString::Format("event_%lld", fDataEventID).Data() + fGetPath;
+      LOG(info) << "Looking for dataset or group " << obj_name << " for event " << fDataEventID;
+      hid_t _objID = -1;
 
-      auto _attr = H5Aopen(_dataset, "timestamp", H5P_DEFAULT);
+      H5O_info_t get_info;
+      auto status = H5Oget_info_by_name(_group, obj_name.c_str(), &get_info, H5P_DEFAULT);
+
+      if (status < 0) {
+         LOG(warning) << "Could not find object " << obj_name << " in group " << _group;
+         fRawEvent->SetNumberOfTimestamps(0);
+         return;
+      }
+
+      switch (get_info.type) {
+      case H5O_TYPE_DATASET: {
+         auto dataset_dims = open_dataset(_group, obj_name.c_str());
+         _dataset = std::get<0>(dataset_dims);
+         _objID = _dataset;
+         break;
+      }
+
+      case H5O_TYPE_GROUP: {
+         auto group_dims = open_group(_group, obj_name.c_str());
+         _objID = std::get<0>(group_dims);
+         break;
+      }
+
+      default:
+         LOG(warning) << "Could not find object " << obj_name << " in group " << _group;
+         fRawEvent->SetNumberOfTimestamps(0);
+         return;
+      }
+
+      LOG(info) << "Opened object ID " << _objID << " for event " << fDataEventID;
+
+      auto _attr = H5Aopen(_objID, "timestamp", H5P_DEFAULT);
       if (_attr < 0) {
          LOG(error) << "Could not open timestamp attribute for event " << fDataEventID;
          fRawEvent->SetNumberOfTimestamps(0);
+         if (get_info.type == H5O_TYPE_GROUP) {
+            H5Gclose(_objID);
+         }
          return;
       } else {
          unsigned long long timestamp;
@@ -66,9 +101,12 @@ void AtFRIBLinkedHDFUnpacker::setEventIDAndTimestamps()
          fRawEvent->SetTimestamp(timestamp, 0);
       }
 
-      _attr = H5Aopen(_dataset, "timestamp_other", H5P_DEFAULT);
+      _attr = H5Aopen(_objID, "timestamp_other", H5P_DEFAULT);
       if (_attr < 0) {
          LOG(error) << "Could not open timestamp_other attribute for event " << fDataEventID;
+         if (get_info.type == H5O_TYPE_GROUP) {
+            H5Gclose(_objID);
+         }
          return;
       } else {
          unsigned long long timestamp;
@@ -87,43 +125,56 @@ void AtFRIBLinkedHDFUnpacker::setEventIDAndTimestamps()
 
 std::size_t AtFRIBLinkedHDFUnpacker::n_pads(std::string i_raw_event)
 {
-   std::string dataset_name = i_raw_event + "/get_traces";
-   auto dataset_dims = open_dataset(_group, dataset_name.c_str());
-   if (std::get<0>(dataset_dims) == 0)
-      return 0;
-   _dataset = std::get<0>(dataset_dims);
-   return std::get<1>(dataset_dims)[0];
+   return n_entries(i_raw_event + "/get_traces")[0];
 };
 
 std::size_t AtFRIBLinkedHDFUnpacker::n_aux(std::string i_raw_event)
 {
+   std::string fFribPath = "/frib_physics/1903";
    std::string dataset_name = i_raw_event + fFribPath;
-   auto dataset_dims = open_dataset(_group, dataset_name.c_str());
-   if (std::get<0>(dataset_dims) == 0)
-      return 0;
-   _dataset = std::get<0>(dataset_dims);
-   return std::get<1>(dataset_dims)[1];
+   return n_entries(dataset_name)[1]; // These are trace x channel so index is 1
 };
 
-void AtFRIBLinkedHDFUnpacker::processAux(std::size_t padIndex)
+void AtFRIBLinkedHDFUnpacker::processAux(std::size_t padIndex, std::size_t nTB)
 {
-   int16_t data[2048];
-   hsize_t counts[2] = {2048, 1};
+   u_int16_t data[nTB];
+   hsize_t counts[2] = {nTB, 1};
    hsize_t offsets[2] = {0, padIndex};
-   hsize_t dims_out[2] = {2048, 1};
-   read_slab<int16_t>(_dataset, counts, offsets, dims_out, data);
-   std::vector<int16_t> rawadc(data, data + 2048);
+   hsize_t dims_out[2] = {nTB, 1};
+   read_slab<u_int16_t>(_dataset, counts, offsets, dims_out, data);
+   std::vector<u_int16_t> rawadc(data, data + nTB);
 
-   auto trace = fRawEvent->AddGenericTrace(padIndex);
-   auto baseline = getBaseline(rawadc);
-   for (Int_t iTb = 0; iTb < 2048; iTb++) {
+   auto trace = fRawEvent->AddGenericTrace(padIndex, nTB);
+   for (Int_t iTb = 0; iTb < nTB; iTb++) {
       trace->SetRawADC(iTb, rawadc.at(iTb));
-      trace->SetADC(iTb, rawadc.at(iTb) - baseline);
+      trace->SetADC(iTb, rawadc.at(iTb));
 
-      if (padIndex == 0 && iTb > 2000)
+      if (padIndex == 0 && iTb > nTB - 48)
          LOG(debug) << "Aux trace " << iTb << " " << rawadc.at(iTb);
    }
 };
+
+void AtFRIBLinkedHDFUnpacker::processSIS(std::string i_raw_event, std::string name)
+{
+   // Open the dataset for the SIS digitizer
+   std::string dataset_name = i_raw_event + "/frib_physics/" + name;
+   auto dims = n_entries(dataset_name);
+   std::size_t nTB = 0;
+   std::size_t nChannels = 0;
+   if (dims.size() == 1) {
+      nTB = 1;
+      nChannels = 1;
+   } else {
+      nTB = dims.at(0);
+      nChannels = dims.at(1);
+   }
+
+   LOG(info) << "Processing SIS digitizer " << name << " with " << nChannels << " channels and " << nTB
+             << " time bins.";
+
+   for (auto i = 0; i < nChannels; ++i)
+      processAux(i, nTB);
+}
 
 void AtFRIBLinkedHDFUnpacker::processData()
 {
@@ -138,10 +189,9 @@ void AtFRIBLinkedHDFUnpacker::processData()
    }
 
    // Loop through and grab all of the generic traces in the event
-   auto nAux = n_aux(event_name.Data());
-   LOG(info) << "Unpacking " << nAux << " generic traces in event " << fDataEventID;
-   for (auto i = 0; i < nAux; ++i)
-      processAux(i);
+   for (auto &sis : fFribPaths) {
+      processSIS(event_name.Data(), sis);
+   }
 
    end_raw_event(); // Close dataset
 };
