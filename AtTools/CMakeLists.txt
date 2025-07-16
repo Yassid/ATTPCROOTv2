@@ -9,6 +9,7 @@ set(SRCS
   AtStringManip.cxx
   AtELossModel.cxx
   AtELossTable.cxx
+  AtELossBetheBloch.cxx
   AtFindVertex.cxx
   
   AtCSVReader.cxx
