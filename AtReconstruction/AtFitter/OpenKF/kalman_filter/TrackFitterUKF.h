@@ -152,7 +152,7 @@ public:
    /// function
    ///
    template <typename PredictionModelCallback>
-   void predictUKF(PredictionModelCallback predictionModelFunc)
+   void predictUKF(PredictionModelCallback predictionModelFunc, const Vector<DIM_Z> &vecZ)
    {
       updateAugmentedStateAndCovariance();
 
@@ -171,7 +171,7 @@ public:
          const Vector<DIM_X> sigmaXxi{util::getColumnAt<DIM_X, SIGMA_DIM_A>(i, sigmaXx)};
          const Vector<DIM_V> sigmaXvi{util::getColumnAt<DIM_V, SIGMA_DIM_A>(i, sigmaXv)};
 
-         const Vector<DIM_X> Yi{predictionModelFunc(sigmaXxi, sigmaXvi)}; // y = f(x)
+         const Vector<DIM_X> Yi{predictionModelFunc(sigmaXxi, sigmaXvi, vecZ)}; // y = f(x)
 
          // Copy the predicted state vector back into the sigmaXx matrix.
          util::copyToColumn<DIM_X, SIGMA_DIM_A>(i, sigmaXx, Yi);
