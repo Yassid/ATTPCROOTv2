@@ -291,7 +291,7 @@ public:
       int iterations = 0;
       double calc_eLoss = 0;
 
-      while (std::abs(calc_eLoss - eLoss) > 1e-3) {
+      while (std::abs(calc_eLoss - eLoss) > 1e-4) {
          std::cout << "Running iteration " << iterations << " with scaling factor: " << scalingFactor
                    << " and energy loss: " << calc_eLoss << std::endl;
 
@@ -309,9 +309,12 @@ public:
 
          XYZVector pos(x[0], x[1], x[2]);
          XYZVector mom(x[3], x[4], x[5]);
+
          double KE_initial = std::sqrt(mom.Mag2() + mass * mass) - mass; // Kinetic energy in MeV
 
          while (true) {
+            XYZVector lastPos = pos;
+            XYZVector lastMom = mom;
             std::cout << "Position: " << pos.X() << ", " << pos.Y() << ", " << pos.Z() << std::endl;
             std::cout << "Momentum: " << mom.X() << ", " << mom.Y() << ", " << mom.Z() << std::endl;
 
@@ -357,13 +360,13 @@ public:
             pos_SI += (x_k1 + 2 * x_k2 + 2 * x_k3 + x_k4) * h / 6;
             pos = pos_SI * 1e3; // Convert back to mm
 
-            std::cout << "Average force: " << F_SI << " N" << std::endl;
-            std::cout << "Momentum: " << mom * mom_SItoMeV << " kg m/s" << std::endl;
-            std::cout << "Delta x: " << (x_k1 + 2 * x_k2 + 2 * x_k3 + x_k4) / 6 << " m/s" << std::endl;
+            // std::cout << "Average force: " << F_SI << " N" << std::endl;
+            // std::cout << "Momentum: " << mom * mom_SItoMeV << " kg m/s" << std::endl;
+            // std::cout << "Delta x: " << (x_k1 + 2 * x_k2 + 2 * x_k3 + x_k4) / 6 << " m/s" << std::endl;
 
             auto approach = dist(pos, measurement);
-            std::cout << "pos: " << pos << " measurement" << measurement << std::endl;
-            std::cout << "Approach: " << approach << " last approach: " << lastApproach << std::endl;
+            // std::cout << "pos: " << pos << " measurement" << measurement << std::endl;
+            // std::cout << "Approach: " << approach << " last approach: " << lastApproach << std::endl;
             if (approach < lastApproach) {
                // We are still approaching the measurement point
                approaching = true;
@@ -381,27 +384,30 @@ public:
                // tracking the point of closest approach until the distance between the current state and
                // the measurement point is larger than the distance between the last state and the measurement point.
 
-               y[0] = pos.X();
-               y[1] = pos.Y();
-               y[2] = pos.Z();
-               y[3] = mom.X();
-               y[4] = mom.Y();
-               y[5] = mom.Z();
+               // Undo the last step since we were closer last time.
+               y[0] = lastPos.X();
+               y[1] = lastPos.Y();
+               y[2] = lastPos.Z();
+               y[3] = lastMom.X();
+               y[4] = lastMom.Y();
+               y[5] = lastMom.Z();
 
                // Update the scaling factor
-               double KE_final = std::sqrt(mom.Mag2() + mass * mass) - mass;
+               double KE_final = std::sqrt(lastMom.Mag2() + mass * mass) - mass;
                calc_eLoss = KE_initial - KE_final; // Energy loss in MeV
-               scalingFactor *= calc_eLoss / eLoss;
-               std::cout << "------- End of RK4 interation ---------" << std::endl;
+               scalingFactor *= eLoss / calc_eLoss;
+               std::cout << "------- End of RK4 interation " << iterations << " ---------" << std::endl;
                std::cout << "Particle stopped: " << particleStopped << std::endl;
                std::cout << "Reached measurement point: " << reachedMeasurementPoint << std::endl;
                std::cout << "Last approach: " << lastApproach << " Current approach: " << approach << std::endl;
                std::cout << "Desired energy loss: " << eLoss << " MeV" << std::endl;
                std::cout << "Calculated energy loss: " << calc_eLoss << " MeV" << std::endl;
+               std::cout << "Difference: " << calc_eLoss - eLoss << " MeV" << std::endl;
                std::cout << "New scaling factor: " << scalingFactor << std::endl;
                std::cout << "Final Position: " << pos.X() << ", " << pos.Y() << ", " << pos.Z() << std::endl;
                std::cout << "Final Momentum: " << mom.X() << ", " << mom.Y() << ", " << mom.Z() << std::endl;
-               return y;
+               break;
+               // return y;
             }
          } // End of loop over RK4 integration
       }    // End loop over energy loss convergence
@@ -512,7 +518,7 @@ TEST_F(TrackFitterUKFPhysicsTest, TestForceBField)
    ASSERT_NEAR(force.Z(), 0, FLOAT_EPSILON);
 }
 
-TEST_F(TrackFitterUKFPhysicsTest, TestPropagatorNoField)
+TEST_F(TrackFitterUKFPhysicsTest, TestPropagatorStoppingNoField)
 {
 
    double KE = 1; // Kinetic energy in MeV
@@ -554,4 +560,48 @@ TEST_F(TrackFitterUKFPhysicsTest, TestPropagatorNoField)
 
    ASSERT_NEAR(final[3], 0, 0.1);  // Final momentum in x-direction should be close to 0
    ASSERT_NEAR(final[0], 68.6, 5); // Final position in x
+}
+
+TEST_F(TrackFitterUKFPhysicsTest, TestPropagatorNoField)
+{
+   double KE = 1; // Kinetic energy in MeV
+   double E = KE + mass_p;
+   double p = std::sqrt(E * E - mass_p * mass_p); // Momentum in MeV/c
+   fBField = XYZVector(0, 0, 0);                  // B-field in tesla
+   fEField = XYZVector(0, 0, 0);                  // E-field
+
+   kf::Vector<DIM_X> x; // Initial state vector
+   x[0] = 0;
+   x[1] = 0;
+   x[2] = 0;
+   x[3] = p; // p_x
+   x[4] = 0;
+   x[5] = 0;
+
+   ASSERT_NEAR(x[3], 43.331, 1e-1); // Make sure momentum is calculated correctly
+
+   kf::Vector<DIM_V> v; // Process noise vector
+   v[0] = 0.0285;       // Energy loss in MeV
+   v[1] = 0.0;          // No process noise in this example
+
+   kf::Vector<DIM_Z> z; // Measurement vector
+   z[0] = 10;           // Measure after 10 mm
+   z[1] = 0;
+   z[2] = 0;
+
+   auto final = funcF(x, v, z); // Propagate the state vector using the process model
+
+   // Check the final position is close to the stopping point from LISE
+   double E_fin = KE - v[0] + mass_p;
+   double p_fin = std::sqrt(E_fin * E_fin - mass_p * mass_p);
+   ASSERT_NEAR(final[3], p_fin, 0.1); // Final momentum in x-direction
+   ASSERT_NEAR(final[0], 10, .5);     // Final position in x-direction should be close to 10 mm
+
+   v[0] = 0.3237;          // Energy loss in MeV
+   z[0] = 100;             // Measure after 100 mm
+   final = funcF(x, v, z); // Propagate the state vector using the process model
+   E_fin = KE - v[0] + mass_p;
+   p_fin = std::sqrt(E_fin * E_fin - mass_p * mass_p);
+   ASSERT_NEAR(final[3], p_fin, 0.1); // Final momentum
+   ASSERT_NEAR(final[0], 100, .5);    // Final position
 }
