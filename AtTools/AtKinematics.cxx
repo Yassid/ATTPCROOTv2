@@ -303,5 +303,12 @@ double EtoA(double mass)
 {
    return mass / 931.5;
 }
-
+ROOT::Math::XYZVector GetVel(ROOT::Math::XYZVector mom, double mass)
+{
+   return mom / Get4Vector(mom, mass).E() * fC;
+}
+double KE(ROOT::Math::XYZVector mom, double mass)
+{
+   return std::sqrt(mom.Mag2() + mass * mass) - mass; // Kinetic energy in MeV
+}
 } // namespace AtTools::Kinematics
