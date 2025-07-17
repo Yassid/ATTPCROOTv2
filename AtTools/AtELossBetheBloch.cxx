@@ -57,6 +57,7 @@ double AtELossBetheBloch::GetEnergyLoss(double energyIni, double distance) const
 
 double AtELossBetheBloch::GetRange(double energyIni, double energyFin) const
 {
+   throw std::runtime_error("GetRange not implemented for Bethe-Bloch model");
    return 0;
 }
 double AtELossBetheBloch::GetEnergy(double energyIni, double distance) const

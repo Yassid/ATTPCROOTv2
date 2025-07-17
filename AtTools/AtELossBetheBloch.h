@@ -30,6 +30,12 @@ public:
    }
    virtual ~AtELossBetheBloch() = default;
 
+   /**
+    * Set the material properties for the Bethe-Bloch model.
+    * @param mat_A Mass of the material (in amu)
+    * @param mat_Z Atomic number of the material
+    * @param density Density of the material in mg/cm^3
+    */
    void SetMaterial(int mat_A, int mat_Z, double density);
 
    /**
