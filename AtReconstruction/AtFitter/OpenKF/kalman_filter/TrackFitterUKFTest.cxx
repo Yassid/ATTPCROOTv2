@@ -381,9 +381,6 @@ public:
                // tracking the point of closest approach until the distance between the current state and
                // the measurement point is larger than the distance between the last state and the measurement point.
 
-               // Undo the last update, and break out of the integration loop
-               // pos = pos - (x_k1 + 2 * x_k2 + 2 * x_k3 + x_k4) * h / 6;
-               // mom = mom - (p_k1 + 2 * p_k2 + 2 * p_k3 + p_k4) * h / 6;
                y[0] = pos.X();
                y[1] = pos.Y();
                y[2] = pos.Z();
@@ -548,4 +545,13 @@ TEST_F(TrackFitterUKFPhysicsTest, TestPropagatorNoField)
    // Check the final position is close to the stopping point from LISE
    ASSERT_NEAR(final[3], 0, 0.1);  // Final momentum in x-direction should be close to 0
    ASSERT_NEAR(final[0], 210, 10); // Final position in x-direction should be close to 210 mm
+
+   KE = 0.5;
+   E = KE + mass_p;
+   p = std::sqrt(E * E - mass_p * mass_p); // Momentum in MeV/c
+   x[3] = p;                               // Reset momentum
+   final = funcF(x, v, z);                 // Propagate the state vector using the
+
+   ASSERT_NEAR(final[3], 0, 0.1);  // Final momentum in x-direction should be close to 0
+   ASSERT_NEAR(final[0], 68.6, 5); // Final position in x
 }
