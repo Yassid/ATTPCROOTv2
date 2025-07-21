@@ -243,7 +243,7 @@ public:
 
       // auto fourMom = AtTools::Kinematics::Get4Vector(mom, mass);
       // auto v = mom / fourMom.E() * c; // m/s
-      auto v = GetVel(mom, mass);
+      auto v = AtTools::Kinematics::GetVel(mom, mass);
 
       auto F_lorentz = charge * (fEField + v.Cross(fBField));
       // std::cout << "F_lorentz: " << F_lorentz << std::endl;
@@ -253,13 +253,6 @@ public:
       // std::cout << "drag: " << drag << " mom " << mom << " dedx " << dedx_si << std::endl;
 
       return F_lorentz + drag;
-   }
-
-   static XYZVector GetVel(XYZVector mom, double mass)
-   {
-      auto fourMom = AtTools::Kinematics::Get4Vector(mom, mass);
-      const double c = 299792458;   // m/s
-      return mom / fourMom.E() * c; // m/s
    }
 
    static double dist(const XYZVector &x, const XYZVector &z) { return std::sqrt((x - z).Mag2()); }
@@ -310,7 +303,8 @@ public:
          XYZVector pos(x[0], x[1], x[2]);
          XYZVector mom(x[3], x[4], x[5]);
 
-         double KE_initial = std::sqrt(mom.Mag2() + mass * mass) - mass; // Kinetic energy in MeV
+         double KE_initial =
+            AtTools::Kinematics::KE(mom, mass); // std::sqrt(mom.Mag2() + mass * mass) - mass; // Kinetic energy in MeV
 
          while (true) {
             XYZVector lastPos = pos;
@@ -319,30 +313,30 @@ public:
             std::cout << "Momentum: " << mom.X() << ", " << mom.Y() << ", " << mom.Z() << std::endl;
 
             // Using timestep, propagate state forward one step.
-            double KE = std::sqrt(mom.Mag2() + mass * mass) - mass; // Kinetic energy in MeV
-            auto dedx = scalingFactor * dedxModel.GetdEdx(KE);      // Get the stopping power in MeV/mm
+            double KE = AtTools::Kinematics::KE(mom, mass);    // Kinetic energy in MeV
+            auto dedx = scalingFactor * dedxModel.GetdEdx(KE); // Get the stopping power in MeV/mm
             // std::cout << "KE: " << KE << " dedx: " << dedx << std::endl;
 
             auto spline = dedxModel.GetSpline();
             // std::cout << "Spline: " << spline.get_x_min() << " to " << spline.get_x_max() << std::endl;
             // std::cout << "dxde " << spline(KE) << " dxde " << dedx << std::endl;
 
-            auto x_k1 = GetVel(mom, mass);
+            auto x_k1 = AtTools::Kinematics::GetVel(mom, mass);
             auto p_k1 = Force(pos, mom, charge, mass, dedx);
             // std::cout << "vel: " << x_k1 << " speed " << x_k1.R() << std::endl;
             // std::cout << "Force: " << p_k1 << std::endl;
 
-            auto x_k2 = GetVel(mom + p_k1 * h / 2, mass);
+            auto x_k2 = AtTools::Kinematics::GetVel(mom + p_k1 * h / 2, mass);
             auto p_k2 = Force(pos + x_k1 * h / 2, mom + p_k1 * h / 2, charge, mass, dedx);
             // std::cout << "vel: " << x_k2 << " speed " << x_k2.R() << std::endl;
             // std::cout << "Force: " << p_k2 << std::endl;
 
-            auto x_k3 = GetVel(mom + p_k2 * h / 2, mass);
+            auto x_k3 = AtTools::Kinematics::GetVel(mom + p_k2 * h / 2, mass);
             auto p_k3 = Force(pos + x_k2 * h / 2, mom + p_k2 * h / 2, charge, mass, dedx);
             // std::cout << "vel: " << x_k3 << " speed " << x_k3.R() << std::endl;
             // std::cout << "Force: " << p_k3 << std::endl;
 
-            auto x_k4 = GetVel(mom + p_k3 * h, mass);
+            auto x_k4 = AtTools::Kinematics::GetVel(mom + p_k3 * h, mass);
             auto p_k4 = Force(pos + x_k3 * h, mom + p_k3 * h, charge, mass, dedx);
             // std::cout << "vel: " << x_k4 << " speed " << x_k4.R() << std::endl;
             // std::cout << "Force: " << p_k4 << std::endl;
@@ -457,6 +451,7 @@ TEST_F(TrackFitterUKFPhysicsTest, PhysicsPrediction)
    // m_ukf.predictUKF(funcF, z);
    ASSERT_EQ(true, true);
 }
+/*
 
 TEST_F(TrackFitterUKFPhysicsTest, TestForceNoFields)
 {
@@ -553,6 +548,7 @@ TEST_F(TrackFitterUKFPhysicsTest, TestPropagatorStoppingNoField)
    ASSERT_NEAR(final[0], 210, 10); // Final position in x-direction should be close to 210 mm
 
    KE = 0.5;
+   v[0] = 0.5; // Energy loss in MeV
    E = KE + mass_p;
    p = std::sqrt(E * E - mass_p * mass_p); // Momentum in MeV/c
    x[3] = p;                               // Reset momentum
@@ -561,6 +557,7 @@ TEST_F(TrackFitterUKFPhysicsTest, TestPropagatorStoppingNoField)
    ASSERT_NEAR(final[3], 0, 0.1);  // Final momentum in x-direction should be close to 0
    ASSERT_NEAR(final[0], 68.6, 5); // Final position in x
 }
+*/
 
 TEST_F(TrackFitterUKFPhysicsTest, TestPropagatorNoField)
 {

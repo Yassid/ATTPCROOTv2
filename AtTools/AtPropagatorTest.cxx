@@ -1,10 +1,12 @@
 #include "AtPropagator.h"
 
+#include "AtELossTable.h"
 #include "AtKinematics.h"
 
 #include <Math/Vector3D.h>
 
 #include <gtest/gtest.h>
+#include <iostream>
 #include <memory>
 using ROOT::Math::XYZVector;
 
@@ -92,4 +94,86 @@ TEST(AtPropagatorTest, ForceBField)
    ASSERT_NEAR(force.X(), 0, 1e-12);
    ASSERT_NEAR(force.Y(), -5.09e-12, 1e-13);
    ASSERT_NEAR(force.Z(), 0, 1e-12);
+}
+
+TEST(AtPropagatorTest, PropagateToPoint_StoppingNoField)
+{
+   double charge = charge_p; // Charge in Coulombs
+   double mass = mass_p;     // Mass in MeV/c^2
+   auto elossModel = std::make_unique<AtTools::AtELossTable>(0);
+   elossModel->LoadSrimTable(
+      "/home/adam/fair_install/ATTPCROOTv2/AtReconstruction/AtFitter/OpenKF/kalman_filter/HinH.txt");
+   AtPropagator propagator(charge, mass, std::move(elossModel));
+
+   double KE = 1; // Kinetic energy in MeV
+   double E = KE + mass_p;
+   double p = std::sqrt(E * E - mass_p * mass_p); // Momentum in MeV/c
+   XYZVector startPos(0, 0, 0);                   // Start position in mm
+   XYZVector startMom(p, 0, 0);                   // Start momentum in MeV/c
+
+   propagator.SetState(startPos, startMom);
+   propagator.SetEField({0, 0, 0}); // No electric field
+   propagator.SetBField({0, 0, 0}); // No magnetic field
+
+   ASSERT_NEAR(propagator.GetMomentum().X(), 43.331, 1e-1);
+
+   XYZVector targetPoint(1e3, 0, 0); // Target point to propagate to (1 m)
+   propagator.PropagateToPoint(targetPoint, KE);
+
+   auto finalPos = propagator.GetPosition();
+   auto finalMom = propagator.GetMomentum();
+
+   ASSERT_NEAR(finalPos.X(), 210, 10); // Final position in x-direction should be close to 210 mm
+   ASSERT_NEAR(finalMom.X(), 0, 0.1);
+
+   KE = 0.5;
+   E = KE + mass_p;
+   p = std::sqrt(E * E - mass_p * mass_p); // Momentum in MeV/c
+   startMom.SetXYZ(p, 0, 0);               // Reset momentum
+   propagator.SetState(startPos, startMom);
+
+   propagator.PropagateToPoint(targetPoint, KE); // Propagate to range
+   finalPos = propagator.GetPosition();
+   finalMom = propagator.GetMomentum();
+   ASSERT_NEAR(finalPos.X(), 68.6, 5); // Final position in x-direction should be close to 68.6 mm
+   ASSERT_NEAR(finalMom.X(), 0, 0.1);  // Final momentum in x-direction should be close to 0
+}
+
+TEST(AtPropagatorTest, PropagateToPoint_NoField)
+{
+   double charge = charge_p; // Charge in Coulombs
+   double mass = mass_p;     // Mass in MeV/c^2
+   auto elossModel = std::make_unique<AtTools::AtELossTable>(0);
+   elossModel->LoadSrimTable(
+      "/home/adam/fair_install/ATTPCROOTv2/AtReconstruction/AtFitter/OpenKF/kalman_filter/HinH.txt");
+   AtPropagator propagator(charge, mass, std::move(elossModel));
+
+   double KE = 1; // Kinetic energy in MeV
+   double E = KE + mass_p;
+   double p = std::sqrt(E * E - mass_p * mass_p); // Momentum in MeV/c
+   XYZVector startPos(0, 0, 0);                   // Start position in mm
+   XYZVector startMom(p, 0, 0);                   // Start momentum in MeV/c
+
+   double eLoss = 0.0285;                                     // Expected energy loss in MeV (LISE)
+   double E_fin = KE - eLoss + mass_p;                        // Expected final energy after loss
+   double p_fin = std::sqrt(E_fin * E_fin - mass_p * mass_p); // Expected final momentum in MeV/c
+
+   propagator.SetState(startPos, startMom);
+   propagator.SetEField({0, 0, 0}); // No electric field
+   propagator.SetBField({0, 0, 0}); // No magnetic field
+
+   ASSERT_NEAR(propagator.GetMomentum().X(), 43.331, 1e-1);
+
+   std::cout << "STARTING PROPAGATION  " << std::endl << std::endl;
+
+   XYZVector targetPoint(10, 0, 0); // Target point to propagate to 10 mm
+   propagator.PropagateToPoint(targetPoint);
+
+   std::cout << "FINISHING PROPAGATION  " << std::endl << std::endl;
+
+   auto finalPos = propagator.GetPosition();
+   auto finalMom = propagator.GetMomentum();
+
+   ASSERT_NEAR(finalPos.X(), 10, 1); // Final position in x-direction should be close to 10 mm
+   ASSERT_NEAR(finalMom.X(), p_fin, 0.1);
 }

@@ -30,7 +30,8 @@ protected:
 
    // Internal state variables for the propagator
    double fH = 1e-10;           /// Step size for propagation in s
-   double fETolerance = 1e-4;   /// Energy tolerance for convergence when fixing energy loss
+   double fETol = 1e-4;         /// Energy tolerance for convergence when fixing energy loss
+   double fStopTol = 0.01;      /// Maximum kinetic energy to consider the particle stopped
    double fScalingFactor = 1.0; /// Scaling factor for energy loss
 
    XYZVector fPos; // Current position of the particle in mm
@@ -87,6 +88,15 @@ public:
     * @return The force acting on the particle in N.
     */
    XYZVector Force(XYZVector pos, XYZVector mom) const;
+
+protected:
+   /**
+    * @brief Perform a single RK4 step for propagation.
+    *
+    * This method performs a single Runge-Kutta 4th order step to propagate the particle's state.
+    * Updates fPos and fMom.
+    */
+   void RK4Step();
 };
 
 } // namespace AtTools
