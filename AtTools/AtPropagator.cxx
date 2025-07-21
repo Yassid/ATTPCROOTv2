@@ -53,12 +53,11 @@ void AtPropagator::PropagateToPoint(const XYZPoint &point, double eLoss)
 {
    LOG(info) << "Propagating to point: " << point << " with eLoss: " << eLoss;
 
-   double scalingFactor = 1.0;
    int iterations = 0;
    double calc_eLoss = 0;
 
    while (std::abs(calc_eLoss - eLoss) > 1e-4 || eLoss == 0) {
-      LOG(debug) << "Running iteration " << iterations << " with scaling factor: " << scalingFactor
+      LOG(debug) << "Running iteration " << iterations << " with scaling factor: " << fScalingFactor
                  << " and energy loss: " << calc_eLoss;
 
       if (iterations > 100) {
@@ -102,7 +101,7 @@ void AtPropagator::PropagateToPoint(const XYZPoint &point, double eLoss)
 
             double KE_final = Kinematics::KE(fMom, fMass);
             calc_eLoss = KE_initial - KE_final; // Energy loss in MeV
-            scalingFactor *= eLoss / calc_eLoss;
+            fScalingFactor *= eLoss / calc_eLoss;
             LOG(info) << "------- End of RK4 interation " << iterations << " ---------";
             LOG(info) << "Particle stopped: " << particleStopped;
             LOG(info) << "Reached measurement point: " << reachedMeasurementPoint;
@@ -110,15 +109,19 @@ void AtPropagator::PropagateToPoint(const XYZPoint &point, double eLoss)
             LOG(info) << "Desired energy loss: " << eLoss << " MeV";
             LOG(info) << "Calculated energy loss: " << calc_eLoss << " MeV";
             LOG(info) << "Difference: " << calc_eLoss - eLoss << " MeV";
-            LOG(info) << "New scaling factor: " << scalingFactor;
+            LOG(info) << "New scaling factor: " << fScalingFactor;
             LOG(info) << "Final Position: " << fPos.X() << ", " << fPos.Y() << ", " << fPos.Z();
             LOG(info) << "Final Momentum: " << fMom.X() << ", " << fMom.Y() << ", " << fMom.Z();
 
-            if (eLoss == 0)
-               return; // If no energy loss is specified, we are done.
-            break;     // Else rerun with adjusted scaling factor
+            if (eLoss == 0) {
+               fScalingFactor = 1; // Reset scaling factor after convergence
+               return;             // If no energy loss is specified, we are done.
+            }
+            break; // Else rerun with adjusted scaling factor
          }
       } // End of loop over RK4 integration
    }    // End loop over energy loss convergence
+
+   fScalingFactor = 1; // Reset scaling factor after convergence
 }
 } // namespace AtTools
