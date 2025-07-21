@@ -80,18 +80,53 @@ void AtPropagator::PropagateToPointAdaptive(const XYZPoint &point)
 
       bool reachedMeasurementPoint = ReachedPOCA(point);
       bool particleStopped = Kinematics::KE(fMom, fMass) < fStopTol;
-      if (reachedMeasurementPoint || particleStopped) {
-         // Last iteration we were still approaching the measurement point. Now we are further away
-         // then before. We have probably reached the measurement point if things are well behaved.
-         // I can think of cases where this will not be true. A better solution might be to run
-         // tracking the point of closest approach until the distance between the current state and
-         // the measurement point is larger than the distance between the last state and the measurement point.
+      bool momentumReversed = (fLastMom.Dot(fMom) < 0);
 
+      if (reachedMeasurementPoint) {
+         // We reached the measurement point, so we should figure out how far we are from the measurement point
+         // and update that remaining amount
+         LOG(info) << "------ Reached measurement point------";
+         double finalH = (fLastPos - fPos).R();    // Distance traveled in the last step
+         double approach = (fLastPos - point).R(); // Distance to the measurement point
+         LOG(info) << "Distance to measurement point: " << approach << " mm";
+         LOG(info) << "Final step size: " << finalH << " mm";
+
+         finalH = approach * 1e-3; // Convert to meters for the RK4 step
+         fPos = fLastPos;
+         fMom = fLastMom;
+         RK4StepAdaptive(finalH); // Propagate to the measurement point
+      }
+
+      // If we stopped, then we should figure out about where we stopped assuming linear de/dx over this last step
+      if (particleStopped || momentumReversed) {
+         LOG(info) << "------ Particle stopped ------";
+
+         double finalH = (fPos - fLastPos).R(); // Distance traveled in the last step
+         double E_loss =
+            Kinematics::KE(fLastMom, fMass) + Kinematics::KE(fMom, fMass); // Energy loss in MeV in the last step
+         double dedx = E_loss / finalH;                                    // Stopping power in MeV/mm
+
+         LOG(info) << "Particle stopped with final step size: " << finalH << " mm";
+         LOG(info) << "Energy loss in last step: " << E_loss << " MeV";
+         LOG(info) << "Stopping power (dE/dx): " << dedx << " MeV/mm";
+         LOG(info) << "Energy before stopping: " << Kinematics::KE(fLastMom, fMass) << " MeV";
+         finalH = Kinematics::KE(fLastMom, fMass) / dedx; // Distance to stop in mm
+         LOG(info) << "Estimated distance to stop: " << finalH << " mm";
+
+         fPos = fLastPos;
+         fMom = fLastMom;           // Reset to last position and momentum
+         RK4Step(finalH);           // Propagate to the point where we stopped
+         fMom = XYZVector(0, 0, 0); // Set momentum to zero since we stopped
+         fLastMom = fMom;
+
+         LOG(info) << "Final Position after stopping: " << fPos.X() << ", " << fPos.Y() << ", " << fPos.Z();
+         LOG(info) << "Final Momentum after stopping: " << fMom.X() << ", " << fMom.Y() << ", " << fMom.Z();
+      }
+
+      if (reachedMeasurementPoint || particleStopped || momentumReversed) {
          // Undo the last step since we were closer last time.
          double lastApproach = (fLastPos - point).R();
          double approach = (fPos - point).R();
-         fPos = fLastPos;
-         fMom = fLastMom;
 
          double KE_final = Kinematics::KE(fMom, fMass);
          auto calc_eLoss = KE_initial - KE_final; // Energy loss in MeV
@@ -103,6 +138,11 @@ void AtPropagator::PropagateToPointAdaptive(const XYZPoint &point)
          LOG(info) << "Scaling factor: " << fScalingFactor;
          LOG(info) << "Final Position: " << fPos.X() << ", " << fPos.Y() << ", " << fPos.Z();
          LOG(info) << "Final Momentum: " << fMom.X() << ", " << fMom.Y() << ", " << fMom.Z();
+         LOG(info) << "Last Position: " << fLastPos.X() << ", " << fLastPos.Y() << ", " << fLastPos.Z();
+         LOG(info) << "Last Momentum: " << fLastMom.X() << ", " << fLastMom.Y() << ", " << fLastMom.Z();
+
+         // fPos = fLastPos;
+         // fMom = fLastMom;
          return;
       }
    } // End of loop over RK4 integration
@@ -115,7 +155,7 @@ bool AtPropagator::RK4StepAdaptive(double &h)
 
    double atol_pos = 1e-2; // Absolute tolerance for position (mm)
    double atol_mom = 1e-2; // Absolute tolerance for momentum (MeV/c)
-   double rtol = 1e-4;     // Relative tolerance for both position and momentum
+   double rtol = 1e-6;     // Relative tolerance for both position and momentum
 
    auto x0_mm = fPos;
    auto p0 = fMom;
