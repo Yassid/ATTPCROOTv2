@@ -3,6 +3,10 @@
 
 #include "AtELossModel.h"
 
+#include <functional>
+
+#include "Math/Plane3D.h"
+#include "Math/Point3D.h"
 #include "Math/Vector3D.h"
 
 namespace AtTools {
@@ -21,6 +25,9 @@ namespace AtTools {
 class AtPropagator {
 protected:
    using XYZVector = ROOT::Math::XYZVector;
+   using XYZPoint = ROOT::Math::XYZPoint;
+   using Plane3D = ROOT::Math::Plane3D;
+   using DistanceFunc = std::function<double(const XYZPoint &)>;
    XYZVector fEField{0, 0, 0}; // Electric field vector
    XYZVector fBField{0, 0, 0}; // Magnetic field vector
 
@@ -34,7 +41,7 @@ protected:
    double fStopTol = 0.01;      /// Maximum kinetic energy to consider the particle stopped
    double fScalingFactor = 1.0; /// Scaling factor for energy loss
 
-   XYZVector fPos; // Current position of the particle in mm
+   XYZPoint fPos;  // Current position of the particle in mm
    XYZVector fMom; // Current momentum of the particle in MeV/c
 
    static constexpr double fReltoSImom = 1.60218e-13 / 299792458; // Conversion factor from MeV/c to kg m/s (SI units)
@@ -61,12 +68,12 @@ public:
     * @param pos Position of the particle in mm.
     * @param mom Momentum of the particle in MeV/c.
     */
-   void SetState(const XYZVector &pos, const XYZVector &mom)
+   void SetState(const XYZPoint &pos, const XYZVector &mom)
    {
       fPos = pos;
       fMom = mom;
    }
-   XYZVector GetPosition() const { return fPos; }
+   XYZPoint GetPosition() const { return fPos; }
    XYZVector GetMomentum() const { return fMom; }
 
    /**
@@ -78,7 +85,15 @@ public:
     * @param point The point to approach.
     * @param eLoss If not 0, constrain the energy loss to this value (adjusting the stopping power).
     */
-   void PropagateToPoint(const XYZVector &point, double eLoss = 0);
+   void PropagateToPoint(const XYZPoint &point, double eLoss = 0);
+
+   /**
+    * @brief Propagate the particle to the given plane.
+    *
+    * Propagate the particle until it reaches the specified plane, adjusting the magnitude
+    * of the stopping power to ensure that a specific amount of energy is lost during the propagation.
+    */
+   void PropagateToPlane(const Plane3D &plane, double eLoss = 0);
 
    /**
     * @brief Calculate the force acting on the particle.
@@ -87,7 +102,7 @@ public:
     * @param mom Momentum of the particle in MeV/c.
     * @return The force acting on the particle in N.
     */
-   XYZVector Force(XYZVector pos, XYZVector mom) const;
+   XYZVector Force(XYZPoint pos, XYZVector mom) const;
 
 protected:
    /**
@@ -97,6 +112,8 @@ protected:
     * Updates fPos and fMom.
     */
    void RK4Step();
+
+   void PropagateTo();
 };
 
 } // namespace AtTools

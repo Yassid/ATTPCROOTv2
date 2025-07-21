@@ -8,6 +8,8 @@
 #include <gtest/gtest.h>
 #include <iostream>
 #include <memory>
+using ROOT::Math::Plane3D;
+using ROOT::Math::XYZPoint;
 using ROOT::Math::XYZVector;
 
 using namespace AtTools;
@@ -28,7 +30,7 @@ public:
 
 TEST(AtPropagatorTest, ForceNoField)
 {
-   XYZVector pos(0, 0, 0);   // Position in mm
+   XYZPoint pos(0, 0, 0);    // Position in mm
    XYZVector mom(100, 0, 0); // Momentum in MeV/c
 
    double charge = charge_p; // Charge in Coulombs
@@ -56,7 +58,7 @@ TEST(AtPropagatorTest, ForceNoField)
 
 TEST(AtPropagatorTest, ForceEField)
 {
-   XYZVector pos(0, 0, 0);   // Position in mm
+   XYZPoint pos(0, 0, 0);    // Position in mm
    XYZVector mom(100, 0, 0); // Momentum in MeV/c
    double charge = charge_p; // Charge in Coulombs
    double mass = mass_p;     // Mass in MeV/c^2
@@ -77,7 +79,7 @@ TEST(AtPropagatorTest, ForceEField)
 
 TEST(AtPropagatorTest, ForceBField)
 {
-   XYZVector pos(0, 0, 0);   // Position in mm
+   XYZPoint pos(0, 0, 0);    // Position in mm
    XYZVector mom(100, 0, 0); // Momentum in MeV/c
    double charge = charge_p; // Charge in Coulombs
    double mass = mass_p;     // Mass in MeV/c^2
@@ -108,7 +110,7 @@ TEST(AtPropagatorTest, PropagateToPoint_StoppingNoField)
    double KE = 1; // Kinetic energy in MeV
    double E = KE + mass_p;
    double p = std::sqrt(E * E - mass_p * mass_p); // Momentum in MeV/c
-   XYZVector startPos(0, 0, 0);                   // Start position in mm
+   XYZPoint startPos(0, 0, 0);                    // Start position in mm
    XYZVector startMom(p, 0, 0);                   // Start momentum in MeV/c
 
    propagator.SetState(startPos, startMom);
@@ -117,7 +119,7 @@ TEST(AtPropagatorTest, PropagateToPoint_StoppingNoField)
 
    ASSERT_NEAR(propagator.GetMomentum().X(), 43.331, 1e-1);
 
-   XYZVector targetPoint(1e3, 0, 0); // Target point to propagate to (1 m)
+   XYZPoint targetPoint(1e3, 0, 0); // Target point to propagate to (1 m)
    propagator.PropagateToPoint(targetPoint, KE);
 
    auto finalPos = propagator.GetPosition();
@@ -151,7 +153,7 @@ TEST(AtPropagatorTest, PropagateToPoint_NoField)
    double KE = 1; // Kinetic energy in MeV
    double E = KE + mass_p;
    double p = std::sqrt(E * E - mass_p * mass_p); // Momentum in MeV/c
-   XYZVector startPos(0, 0, 0);                   // Start position in mm
+   XYZPoint startPos(0, 0, 0);                    // Start position in mm
    XYZVector startMom(p, 0, 0);                   // Start momentum in MeV/c
 
    double eLoss = 0.0285;                                     // Expected energy loss in MeV (LISE)
@@ -166,7 +168,7 @@ TEST(AtPropagatorTest, PropagateToPoint_NoField)
 
    std::cout << "STARTING PROPAGATION  " << std::endl << std::endl;
 
-   XYZVector targetPoint(10, 0, 0); // Target point to propagate to 10 mm
+   XYZPoint targetPoint(10, 0, 0); // Target point to propagate to 10 mm
    propagator.PropagateToPoint(targetPoint);
 
    std::cout << "FINISHING PROPAGATION  " << std::endl << std::endl;

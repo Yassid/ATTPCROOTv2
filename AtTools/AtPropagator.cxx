@@ -5,7 +5,7 @@
 #include <FairLogger.h>
 namespace AtTools {
 
-AtPropagator::XYZVector AtPropagator::Force(XYZVector pos, XYZVector mom) const
+AtPropagator::XYZVector AtPropagator::Force(XYZPoint pos, XYZVector mom) const
 {
    auto v = Kinematics::GetVel(mom, fMass);
 
@@ -47,7 +47,9 @@ void AtPropagator::RK4Step()
    fPos = pos_SI * 1e3;                                   // Convert back to mm
 }
 
-void AtPropagator::PropagateToPoint(const XYZVector &point, double eLoss)
+void AtPropagator::PropagateTo() {}
+
+void AtPropagator::PropagateToPoint(const XYZPoint &point, double eLoss)
 {
    LOG(info) << "Propagating to point: " << point << " with eLoss: " << eLoss;
 
@@ -70,8 +72,8 @@ void AtPropagator::PropagateToPoint(const XYZVector &point, double eLoss)
       auto KE_initial = Kinematics::KE(fMom, fMass);
 
       while (true) {
-         XYZVector lastPos = fPos;
-         XYZVector lastMom = fMom;
+         auto lastPos = fPos;
+         auto lastMom = fMom;
          LOG(debug) << "Position: " << fPos.X() << ", " << fPos.Y() << ", " << fPos.Z();
          LOG(debug) << "Momentum: " << fMom.X() << ", " << fMom.Y() << ", " << fMom.Z();
 
