@@ -268,7 +268,6 @@ TEST(AtPropagatorTest, PropagateToPointAdaptive_NoField)
    propagator.SetState(startPos, startMom);
    propagator.SetEField({0, 0, 0}); // No electric field
    propagator.SetBField({0, 0, 0}); // No magnetic field
-   propagator.SetDelta(1e-3);       // Set relative error tolerance. Traveling 10 mm means at most 10 microns of error.
    propagator.SetH(1);              // Set initial step size to 1 s
 
    ASSERT_NEAR(propagator.GetMomentum().X(), 43.331, 1e-1);
@@ -278,6 +277,21 @@ TEST(AtPropagatorTest, PropagateToPointAdaptive_NoField)
 
    auto finalPos = propagator.GetPosition();
    auto finalMom = propagator.GetMomentum();
+
+   ASSERT_NEAR(finalPos.X(), 10, 10 * 1e-3); // Final position in x-direction should be close to 10 mm
+   ASSERT_NEAR(finalMom.X(), p_fin, 0.1);
+
+   propagator.SetState(startPos, startMom);
+   propagator.SetEField({0, 0, 0}); // No electric field
+   propagator.SetBField({0, 0, 0}); // No magnetic field
+   propagator.SetH(1e-6);           // Set initial step size to 1e-6 m
+
+   ASSERT_NEAR(propagator.GetMomentum().X(), 43.331, 1e-1);
+
+   propagator.PropagateToPointAdaptive(targetPoint);
+
+   finalPos = propagator.GetPosition();
+   finalMom = propagator.GetMomentum();
 
    ASSERT_NEAR(finalPos.X(), 10, 10 * 1e-3); // Final position in x-direction should be close to 10 mm
    ASSERT_NEAR(finalMom.X(), p_fin, 0.1);
