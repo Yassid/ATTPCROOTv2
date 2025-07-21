@@ -76,6 +76,7 @@ double GetBeta(double p, double mass);
 double GetRelMom(double gamma, double mass);
 double AtoE(double Amu);
 double EtoA(double mass);
+double GetSpeed(double p, double mass); /// Calculate the speed of a particle given its momentum and mass in m/s
 
 /**
  * Calculate the kinetic energy of a particle given its momentum and mass.
