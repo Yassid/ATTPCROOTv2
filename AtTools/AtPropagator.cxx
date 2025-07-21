@@ -316,38 +316,83 @@ void AtPropagator::PropagateToPlane(const Plane3D &plane)
    while (true) {
       fLastPos = fPos;
       fLastMom = fMom;
-      LOG(debug) << "Position: " << fPos.X() << ", " << fPos.Y() << ", " << fPos.Z();
-      LOG(debug) << "Momentum: " << fMom.X() << ", " << fMom.Y() << ", " << fMom.Z();
+      LOG(info) << "Position: " << fPos.X() << ", " << fPos.Y() << ", " << fPos.Z();
+      LOG(info) << "Momentum: " << fMom.X() << ", " << fMom.Y() << ", " << fMom.Z();
 
       RK4Step(fH);
 
-      if (!IntersectedPlane(plane))
-         continue;
-
       bool reachedMeasurementPoint = IntersectedPlane(plane);
       bool particleStopped = Kinematics::KE(fMom, fMass) < fStopTol;
-      if (reachedMeasurementPoint || particleStopped) {
-         // Last iteration we were still approaching the measurement point. Now we are further away
-         // then before. We have probably reached the measurement point if things are well behaved.
-         // I can think of cases where this will not be true. A better solution might be to run
-         // tracking the point of closest approach until the distance between the current state and
-         // the measurement point is larger than the distance between the last state and the measurement point.
+      bool momentumReversed = (fLastMom.Dot(fMom) < 0);
 
-         // Undo the last step since we were closer last time.
-         double lastApproach = plane.Distance(fLastPos);
-         double approach = plane.Distance(fPos);
+      if (reachedMeasurementPoint && !particleStopped && !momentumReversed) {
+         // We reached the measurement point, so we should figure out how far we are from the measurement point
+         LOG(info) << "------ Reached measurement point ------";
+         double finalH = (fLastPos - fPos).R(); // Distance traveled in the last step
+         double approach = std::abs(plane.Distance(fLastPos));
+
+         LOG(info) << "Distance to plane: " << approach << " mm";
+         LOG(info) << "Final step size: " << finalH << " mm";
+
+         finalH = approach * 1e-3; // Convert to meters for the RK4 step
          fPos = fLastPos;
          fMom = fLastMom;
+         RK4Step(finalH); // Propagate to the measurement point
+      }
+
+      if (particleStopped || momentumReversed) {
+         // In this case the particle stopped before hitting the plane
+         // we should throw a warning to let the user know that there wasn't
+         // enough energy to reach the plane.
+         LOG(warning) << "------ Particle stopped before intersecting plane ------";
+
+         // Calculate how far to travel before stopping
+         double KE_last = Kinematics::KE(fLastMom, fMass);
+         double deltaE = KE_last - fStopTol;
+         deltaE = std::max(deltaE, 0.0); // Ensure we don't have negative energy loss
+
+         LOG(info) << "Last KE: " << KE_last << " MeV";
+         LOG(info) << "Energy to loose to stop: " << deltaE << " MeV";
+
+         double h_Stop = deltaE / fELossModel->GetdEdx(KE_last); // Distance to stop in mm
+         RK4Step(h_Stop);
+         LOG(info) << "Propagated to stopping point: " << fPos.X() << ", " << fPos.Y() << ", " << fPos.Z();
+         LOG(info) << "Energy after stopping: " << Kinematics::KE(fMom, fMass) << " MeV";
+
+         while (!IntersectedPlane(plane)) {
+            fScalingFactor = 0; // Turn off enregy loss.
+
+            // If we still haven't intersected the plane, we need to adjust the step size
+            double h = std::abs(plane.Distance(fPos)); // Reduce step size so we hit the plane
+            if (h <= fDistTol)
+               break;
+            LOG(info) << "Propagating to plane after stopping with step size: " << h << " mm";
+            RK4Step(h * 1e-3); // Convert mm to m for RK4 step
+            LOG(info) << "New position after adjusting step size: " << fPos.X() << ", " << fPos.Y() << ", " << fPos.Z();
+         }
+         fLastMom = fMom;
+         fMom = XYZVector(0, 0, 0); // Set momentum to zero since we stopped
+         reachedMeasurementPoint = true;
+      }
+
+      if (reachedMeasurementPoint || particleStopped || momentumReversed) {
+         double distanceToPlane = std::abs(plane.Distance(fPos));
 
          double KE_final = Kinematics::KE(fMom, fMass);
          auto calc_eLoss = KE_initial - KE_final; // Energy loss in MeV
          LOG(info) << "------- End of RK4 interation  ---------";
          LOG(info) << "Particle stopped: " << particleStopped;
          LOG(info) << "Reached measurement point: " << reachedMeasurementPoint;
-         LOG(info) << "Last approach: " << lastApproach << " Current approach: " << approach;
+         LOG(info) << "Distance to plane: " << distanceToPlane << " mm";
          LOG(info) << "Calculated energy loss: " << calc_eLoss << " MeV";
          LOG(info) << "Scaling factor: " << fScalingFactor;
          LOG(info) << "Final Position: " << fPos.X() << ", " << fPos.Y() << ", " << fPos.Z();
+
+         // Project the position onto the plane. Cannot use ProjectOnPlane since it is templated in such
+         // a way that it can't separate our XYZPoint and its internal XYZPoint.
+         double d = plane.Distance(fPos); // Distance from the point to the plane
+         fPos = XYZPoint(fPos.X() - plane.A() * d, fPos.Y() - plane.B() * d, fPos.Z() - plane.C() * d);
+         LOG(info) << "Projected Position on plane: " << fPos.X() << ", " << fPos.Y() << ", " << fPos.Z();
          LOG(info) << "Final Momentum: " << fMom.X() << ", " << fMom.Y() << ", " << fMom.Z();
          return;
       }
@@ -373,6 +418,21 @@ void AtPropagator::PropagateToPoint(const XYZPoint &point)
       bool reachedMeasurementPoint = ReachedPOCA(point);
       bool particleStopped = Kinematics::KE(fMom, fMass) < fStopTol;
       bool momentumReversed = (fLastMom.Dot(fMom) < 0);
+
+      if (reachedMeasurementPoint) {
+         // We reached the measurement point, so we should figure out how far we are from the measurement point
+         // and update that remaining amount
+         LOG(info) << "------ Reached measurement point------";
+         double finalH = (fLastPos - fPos).R();    // Distance traveled in the last step
+         double approach = (fLastPos - point).R(); // Distance to the measurement point
+         LOG(info) << "Distance to measurement point: " << approach << " mm";
+         LOG(info) << "Final step size: " << finalH << " mm";
+
+         finalH = approach * 1e-3; // Convert to meters for the RK4 step
+         fPos = fLastPos;
+         fMom = fLastMom;
+         RK4Step(finalH); // Propagate to the measurement point
+      }
 
       // If we stopped, then we should figure out about where we stopped assuming linear de/dx over this last step
       if (particleStopped || momentumReversed) {
@@ -400,22 +460,7 @@ void AtPropagator::PropagateToPoint(const XYZPoint &point)
          LOG(info) << "Final Momentum after stopping: " << fMom.X() << ", " << fMom.Y() << ", " << fMom.Z();
       }
 
-      if (reachedMeasurementPoint) {
-         // We reached the measurement point, so we should figure out how far we are from the measurement point
-         // and update that remaining amount
-         LOG(info) << "------ Reached measurement point------";
-         double finalH = (fLastPos - fPos).R();    // Distance traveled in the last step
-         double approach = (fLastPos - point).R(); // Distance to the measurement point
-         LOG(info) << "Distance to measurement point: " << approach << " mm";
-         LOG(info) << "Final step size: " << finalH << " mm";
-
-         finalH = approach * 1e-3; // Convert to meters for the RK4 step
-         fPos = fLastPos;
-         fMom = fLastMom;
-         RK4Step(finalH); // Propagate to the measurement point
-      }
-
-      if (reachedMeasurementPoint || particleStopped) {
+      if (reachedMeasurementPoint || particleStopped || momentumReversed) {
          // Undo the last step since we were closer last time.
          double lastApproach = (fLastPos - point).R();
          double approach = (fPos - point).R();

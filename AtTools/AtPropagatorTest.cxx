@@ -213,6 +213,39 @@ TEST(AtPropagatorTest, PropagateToPlane_NoField)
    ASSERT_NEAR(finalMom.X(), p_fin, 0.1);
 }
 
+TEST(AtPropagatorTest, PropagateToPlane_StoppingNoField)
+{
+   double charge = charge_p; // Charge in Coulombs
+   double mass = mass_p;     // Mass in MeV/c^2
+   auto elossModel = std::make_unique<AtTools::AtELossTable>(0);
+   elossModel->LoadSrimTable(
+      "/home/adam/fair_install/ATTPCROOTv2/AtReconstruction/AtFitter/OpenKF/kalman_filter/HinH.txt");
+   AtPropagator propagator(charge, mass, std::move(elossModel));
+
+   double KE = 1; // Kinetic energy in MeV
+   double E = KE + mass_p;
+   double p = std::sqrt(E * E - mass_p * mass_p); // Momentum in MeV/c
+   XYZPoint startPos(0, 0, 0);                    // Start position in mm
+   XYZVector startMom(p, 0, 0);                   // Start momentum in MeV/c
+
+   propagator.SetState(startPos, startMom);
+   propagator.SetEField({0, 0, 0}); // No electric field
+   propagator.SetBField({0, 0, 0}); // No magnetic field
+
+   ASSERT_NEAR(propagator.GetMomentum().X(), 43.331, 1e-1);
+
+   XYZPoint planePoint(220, 0, 0);         // Target point to propagate to 215 mm
+   XYZVector planeNormal(1, 0, 0);         // Normal vector of the plane in x-direction
+   Plane3D plane(planeNormal, planePoint); // Create the plane
+   propagator.PropagateToPlane(plane);
+
+   auto finalPos = propagator.GetPosition();
+   auto finalMom = propagator.GetMomentum();
+
+   ASSERT_NEAR(finalPos.X(), 220, 1); // Final position in x-direction should be close to 215 mm
+   ASSERT_NEAR(finalMom.X(), 0, 0.1);
+}
+
 TEST(AtPropagatorTest, PropagateToPointAdaptive_NoField)
 {
    double charge = charge_p; // Charge in Coulombs

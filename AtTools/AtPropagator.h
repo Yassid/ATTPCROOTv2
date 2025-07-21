@@ -41,6 +41,7 @@ protected:
                                 /// introduces at most 1mm of error.
    double fETol = 1e-4;         /// Energy tolerance for convergence when fixing energy loss
    double fStopTol = 0.01;      /// Maximum kinetic energy to consider the particle stopped (MeV)
+   double fDistTol = 1e-2;      /// Distance tolerance when considering positions equal. (mm)
    double fScalingFactor = 1.0; /// Scaling factor for energy loss
 
    XYZPoint fPos;  // Current position of the particle in mm
