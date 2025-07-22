@@ -14,14 +14,15 @@ namespace AtTools {
 class AtMeasurementSurface;
 class AtStepper {
 public:
-   struct StepResult {
-      ROOT::Math::XYZPoint pos;      // Position of the particle in mm
-      ROOT::Math::XYZVector mom;     // Momentum of the particle in MeV/c
-      ROOT::Math::XYZPoint lastPos;  // Last position of the particle in mm
-      ROOT::Math::XYZVector lastMom; // Last momentum of the particle in MeV/c
-      double mass;                   // Mass of the particle in MeV/c^2
-      double h;                      // Step size for the step in m
-      bool success;                  // Whether the step was successful
+   struct StepState {
+      ROOT::Math::XYZPoint pos;      /// Position of the particle in mm
+      ROOT::Math::XYZVector mom;     /// Momentum of the particle in MeV/c
+      ROOT::Math::XYZPoint lastPos;  /// Last position of the particle in mm
+      ROOT::Math::XYZVector lastMom; /// Last momentum of the particle in MeV/c
+      double mass;                   /// Mass of the particle in MeV/c^2
+      double h;                      /// Step size to use in m
+      double hUsed;                  /// Step size used in this step in m
+      bool success;                  /// Whether the step was successful
    };
    /**
     * @brief Function type defining the derivative of the position and momentum w.r.t. distance.
@@ -39,10 +40,33 @@ public:
 
    DerivFunc fDeriv;
 
-   virtual StepResult Step(double h, const ROOT::Math::XYZPoint &pos, const ROOT::Math::XYZVector &mom) const = 0;
+   virtual StepState Step(double h, const ROOT::Math::XYZPoint &pos, const ROOT::Math::XYZVector &mom) const = 0;
 
 protected:
    static constexpr double fReltoSImom = 1.60218e-13 / 299792458; // Conversion factor from MeV/c to kg m/s (SI units)
+};
+
+/**
+ * @brief Class for measurement surface in the AT-TPC.
+ *
+ * This class represents a measurement surface or point in the AT-TPC. It's used to define the stopping
+ * point and behavior of the propagator.
+ */
+class AtMeasurementSurface {
+public:
+   bool fClipToSurface = false; // Whether to clip to the surface
+
+   /**
+    * @brief Calculate the distance from the position to the surface.
+    */
+   virtual double Distance(const ROOT::Math::XYZPoint &pos) const = 0;
+
+   /**
+    * @brief Check if we have passed the surface between the last position and the current position.
+    */
+   virtual bool PassedSurface(AtStepper::StepState &result) const = 0;
+
+   virtual ROOT::Math::XYZPoint ProjectToSurface(const ROOT::Math::XYZPoint &pos) const = 0;
 };
 
 /**
@@ -70,8 +94,6 @@ protected:
 
    // Internal state variables for the propagator
    double fH = 1e-4;            /// Step size for propagation in m
-   double fDelta = 1e-3;        /// Relative error tolerance for adaptive step size. 10^-3 means each 1m of propagation
-                                /// introduces at most 1mm of error.
    double fETol = 1e-4;         /// Energy tolerance for convergence when fixing energy loss
    double fStopTol = 0.01;      /// Maximum kinetic energy to consider the particle stopped (MeV)
    double fDistTol = 1e-2;      /// Distance tolerance when considering positions equal. (mm)
@@ -114,7 +136,6 @@ public:
       fMom = mom;
    }
 
-   void SetDelta(double delta) { fDelta = delta; }
    void SetH(double h) { fH = h; }
 
    XYZPoint GetPosition() const { return fPos; }
@@ -130,13 +151,6 @@ public:
     * @param eLoss If not 0, constrain the energy loss to this value by adjusting fScalingFactor.
     */
    void PropagateToMeasurementSurface(const AtMeasurementSurface &point, double eLoss, AtStepper &stepper);
-
-   /**
-    * @brief Propagate the particle to the given plane.
-    *
-    * @param plane The plane to approach.
-    */
-   void PropagateToPlane(const Plane3D &plane, AtStepper &stepper);
 
    void PropagateToMeasurementSurface(const AtMeasurementSurface &surface, AtStepper &stepper);
 
@@ -182,9 +196,7 @@ public:
    }
 
 protected:
-   bool ReachedPOCA(const XYZPoint &point);
-   bool IntersectedPlane(const Plane3D &plane);
-   void CopyFromState(const AtStepper::StepResult &result)
+   void CopyFromState(const AtStepper::StepState &result)
    {
       fPos = result.pos;
       fMom = result.mom;
@@ -192,9 +204,9 @@ protected:
       fLastMom = result.lastMom;
       fH = result.h;
    }
-   AtStepper::StepResult CopyToState() const
+   AtStepper::StepState CopyToState() const
    {
-      AtStepper::StepResult result;
+      AtStepper::StepState result;
       result.pos = fPos;
       result.mom = fMom;
       result.lastPos = fLastPos;
@@ -208,37 +220,11 @@ protected:
 
 class AtRK4Stepper : public AtStepper {
 public:
-   StepResult Step(double h, const ROOT::Math::XYZPoint &pos, const ROOT::Math::XYZVector &mom) const override;
+   StepState Step(double h, const ROOT::Math::XYZPoint &pos, const ROOT::Math::XYZVector &mom) const override;
 };
 class AtRK4AdaptiveStepper : public AtStepper {
 public:
-   StepResult Step(double h, const ROOT::Math::XYZPoint &pos, const ROOT::Math::XYZVector &mom) const override;
-};
-
-/**
- * @brief Class for measurement surface in the AT-TPC.
- *
- * This class represents a measurement surface or point in the AT-TPC. It's used to define the stopping
- * point and behavior of the propagator.
- */
-class AtMeasurementSurface {
-public:
-   bool fClipToSurface = false; // Whether to clip to the surface
-
-   /**
-    * @brief Calculate the distance from the position to the surface.
-    */
-   virtual double Distance(const ROOT::Math::XYZPoint &pos) const = 0;
-
-   /**
-    * @brief Check if we have passed the surface between the last position and the current position.
-    */
-   virtual bool PassedSurface(AtStepper::StepResult &result) const = 0;
-
-   virtual ROOT::Math::XYZPoint ProjectToSurface(const ROOT::Math::XYZPoint &pos) const
-   {
-      return pos; // Default implementation returns the position as is
-   }
+   StepState Step(double h, const ROOT::Math::XYZPoint &pos, const ROOT::Math::XYZVector &mom) const override;
 };
 
 class AtMeasurementPoint : public AtMeasurementSurface {
@@ -249,8 +235,8 @@ public:
    AtMeasurementPoint(const ROOT::Math::XYZPoint &point) : fPoint(point) {}
 
    double Distance(const ROOT::Math::XYZPoint &pos) const override { return (fPoint - pos).R(); }
-
-   bool PassedSurface(AtStepper::StepResult &result) const override;
+   bool PassedSurface(AtStepper::StepState &result) const override;
+   ROOT::Math::XYZPoint ProjectToSurface(const ROOT::Math::XYZPoint &pos) const override { return fPoint; }
 };
 
 class AtMeasurementPlane : public AtMeasurementSurface {
@@ -260,7 +246,8 @@ public:
    AtMeasurementPlane(const ROOT::Math::Plane3D &plane) : fPlane(plane) { fClipToSurface = true; }
 
    double Distance(const ROOT::Math::XYZPoint &pos) const override { return std::abs(fPlane.Distance(pos)); }
-   bool PassedSurface(AtStepper::StepResult &result) const override;
+   bool PassedSurface(AtStepper::StepState &result) const override;
+   ROOT::Math::XYZPoint ProjectToSurface(const ROOT::Math::XYZPoint &pos) const override;
 };
 } // namespace AtTools
 #endif // #ifndef ATPROPAGATOR_H
