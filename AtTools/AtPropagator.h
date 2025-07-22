@@ -20,6 +20,7 @@ public:
       ROOT::Math::XYZPoint fLastPos;  /// Last position of the particle in mm
       ROOT::Math::XYZVector fLastMom; /// Last momentum of the particle in MeV/c
       double fMass;                   /// Mass of the particle in MeV/c^2
+      double fQ;                      /// Charge of the particle in Coulombs
       double h;                       /// Step size to use in m
       double hUsed;                   /// Step size used in this step in m
       bool success;                   /// Whether the step was successful
@@ -40,7 +41,7 @@ public:
 
    DerivFunc fDeriv;
 
-   virtual StepState Step(double h, const ROOT::Math::XYZPoint &pos, const ROOT::Math::XYZVector &mom) const = 0;
+   virtual StepState Step(const StepState &state) const = 0;
 
 protected:
    static constexpr double fReltoSImom = 1.60218e-13 / 299792458; // Conversion factor from MeV/c to kg m/s (SI units)
@@ -99,20 +100,22 @@ protected:
    double fDistTol = 1e-2;      /// Distance tolerance when considering positions equal. (mm)
    double fScalingFactor = 1.0; /// Scaling factor for energy loss
 
-   AtStepper::StepState fState; // Current state of the particle
-
-   XYZPoint fPos;  // Current position of the particle in mm
-   XYZVector fMom; // Current momentum of the particle in MeV/c
-
-   XYZPoint fLastPos;
-   XYZVector fLastMom;
-
+   AtStepper::StepState fState;                                   // Current state of the particle
    static constexpr double fReltoSImom = 1.60218e-13 / 299792458; // Conversion factor from MeV/c to kg m/s (SI units)
 
 public:
+   /**
+    * @brief Constructor for AtPropagator.
+    * @param charge Charge of the particle in Coulombs.
+    * @param mass Mass of the particle in MeV/c^2.
+    * @param elossModel Energy loss model to use for the particle.
+    */
    AtPropagator(double charge, double mass, std::unique_ptr<AtELossModel> elossModel)
       : fQ(charge), fMass(mass), fELossModel(std::move(elossModel))
    {
+      fState.fMass = mass;
+      fState.fQ = charge;
+      fState.h = fH; // Initialize step size
    }
    /**
     * @brief Set the electric field (V/m)
@@ -134,14 +137,18 @@ public:
     */
    void SetState(const XYZPoint &pos, const XYZVector &mom)
    {
-      fPos = pos;
-      fMom = mom;
+      fState.fPos = pos;
+      fState.fMom = mom;
    }
 
-   void SetH(double h) { fH = h; }
+   void SetH(double h)
+   {
+      fH = h;
+      fState.h = h;
+   } // Set the step size in m
 
-   XYZPoint GetPosition() const { return fPos; }
-   XYZVector GetMomentum() const { return fMom; }
+   XYZPoint GetPosition() const { return fState.fPos; }
+   XYZVector GetMomentum() const { return fState.fMom; }
 
    /**
     * @brief Propagate the particle to the point of closest approach to the given point.
@@ -200,33 +207,22 @@ public:
 protected:
    void CopyFromState(const AtStepper::StepState &result)
    {
-      fPos = result.fPos;
-      fMom = result.fMom;
-      fLastPos = result.fLastPos;
-      fLastMom = result.fLastMom;
+      fState = result;
+      // fPos = result.fPos;
+      // fMom = result.fMom;
+      // fLastPos = result.fLastPos;
+      // fLastMom = result.fLastMom;
       fH = result.h;
-   }
-   AtStepper::StepState CopyToState() const
-   {
-      AtStepper::StepState result;
-      result.fPos = fPos;
-      result.fMom = fMom;
-      result.fLastPos = fLastPos;
-      result.fLastMom = fLastMom;
-      result.fMass = fMass;
-      result.h = fH;
-      result.success = true; // Assume success unless proven otherwise
-      return result;
    }
 };
 
 class AtRK4Stepper : public AtStepper {
 public:
-   StepState Step(double h, const ROOT::Math::XYZPoint &pos, const ROOT::Math::XYZVector &mom) const override;
+   StepState Step(const StepState &state) const override;
 };
 class AtRK4AdaptiveStepper : public AtStepper {
 public:
-   StepState Step(double h, const ROOT::Math::XYZPoint &pos, const ROOT::Math::XYZVector &mom) const override;
+   StepState Step(const StepState &state) const override;
 };
 
 class AtMeasurementPoint : public AtMeasurementSurface {
