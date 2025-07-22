@@ -194,108 +194,6 @@ void AtPropagator::PropagateToPlane(const Plane3D &plane, AtStepper &stepper)
    } // End of loop over RK4 integration
 }
 
-void AtPropagator::PropagateToPoint(const XYZPoint &point, AtStepper &stepper)
-{
-   LOG(info) << "Propagating to point: " << point;
-
-   auto KE_initial = Kinematics::KE(fMom, fMass);
-   stepper.fDeriv = [this](const XYZPoint &pos, const XYZVector &mom) { return this->Derivatives(pos, mom); };
-
-   while (true) {
-      LOG(debug) << "Position: " << fPos.X() << ", " << fPos.Y() << ", " << fPos.Z();
-      LOG(debug) << "Momentum: " << fMom.X() << ", " << fMom.Y() << ", " << fMom.Z();
-
-      auto result = stepper.Step(fH, fPos, fMom);
-      if (!result.success) {
-         LOG(error) << "Integration step failed, aborting propagation.";
-         return; // Abort propagation if step failed
-      }
-      CopyFromState(result); // Copy the new state from the stepper
-
-      if (!ReachedPOCA(point))
-         continue;
-
-      bool reachedMeasurementPoint = ReachedPOCA(point);
-      bool particleStopped = Kinematics::KE(fMom, fMass) < fStopTol;
-      bool momentumReversed = (fLastMom.Dot(fMom) < 0);
-
-      if (reachedMeasurementPoint && !particleStopped && !momentumReversed) {
-         // We reached the measurement point, so we should figure out how far we are from the measurement point
-         // and update that remaining amount
-         LOG(info) << "------ Reached measurement point------";
-         double finalH = (fLastPos - fPos).R();    // Distance traveled in the last step
-         double approach = (fLastPos - point).R(); // Distance to the measurement point
-         LOG(info) << "Distance to measurement point: " << approach << " mm";
-         LOG(info) << "Final step size: " << finalH << " mm";
-
-         finalH = approach * 1e-3; // Convert to meters for the RK4 step
-         result = stepper.Step(finalH, fLastPos, fLastMom);
-         if (!result.success) {
-            LOG(error) << "Failed to propagate to measurement point, aborting.";
-            return; // Abort propagation if step failed
-         }
-         auto origH = fH;       // Save original step size
-         CopyFromState(result); // Update position and momentum to the new state
-         fH = origH;            // Restore original step size
-      }
-
-      // If we stopped, then we should figure out about where we stopped assuming linear de/dx over this last step
-      if (particleStopped || momentumReversed) {
-         LOG(info) << "------ Particle stopped before measurement point/surface------";
-
-         result.mass = fMass; // Ensure mass is set in the result
-
-         // Calculate how far to travel before stopping
-         double KE_last = Kinematics::KE(fLastMom, fMass);
-         double deltaE = KE_last - fStopTol;
-         deltaE = std::max(deltaE, 0.0);                         // Ensure we don't have negative energy loss
-         double h_Stop = deltaE / fELossModel->GetdEdx(KE_last); // Distance to stop in mm
-
-         LOG(info) << "KE at last point: " << KE_last << " MeV";
-         LOG(info) << "Energy to lose to stop: " << deltaE << " MeV";
-         LOG(info) << "Estimated distance to stop: " << h_Stop << " mm";
-         LOG(info) << "dE/dx at last point: " << fELossModel->GetdEdx(KE_last) << " MeV/mm";
-
-         result = stepper.Step(h_Stop * 1e-3, fLastPos, fLastMom);
-         if (!result.success) {
-            LOG(error) << "Failed to propagate to stopping point, aborting.";
-            return; // Abort propagation if step failed
-         }
-         auto origH = fH;           // Save original step size
-         CopyFromState(result);     // Update position and momentum to the new state
-         fMom = XYZVector(0, 0, 0); // Set momentum to zero since we stopped
-         fLastMom = fMom;           // Update last momentum to zero
-         fH = origH;                // Restore original step size
-
-         LOG(info) << "Final Position after stopping: " << fPos.X() << ", " << fPos.Y() << ", " << fPos.Z();
-         LOG(info) << "Final Momentum after stopping: " << fMom.X() << ", " << fMom.Y() << ", " << fMom.Z();
-      }
-
-      if (reachedMeasurementPoint || particleStopped || momentumReversed) {
-         // Undo the last step since we were closer last time.
-         double lastApproach = (fLastPos - point).R();
-         double approach = (fPos - point).R();
-
-         double KE_final = Kinematics::KE(fMom, fMass);
-         auto calc_eLoss = KE_initial - KE_final; // Energy loss in MeV
-         LOG(info) << "------- End of RK4 interation  ---------";
-         LOG(info) << "Particle stopped: " << particleStopped;
-         LOG(info) << "Reached measurement point: " << reachedMeasurementPoint;
-         LOG(info) << "Last approach: " << lastApproach << " Current approach: " << approach;
-         LOG(info) << "Calculated energy loss: " << calc_eLoss << " MeV";
-         LOG(info) << "Scaling factor: " << fScalingFactor;
-         LOG(info) << "Final Position: " << fPos.X() << ", " << fPos.Y() << ", " << fPos.Z();
-         LOG(info) << "Final Momentum: " << fMom.X() << ", " << fMom.Y() << ", " << fMom.Z();
-         LOG(info) << "Last Position: " << fLastPos.X() << ", " << fLastPos.Y() << ", " << fLastPos.Z();
-         LOG(info) << "Last Momentum: " << fLastMom.X() << ", " << fLastMom.Y() << ", " << fLastMom.Z();
-
-         // fPos = fLastPos;
-         // fMom = fLastMom;
-         return;
-      }
-   } // End of loop over RK4 integration
-}
-
 void AtPropagator::PropagateToMeasurementSurface(const AtMeasurementSurface &surface, AtStepper &stepper)
 {
    LOG(info) << "Propagating to measurement surface";
@@ -407,13 +305,13 @@ void AtPropagator::PropagateToMeasurementSurface(const AtMeasurementSurface &sur
    } // End of loop over RK4 integration
 }
 
-void AtPropagator::PropagateToPoint(const XYZPoint &point, double eLoss, AtStepper &stepper)
+void AtPropagator::PropagateToMeasurementSurface(const AtMeasurementSurface &surface, double eLoss, AtStepper &stepper)
 {
-   LOG(info) << "Propagating to point: " << point << " with eLoss: " << eLoss;
+   LOG(info) << "Propagating to surface with eLoss: " << eLoss;
 
    if (eLoss == 0) {
       LOG(warn) << "No energy loss specified, propagating without energy loss adjustment.";
-      PropagateToPoint(point, stepper);
+      PropagateToMeasurementSurface(surface, stepper);
       return;
    }
 
@@ -436,7 +334,7 @@ void AtPropagator::PropagateToPoint(const XYZPoint &point, double eLoss, AtStepp
       }
 
       iterations++;
-      PropagateToPoint(point, stepper); // Propagate without energy loss adjustment
+      PropagateToMeasurementSurface(surface, stepper); // Propagate without energy loss adjustment
 
       double KE_final = Kinematics::KE(fMom, fMass);
       calc_eLoss = KE_initial - KE_final; // Energy loss in MeV

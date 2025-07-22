@@ -129,15 +129,7 @@ public:
     * @param point The point to approach.
     * @param eLoss If not 0, constrain the energy loss to this value by adjusting fScalingFactor.
     */
-   void PropagateToPoint(const XYZPoint &point, double eLoss, AtStepper &stepper);
-
-   /**
-    * @brief Propagate the particle to the point of closest approach to the given point.
-    *
-    * @param point The point to approach.
-    * @param stepper The stepper to use for propagation.
-    */
-   void PropagateToPoint(const XYZPoint &point, AtStepper &stepper);
+   void PropagateToMeasurementSurface(const AtMeasurementSurface &point, double eLoss, AtStepper &stepper);
 
    /**
     * @brief Propagate the particle to the given plane.
