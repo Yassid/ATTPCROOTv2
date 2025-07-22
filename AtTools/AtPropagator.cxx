@@ -69,8 +69,8 @@ void AtPropagator::PropagateToMeasurementSurface(const AtMeasurementSurface &sur
    stepper.fDeriv = [this](const XYZPoint &pos, const XYZVector &mom) { return this->Derivatives(pos, mom); };
 
    while (true) {
-      LOG(info) << "Position: " << GetPosition().X() << ", " << GetPosition().Y() << ", " << GetPosition().Z();
-      LOG(info) << "Momentum: " << GetMomentum().X() << ", " << GetMomentum().Y() << ", " << GetMomentum().Z();
+      LOG(debug) << "Position: " << GetPosition().X() << ", " << GetPosition().Y() << ", " << GetPosition().Z();
+      LOG(debug) << "Momentum: " << GetMomentum().X() << ", " << GetMomentum().Y() << ", " << GetMomentum().Z();
 
       auto result = stepper.Step(fState);
       if (!result.success) {
@@ -106,11 +106,10 @@ void AtPropagator::PropagateToMeasurementSurface(const AtMeasurementSurface &sur
             LOG(error) << "Failed to propagate to measurement point, aborting.";
             return; // Abort propagation if step failed
          }
-         auto origH = fH;       // Save original step size
+         auto origH = fState.h; // Save original step size
          CopyFromState(result); // Update position and momentum to the new state
          fState = result;       // Update the internal state
          fState.h = origH;      // Restore original step size
-         fH = origH;            // Restore original step size
       }
 
       if (particleStopped || momentumReversed) {
@@ -137,11 +136,10 @@ void AtPropagator::PropagateToMeasurementSurface(const AtMeasurementSurface &sur
             LOG(error) << "Failed to propagate to stopping point, aborting.";
             return; // Abort propagation if step failed
          }
-         auto origH = fH;       // Save original step size
+         auto origH = fState.h; // Save original step size
          CopyFromState(result); // Update position and momentum to the new state
          fState = result;       // Update the internal state
          fState.h = origH;      // Restore original step size
-         fH = origH;            // Restore original step size
          LOG(info) << "Propagated to stopping point: " << fState.fPos.X() << ", " << fState.fPos.Y() << ", "
                    << fState.fPos.Z();
          LOG(info) << "Energy after stopping: " << Kinematics::KE(fState.fMom, fState.fMass) << " MeV";

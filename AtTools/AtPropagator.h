@@ -94,7 +94,6 @@ protected:
    const std::unique_ptr<AtELossModel> fELossModel; // Energy loss model
 
    // Internal state variables for the propagator
-   double fH = 1e-4;            /// Step size for propagation in m
    double fETol = 1e-4;         /// Energy tolerance for convergence when fixing energy loss
    double fStopTol = 0.01;      /// Maximum kinetic energy to consider the particle stopped (MeV)
    double fDistTol = 1e-2;      /// Distance tolerance when considering positions equal. (mm)
@@ -115,7 +114,7 @@ public:
    {
       fState.fMass = mass;
       fState.fQ = charge;
-      fState.h = fH; // Initialize step size
+      fState.h = 1e-4; // Initial step size in m
    }
    /**
     * @brief Set the electric field (V/m)
@@ -141,11 +140,7 @@ public:
       fState.fMom = mom;
    }
 
-   void SetH(double h)
-   {
-      fH = h;
-      fState.h = h;
-   } // Set the step size in m
+   void SetH(double h) { fState.h = h; } // Set the step size in m
 
    XYZPoint GetPosition() const { return fState.fPos; }
    XYZVector GetMomentum() const { return fState.fMom; }
@@ -212,7 +207,7 @@ protected:
       // fMom = result.fMom;
       // fLastPos = result.fLastPos;
       // fLastMom = result.fLastMom;
-      fH = result.h;
+      // fH = result.h;
    }
 };
 
