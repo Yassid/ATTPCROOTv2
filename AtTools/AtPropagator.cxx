@@ -33,12 +33,12 @@ namespace AtTools {
 
 AtPropagator::XYZVector AtPropagator::Force(XYZPoint pos, XYZVector mom) const
 {
-   auto v = Kinematics::GetVel(mom, fMass);
+   auto v = Kinematics::GetVel(mom, fState.fMass);
 
-   auto F_lorentz = fQ * (fEField + v.Cross(fBField));
+   auto F_lorentz = fState.fQ * (fEField + v.Cross(fBField));
    LOG(debug) << "F_lorentz: " << F_lorentz;
-   auto dedx = fScalingFactor * fELossModel->GetdEdx(Kinematics::KE(mom, fMass)); // Stopping power in MeV/mm
-   auto dedx_si = dedx * 1.60218e-10;                                             // de_dx in SI units (J/m)
+   auto dedx = fScalingFactor * fELossModel->GetdEdx(Kinematics::KE(mom, fState.fMass)); // Stopping power in MeV/mm
+   auto dedx_si = dedx * 1.60218e-10;                                                    // de_dx in SI units (J/m)
 
    auto drag = -dedx_si * mom.Unit();
    LOG(debug) << "drag: " << drag << " mom " << mom << " dedx " << dedx_si;
@@ -49,7 +49,7 @@ AtPropagator::XYZVector AtPropagator::Force(XYZPoint pos, XYZVector mom) const
 AtPropagator::XYZVector AtPropagator::dpds(const XYZPoint &pos, const XYZVector &mom) const
 {
    // Calculate the force acting on the particle at the given position and momentum
-   auto speed = Kinematics::GetSpeed(mom.R(), fMass); // Speed in m/s
+   auto speed = Kinematics::GetSpeed(mom.R(), fState.fMass); // Speed in m/s
    return Force(pos, mom) / speed;
 }
 AtPropagator::XYZVector AtPropagator::d2xds2(const XYZPoint &pos, const XYZVector &mom) const
@@ -77,8 +77,7 @@ void AtPropagator::PropagateToMeasurementSurface(const AtMeasurementSurface &sur
          LOG(error) << "Integration step failed, aborting propagation.";
          return; // Abort propagation if step failed
       }
-      CopyFromState(result); // Copy the new state from the stepper
-      fState = result;       // Update the internal state
+      fState = result; // Update the internal state
 
       bool reachedMeasurementPoint = surface.PassedSurface(fState);
       bool particleStopped = Kinematics::KE(fState.fMom, fState.fMass) < fStopTol;
@@ -107,7 +106,6 @@ void AtPropagator::PropagateToMeasurementSurface(const AtMeasurementSurface &sur
             return; // Abort propagation if step failed
          }
          auto origH = fState.h; // Save original step size
-         CopyFromState(result); // Update position and momentum to the new state
          fState = result;       // Update the internal state
          fState.h = origH;      // Restore original step size
       }
@@ -137,7 +135,6 @@ void AtPropagator::PropagateToMeasurementSurface(const AtMeasurementSurface &sur
             return; // Abort propagation if step failed
          }
          auto origH = fState.h; // Save original step size
-         CopyFromState(result); // Update position and momentum to the new state
          fState = result;       // Update the internal state
          fState.h = origH;      // Restore original step size
          LOG(info) << "Propagated to stopping point: " << fState.fPos.X() << ", " << fState.fPos.Y() << ", "
@@ -160,8 +157,7 @@ void AtPropagator::PropagateToMeasurementSurface(const AtMeasurementSurface &sur
                LOG(error) << "Failed to propagate to surface after stopping, aborting.";
                return; // Abort propagation if step failed
             }
-            CopyFromState(result); // Update position and momentum to the new state
-            fState = result;       // Update the internal state
+            fState = result; // Update the internal state
             LOG(info) << "New position after adjusting step size: " << fState.fPos.X() << ", " << fState.fPos.Y()
                       << ", " << fState.fPos.Z();
          }
@@ -299,6 +295,7 @@ AtStepper::StepState AtRK4AdaptiveStepper::Step(const StepState &state) const
    result.fLastPos = state.fPos;
    result.fLastMom = state.fMom;
    result.success = true;
+
    auto h = state.h; // Step size in m
    auto fPos = state.fPos;
    auto fMom = state.fMom;
@@ -306,14 +303,10 @@ AtStepper::StepState AtRK4AdaptiveStepper::Step(const StepState &state) const
    // Take h to be the step size in m.
    // Use DP5(4) method for adaptive step size control.
 
-   double atol_pos = 1e-2; // Absolute tolerance for position (mm)
-   double atol_mom = 1e-2; // Absolute tolerance for momentum (MeV/c)
-   double rtol = 1e-6;     // Relative tolerance for both position and momentum
-
    auto x0_mm = fPos;
    auto p0 = fMom;
-   LOG(info) << "Starting RK4 step with initial position: " << x0_mm.X() << ", " << x0_mm.Y() << ", " << x0_mm.Z();
-   LOG(info) << "Initial momentum: " << p0.X() << ", " << p0.Y() << ", " << p0.Z();
+   LOG(debug) << "Starting RK4 step with initial position: " << x0_mm.X() << ", " << x0_mm.Y() << ", " << x0_mm.Z();
+   LOG(debug) << "Initial momentum: " << p0.X() << ", " << p0.Y() << ", " << p0.Z();
 
    while (true) {
       auto x_SI = fPos * 1e-3;        // Convert position to SI units (m)
@@ -403,13 +396,13 @@ AtStepper::StepState AtRK4AdaptiveStepper::Step(const StepState &state) const
       XYZVector p_err = (p_5_MeV - p_4_MeV); // Error in momentum (MeV/c)
 
       // Calculate the overall error
-      double ex = x_err.X() / (atol_pos + rtol * std::abs(x_5_mm.X()));
-      double ey = x_err.Y() / (atol_pos + rtol * std::abs(x_5_mm.Y()));
-      double ez = x_err.Z() / (atol_pos + rtol * std::abs(x_5_mm.Z()));
+      double ex = x_err.X() / (fAtolPos + fRtol * std::abs(x_5_mm.X()));
+      double ey = x_err.Y() / (fAtolPos + fRtol * std::abs(x_5_mm.Y()));
+      double ez = x_err.Z() / (fAtolPos + fRtol * std::abs(x_5_mm.Z()));
 
-      double ep_x = p_err.X() / (atol_mom + rtol * std::abs(p_5_MeV.X()));
-      double ep_y = p_err.Y() / (atol_mom + rtol * std::abs(p_5_MeV.Y()));
-      double ep_z = p_err.Z() / (atol_mom + rtol * std::abs(p_5_MeV.Z()));
+      double ep_x = p_err.X() / (fAtolMom + fRtol * std::abs(p_5_MeV.X()));
+      double ep_y = p_err.Y() / (fAtolMom + fRtol * std::abs(p_5_MeV.Y()));
+      double ep_z = p_err.Z() / (fAtolMom + fRtol * std::abs(p_5_MeV.Z()));
 
       // Combine errors (norm)
       double err = std::sqrt(ex * ex + ey * ey + ez * ez + ep_x * ep_x + ep_y * ep_y + ep_z * ep_z);
@@ -428,8 +421,7 @@ AtStepper::StepState AtRK4AdaptiveStepper::Step(const StepState &state) const
          LOG(info) << "New Position: " << result.fPos.X() << ", " << result.fPos.Y() << ", " << result.fPos.Z();
          LOG(info) << "New Momentum: " << result.fMom.X() << ", " << result.fMom.Y() << ", " << result.fMom.Z();
 
-         // Adjust the step size for the next iteration
-         result.h = hNew;
+         result.h = hNew;       // Adjust the step size for the next iteration
          result.hUsed = h;      // Store the step size used
          result.success = true; // Step accepted
          return result;
@@ -439,13 +431,13 @@ AtStepper::StepState AtRK4AdaptiveStepper::Step(const StepState &state) const
          LOG(info) << "Step size: " << h << " m";
          LOG(info) << "Reducing step size to: " << hNew << " m";
 
-         result.h = hNew; // Reduce step size
-         h = hNew;        // Update the step size for the next iteration
-         if (result.h < 1e-6) {
-            LOG(error) << "Step size too small, aborting propagation.";
+         result.h = hNew; // Reduce step size for next iteration
+         h = hNew;        // Update h for the next iteration
+         if (result.h < fMinStep || result.h > fMaxStep) {
+            LOG(error) << "Step size out of bounds, aborting propagation.";
             result.success = false;
             result.hUsed = h;
-            return result; // Abort propagation if step size is too small
+            return result; // Abort propagation if step size is out of bounds
          }
       }
    }

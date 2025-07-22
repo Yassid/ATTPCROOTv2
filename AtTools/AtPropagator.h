@@ -86,20 +86,21 @@ protected:
    using XYZVector = ROOT::Math::XYZVector;
    using XYZPoint = ROOT::Math::XYZPoint;
    using Plane3D = ROOT::Math::Plane3D;
-   XYZVector fEField{0, 0, 0}; // Electric field vector
-   XYZVector fBField{0, 0, 0}; // Magnetic field vector
 
-   const double fQ;                                 // Charge of the particle in Coulombs
-   const double fMass;                              // Mass of the particle in MeV/c^2
+   // Variables used for the force
+   XYZVector fEField{0, 0, 0};                      // Electric field vector
+   XYZVector fBField{0, 0, 0};                      // Magnetic field vector
    const std::unique_ptr<AtELossModel> fELossModel; // Energy loss model
 
    // Internal state variables for the propagator
-   double fETol = 1e-4;         /// Energy tolerance for convergence when fixing energy loss
-   double fStopTol = 0.01;      /// Maximum kinetic energy to consider the particle stopped (MeV)
-   double fDistTol = 1e-2;      /// Distance tolerance when considering positions equal. (mm)
    double fScalingFactor = 1.0; /// Scaling factor for energy loss
+   AtStepper::StepState fState; /// Current state of the particle
 
-   AtStepper::StepState fState;                                   // Current state of the particle
+   // Tolerances and limits
+   double fETol = 1e-4;    /// Energy tolerance for convergence when fixing energy loss
+   double fStopTol = 0.01; /// Maximum kinetic energy to consider the particle stopped (MeV)
+   double fDistTol = 1e-2; /// Distance tolerance when considering positions equal. (mm)
+
    static constexpr double fReltoSImom = 1.60218e-13 / 299792458; // Conversion factor from MeV/c to kg m/s (SI units)
 
 public:
@@ -110,7 +111,7 @@ public:
     * @param elossModel Energy loss model to use for the particle.
     */
    AtPropagator(double charge, double mass, std::unique_ptr<AtELossModel> elossModel)
-      : fQ(charge), fMass(mass), fELossModel(std::move(elossModel))
+      : fELossModel(std::move(elossModel))
    {
       fState.fMass = mass;
       fState.fQ = charge;
@@ -176,18 +177,6 @@ public:
     */
    XYZVector dpds(const XYZPoint &pos, const XYZVector &mom) const;
 
-   /**
-    * @brief Calculate the second derivative of the position w.r.t. arc length.
-    *
-    * \frac{d^2\vec{x}}{ds^2} = \frac{1}{p} \left( \frac{d\vec{p}}{ds} - \hat{p} (\hat{p} \cdot \frac{d\vec{p}}{ds})
-    * \right)
-    *
-    * @param pos Position of the particle in mm.
-    * @param mom Momentum of the particle in MeV/c.
-    * @return The second derivative of the position w.r.t. arc length in m/m^2.
-    */
-   XYZVector d2xds2(const XYZPoint &pos, const XYZVector &mom) const;
-
    XYZVector dxds(const XYZPoint &pos, const XYZVector &mom) const
    {
       return mom.Unit(); // The derivative of the position is just the unit vector of the momentum.
@@ -200,15 +189,17 @@ public:
    }
 
 protected:
-   void CopyFromState(const AtStepper::StepState &result)
-   {
-      fState = result;
-      // fPos = result.fPos;
-      // fMom = result.fMom;
-      // fLastPos = result.fLastPos;
-      // fLastMom = result.fLastMom;
-      // fH = result.h;
-   }
+   /**
+    * @brief Calculate the second derivative of the position w.r.t. arc length.
+    *
+    * \frac{d^2\vec{x}}{ds^2} = \frac{1}{p} \left( \frac{d\vec{p}}{ds} - \hat{p} (\hat{p} \cdot \frac{d\vec{p}}{ds})
+    * \right)
+    *
+    * @param pos Position of the particle in mm.
+    * @param mom Momentum of the particle in MeV/c.
+    * @return The second derivative of the position w.r.t. arc length in m/m^2.
+    */
+   XYZVector d2xds2(const XYZPoint &pos, const XYZVector &mom) const;
 };
 
 class AtRK4Stepper : public AtStepper {
@@ -217,6 +208,12 @@ public:
 };
 class AtRK4AdaptiveStepper : public AtStepper {
 public:
+   double fAtolPos = 1e-2; /// Absolute tolerance for position in mm
+   double fAtolMom = 1e-2; /// Absolute tolerance for momentum in MeV/c
+   double fRtol = 1e-6;    /// Relative tolerance for position and momentum
+   double fMinStep = 1e-6; /// Minimum step size in m
+   double fMaxStep = 10.0; /// Maximum step size in m
+
    StepState Step(const StepState &state) const override;
 };
 
