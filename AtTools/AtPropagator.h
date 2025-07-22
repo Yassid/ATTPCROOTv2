@@ -15,14 +15,14 @@ class AtMeasurementSurface;
 class AtStepper {
 public:
    struct StepState {
-      ROOT::Math::XYZPoint pos;      /// Position of the particle in mm
-      ROOT::Math::XYZVector mom;     /// Momentum of the particle in MeV/c
-      ROOT::Math::XYZPoint lastPos;  /// Last position of the particle in mm
-      ROOT::Math::XYZVector lastMom; /// Last momentum of the particle in MeV/c
-      double mass;                   /// Mass of the particle in MeV/c^2
-      double h;                      /// Step size to use in m
-      double hUsed;                  /// Step size used in this step in m
-      bool success;                  /// Whether the step was successful
+      ROOT::Math::XYZPoint fPos;      /// Position of the particle in mm
+      ROOT::Math::XYZVector fMom;     /// Momentum of the particle in MeV/c
+      ROOT::Math::XYZPoint fLastPos;  /// Last position of the particle in mm
+      ROOT::Math::XYZVector fLastMom; /// Last momentum of the particle in MeV/c
+      double fMass;                   /// Mass of the particle in MeV/c^2
+      double h;                       /// Step size to use in m
+      double hUsed;                   /// Step size used in this step in m
+      bool success;                   /// Whether the step was successful
    };
    /**
     * @brief Function type defining the derivative of the position and momentum w.r.t. distance.
@@ -98,6 +98,8 @@ protected:
    double fStopTol = 0.01;      /// Maximum kinetic energy to consider the particle stopped (MeV)
    double fDistTol = 1e-2;      /// Distance tolerance when considering positions equal. (mm)
    double fScalingFactor = 1.0; /// Scaling factor for energy loss
+
+   AtStepper::StepState fState; // Current state of the particle
 
    XYZPoint fPos;  // Current position of the particle in mm
    XYZVector fMom; // Current momentum of the particle in MeV/c
@@ -198,20 +200,20 @@ public:
 protected:
    void CopyFromState(const AtStepper::StepState &result)
    {
-      fPos = result.pos;
-      fMom = result.mom;
-      fLastPos = result.lastPos;
-      fLastMom = result.lastMom;
+      fPos = result.fPos;
+      fMom = result.fMom;
+      fLastPos = result.fLastPos;
+      fLastMom = result.fLastMom;
       fH = result.h;
    }
    AtStepper::StepState CopyToState() const
    {
       AtStepper::StepState result;
-      result.pos = fPos;
-      result.mom = fMom;
-      result.lastPos = fLastPos;
-      result.lastMom = fLastMom;
-      result.mass = fMass;
+      result.fPos = fPos;
+      result.fMom = fMom;
+      result.fLastPos = fLastPos;
+      result.fLastMom = fLastMom;
+      result.fMass = fMass;
       result.h = fH;
       result.success = true; // Assume success unless proven otherwise
       return result;

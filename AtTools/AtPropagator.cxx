@@ -227,8 +227,8 @@ AtStepper::StepState AtRK4Stepper::Step(double h, const XYZPoint &fPos, const XY
 {
    // Take h to be the step size in m.
    StepState result;
-   result.lastPos = fPos;
-   result.lastMom = fMom;
+   result.fLastPos = fPos;
+   result.fLastMom = fMom;
    result.h = h;
    result.success = true;
 
@@ -259,12 +259,12 @@ AtStepper::StepState AtRK4Stepper::Step(double h, const XYZPoint &fPos, const XY
    LOG(debug) << "dx/ds (SI units): " << dxds_SI.X() << ", " << dxds_SI.Y() << ", " << dxds_SI.Z();
 
    auto mom_SI = fReltoSImom * fMom;
-   mom_SI += dpds_SI * h;             // Update momentum in SI units (kg m/s)
-   result.mom = mom_SI / fReltoSImom; // Convert back to
+   mom_SI += dpds_SI * h;              // Update momentum in SI units (kg m/s)
+   result.fMom = mom_SI / fReltoSImom; // Convert back to
 
-   auto pos_SI = fPos * 1e-3; // Convert position to SI units (m)
-   pos_SI += dxds_SI * h;     // Update position in SI units (m
-   result.pos = pos_SI * 1e3; // Convert back to mm
+   auto pos_SI = fPos * 1e-3;  // Convert position to SI units (m)
+   pos_SI += dxds_SI * h;      // Update position in SI units (m
+   result.fPos = pos_SI * 1e3; // Convert back to mm
 
    return result;
 }
@@ -273,8 +273,8 @@ AtStepper::StepState AtRK4AdaptiveStepper::Step(double h, const XYZPoint &fPos, 
 {
    // Take h to be the step size in m.
    StepState result;
-   result.lastPos = fPos;
-   result.lastMom = fMom;
+   result.fLastPos = fPos;
+   result.fLastMom = fMom;
    result.h = h;
    result.success = true;
 
@@ -395,13 +395,13 @@ AtStepper::StepState AtRK4AdaptiveStepper::Step(double h, const XYZPoint &fPos, 
       // We now know the local error at this point. Now we need to decide to accept the point or not.
       if (err <= 1.0) {
          // Accept the step
-         result.pos = x_5_mm;  // Update position in mm
-         result.mom = p_5_MeV; // Update momentum in MeV/c
+         result.fPos = x_5_mm;  // Update position in mm
+         result.fMom = p_5_MeV; // Update momentum in MeV/c
          LOG(info) << "Accepted step with error: " << err;
          LOG(info) << "Step size: " << h << " m";
          LOG(info) << "New step size: " << hNew << " m";
-         LOG(info) << "New Position: " << result.pos.X() << ", " << result.pos.Y() << ", " << result.pos.Z();
-         LOG(info) << "New Momentum: " << result.mom.X() << ", " << result.mom.Y() << ", " << result.mom.Z();
+         LOG(info) << "New Position: " << result.fPos.X() << ", " << result.fPos.Y() << ", " << result.fPos.Z();
+         LOG(info) << "New Momentum: " << result.fMom.X() << ", " << result.fMom.Y() << ", " << result.fMom.Z();
 
          // Adjust the step size for the next iteration
          result.h = hNew;
@@ -427,8 +427,8 @@ AtStepper::StepState AtRK4AdaptiveStepper::Step(double h, const XYZPoint &fPos, 
 bool AtMeasurementPoint::PassedSurface(AtStepper::StepState &result) const
 {
    // Check if the particle has passed the measurement point
-   auto lastDeriv = (fPoint - result.lastPos).Dot(result.lastMom.Unit());
-   auto currDeriv = (fPoint - result.pos).Dot(result.mom.Unit());
+   auto lastDeriv = (fPoint - result.fLastPos).Dot(result.fLastMom.Unit());
+   auto currDeriv = (fPoint - result.fPos).Dot(result.fMom.Unit());
    LOG(debug) << "Last Derivative: " << lastDeriv << ", Current Derivative: " << currDeriv;
    return lastDeriv * currDeriv <= 0;
 }
@@ -436,8 +436,8 @@ bool AtMeasurementPoint::PassedSurface(AtStepper::StepState &result) const
 bool AtMeasurementPlane::PassedSurface(AtStepper::StepState &result) const
 {
    // Check if the particle has crossed the plane this step.
-   auto prevSign = fPlane.Distance(result.lastPos) > 0 ? 1 : -1;
-   auto currSign = fPlane.Distance(result.pos) > 0 ? 1 : -1;
+   auto prevSign = fPlane.Distance(result.fLastPos) > 0 ? 1 : -1;
+   auto currSign = fPlane.Distance(result.fPos) > 0 ? 1 : -1;
    return (prevSign != currSign);
 }
 
