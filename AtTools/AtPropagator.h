@@ -252,5 +252,15 @@ public:
 
    bool PassedSurface(AtStepper::StepResult &result) const override;
 };
+
+class AtMeasurementPlane : public AtMeasurementSurface {
+protected:
+   ROOT::Math::Plane3D fPlane; // The measurement plane
+public:
+   AtMeasurementPlane(const ROOT::Math::Plane3D &plane) : fPlane(plane) { fClipToSurface = true; }
+
+   double Distance(const ROOT::Math::XYZPoint &pos) const override { return std::abs(fPlane.Distance(pos)); }
+   bool PassedSurface(AtStepper::StepResult &result) const override;
+};
 } // namespace AtTools
 #endif // #ifndef ATPROPAGATOR_H

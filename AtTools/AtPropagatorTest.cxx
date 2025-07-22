@@ -209,7 +209,8 @@ TEST(AtPropagatorTest, PropagateToPlane_NoField)
    XYZPoint planePoint(10, 10, 10);        // Target point to propagate to 10 mm
    XYZVector planeNormal(1, 0, 0);         // Normal vector of the plane in x-direction
    Plane3D plane(planeNormal, planePoint); // Create the plane
-   propagator.PropagateToPlane(plane, stepper);
+   AtMeasurementPlane measurementPlane(plane);
+   propagator.PropagateToMeasurementSurface(measurementPlane, stepper);
 
    auto finalPos = propagator.GetPosition();
    auto finalMom = propagator.GetMomentum();
@@ -243,7 +244,8 @@ TEST(AtPropagatorTest, PropagateToPlane_StoppingNoField)
    XYZPoint planePoint(220, 0, 0);         // Target point to propagate to 215 mm
    XYZVector planeNormal(1, 0, 0);         // Normal vector of the plane in x-direction
    Plane3D plane(planeNormal, planePoint); // Create the plane
-   propagator.PropagateToPlane(plane, stepper);
+   AtMeasurementPlane measurementPlane(plane);
+   propagator.PropagateToMeasurementSurface(measurementPlane, stepper);
 
    auto finalPos = propagator.GetPosition();
    auto finalMom = propagator.GetMomentum();

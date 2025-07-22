@@ -562,4 +562,12 @@ bool AtMeasurementPoint::PassedSurface(AtStepper::StepResult &result) const
    return lastDeriv * currDeriv <= 0;
 }
 
+bool AtMeasurementPlane::PassedSurface(AtStepper::StepResult &result) const
+{
+   // Check if the particle has crossed the plane this step.
+   auto prevSign = fPlane.Distance(result.lastPos) > 0 ? 1 : -1;
+   auto currSign = fPlane.Distance(result.pos) > 0 ? 1 : -1;
+   return (prevSign != currSign);
+}
+
 } // namespace AtTools
