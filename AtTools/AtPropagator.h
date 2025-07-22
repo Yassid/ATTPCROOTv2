@@ -188,20 +188,47 @@ protected:
    bool IntersectedPlane(const Plane3D &plane);
 };
 
-static constexpr double a21 = 1.0 / 5.0;
-static constexpr double a31 = 3.0 / 40.0, a32 = 9.0 / 40.0;
-static constexpr double a41 = 44.0 / 45.0, a42 = -56.0 / 15.0, a43 = 32.0 / 9.0;
-static constexpr double a51 = 19372.0 / 6561.0, a52 = -25360.0 / 2187.0, a53 = 64448.0 / 6561.0, a54 = -212.0 / 729.0;
-static constexpr double a61 = 9017.0 / 3168.0, a62 = -355.0 / 33.0, a63 = 46732.0 / 5247.0, a64 = 49.0 / 176.0,
-                        a65 = -5103.0 / 18656.0;
-static constexpr double a71 = 35.0 / 384.0, a72 = 0.0, a73 = 500.0 / 1113.0, a74 = 125.0 / 192.0,
-                        a75 = -2187.0 / 6784.0, a76 = 11.0 / 84.0;
-// b (5th-order)
-static constexpr double b1 = 35.0 / 384.0, b3 = 500.0 / 1113.0, b4 = 125.0 / 192.0, b5 = -2187.0 / 6784.0,
-                        b6 = 11.0 / 84.0;
-// b* (4th-order, “star”)
-static constexpr double bs1 = 5179.0 / 57600.0, bs3 = 7571.0 / 16695.0, bs4 = 393.0 / 640.0, bs5 = -92097.0 / 339200.0,
-                        bs6 = 187.0 / 2100.0, bs7 = 1.0 / 40.0;
+class AtStepper {
+public:
+   struct StepResult {
+      ROOT::Math::XYZPoint pos;      // Position of the particle in mm
+      ROOT::Math::XYZVector mom;     // Momentum of the particle in MeV/c
+      ROOT::Math::XYZPoint lastPos;  // Last position of the particle in mm
+      ROOT::Math::XYZVector lastMom; // Last momentum of the particle in MeV/c
+      double h;                      // Step size for the step in m
+      bool success;                  // Whether the step was successful
+   };
+   /**
+    * @brief Function type defining the derivative of the position and momentum w.r.t. distance.
+    *
+    * This function takes the current position and momentum and returns the derivate of the position and momentum.
+    *
+    * @param pos Current position of the particle in mm.
+    * @param mom Current momentum of the particle in MeV/c.
+    * @return A pair containing the derivatives of the position and momentum in SI units (m and kg m/s).
+    * The first element is the derivative of the position, and the second element is the derivative
+    * of the momentum.
+    */
+   using DerivFunc = std::function<std::pair<ROOT::Math::XYZPoint, ROOT::Math::XYZVector>(
+      const ROOT::Math::XYZPoint &, const ROOT::Math::XYZVector &)>;
+
+   virtual StepResult
+   Step(double h, const ROOT::Math::XYZPoint &pos, const ROOT::Math::XYZVector &mom, DerivFunc derivFunc) const = 0;
+
+protected:
+   static constexpr double fReltoSImom = 1.60218e-13 / 299792458; // Conversion factor from MeV/c to kg m/s (SI units)
+};
+
+class AtRK4Stepper : public AtStepper {
+public:
+   StepResult Step(double h, const ROOT::Math::XYZPoint &pos, const ROOT::Math::XYZVector &mom,
+                   DerivFunc derivFunc) const override;
+};
+class AtRK4AdaptiveStepper : public AtStepper {
+public:
+   StepResult Step(double h, const ROOT::Math::XYZPoint &pos, const ROOT::Math::XYZVector &mom,
+                   DerivFunc derivFunc) const override;
+};
 
 } // namespace AtTools
 #endif // #ifndef ATPROPAGATOR_H

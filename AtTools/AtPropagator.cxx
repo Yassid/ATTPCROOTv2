@@ -26,6 +26,9 @@ static constexpr double b[7] = {35.0 / 384.0, 0.0, 500.0 / 1113.0, 125.0 / 192.0
 static constexpr double bs[7] = {5179.0 / 57600.0, 0.0,       7571.0 / 16695.0, 393.0 / 640.0, -92097.0 / 339200.0,
                                  187.0 / 2100.0,   1.0 / 40.0};
 
+using ROOT::Math::Plane3D;
+using ROOT::Math::XYZPoint;
+using ROOT::Math::XYZVector;
 namespace AtTools {
 
 AtPropagator::XYZVector AtPropagator::Force(XYZPoint pos, XYZVector mom) const
@@ -299,18 +302,18 @@ void AtPropagator::RK4Step(double h)
    auto x_k1 = fMom.Unit();      // The derivative of the position is then just the unit vector of the momentum.
    auto p_k1 = dpds(fPos, fMom); // The derivative of the momentum is dpds.
 
-   auto x_2 = fPos + x_k1 * h / 2; // Position at the midpoint
-   auto p_2 = fMom + p_k1 * h / 2; // Momentum at the midpoint
+   auto x_2 = fPos + x_k1 * h / 2;               // Position at the midpoint
+   auto p_2 = fMom + p_k1 * h / 2 / fReltoSImom; // Momentum at the midpoint
    auto x_k2 = p_2.Unit();
    auto p_k2 = dpds(x_2, p_2);
 
-   auto x_3 = fPos + x_k2 * h / 2; // Position at the second midpoint
-   auto p_3 = fMom + p_k2 * h / 2; // Momentum at the second midpoint
+   auto x_3 = fPos + x_k2 * h / 2;               // Position at the second midpoint
+   auto p_3 = fMom + p_k2 * h / 2 / fReltoSImom; // Momentum at the second midpoint
    auto x_k3 = p_3.Unit();
    auto p_k3 = dpds(x_3, p_3);
 
-   auto x_4 = fPos + x_k3 * h; // Position at the end of the step
-   auto p_4 = fMom + p_k3 * h; // Momentum at the end of the step
+   auto x_4 = fPos + x_k3 * h;               // Position at the end of the step
+   auto p_4 = fMom + p_k3 * h / fReltoSImom; // Momentum at the end of the step
    auto x_k4 = p_4.Unit();
    auto p_k4 = dpds(x_4, p_4);
 
@@ -393,9 +396,10 @@ void AtPropagator::PropagateToPlane(const Plane3D &plane)
 
          LOG(info) << "Last KE: " << KE_last << " MeV";
          LOG(info) << "Energy to loose to stop: " << deltaE << " MeV";
-
          double h_Stop = deltaE / fELossModel->GetdEdx(KE_last); // Distance to stop in mm
-         RK4Step(h_Stop);
+         LOG(info) << "Estimated distance to stop: " << h_Stop << " mm";
+
+         RK4Step(h_Stop * 1e-3);
          LOG(info) << "Propagated to stopping point: " << fPos.X() << ", " << fPos.Y() << ", " << fPos.Z();
          LOG(info) << "Energy after stopping: " << Kinematics::KE(fMom, fMass) << " MeV";
 
@@ -570,5 +574,13 @@ void AtPropagator::PropagateToPoint(const XYZPoint &point, double eLoss)
    LOG(info) << "Energy loss converged after " << iterations << " iterations.";
 
    fScalingFactor = 1; // Reset scaling factor after convergence
+}
+
+AtStepper::StepResult
+AtRK4Stepper::Step(double h, const XYZPoint &fPos, const XYZVector &fMom, DerivFunc derivFunc) const
+{
+   // Take h to be the step size in m.
+
+   return {};
 }
 } // namespace AtTools
