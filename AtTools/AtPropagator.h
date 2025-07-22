@@ -59,7 +59,6 @@ protected:
    using XYZVector = ROOT::Math::XYZVector;
    using XYZPoint = ROOT::Math::XYZPoint;
    using Plane3D = ROOT::Math::Plane3D;
-   using DistanceFunc = std::function<double(const XYZPoint &)>;
    XYZVector fEField{0, 0, 0}; // Electric field vector
    XYZVector fBField{0, 0, 0}; // Magnetic field vector
 
@@ -137,14 +136,13 @@ public:
     * @param stepper The stepper to use for propagation.
     */
    void PropagateToPoint(const XYZPoint &point, AtStepper &stepper);
-   void PropagateToPointAdaptive(const XYZPoint &point);
 
    /**
     * @brief Propagate the particle to the given plane.
     *
     * @param plane The plane to approach.
     */
-   void PropagateToPlane(const Plane3D &plane);
+   void PropagateToPlane(const Plane3D &plane, AtStepper &stepper);
 
    /**
     * @brief Calculate the force acting on the particle.
@@ -188,41 +186,6 @@ public:
    }
 
 protected:
-   /**
-    * @brief Perform a single RK4 step for propagation.
-    *
-    * This method performs a single Runge-Kutta 4th order step to propagate the particle's state.
-    * Updates fPos and fMom.
-    * @param h Step size for the RK4 step in meters.
-    */
-   void RK4Step(double h);
-
-   /**
-    * @brief Perform a single RK4 step using the Nystrom method.
-    * This method performs a single Runge-Kutta 4th order step using the Nystrom method
-    * to propagate the particle's state. Updates fPos and fMom.
-    * @param h Step size for the RK4 step in meters.
-    */
-   void RK4StepNystrom(double h);
-
-   /**
-    * @brief Perform an adaptive RK4 step for propagation.
-    * This method performs an adaptive Runge-Kutta 4th order step to propagate the particle's state.
-    * Updates fPos and fMom.
-    *
-    * The error is based on the difference in the positions at the end of the step. i.e:
-    * \eps = \sqrt{\eps_x^2 + \eps_y^2 + \eps_z^2}, where
-    * \eps_x = 1/30*|x_1 - x_2|, where x_1 is using h/2 and x_2 is using h.
-    *
-    * Step size is adjust to ensure the local error is less than fDelta.
-    *
-    * @param h Step size for the RK4 step in seconds. Modified in place to reflect the new step size.
-    * @return True if the step was accepted, false otherwise.
-    */
-   bool RK4StepAdaptive(double &h);
-
-   void PropagateTo(DistanceFunc distanceFunc);
-
    bool ReachedPOCA(const XYZPoint &point);
    bool IntersectedPlane(const Plane3D &plane);
    void CopyFromState(const AtStepper::StepResult &result)

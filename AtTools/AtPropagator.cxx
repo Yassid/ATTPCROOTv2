@@ -61,273 +61,6 @@ AtPropagator::XYZVector AtPropagator::d2xds2(const XYZPoint &pos, const XYZVecto
    return 1 / p * (dpds_vec - phat * (phat.Dot(dpds_vec))); // Second derivative of position w.r.t. arc length
 }
 
-void AtPropagator::PropagateToPointAdaptive(const XYZPoint &point)
-{
-   LOG(info) << "Propagating to point: " << point;
-
-   auto KE_initial = Kinematics::KE(fMom, fMass);
-   while (true) {
-      fLastPos = fPos;
-      fLastMom = fMom;
-      LOG(debug) << "Position: " << fPos.X() << ", " << fPos.Y() << ", " << fPos.Z();
-      LOG(debug) << "Momentum: " << fMom.X() << ", " << fMom.Y() << ", " << fMom.Z();
-
-      auto acceptedStep = RK4StepAdaptive(fH);
-      if (!acceptedStep) {
-         LOG(error) << "RK4 step failed, aborting propagation.";
-         return; // Abort propagation if step failed
-      }
-
-      if (!acceptedStep || !ReachedPOCA(point))
-         continue;
-
-      bool reachedMeasurementPoint = ReachedPOCA(point);
-      bool particleStopped = Kinematics::KE(fMom, fMass) < fStopTol;
-      bool momentumReversed = (fLastMom.Dot(fMom) < 0);
-
-      if (reachedMeasurementPoint) {
-         // We reached the measurement point, so we should figure out how far we are from the measurement point
-         // and update that remaining amount
-         LOG(info) << "------ Reached measurement point------";
-         double finalH = (fLastPos - fPos).R();    // Distance traveled in the last step
-         double approach = (fLastPos - point).R(); // Distance to the measurement point
-         LOG(info) << "Distance to measurement point: " << approach << " mm";
-         LOG(info) << "Final step size: " << finalH << " mm";
-
-         finalH = approach * 1e-3; // Convert to meters for the RK4 step
-         fPos = fLastPos;
-         fMom = fLastMom;
-         RK4StepAdaptive(finalH); // Propagate to the measurement point
-      }
-
-      // If we stopped, then we should figure out about where we stopped assuming linear de/dx over this last step
-      if (particleStopped || momentumReversed) {
-         LOG(info) << "------ Particle stopped ------";
-
-         double finalH = (fPos - fLastPos).R(); // Distance traveled in the last step
-         double E_loss =
-            Kinematics::KE(fLastMom, fMass) + Kinematics::KE(fMom, fMass); // Energy loss in MeV in the last step
-         double dedx = E_loss / finalH;                                    // Stopping power in MeV/mm
-
-         LOG(info) << "Particle stopped with final step size: " << finalH << " mm";
-         LOG(info) << "Energy loss in last step: " << E_loss << " MeV";
-         LOG(info) << "Stopping power (dE/dx): " << dedx << " MeV/mm";
-         LOG(info) << "Energy before stopping: " << Kinematics::KE(fLastMom, fMass) << " MeV";
-         finalH = Kinematics::KE(fLastMom, fMass) / dedx; // Distance to stop in mm
-         LOG(info) << "Estimated distance to stop: " << finalH << " mm";
-
-         fPos = fLastPos;
-         fMom = fLastMom;           // Reset to last position and momentum
-         RK4Step(finalH);           // Propagate to the point where we stopped
-         fMom = XYZVector(0, 0, 0); // Set momentum to zero since we stopped
-         fLastMom = fMom;
-
-         LOG(info) << "Final Position after stopping: " << fPos.X() << ", " << fPos.Y() << ", " << fPos.Z();
-         LOG(info) << "Final Momentum after stopping: " << fMom.X() << ", " << fMom.Y() << ", " << fMom.Z();
-      }
-
-      if (reachedMeasurementPoint || particleStopped || momentumReversed) {
-         // Undo the last step since we were closer last time.
-         double lastApproach = (fLastPos - point).R();
-         double approach = (fPos - point).R();
-
-         double KE_final = Kinematics::KE(fMom, fMass);
-         auto calc_eLoss = KE_initial - KE_final; // Energy loss in MeV
-         LOG(info) << "------- End of RK4 interation  ---------";
-         LOG(info) << "Particle stopped: " << particleStopped;
-         LOG(info) << "Reached measurement point: " << reachedMeasurementPoint;
-         LOG(info) << "Last approach: " << lastApproach << " Current approach: " << approach;
-         LOG(info) << "Calculated energy loss: " << calc_eLoss << " MeV";
-         LOG(info) << "Scaling factor: " << fScalingFactor;
-         LOG(info) << "Final Position: " << fPos.X() << ", " << fPos.Y() << ", " << fPos.Z();
-         LOG(info) << "Final Momentum: " << fMom.X() << ", " << fMom.Y() << ", " << fMom.Z();
-         LOG(info) << "Last Position: " << fLastPos.X() << ", " << fLastPos.Y() << ", " << fLastPos.Z();
-         LOG(info) << "Last Momentum: " << fLastMom.X() << ", " << fLastMom.Y() << ", " << fLastMom.Z();
-
-         // fPos = fLastPos;
-         // fMom = fLastMom;
-         return;
-      }
-   } // End of loop over RK4 integration
-}
-
-bool AtPropagator::RK4StepAdaptive(double &h)
-{
-   // Take h to be the step size in m.
-   // Use DP5(4) method for adaptive step size control.
-
-   double atol_pos = 1e-2; // Absolute tolerance for position (mm)
-   double atol_mom = 1e-2; // Absolute tolerance for momentum (MeV/c)
-   double rtol = 1e-6;     // Relative tolerance for both position and momentum
-
-   auto x0_mm = fPos;
-   auto p0 = fMom;
-   LOG(info) << "Starting RK4 step with initial position: " << x0_mm.X() << ", " << x0_mm.Y() << ", " << x0_mm.Z();
-   LOG(info) << "Initial momentum: " << p0.X() << ", " << p0.Y() << ", " << p0.Z();
-
-   while (true) {
-      auto x_SI = fPos * 1e-3;        // Convert position to SI units (m)
-      auto p_SI = fReltoSImom * fMom; // Convert momentum to SI units (kg m/s)
-      XYZVector kx[7];                // kx[i] will hold the position derivatives (unitless)
-      XYZVector kp[7];                // kp[i] will hold the momentum derivatives (SI units)
-
-      // anonymous lambda to calculate and store the kx and kp values. Input is SI units.
-      auto calc_k = [&](const XYZPoint &x, const XYZVector &p, int i) {
-         kx[i] = p.Unit(); // The derivative of the position is then just the unit vector of the momentum.
-         kp[i] = dpds(x * 1e-3, p / fReltoSImom); // The derivative of the momentum is dpds.
-      };
-
-      // anonymous lambda to calculate the position and momentum at the i-th stage
-      auto calc_xp = [&](int i) {
-         XYZVector dx(0, 0, 0);
-         XYZVector dp(0, 0, 0);
-         for (int j = 0; j < i; ++j) {
-            dx = dx + kx[j] * a[i][j];
-            dp = dp + kp[j] * a[i][j];
-         }
-         XYZPoint x = x_SI + dx * h;
-         XYZVector p = p_SI + dp * h;
-         return std::make_pair(x, p);
-      };
-
-      // Calculate kx and kp for each stage
-      // build stage 0
-      calc_k(x_SI, p0, 0);
-
-      // build stage 1
-      auto [x1, p1] = calc_xp(1);
-      calc_k(x1, p1, 1); // k1
-
-      // build stage 2
-      auto [x2, p2] = calc_xp(2);
-      calc_k(x2, p2, 2); // k2
-
-      // build stage 3
-      auto [x3, p3] = calc_xp(3);
-      calc_k(x3, p3, 3); // k3
-
-      // build stage 4
-      auto [x4, p4] = calc_xp(4);
-      calc_k(x4, p4, 4); // k4
-
-      // build stage 5
-      auto [x5, p5] = calc_xp(5);
-      calc_k(x5, p5, 5); // k5
-
-      // build stage 6
-      auto [x6, p6] = calc_xp(6);
-      calc_k(x6, p6, 6); // k6
-
-      // Calculate the new position and momentum using the 5th-order method
-      XYZVector dx(0, 0, 0);
-      XYZVector dp(0, 0, 0);
-      for (int i = 0; i < 7; ++i) {
-         dx = dx + kx[i] * b[i];
-         dp = dp + kp[i] * b[i];
-      }
-      XYZPoint x_new_5 = x_SI + dx * h;  // New position in SI units (m)
-      XYZVector p_new_5 = p_SI + dp * h; // New momentum in SI units (kg m/s)
-
-      // Calculate the new position and momentum using the 4th-order method
-      dx = XYZVector(0, 0, 0);
-      dp = XYZVector(0, 0, 0);
-      for (int i = 0; i < 7; ++i) {
-         dx = dx + kx[i] * bs[i];
-         dp = dp + kp[i] * bs[i];
-      }
-      XYZPoint x_new_4 = x_SI + dx * h;  // New position in SI units (m)
-      XYZVector p_new_4 = p_SI + dp * h; // New momentum in SI units (kg m/s)
-
-      auto x_4_mm = x_new_4 * 1e3;          // Convert back to mm
-      auto p_4_MeV = p_new_4 / fReltoSImom; // Convert back to MeV/c
-      auto x_5_mm = x_new_5 * 1e3;          // Convert back to mm
-      auto p_5_MeV = p_new_5 / fReltoSImom; // Convert back to MeV/c
-      LOG(info) << "New position (5th order): " << x_5_mm.X() << ", " << x_5_mm.Y() << ", " << x_5_mm.Z();
-      LOG(info) << "New momentum (5th order): " << p_5_MeV.X() << ", " << p_5_MeV.Y() << ", " << p_5_MeV.Z();
-      LOG(info) << "New position (4th order): " << x_4_mm.X() << ", " << x_4_mm.Y() << ", " << x_4_mm.Z();
-      LOG(info) << "New momentum (4th order): " << p_4_MeV.X() << ", " << p_4_MeV.Y() << ", " << p_4_MeV.Z();
-
-      // Convert back to mm and MeV/c
-      XYZVector x_err = (x_5_mm - x_4_mm);   // Error in position (mm)
-      XYZVector p_err = (p_5_MeV - p_4_MeV); // Error in momentum (MeV/c)
-
-      // Calculate the overall error
-      double ex = x_err.X() / (atol_pos + rtol * std::abs(x_5_mm.X()));
-      double ey = x_err.Y() / (atol_pos + rtol * std::abs(x_5_mm.Y()));
-      double ez = x_err.Z() / (atol_pos + rtol * std::abs(x_5_mm.Z()));
-
-      double ep_x = p_err.X() / (atol_mom + rtol * std::abs(p_5_MeV.X()));
-      double ep_y = p_err.Y() / (atol_mom + rtol * std::abs(p_5_MeV.Y()));
-      double ep_z = p_err.Z() / (atol_mom + rtol * std::abs(p_5_MeV.Z()));
-
-      // Combine errors (norm)
-      double err = std::sqrt(ex * ex + ey * ey + ez * ez + ep_x * ep_x + ep_y * ep_y + ep_z * ep_z);
-
-      double factor = std::pow(err, -1.0 / 5.0); // Adjust step size based on error
-      factor = std::clamp(factor, 0.25, 4.0);    // Clamp factor to reasonable limits
-      double hNew = h * factor;
-      // We now know the local error at this point. Now we need to decide to accept the point or not.
-      if (err <= 1.0) {
-         // Accept the step
-         fPos = x_5_mm;  // Update position in mm
-         fMom = p_5_MeV; // Update momentum in MeV/c
-         LOG(info) << "Accepted step with error: " << err;
-         LOG(info) << "Step size: " << h << " m";
-         LOG(info) << "New step size: " << hNew << " m";
-         LOG(info) << "New Position: " << fPos.X() << ", " << fPos.Y() << ", " << fPos.Z();
-         LOG(info) << "New Momentum: " << fMom.X() << ", " << fMom.Y() << ", " << fMom.Z();
-
-         // Adjust the step size for the next iteration
-         h = hNew;
-         return true; // Step accepted
-      } else {
-         // Reject the step and reduce the step size
-         LOG(info) << "Rejected step with error: " << err;
-         LOG(info) << "Step size: " << h << " m";
-         LOG(info) << "Reducing step size to: " << hNew << " m";
-
-         h = hNew; // Reduce step size
-         if (h < 1e-6) {
-            LOG(error) << "Step size too small, aborting propagation.";
-            return false; // Abort propagation if step size is too small
-         }
-      }
-   }
-}
-
-void AtPropagator::RK4Step(double h)
-{
-   // Take h to be the step size in m.
-
-   auto x_k1 = fMom.Unit();      // The derivative of the position is then just the unit vector of the momentum.
-   auto p_k1 = dpds(fPos, fMom); // The derivative of the momentum is dpds.
-
-   auto x_2 = fPos + x_k1 * h / 2;               // Position at the midpoint
-   auto p_2 = fMom + p_k1 * h / 2 / fReltoSImom; // Momentum at the midpoint
-   auto x_k2 = p_2.Unit();
-   auto p_k2 = dpds(x_2, p_2);
-
-   auto x_3 = fPos + x_k2 * h / 2;               // Position at the second midpoint
-   auto p_3 = fMom + p_k2 * h / 2 / fReltoSImom; // Momentum at the second midpoint
-   auto x_k3 = p_3.Unit();
-   auto p_k3 = dpds(x_3, p_3);
-
-   auto x_4 = fPos + x_k3 * h;               // Position at the end of the step
-   auto p_4 = fMom + p_k3 * h / fReltoSImom; // Momentum at the end of the step
-   auto x_k4 = p_4.Unit();
-   auto p_k4 = dpds(x_4, p_4);
-
-   auto dpds_SI = (p_k1 + 2 * p_k2 + 2 * p_k3 + p_k4) / 6; // "Force" in SI units (N)
-
-   auto mom_SI = fReltoSImom * fMom;
-   mom_SI += dpds_SI * h;       // Update momentum in SI units (kg m/s)
-   fMom = mom_SI / fReltoSImom; // Convert back to
-
-   auto pos_SI = fPos * 1e-3;                             // Convert position to SI units (m)
-   pos_SI += (x_k1 + 2 * x_k2 + 2 * x_k3 + x_k4) * h / 6; // Update position in SI units (m
-   fPos = pos_SI * 1e3;                                   // Convert back to mm
-}
-
 bool AtPropagator::ReachedPOCA(const XYZPoint &point)
 {
    // Here we need to check if we are getting closer or further away from the POCA.
@@ -351,18 +84,23 @@ bool AtPropagator::IntersectedPlane(const Plane3D &plane)
    return (prevSign != currSign);
 }
 
-void AtPropagator::PropagateToPlane(const Plane3D &plane)
+void AtPropagator::PropagateToPlane(const Plane3D &plane, AtStepper &stepper)
 {
    LOG(info) << "Propagating to plane: " << plane;
 
    auto KE_initial = Kinematics::KE(fMom, fMass);
-   while (true) {
-      fLastPos = fPos;
-      fLastMom = fMom;
-      LOG(info) << "Position: " << fPos.X() << ", " << fPos.Y() << ", " << fPos.Z();
-      LOG(info) << "Momentum: " << fMom.X() << ", " << fMom.Y() << ", " << fMom.Z();
+   stepper.fDeriv = [this](const XYZPoint &pos, const XYZVector &mom) { return this->Derivatives(pos, mom); };
 
-      RK4Step(fH);
+   while (true) {
+      LOG(debug) << "Position: " << fPos.X() << ", " << fPos.Y() << ", " << fPos.Z();
+      LOG(debug) << "Momentum: " << fMom.X() << ", " << fMom.Y() << ", " << fMom.Z();
+
+      auto result = stepper.Step(fH, fPos, fMom);
+      if (!result.success) {
+         LOG(error) << "Integration step failed, aborting propagation.";
+         return; // Abort propagation if step failed
+      }
+      CopyFromState(result); // Copy the new state from the stepper
 
       bool reachedMeasurementPoint = IntersectedPlane(plane);
       bool particleStopped = Kinematics::KE(fMom, fMass) < fStopTol;
@@ -378,9 +116,14 @@ void AtPropagator::PropagateToPlane(const Plane3D &plane)
          LOG(info) << "Final step size: " << finalH << " mm";
 
          finalH = approach * 1e-3; // Convert to meters for the RK4 step
-         fPos = fLastPos;
-         fMom = fLastMom;
-         RK4Step(finalH); // Propagate to the measurement point
+         result = stepper.Step(finalH, fLastPos, fLastMom);
+         if (!result.success) {
+            LOG(error) << "Failed to propagate to measurement point, aborting.";
+            return; // Abort propagation if step failed
+         }
+         auto origH = fH;       // Save original step size
+         CopyFromState(result); // Update position and momentum to the new state
+         fH = origH;            // Restore original step size
       }
 
       if (particleStopped || momentumReversed) {
@@ -399,19 +142,31 @@ void AtPropagator::PropagateToPlane(const Plane3D &plane)
          double h_Stop = deltaE / fELossModel->GetdEdx(KE_last); // Distance to stop in mm
          LOG(info) << "Estimated distance to stop: " << h_Stop << " mm";
 
-         RK4Step(h_Stop * 1e-3);
+         result = stepper.Step(h_Stop * 1e-3, fLastPos, fLastMom);
+         if (!result.success) {
+            LOG(error) << "Failed to propagate to stopping point, aborting.";
+            return; // Abort propagation if step failed
+         }
+         auto origH = fH;       // Save original step size
+         CopyFromState(result); // Update position and momentum to the new state
+         fH = origH;            // Restore original step size
          LOG(info) << "Propagated to stopping point: " << fPos.X() << ", " << fPos.Y() << ", " << fPos.Z();
          LOG(info) << "Energy after stopping: " << Kinematics::KE(fMom, fMass) << " MeV";
 
          while (!IntersectedPlane(plane)) {
-            fScalingFactor = 0; // Turn off enregy loss.
+            fScalingFactor = 0; // Turn off energy loss.
 
             // If we still haven't intersected the plane, we need to adjust the step size
             double h = std::abs(plane.Distance(fPos)); // Reduce step size so we hit the plane
             if (h <= fDistTol)
                break;
             LOG(info) << "Propagating to plane after stopping with step size: " << h << " mm";
-            RK4Step(h * 1e-3); // Convert mm to m for RK4 step
+            result = stepper.Step(h * 1e-3, fPos, fMom);
+            if (!result.success) {
+               LOG(error) << "Failed to propagate to plane after stopping, aborting.";
+               return; // Abort propagation if step failed
+            }
+            CopyFromState(result); // Update position and momentum to the new state
             LOG(info) << "New position after adjusting step size: " << fPos.X() << ", " << fPos.Y() << ", " << fPos.Z();
          }
          fLastMom = fMom;
@@ -599,6 +354,10 @@ AtStepper::StepResult AtRK4Stepper::Step(double h, const XYZPoint &fPos, const X
    result.h = h;
    result.success = true;
 
+   LOG(debug) << "Starting RK4 step with initial position: " << fPos.X() << ", " << fPos.Y() << ", " << fPos.Z();
+   LOG(debug) << "Initial momentum: " << fMom.X() << ", " << fMom.Y() << ", " << fMom.Z();
+   LOG(debug) << "Step size (h): " << h << " m";
+
    auto [x_k1, p_k1] =
       fDeriv(fPos, fMom); // The derivative of the position is then just the unit vector of the momentum.
 
@@ -616,14 +375,18 @@ AtStepper::StepResult AtRK4Stepper::Step(double h, const XYZPoint &fPos, const X
    auto [x_k4, p_k4] = fDeriv(x_4, p_4);
 
    auto dpds_SI = (p_k1 + 2 * p_k2 + 2 * p_k3 + p_k4) / 6; // "Force" in SI units (N)
+   auto dxds_SI = (x_k1 + 2 * x_k2 + 2 * x_k3 + x_k4) / 6; // Position derivative in SI units (m)
+
+   LOG(debug) << "dp/ds (SI units): " << dpds_SI.X() << ", " << dpds_SI.Y() << ", " << dpds_SI.Z();
+   LOG(debug) << "dx/ds (SI units): " << dxds_SI.X() << ", " << dxds_SI.Y() << ", " << dxds_SI.Z();
 
    auto mom_SI = fReltoSImom * fMom;
    mom_SI += dpds_SI * h;             // Update momentum in SI units (kg m/s)
    result.mom = mom_SI / fReltoSImom; // Convert back to
 
-   auto pos_SI = fPos * 1e-3;                             // Convert position to SI units (m)
-   pos_SI += (x_k1 + 2 * x_k2 + 2 * x_k3 + x_k4) * h / 6; // Update position in SI units (m
-   result.pos = pos_SI * 1e3;                             // Convert back to mm
+   auto pos_SI = fPos * 1e-3; // Convert position to SI units (m)
+   pos_SI += dxds_SI * h;     // Update position in SI units (m
+   result.pos = pos_SI * 1e3; // Convert back to mm
 
    return result;
 }
