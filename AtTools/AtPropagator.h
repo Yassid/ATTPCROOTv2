@@ -11,6 +11,38 @@
 
 namespace AtTools {
 
+class AtStepper {
+public:
+   struct StepResult {
+      ROOT::Math::XYZPoint pos;      // Position of the particle in mm
+      ROOT::Math::XYZVector mom;     // Momentum of the particle in MeV/c
+      ROOT::Math::XYZPoint lastPos;  // Last position of the particle in mm
+      ROOT::Math::XYZVector lastMom; // Last momentum of the particle in MeV/c
+      double h;                      // Step size for the step in m
+      bool success;                  // Whether the step was successful
+   };
+   /**
+    * @brief Function type defining the derivative of the position and momentum w.r.t. distance.
+    *
+    * This function takes the current position and momentum and returns the derivate of the position and momentum.
+    *
+    * @param pos Current position of the particle in mm.
+    * @param mom Current momentum of the particle in MeV/c.
+    * @return A pair containing the derivatives of the position and momentum in SI units (m and kg m/s).
+    * The first element is the derivative of the position, and the second element is the derivative
+    * of the momentum.
+    */
+   using DerivFunc = std::function<std::pair<ROOT::Math::XYZVector, ROOT::Math::XYZVector>(
+      const ROOT::Math::XYZPoint &, const ROOT::Math::XYZVector &)>;
+
+   DerivFunc fDeriv;
+
+   virtual StepResult Step(double h, const ROOT::Math::XYZPoint &pos, const ROOT::Math::XYZVector &mom) const = 0;
+
+protected:
+   static constexpr double fReltoSImom = 1.60218e-13 / 299792458; // Conversion factor from MeV/c to kg m/s (SI units)
+};
+
 /**
  * @brief Class for propagating particles through a medium.
  *
@@ -148,6 +180,12 @@ public:
       return mom.Unit(); // The derivative of the position is just the unit vector of the momentum.
    }
 
+   std::pair<ROOT::Math::XYZVector, ROOT::Math::XYZVector>
+   Derivatives(const ROOT::Math::XYZPoint &pos, const ROOT::Math::XYZVector &mom) const
+   {
+      return {dxds(pos, mom), dpds(pos, mom)};
+   }
+
 protected:
    /**
     * @brief Perform a single RK4 step for propagation.
@@ -186,48 +224,32 @@ protected:
 
    bool ReachedPOCA(const XYZPoint &point);
    bool IntersectedPlane(const Plane3D &plane);
-};
-
-class AtStepper {
-public:
-   struct StepResult {
-      ROOT::Math::XYZPoint pos;      // Position of the particle in mm
-      ROOT::Math::XYZVector mom;     // Momentum of the particle in MeV/c
-      ROOT::Math::XYZPoint lastPos;  // Last position of the particle in mm
-      ROOT::Math::XYZVector lastMom; // Last momentum of the particle in MeV/c
-      double h;                      // Step size for the step in m
-      bool success;                  // Whether the step was successful
-   };
-   /**
-    * @brief Function type defining the derivative of the position and momentum w.r.t. distance.
-    *
-    * This function takes the current position and momentum and returns the derivate of the position and momentum.
-    *
-    * @param pos Current position of the particle in mm.
-    * @param mom Current momentum of the particle in MeV/c.
-    * @return A pair containing the derivatives of the position and momentum in SI units (m and kg m/s).
-    * The first element is the derivative of the position, and the second element is the derivative
-    * of the momentum.
-    */
-   using DerivFunc = std::function<std::pair<ROOT::Math::XYZPoint, ROOT::Math::XYZVector>(
-      const ROOT::Math::XYZPoint &, const ROOT::Math::XYZVector &)>;
-
-   virtual StepResult
-   Step(double h, const ROOT::Math::XYZPoint &pos, const ROOT::Math::XYZVector &mom, DerivFunc derivFunc) const = 0;
-
-protected:
-   static constexpr double fReltoSImom = 1.60218e-13 / 299792458; // Conversion factor from MeV/c to kg m/s (SI units)
+   void CopyFromState(const AtStepper::StepResult &result)
+   {
+      fPos = result.pos;
+      fMom = result.mom;
+      fLastPos = result.lastPos;
+      fLastMom = result.lastMom;
+      fH = result.h;
+   }
+   AtStepper::StepResult CopyToState() const
+   {
+      AtStepper::StepResult result;
+      result.pos = fPos;
+      result.mom = fMom;
+      result.lastPos = fLastPos;
+      result.lastMom = fLastMom;
+      return result;
+   }
 };
 
 class AtRK4Stepper : public AtStepper {
 public:
-   StepResult Step(double h, const ROOT::Math::XYZPoint &pos, const ROOT::Math::XYZVector &mom,
-                   DerivFunc derivFunc) const override;
+   StepResult Step(double h, const ROOT::Math::XYZPoint &pos, const ROOT::Math::XYZVector &mom) const override;
 };
 class AtRK4AdaptiveStepper : public AtStepper {
 public:
-   StepResult Step(double h, const ROOT::Math::XYZPoint &pos, const ROOT::Math::XYZVector &mom,
-                   DerivFunc derivFunc) const override;
+   StepResult Step(double h, const ROOT::Math::XYZPoint &pos, const ROOT::Math::XYZVector &mom) const override;
 };
 
 } // namespace AtTools
