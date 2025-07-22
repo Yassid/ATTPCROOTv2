@@ -443,12 +443,11 @@ void AtPropagator::PropagateToPlane(const Plane3D &plane)
    } // End of loop over RK4 integration
 }
 
-void AtPropagator::PropagateToPoint(const XYZPoint &point)
+void AtPropagator::PropagateToPoint(const XYZPoint &point, AtStepper &stepper)
 {
    LOG(info) << "Propagating to point: " << point;
 
    auto KE_initial = Kinematics::KE(fMom, fMass);
-   AtRK4Stepper stepper;
    stepper.fDeriv = [this](const XYZPoint &pos, const XYZVector &mom) { return this->Derivatives(pos, mom); };
 
    while (true) {
@@ -514,25 +513,6 @@ void AtPropagator::PropagateToPoint(const XYZPoint &point)
          fMom = XYZVector(0, 0, 0); // Set momentum to zero since we stopped
          fLastMom = fMom;           // Update last momentum to zero
          fH = origH;                // Restore original step size
-         /*
-         double finalH = (fPos - fLastPos).R(); // Distance traveled in the last step
-         double E_loss =
-            Kinematics::KE(fLastMom, fMass) + Kinematics::KE(fMom, fMass); // Energy loss in MeV in the last step
-         double dedx = E_loss / finalH;                                    // Stopping power in MeV/mm
-
-         LOG(info) << "Particle stopped with final step size: " << finalH << " mm";
-         LOG(info) << "Energy loss in last step: " << E_loss << " MeV";
-         LOG(info) << "Stopping power (dE/dx): " << dedx << " MeV/mm";
-         LOG(info) << "Energy before stopping: " << Kinematics::KE(fLastMom, fMass) << " MeV";
-         finalH = Kinematics::KE(fLastMom, fMass) / dedx; // Distance to stop in mm
-         LOG(info) << "Estimated distance to stop: " << finalH << " mm";
-
-         fPos = fLastPos;
-         fMom = fLastMom;           // Reset to last position and momentum
-         RK4Step(finalH);           // Propagate to the point where we stopped
-         fMom = XYZVector(0, 0, 0); // Set momentum to zero since we stopped
-         fLastMom = fMom;
-         */
 
          LOG(info) << "Final Position after stopping: " << fPos.X() << ", " << fPos.Y() << ", " << fPos.Z();
          LOG(info) << "Final Momentum after stopping: " << fMom.X() << ", " << fMom.Y() << ", " << fMom.Z();
@@ -563,13 +543,13 @@ void AtPropagator::PropagateToPoint(const XYZPoint &point)
    } // End of loop over RK4 integration
 }
 
-void AtPropagator::PropagateToPoint(const XYZPoint &point, double eLoss)
+void AtPropagator::PropagateToPoint(const XYZPoint &point, double eLoss, AtStepper &stepper)
 {
    LOG(info) << "Propagating to point: " << point << " with eLoss: " << eLoss;
 
    if (eLoss == 0) {
       LOG(warn) << "No energy loss specified, propagating without energy loss adjustment.";
-      PropagateToPoint(point);
+      PropagateToPoint(point, stepper);
       return;
    }
 
@@ -592,7 +572,7 @@ void AtPropagator::PropagateToPoint(const XYZPoint &point, double eLoss)
       }
 
       iterations++;
-      PropagateToPoint(point); // Propagate without energy loss adjustment
+      PropagateToPoint(point, stepper); // Propagate without energy loss adjustment
 
       double KE_final = Kinematics::KE(fMom, fMass);
       calc_eLoss = KE_initial - KE_final; // Energy loss in MeV
@@ -646,5 +626,159 @@ AtStepper::StepResult AtRK4Stepper::Step(double h, const XYZPoint &fPos, const X
    result.pos = pos_SI * 1e3;                             // Convert back to mm
 
    return result;
+}
+
+AtStepper::StepResult AtRK4AdaptiveStepper::Step(double h, const XYZPoint &fPos, const XYZVector &fMom) const
+{
+   // Take h to be the step size in m.
+   StepResult result;
+   result.lastPos = fPos;
+   result.lastMom = fMom;
+   result.h = h;
+   result.success = true;
+
+   // Take h to be the step size in m.
+   // Use DP5(4) method for adaptive step size control.
+
+   double atol_pos = 1e-2; // Absolute tolerance for position (mm)
+   double atol_mom = 1e-2; // Absolute tolerance for momentum (MeV/c)
+   double rtol = 1e-6;     // Relative tolerance for both position and momentum
+
+   auto x0_mm = fPos;
+   auto p0 = fMom;
+   LOG(info) << "Starting RK4 step with initial position: " << x0_mm.X() << ", " << x0_mm.Y() << ", " << x0_mm.Z();
+   LOG(info) << "Initial momentum: " << p0.X() << ", " << p0.Y() << ", " << p0.Z();
+
+   while (true) {
+      auto x_SI = fPos * 1e-3;        // Convert position to SI units (m)
+      auto p_SI = fReltoSImom * fMom; // Convert momentum to SI units (kg m/s)
+      XYZVector kx[7];                // kx[i] will hold the position derivatives (unitless)
+      XYZVector kp[7];                // kp[i] will hold the momentum derivatives (SI units)
+
+      // anonymous lambda to calculate and store the kx and kp values. Input is SI units.
+      auto calc_k = [&](const XYZPoint &x, const XYZVector &p, int i) {
+         auto [k_x, k_p] = fDeriv(x * 1e-3, p / fReltoSImom);
+         kx[i] = k_x; // Store the position derivative (unitless)
+         kp[i] = k_p; // Store the momentum derivative (SI units)
+      };
+
+      // anonymous lambda to calculate the position and momentum at the i-th stage
+      auto calc_xp = [&](int i) {
+         XYZVector dx(0, 0, 0);
+         XYZVector dp(0, 0, 0);
+         for (int j = 0; j < i; ++j) {
+            dx = dx + kx[j] * a[i][j];
+            dp = dp + kp[j] * a[i][j];
+         }
+         XYZPoint x = x_SI + dx * h;
+         XYZVector p = p_SI + dp * h;
+         return std::make_pair(x, p);
+      };
+
+      // Calculate kx and kp for each stage
+      // build stage 0
+      calc_k(x_SI, p0, 0);
+
+      // build stage 1
+      auto [x1, p1] = calc_xp(1);
+      calc_k(x1, p1, 1); // k1
+
+      // build stage 2
+      auto [x2, p2] = calc_xp(2);
+      calc_k(x2, p2, 2); // k2
+
+      // build stage 3
+      auto [x3, p3] = calc_xp(3);
+      calc_k(x3, p3, 3); // k3
+
+      // build stage 4
+      auto [x4, p4] = calc_xp(4);
+      calc_k(x4, p4, 4); // k4
+
+      // build stage 5
+      auto [x5, p5] = calc_xp(5);
+      calc_k(x5, p5, 5); // k5
+
+      // build stage 6
+      auto [x6, p6] = calc_xp(6);
+      calc_k(x6, p6, 6); // k6
+
+      // Calculate the new position and momentum using the 5th-order method
+      XYZVector dx(0, 0, 0);
+      XYZVector dp(0, 0, 0);
+      for (int i = 0; i < 7; ++i) {
+         dx = dx + kx[i] * b[i];
+         dp = dp + kp[i] * b[i];
+      }
+      XYZPoint x_new_5 = x_SI + dx * h;  // New position in SI units (m)
+      XYZVector p_new_5 = p_SI + dp * h; // New momentum in SI units (kg m/s)
+
+      // Calculate the new position and momentum using the 4th-order method
+      dx = XYZVector(0, 0, 0);
+      dp = XYZVector(0, 0, 0);
+      for (int i = 0; i < 7; ++i) {
+         dx = dx + kx[i] * bs[i];
+         dp = dp + kp[i] * bs[i];
+      }
+      XYZPoint x_new_4 = x_SI + dx * h;  // New position in SI units (m)
+      XYZVector p_new_4 = p_SI + dp * h; // New momentum in SI units (kg m/s)
+
+      auto x_4_mm = x_new_4 * 1e3;          // Convert back to mm
+      auto p_4_MeV = p_new_4 / fReltoSImom; // Convert back to MeV/c
+      auto x_5_mm = x_new_5 * 1e3;          // Convert back to mm
+      auto p_5_MeV = p_new_5 / fReltoSImom; // Convert back to MeV/c
+      LOG(info) << "New position (5th order): " << x_5_mm.X() << ", " << x_5_mm.Y() << ", " << x_5_mm.Z();
+      LOG(info) << "New momentum (5th order): " << p_5_MeV.X() << ", " << p_5_MeV.Y() << ", " << p_5_MeV.Z();
+      LOG(info) << "New position (4th order): " << x_4_mm.X() << ", " << x_4_mm.Y() << ", " << x_4_mm.Z();
+      LOG(info) << "New momentum (4th order): " << p_4_MeV.X() << ", " << p_4_MeV.Y() << ", " << p_4_MeV.Z();
+
+      // Convert back to mm and MeV/c
+      XYZVector x_err = (x_5_mm - x_4_mm);   // Error in position (mm)
+      XYZVector p_err = (p_5_MeV - p_4_MeV); // Error in momentum (MeV/c)
+
+      // Calculate the overall error
+      double ex = x_err.X() / (atol_pos + rtol * std::abs(x_5_mm.X()));
+      double ey = x_err.Y() / (atol_pos + rtol * std::abs(x_5_mm.Y()));
+      double ez = x_err.Z() / (atol_pos + rtol * std::abs(x_5_mm.Z()));
+
+      double ep_x = p_err.X() / (atol_mom + rtol * std::abs(p_5_MeV.X()));
+      double ep_y = p_err.Y() / (atol_mom + rtol * std::abs(p_5_MeV.Y()));
+      double ep_z = p_err.Z() / (atol_mom + rtol * std::abs(p_5_MeV.Z()));
+
+      // Combine errors (norm)
+      double err = std::sqrt(ex * ex + ey * ey + ez * ez + ep_x * ep_x + ep_y * ep_y + ep_z * ep_z);
+
+      double factor = std::pow(err, -1.0 / 5.0); // Adjust step size based on error
+      factor = std::clamp(factor, 0.25, 4.0);    // Clamp factor to reasonable limits
+      double hNew = h * factor;
+      // We now know the local error at this point. Now we need to decide to accept the point or not.
+      if (err <= 1.0) {
+         // Accept the step
+         result.pos = x_5_mm;  // Update position in mm
+         result.mom = p_5_MeV; // Update momentum in MeV/c
+         LOG(info) << "Accepted step with error: " << err;
+         LOG(info) << "Step size: " << h << " m";
+         LOG(info) << "New step size: " << hNew << " m";
+         LOG(info) << "New Position: " << result.pos.X() << ", " << result.pos.Y() << ", " << result.pos.Z();
+         LOG(info) << "New Momentum: " << result.mom.X() << ", " << result.mom.Y() << ", " << result.mom.Z();
+
+         // Adjust the step size for the next iteration
+         result.h = hNew;
+         result.success = true; // Step accepted
+         return result;
+      } else {
+         // Reject the step and reduce the step size
+         LOG(info) << "Rejected step with error: " << err;
+         LOG(info) << "Step size: " << h << " m";
+         LOG(info) << "Reducing step size to: " << hNew << " m";
+
+         result.h = hNew; // Reduce step size
+         if (result.h < 1e-6) {
+            LOG(error) << "Step size too small, aborting propagation.";
+            result.success = false;
+            return result; // Abort propagation if step size is too small
+         }
+      }
+   }
 }
 } // namespace AtTools
