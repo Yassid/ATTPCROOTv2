@@ -169,8 +169,6 @@ TEST(AtPropagatorTest, PropagateToPoint_NoField)
 
    ASSERT_NEAR(propagator.GetMomentum().X(), 43.331, 1e-1);
 
-   XYZPoint targetPoint(10, 0, 0); // Target point to propagate to 10 mm
-   // propagator.PropagateToPoint(targetPoint, stepper);
    propagator.PropagateToMeasurementSurface(measurementPoint, stepper);
 
    auto finalPos = propagator.GetPosition();
@@ -278,7 +276,7 @@ TEST(AtPropagatorTest, PropagateToPointAdaptive_NoField)
    propagator.SetState(startPos, startMom);
    propagator.SetEField({0, 0, 0}); // No electric field
    propagator.SetBField({0, 0, 0}); // No magnetic field
-   propagator.SetH(1);              // Set initial step size to 1 s
+   stepper.fInitialStep = 1;        // Set initial step size to 1 m
 
    ASSERT_NEAR(propagator.GetMomentum().X(), 43.331, 1e-1);
 
@@ -293,7 +291,7 @@ TEST(AtPropagatorTest, PropagateToPointAdaptive_NoField)
    propagator.SetState(startPos, startMom);
    propagator.SetEField({0, 0, 0}); // No electric field
    propagator.SetBField({0, 0, 0}); // No magnetic field
-   propagator.SetH(1e-6);           // Set initial step size to 1e-6 m
+   stepper.fInitialStep = 1e-6;     // Set initial step size to 1e-6 m
 
    ASSERT_NEAR(propagator.GetMomentum().X(), 43.331, 1e-1);
 
