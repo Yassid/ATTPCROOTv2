@@ -256,6 +256,7 @@ TEST(AtPropagatorTest, PropagateToPointAdaptive_NoField)
    elossModel->LoadSrimTable(
       "/home/adam/fair_install/ATTPCROOTv2/AtReconstruction/AtFitter/OpenKF/kalman_filter/HinH.txt");
    AtPropagator propagator(charge, mass, std::move(elossModel));
+   AtRK4AdaptiveStepper stepper;
 
    double KE = 1; // Kinetic energy in MeV
    double E = KE + mass_p;
@@ -275,7 +276,8 @@ TEST(AtPropagatorTest, PropagateToPointAdaptive_NoField)
    ASSERT_NEAR(propagator.GetMomentum().X(), 43.331, 1e-1);
 
    XYZPoint targetPoint(10, 0, 0); // Target point to propagate to (10 mm)
-   propagator.PropagateToPointAdaptive(targetPoint);
+   // propagator.PropagateToPointAdaptive(targetPoint);
+   propagator.PropagateToPoint(targetPoint, stepper);
 
    auto finalPos = propagator.GetPosition();
    auto finalMom = propagator.GetMomentum();
@@ -290,7 +292,8 @@ TEST(AtPropagatorTest, PropagateToPointAdaptive_NoField)
 
    ASSERT_NEAR(propagator.GetMomentum().X(), 43.331, 1e-1);
 
-   propagator.PropagateToPointAdaptive(targetPoint);
+   // propagator.PropagateToPointAdaptive(targetPoint);
+   propagator.PropagateToPoint(targetPoint, stepper);
 
    finalPos = propagator.GetPosition();
    finalMom = propagator.GetMomentum();

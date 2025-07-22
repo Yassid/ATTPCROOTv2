@@ -773,6 +773,7 @@ AtStepper::StepResult AtRK4AdaptiveStepper::Step(double h, const XYZPoint &fPos,
          LOG(info) << "Reducing step size to: " << hNew << " m";
 
          result.h = hNew; // Reduce step size
+         h = hNew;        // Update the step size for the next iteration
          if (result.h < 1e-6) {
             LOG(error) << "Step size too small, aborting propagation.";
             result.success = false;
