@@ -33,6 +33,7 @@ AtPropagator::XYZVector AtPropagator::Force(XYZPoint pos, XYZVector mom) const
 
    auto F_lorentz = fState.fQ * (fEField + v.Cross(fBField));
    LOG(debug) << "F_lorentz: " << F_lorentz;
+
    auto dedx = fScalingFactor * fELossModel->GetdEdx(Kinematics::KE(mom, fState.fMass)); // Stopping power in MeV/mm
    auto dedx_si = dedx * 1.60218e-10;                                                    // de_dx in SI units (J/m)
 
@@ -66,7 +67,8 @@ void AtPropagator::PropagateToMeasurementSurface(const AtMeasurementSurface &sur
    stepper.fDeriv = [this](const XYZPoint &pos, const XYZVector &mom) { return this->Derivatives(pos, mom); };
 
    while (true) {
-      LOG(debug) << "Position: " << GetPosition().X() << ", " << GetPosition().Y() << ", " << GetPosition().Z();
+      LOG(info) << "Position: " << GetPosition().X() / 10 << ", " << GetPosition().Y() / 10 << ", "
+                << GetPosition().Z() / 10;
       LOG(debug) << "Momentum: " << GetMomentum().X() << ", " << GetMomentum().Y() << ", " << GetMomentum().Z();
 
       auto result = stepper.Step(fState);
