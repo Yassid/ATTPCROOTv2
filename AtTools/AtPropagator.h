@@ -11,6 +11,7 @@
 
 namespace AtTools {
 
+class AtMeasurementSurface;
 class AtStepper {
 public:
    struct StepResult {
@@ -18,6 +19,7 @@ public:
       ROOT::Math::XYZVector mom;     // Momentum of the particle in MeV/c
       ROOT::Math::XYZPoint lastPos;  // Last position of the particle in mm
       ROOT::Math::XYZVector lastMom; // Last momentum of the particle in MeV/c
+      double mass;                   // Mass of the particle in MeV/c^2
       double h;                      // Step size for the step in m
       bool success;                  // Whether the step was successful
    };
@@ -144,6 +146,8 @@ public:
     */
    void PropagateToPlane(const Plane3D &plane, AtStepper &stepper);
 
+   void PropagateToMeasurementSurface(const AtMeasurementSurface &surface, AtStepper &stepper);
+
    /**
     * @brief Calculate the force acting on the particle.
     *
@@ -203,6 +207,9 @@ protected:
       result.mom = fMom;
       result.lastPos = fLastPos;
       result.lastMom = fLastMom;
+      result.mass = fMass;
+      result.h = fH;
+      result.success = true; // Assume success unless proven otherwise
       return result;
    }
 };
@@ -216,5 +223,42 @@ public:
    StepResult Step(double h, const ROOT::Math::XYZPoint &pos, const ROOT::Math::XYZVector &mom) const override;
 };
 
+/**
+ * @brief Class for measurement surface in the AT-TPC.
+ *
+ * This class represents a measurement surface or point in the AT-TPC. It's used to define the stopping
+ * point and behavior of the propagator.
+ */
+class AtMeasurementSurface {
+public:
+   bool fClipToSurface = false; // Whether to clip to the surface
+
+   /**
+    * @brief Calculate the distance from the position to the surface.
+    */
+   virtual double Distance(const ROOT::Math::XYZPoint &pos) const = 0;
+
+   /**
+    * @brief Check if we have passed the surface between the last position and the current position.
+    */
+   virtual bool PassedSurface(AtStepper::StepResult &result) const = 0;
+
+   virtual ROOT::Math::XYZPoint ProjectToSurface(const ROOT::Math::XYZPoint &pos) const
+   {
+      return pos; // Default implementation returns the position as is
+   }
+};
+
+class AtMeasurementPoint : public AtMeasurementSurface {
+protected:
+   ROOT::Math::XYZPoint fPoint; // The measurement point in mm
+
+public:
+   AtMeasurementPoint(const ROOT::Math::XYZPoint &point) : fPoint(point) {}
+
+   double Distance(const ROOT::Math::XYZPoint &pos) const override { return (fPoint - pos).R(); }
+
+   bool PassedSurface(AtStepper::StepResult &result) const override;
+};
 } // namespace AtTools
 #endif // #ifndef ATPROPAGATOR_H

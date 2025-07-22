@@ -107,6 +107,7 @@ TEST(AtPropagatorTest, PropagateToPoint_StoppingNoField)
       "/home/adam/fair_install/ATTPCROOTv2/AtReconstruction/AtFitter/OpenKF/kalman_filter/HinH.txt");
    AtPropagator propagator(charge, mass, std::move(elossModel));
    AtRK4Stepper stepper;
+   AtMeasurementPoint measurementPoint({1e3, 0, 0});
 
    double KE = 1; // Kinetic energy in MeV
    double E = KE + mass_p;
@@ -120,8 +121,7 @@ TEST(AtPropagatorTest, PropagateToPoint_StoppingNoField)
 
    ASSERT_NEAR(propagator.GetMomentum().X(), 43.331, 1e-1);
 
-   XYZPoint targetPoint(1e3, 0, 0); // Target point to propagate to (1 m)
-   propagator.PropagateToPoint(targetPoint, stepper);
+   propagator.PropagateToMeasurementSurface(measurementPoint, stepper);
 
    auto finalPos = propagator.GetPosition();
    auto finalMom = propagator.GetMomentum();
@@ -135,7 +135,7 @@ TEST(AtPropagatorTest, PropagateToPoint_StoppingNoField)
    startMom.SetXYZ(p, 0, 0);               // Reset momentum
    propagator.SetState(startPos, startMom);
 
-   propagator.PropagateToPoint(targetPoint, stepper); // Propagate to range
+   propagator.PropagateToMeasurementSurface(measurementPoint, stepper); // Propagate to range
    finalPos = propagator.GetPosition();
    finalMom = propagator.GetMomentum();
    ASSERT_NEAR(finalPos.X(), 130, 10); // Final position in x-direction should be close to 130 mm
@@ -151,6 +151,7 @@ TEST(AtPropagatorTest, PropagateToPoint_NoField)
       "/home/adam/fair_install/ATTPCROOTv2/AtReconstruction/AtFitter/OpenKF/kalman_filter/HinH.txt");
    AtPropagator propagator(charge, mass, std::move(elossModel));
    AtRK4Stepper stepper;
+   AtMeasurementPoint measurementPoint({10, 0, 0});
 
    double KE = 1; // Kinetic energy in MeV
    double E = KE + mass_p;
@@ -169,7 +170,8 @@ TEST(AtPropagatorTest, PropagateToPoint_NoField)
    ASSERT_NEAR(propagator.GetMomentum().X(), 43.331, 1e-1);
 
    XYZPoint targetPoint(10, 0, 0); // Target point to propagate to 10 mm
-   propagator.PropagateToPoint(targetPoint, stepper);
+   // propagator.PropagateToPoint(targetPoint, stepper);
+   propagator.PropagateToMeasurementSurface(measurementPoint, stepper);
 
    auto finalPos = propagator.GetPosition();
    auto finalMom = propagator.GetMomentum();
@@ -259,6 +261,7 @@ TEST(AtPropagatorTest, PropagateToPointAdaptive_NoField)
       "/home/adam/fair_install/ATTPCROOTv2/AtReconstruction/AtFitter/OpenKF/kalman_filter/HinH.txt");
    AtPropagator propagator(charge, mass, std::move(elossModel));
    AtRK4AdaptiveStepper stepper;
+   AtMeasurementPoint measurementPoint({10, 0, 0});
 
    double KE = 1; // Kinetic energy in MeV
    double E = KE + mass_p;
@@ -277,8 +280,7 @@ TEST(AtPropagatorTest, PropagateToPointAdaptive_NoField)
 
    ASSERT_NEAR(propagator.GetMomentum().X(), 43.331, 1e-1);
 
-   XYZPoint targetPoint(10, 0, 0); // Target point to propagate to (10 mm)
-   propagator.PropagateToPoint(targetPoint, stepper);
+   propagator.PropagateToMeasurementSurface(measurementPoint, stepper);
 
    auto finalPos = propagator.GetPosition();
    auto finalMom = propagator.GetMomentum();
@@ -293,7 +295,7 @@ TEST(AtPropagatorTest, PropagateToPointAdaptive_NoField)
 
    ASSERT_NEAR(propagator.GetMomentum().X(), 43.331, 1e-1);
 
-   propagator.PropagateToPoint(targetPoint, stepper);
+   propagator.PropagateToMeasurementSurface(measurementPoint, stepper);
 
    finalPos = propagator.GetPosition();
    finalMom = propagator.GetMomentum();

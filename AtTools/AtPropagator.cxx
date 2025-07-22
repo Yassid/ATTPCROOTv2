@@ -69,11 +69,7 @@ bool AtPropagator::ReachedPOCA(const XYZPoint &point)
    auto lastDeriv = (fLastPos - point).Dot(fLastMom.Unit()); // proportional missing constants
    auto currDeriv = (fPos - point).Dot(fMom.Unit());
    LOG(debug) << "Last Derivative: " << lastDeriv << ", Current Derivative: " << currDeriv;
-   return lastDeriv * currDeriv < 0;
-
-   auto lastApproach = (fLastPos - point).R();
-   auto approach = (fPos - point).R();
-   return (approach > lastApproach);
+   return lastDeriv * currDeriv <= 0;
 }
 
 bool AtPropagator::IntersectedPlane(const Plane3D &plane)
@@ -247,6 +243,8 @@ void AtPropagator::PropagateToPoint(const XYZPoint &point, AtStepper &stepper)
       if (particleStopped || momentumReversed) {
          LOG(info) << "------ Particle stopped before measurement point/surface------";
 
+         result.mass = fMass; // Ensure mass is set in the result
+
          // Calculate how far to travel before stopping
          double KE_last = Kinematics::KE(fLastMom, fMass);
          double deltaE = KE_last - fStopTol;
@@ -293,6 +291,117 @@ void AtPropagator::PropagateToPoint(const XYZPoint &point, AtStepper &stepper)
 
          // fPos = fLastPos;
          // fMom = fLastMom;
+         return;
+      }
+   } // End of loop over RK4 integration
+}
+
+void AtPropagator::PropagateToMeasurementSurface(const AtMeasurementSurface &surface, AtStepper &stepper)
+{
+   LOG(info) << "Propagating to measurement surface";
+
+   auto KE_initial = Kinematics::KE(fMom, fMass);
+   stepper.fDeriv = [this](const XYZPoint &pos, const XYZVector &mom) { return this->Derivatives(pos, mom); };
+
+   while (true) {
+      LOG(debug) << "Position: " << fPos.X() << ", " << fPos.Y() << ", " << fPos.Z();
+      LOG(debug) << "Momentum: " << fMom.X() << ", " << fMom.Y() << ", " << fMom.Z();
+
+      auto result = stepper.Step(fH, fPos, fMom);
+      if (!result.success) {
+         LOG(error) << "Integration step failed, aborting propagation.";
+         return; // Abort propagation if step failed
+      }
+      CopyFromState(result); // Copy the new state from the stepper
+
+      bool reachedMeasurementPoint = surface.PassedSurface(result);
+      bool particleStopped = Kinematics::KE(fMom, fMass) < fStopTol;
+      bool momentumReversed = (fLastMom.Dot(fMom) < 0);
+
+      if (reachedMeasurementPoint && !particleStopped && !momentumReversed) {
+         // We reached the measurement surface, so we should figure out how far we are from the measurement point
+         LOG(info) << "------ Reached measurement surface ------";
+         double finalH = (fLastPos - fPos).R(); // Distance traveled in the last step
+         double approach = surface.Distance(fLastPos);
+
+         LOG(info) << "Distance to plane: " << approach << " mm";
+         LOG(info) << "Final step size: " << finalH << " mm";
+
+         finalH = approach * 1e-3; // Convert to meters for the RK4 step
+         result = stepper.Step(finalH, fLastPos, fLastMom);
+         if (!result.success) {
+            LOG(error) << "Failed to propagate to measurement point, aborting.";
+            return; // Abort propagation if step failed
+         }
+         auto origH = fH;       // Save original step size
+         CopyFromState(result); // Update position and momentum to the new state
+         fH = origH;            // Restore original step size
+      }
+
+      if (particleStopped || momentumReversed) {
+         // In this case the particle stopped before hitting the plane
+         // we should throw a warning to let the user know that there wasn't
+         // enough energy to reach the surface.
+         LOG(warning) << "------ Particle stopped before reaching measurement surface ------";
+
+         // Calculate how far to travel before stopping
+         double KE_last = Kinematics::KE(fLastMom, fMass);
+         double deltaE = KE_last - fStopTol;
+         deltaE = std::max(deltaE, 0.0); // Ensure we don't have negative energy loss
+
+         LOG(info) << "Last KE: " << KE_last << " MeV";
+         LOG(info) << "Energy to loose to stop: " << deltaE << " MeV";
+         double h_Stop = deltaE / fELossModel->GetdEdx(KE_last); // Distance to stop in mm
+         LOG(info) << "Estimated distance to stop: " << h_Stop << " mm";
+
+         result = stepper.Step(h_Stop * 1e-3, fLastPos, fLastMom);
+         if (!result.success) {
+            LOG(error) << "Failed to propagate to stopping point, aborting.";
+            return; // Abort propagation if step failed
+         }
+         auto origH = fH;       // Save original step size
+         CopyFromState(result); // Update position and momentum to the new state
+         fH = origH;            // Restore original step size
+         LOG(info) << "Propagated to stopping point: " << fPos.X() << ", " << fPos.Y() << ", " << fPos.Z();
+         LOG(info) << "Energy after stopping: " << Kinematics::KE(fMom, fMass) << " MeV";
+
+         while (surface.fClipToSurface && !surface.PassedSurface(result)) {
+            fScalingFactor = 0; // Turn off energy loss.
+
+            // If we still haven't intersected the surface, we need to adjust the step size
+            double h = surface.Distance(fPos); // Reduce step size so we hit the surface
+            if (h <= fDistTol)
+               break;
+            LOG(info) << "Propagating to surface after stopping with step size: " << h << " mm";
+            result = stepper.Step(h * 1e-3, fPos, fMom);
+            if (!result.success) {
+               LOG(error) << "Failed to propagate to surface after stopping, aborting.";
+               return; // Abort propagation if step failed
+            }
+            CopyFromState(result); // Update position and momentum to the new state
+            LOG(info) << "New position after adjusting step size: " << fPos.X() << ", " << fPos.Y() << ", " << fPos.Z();
+         }
+         fLastMom = fMom;
+         fMom = XYZVector(0, 0, 0); // Set momentum to zero since we stopped
+         reachedMeasurementPoint = true;
+      }
+
+      if (reachedMeasurementPoint || particleStopped || momentumReversed) {
+         double distanceToSurface = surface.Distance(fPos);
+
+         double KE_final = Kinematics::KE(fMom, fMass);
+         auto calc_eLoss = KE_initial - KE_final; // Energy loss in MeV
+         LOG(info) << "------- End of RK4 interation  ---------";
+         LOG(info) << "Particle stopped: " << particleStopped;
+         LOG(info) << "Reached measurement point: " << reachedMeasurementPoint;
+         LOG(info) << "Distance to plane: " << distanceToSurface << " mm";
+         LOG(info) << "Calculated energy loss: " << calc_eLoss << " MeV";
+         LOG(info) << "Scaling factor: " << fScalingFactor;
+         LOG(info) << "Final Position: " << fPos.X() << ", " << fPos.Y() << ", " << fPos.Z();
+
+         fPos = surface.ProjectToSurface(fPos);
+         LOG(info) << "Projected Position on plane: " << fPos.X() << ", " << fPos.Y() << ", " << fPos.Z();
+         LOG(info) << "Final Momentum: " << fMom.X() << ", " << fMom.Y() << ", " << fMom.Z();
          return;
       }
    } // End of loop over RK4 integration
@@ -545,4 +654,14 @@ AtStepper::StepResult AtRK4AdaptiveStepper::Step(double h, const XYZPoint &fPos,
       }
    }
 }
+
+bool AtMeasurementPoint::PassedSurface(AtStepper::StepResult &result) const
+{
+   // Check if the particle has passed the measurement point
+   auto lastDeriv = (fPoint - result.lastPos).Dot(result.lastMom.Unit());
+   auto currDeriv = (fPoint - result.pos).Dot(result.mom.Unit());
+   LOG(debug) << "Last Derivative: " << lastDeriv << ", Current Derivative: " << currDeriv;
+   return lastDeriv * currDeriv <= 0;
+}
+
 } // namespace AtTools
