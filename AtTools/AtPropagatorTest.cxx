@@ -103,8 +103,9 @@ TEST(AtPropagatorTest, PropagateToPoint_StoppingNoField)
    double charge = charge_p; // Charge in Coulombs
    double mass = mass_p;     // Mass in MeV/c^2
    auto elossModel = std::make_unique<AtTools::AtELossTable>(0);
-   elossModel->LoadSrimTable(
-      "/home/adam/fair_install/ATTPCROOTv2/AtReconstruction/AtFitter/OpenKF/kalman_filter/HinH.txt");
+   // elossModel->LoadSrimTable(
+   //    "/home/adam/fair_install/ATTPCROOTv2/AtReconstruction/AtFitter/OpenKF/kalman_filter/HinH.txt");
+   elossModel->LoadSrimTable("../../resources/energy_loss/HinH.txt"); // Assumes cwd is build/AtTools
    AtPropagator propagator(charge, mass, std::move(elossModel));
    AtRK4Stepper stepper;
    AtMeasurementPoint measurementPoint({1e3, 0, 0});
@@ -147,8 +148,9 @@ TEST(AtPropagatorTest, PropagateToPoint_NoField)
    double charge = charge_p; // Charge in Coulombs
    double mass = mass_p;     // Mass in MeV/c^2
    auto elossModel = std::make_unique<AtTools::AtELossTable>(0);
-   elossModel->LoadSrimTable(
-      "/home/adam/fair_install/ATTPCROOTv2/AtReconstruction/AtFitter/OpenKF/kalman_filter/HinH.txt");
+   // elossModel->LoadSrimTable(
+   //    "/home/adam/fair_install/ATTPCROOTv2/AtReconstruction/AtFitter/OpenKF/kalman_filter/HinH.txt");
+   elossModel->LoadSrimTable("../../resources/energy_loss/HinH.txt"); // Assumes cwd is build/AtTools
    AtPropagator propagator(charge, mass, std::move(elossModel));
    AtRK4Stepper stepper;
    AtMeasurementPoint measurementPoint({10, 0, 0});
@@ -183,8 +185,9 @@ TEST(AtPropagatorTest, PropagateToPlane_NoField)
    double charge = charge_p; // Charge in Coulombs
    double mass = mass_p;     // Mass in MeV/c^2
    auto elossModel = std::make_unique<AtTools::AtELossTable>(0);
-   elossModel->LoadSrimTable(
-      "/home/adam/fair_install/ATTPCROOTv2/AtReconstruction/AtFitter/OpenKF/kalman_filter/HinH.txt");
+   // elossModel->LoadSrimTable(
+   //    "/home/adam/fair_install/ATTPCROOTv2/AtReconstruction/AtFitter/OpenKF/kalman_filter/HinH.txt");
+   elossModel->LoadSrimTable("../../resources/energy_loss/HinH.txt"); // Assumes cwd is build/AtTools
    AtPropagator propagator(charge, mass, std::move(elossModel));
    AtRK4Stepper stepper;
 
@@ -222,8 +225,9 @@ TEST(AtPropagatorTest, PropagateToPlane_StoppingNoField)
    double charge = charge_p; // Charge in Coulombs
    double mass = mass_p;     // Mass in MeV/c^2
    auto elossModel = std::make_unique<AtTools::AtELossTable>(0);
-   elossModel->LoadSrimTable(
-      "/home/adam/fair_install/ATTPCROOTv2/AtReconstruction/AtFitter/OpenKF/kalman_filter/HinH.txt");
+   // elossModel->LoadSrimTable(
+   //    "/home/adam/fair_install/ATTPCROOTv2/AtReconstruction/AtFitter/OpenKF/kalman_filter/HinH.txt");
+   elossModel->LoadSrimTable("../../resources/energy_loss/HinH.txt"); // Assumes cwd is build/AtTools
    AtPropagator propagator(charge, mass, std::move(elossModel));
    AtRK4Stepper stepper;
 
@@ -257,8 +261,9 @@ TEST(AtPropagatorTest, PropagateToPointAdaptive_NoField)
    double charge = charge_p; // Charge in Coulombs
    double mass = mass_p;     // Mass in MeV/c^2
    auto elossModel = std::make_unique<AtTools::AtELossTable>(0);
-   elossModel->LoadSrimTable(
-      "/home/adam/fair_install/ATTPCROOTv2/AtReconstruction/AtFitter/OpenKF/kalman_filter/HinH.txt");
+   // elossModel->LoadSrimTable(
+   //    "/home/adam/fair_install/ATTPCROOTv2/AtReconstruction/AtFitter/OpenKF/kalman_filter/HinH.txt");
+   elossModel->LoadSrimTable("../../resources/energy_loss/HinH.txt"); // Assumes cwd is build/AtTools
    AtPropagator propagator(charge, mass, std::move(elossModel));
    AtRK4AdaptiveStepper stepper;
    AtMeasurementPoint measurementPoint({10, 0, 0});
@@ -302,4 +307,61 @@ TEST(AtPropagatorTest, PropagateToPointAdaptive_NoField)
 
    ASSERT_NEAR(finalPos.X(), 10, 10 * 1e-3); // Final position in x-direction should be close to 10 mm
    ASSERT_NEAR(finalMom.X(), p_fin, 0.1);
+}
+
+TEST(AtPropagatorTest, PropagateToPoint_Field)
+{
+   double charge = charge_p; // Charge in Coulombs
+   double mass = mass_p;     // Mass in MeV/c^2
+   auto elossModel = std::make_unique<AtTools::AtELossTable>(0);
+   // elossModel->LoadSrimTable(
+   //    "/home/adam/fair_install/ATTPCROOTv2/AtReconstruction/AtFitter/OpenKF/kalman_filter/HinH.txt");
+   elossModel->LoadSrimTable("../../resources/energy_loss/HinH.txt"); // Assumes cwd is build/AtTools
+   elossModel->SetDensity(3.3084e-05);                                // Set density in g/cm^3 for 300 torr H2
+   AtPropagator propagator(charge, mass, std::move(elossModel));
+   propagator.SetEField({0, 0, 0});    // No electric field
+   propagator.SetBField({0, 0, 2.85}); // Magnetic field
+   AtRK4Stepper stepper;
+
+   XYZPoint startPos(-3.40046e-05, -1.49863e-05, 0.10018); // Start position in cm
+   startPos *= 10;                                         // Convert to mm
+   XYZVector startMom(0.00935463, -0.0454279, 0.00826042); // Start momentum in GeV/c
+   startMom *= 1e3;                                        // Convert to MeV/c
+
+   auto KE = Kinematics::KE(startMom, mass); // Convert momentum to kinetic energy
+   std::cout << "Propagating proton with KE: " << KE << " MeV" << std::endl;
+   std::cout << "Initial position: " << startPos.X() << ", " << startPos.Y() << ", " << startPos.Z() << std::endl;
+
+   propagator.SetState(startPos, startMom);
+
+   XYZPoint point({-1.4895, -4.8787, 1.01217}); // measurement point in cm
+   point *= 10;                                 // Convert to mm
+   AtMeasurementPoint measurementPoint(point);
+
+   propagator.PropagateToMeasurementSurface(measurementPoint, stepper);
+
+   auto finalPos = propagator.GetPosition();
+   auto finalMom = propagator.GetMomentum();
+
+   ASSERT_NEAR(finalPos.X(), point.X(), 1); // Check final position is within 1 mm of the measurement point
+   ASSERT_NEAR(finalPos.Y(), point.Y(), 1);
+   ASSERT_NEAR(finalPos.Z(), point.Z(), 1);
+   std::cout << "Difference in position: " << measurementPoint.Distance(finalPos) << " mm" << std::endl;
+
+   /*** Propagate to new measurement point ****/
+   propagator.SetState(startPos, startMom);
+
+   point = XYZPoint({-3.6942, -6.13106, 1.45025}); // measurement point in cm
+   point *= 10;                                    // Convert to mm
+   measurementPoint = AtMeasurementPoint(point);
+
+   propagator.PropagateToMeasurementSurface(measurementPoint, stepper);
+
+   finalPos = propagator.GetPosition();
+   finalMom = propagator.GetMomentum();
+
+   ASSERT_NEAR(finalPos.X(), point.X(), 1); // Check final position is within 1 mm of the measurement point
+   ASSERT_NEAR(finalPos.Y(), point.Y(), 1);
+   ASSERT_NEAR(finalPos.Z(), point.Z(), 1);
+   std::cout << "Difference in position: " << measurementPoint.Distance(finalPos) << " mm" << std::endl;
 }

@@ -56,8 +56,7 @@ protected:
    const std::unique_ptr<AtELossModel> fELossModel; // Energy loss model
 
    // Internal state variables for the propagator
-   double fScalingFactor = 1.0; /// Scaling factor for energy loss
-   StepState fState;            /// Current state of the particle
+   StepState fState; /// Current state of the particle
 
    // Tolerances and limits
    double fETol = 1e-4;    /// Energy tolerance for convergence when fixing energy loss
@@ -67,6 +66,8 @@ protected:
    static constexpr double fReltoSImom = 1.60218e-13 / 299792458; // Conversion factor from MeV/c to kg m/s (SI units)
 
 public:
+   double fScalingFactor = 1.0; /// Scaling factor for energy loss
+
    /**
     * @brief Constructor for AtPropagator.
     * @param charge Charge of the particle in Coulombs.
@@ -238,7 +239,7 @@ public:
 
    double Distance(const ROOT::Math::XYZPoint &pos) const override { return (fPoint - pos).R(); }
    bool PassedSurface(AtPropagator::StepState &result) const override;
-   ROOT::Math::XYZPoint ProjectToSurface(const ROOT::Math::XYZPoint &pos) const override { return fPoint; }
+   ROOT::Math::XYZPoint ProjectToSurface(const ROOT::Math::XYZPoint &pos) const override { return pos; }
 };
 
 class AtMeasurementPlane : public AtMeasurementSurface {
