@@ -58,6 +58,21 @@ AtPropagator::XYZVector AtPropagator::d2xds2(const XYZPoint &pos, const XYZVecto
    return 1 / p * (dpds_vec - phat * (phat.Dot(dpds_vec))); // Second derivative of position w.r.t. arc length
 }
 
+void AtPropagator::PropagateOneStep(AtStepper &stepper)
+{
+   if (fState.h == 0)
+      fState.h = stepper.GetInitialStep(); // Set the initial step size
+
+   stepper.fDeriv = [this](const XYZPoint &pos, const XYZVector &mom) { return this->Derivatives(pos, mom); };
+
+   auto result = stepper.Step(fState);
+   if (!result) {
+      LOG(error) << "Integration step failed, aborting propagation.";
+      return; // Abort propagation if step failed
+   }
+   fState = result; // Update the internal state
+}
+
 void AtPropagator::PropagateToMeasurementSurface(const AtMeasurementSurface &surface, AtStepper &stepper)
 {
    LOG(info) << "Propagating to measurement surface";

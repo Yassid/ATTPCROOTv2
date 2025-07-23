@@ -104,6 +104,7 @@ public:
       fState.fPos = pos;
       fState.fMom = mom;
    }
+   const StepState &GetState() const { return fState; }
 
    XYZPoint GetPosition() const { return fState.fPos; }
    XYZVector GetMomentum() const { return fState.fMom; }
@@ -120,6 +121,14 @@ public:
    void PropagateToMeasurementSurface(const AtMeasurementSurface &point, double eLoss, AtStepper &stepper);
 
    void PropagateToMeasurementSurface(const AtMeasurementSurface &surface, AtStepper &stepper);
+
+   /**
+    * @brief Propagate the particle using the given stepper.
+    * Propagates one step using the provided stepper.
+    *
+    * @param stepper The stepper to use for propagation.
+    */
+   void PropagateOneStep(AtStepper &stepper);
 
    /**
     * @brief Calculate the force acting on the particle.
