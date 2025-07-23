@@ -17,6 +17,14 @@ using namespace AtTools;
 const double mass_p = 938.272;           // Mass of proton in MeV/c^2
 const double charge_p = 1.602176634e-19; // Charge of proton
 
+std::string getEnergyPath()
+{
+   auto env = std::getenv("VMCWORKDIR");
+   if (env == nullptr) {
+      return "../../resources/energy_loss/HinH.txt"; // Default path assuming cwd is build/AtTools
+   }
+   return std::string(env) + "/resources/energy_loss/HinH.txt"; // Use environment variable
+}
 class DummyELossModel : public AtELossModel {
 public:
    double eLoss = 1;
@@ -105,7 +113,8 @@ TEST(AtPropagatorTest, PropagateToPoint_StoppingNoField)
    auto elossModel = std::make_unique<AtTools::AtELossTable>(0);
    // elossModel->LoadSrimTable(
    //    "/home/adam/fair_install/ATTPCROOTv2/AtReconstruction/AtFitter/OpenKF/kalman_filter/HinH.txt");
-   elossModel->LoadSrimTable("../../resources/energy_loss/HinH.txt"); // Assumes cwd is build/AtTools
+
+   elossModel->LoadSrimTable(getEnergyPath()); // Use the function to get the path
    AtPropagator propagator(charge, mass, std::move(elossModel));
    AtRK4Stepper stepper;
    AtMeasurementPoint measurementPoint({1e3, 0, 0});
@@ -150,7 +159,7 @@ TEST(AtPropagatorTest, PropagateToPoint_NoField)
    auto elossModel = std::make_unique<AtTools::AtELossTable>(0);
    // elossModel->LoadSrimTable(
    //    "/home/adam/fair_install/ATTPCROOTv2/AtReconstruction/AtFitter/OpenKF/kalman_filter/HinH.txt");
-   elossModel->LoadSrimTable("../../resources/energy_loss/HinH.txt"); // Assumes cwd is build/AtTools
+   elossModel->LoadSrimTable(getEnergyPath()); // Use the function to get the path
    AtPropagator propagator(charge, mass, std::move(elossModel));
    AtRK4Stepper stepper;
    AtMeasurementPoint measurementPoint({10, 0, 0});
@@ -187,7 +196,7 @@ TEST(AtPropagatorTest, PropagateToPlane_NoField)
    auto elossModel = std::make_unique<AtTools::AtELossTable>(0);
    // elossModel->LoadSrimTable(
    //    "/home/adam/fair_install/ATTPCROOTv2/AtReconstruction/AtFitter/OpenKF/kalman_filter/HinH.txt");
-   elossModel->LoadSrimTable("../../resources/energy_loss/HinH.txt"); // Assumes cwd is build/AtTools
+   elossModel->LoadSrimTable(getEnergyPath()); // Use the function to get the path
    AtPropagator propagator(charge, mass, std::move(elossModel));
    AtRK4Stepper stepper;
 
@@ -227,7 +236,7 @@ TEST(AtPropagatorTest, PropagateToPlane_StoppingNoField)
    auto elossModel = std::make_unique<AtTools::AtELossTable>(0);
    // elossModel->LoadSrimTable(
    //    "/home/adam/fair_install/ATTPCROOTv2/AtReconstruction/AtFitter/OpenKF/kalman_filter/HinH.txt");
-   elossModel->LoadSrimTable("../../resources/energy_loss/HinH.txt"); // Assumes cwd is build/AtTools
+   elossModel->LoadSrimTable(getEnergyPath()); // Use the function to get the path
    AtPropagator propagator(charge, mass, std::move(elossModel));
    AtRK4Stepper stepper;
 
@@ -263,7 +272,7 @@ TEST(AtPropagatorTest, PropagateToPointAdaptive_NoField)
    auto elossModel = std::make_unique<AtTools::AtELossTable>(0);
    // elossModel->LoadSrimTable(
    //    "/home/adam/fair_install/ATTPCROOTv2/AtReconstruction/AtFitter/OpenKF/kalman_filter/HinH.txt");
-   elossModel->LoadSrimTable("../../resources/energy_loss/HinH.txt"); // Assumes cwd is build/AtTools
+   elossModel->LoadSrimTable(getEnergyPath()); // Use the function to get the path
    AtPropagator propagator(charge, mass, std::move(elossModel));
    AtRK4AdaptiveStepper stepper;
    AtMeasurementPoint measurementPoint({10, 0, 0});
@@ -316,8 +325,8 @@ TEST(AtPropagatorTest, PropagateToPoint_Field)
    auto elossModel = std::make_unique<AtTools::AtELossTable>(0);
    // elossModel->LoadSrimTable(
    //    "/home/adam/fair_install/ATTPCROOTv2/AtReconstruction/AtFitter/OpenKF/kalman_filter/HinH.txt");
-   elossModel->LoadSrimTable("../../resources/energy_loss/HinH.txt"); // Assumes cwd is build/AtTools
-   elossModel->SetDensity(3.3084e-05);                                // Set density in g/cm^3 for 300 torr H2
+   elossModel->LoadSrimTable(getEnergyPath()); // Use the function to get the path
+   elossModel->SetDensity(3.3084e-05);         // Set density in g/cm^3 for 300 torr H2
    AtPropagator propagator(charge, mass, std::move(elossModel));
    propagator.SetEField({0, 0, 0});    // No electric field
    propagator.SetBField({0, 0, 2.85}); // Magnetic field
