@@ -16,6 +16,7 @@ using namespace AtTools;
 
 const double mass_p = 938.272;           // Mass of proton in MeV/c^2
 const double charge_p = 1.602176634e-19; // Charge of proton
+namespace {
 
 std::string getEnergyPath()
 {
@@ -25,6 +26,7 @@ std::string getEnergyPath()
    }
    return std::string(env) + "/resources/energy_loss/HinH.txt"; // Use environment variable
 }
+} // namespace
 class DummyELossModel : public AtELossModel {
 public:
    double eLoss = 1;
@@ -34,6 +36,9 @@ public:
    double GetRange(double /*energyIni*/, double /*energyFin = 0*/) const override { return 1.0; }
    double GetEnergyLoss(double /*energyIni*/, double /*distance*/) const override { return 1.0; }
    double GetEnergy(double /*energyIni*/, double /*distance*/) const override { return 1.0; }
+   double GetElossStraggling(double /*energyIni*/, double /*energyFin*/) const override { return 0.0; }
+   double GetdEdxStraggling(double /*energyIni*/, double /*energyFin*/) const override { return 0.0; }
+   double GetRangeVariance(double /*energy*/) const override { return 0.0; }
 };
 
 TEST(AtPropagatorTest, ForceNoField)

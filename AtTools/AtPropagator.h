@@ -51,9 +51,9 @@ protected:
    using Plane3D = ROOT::Math::Plane3D;
 
    // Variables used for the force
-   XYZVector fEField{0, 0, 0};                      // Electric field vector
-   XYZVector fBField{0, 0, 0};                      // Magnetic field vector
-   const std::unique_ptr<AtELossModel> fELossModel; // Energy loss model
+   XYZVector fEField{0, 0, 0};                // Electric field vector
+   XYZVector fBField{0, 0, 0};                // Magnetic field vector
+   std::unique_ptr<AtELossModel> fELossModel; // Energy loss model
 
    // Internal state variables for the propagator
    StepState fState; /// Current state of the particle
@@ -80,7 +80,7 @@ public:
       fState.fMass = mass;
       fState.fQ = charge;
    }
-
+   AtPropagator(AtPropagator &&) = default;
    /**
     * @brief Set the electric field (V/m)
     */
@@ -105,6 +105,7 @@ public:
       fState.fMom = mom;
    }
    const StepState &GetState() const { return fState; }
+   const AtELossModel *GetELossModel() const { return fELossModel.get(); }
 
    XYZPoint GetPosition() const { return fState.fPos; }
    XYZVector GetMomentum() const { return fState.fMom; }
@@ -245,6 +246,12 @@ protected:
 
 public:
    AtMeasurementPoint(const ROOT::Math::XYZPoint &point) : fPoint(point) {}
+
+   template <typename T>
+   AtMeasurementPoint(const T &point)
+   {
+      fPoint = ROOT::Math::XYZPoint(point[0], point[1], point[2]);
+   }
 
    double Distance(const ROOT::Math::XYZPoint &pos) const override { return (fPoint - pos).R(); }
    bool PassedSurface(AtPropagator::StepState &result) const override;
