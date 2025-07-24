@@ -9,8 +9,10 @@
 /// @file unscented_kalman_filter.h
 ///
 
-#ifndef UNSCENTED_KALMAN_FILTER_LIB_H
-#define UNSCENTED_KALMAN_FILTER_LIB_H
+#ifndef TRACKFITTERUKF_H
+#define TRACKFITTERUKF_H
+
+#include "AtPropagator.h"
 
 #include "kalman_filter.h"
 #include "kf_util.h"
@@ -370,6 +372,71 @@ private:
       return matPxy;
    }
 };
+
+// Define template dimension variables for clarity and reuse
+
+class TrackFitterUKF : public TrackFitterUKFBase<6, 1, 3, 3> {
+protected:
+   static constexpr int32_t TRACKFITTER_DIM_X = 6;
+   static constexpr int32_t TRACKFITTER_DIM_Z = 1;
+   static constexpr int32_t TRACKFITTER_DIM_V = 3;
+   static constexpr int32_t TRACKFITTER_DIM_N = 3;
+
+   AtTools::AtPropagator fPropagator;          ///< @brief Propagator for the track fitter
+   AtTools::AtPropagator::StepState fMeanStep; /// Holds the step information for POCA propagation of mean state
+
+public:
+   /**
+    * @brief Constructor for the TrackFitterUKF class.
+    * @param propagator The propagator to be used for the track fitting, must be passed as an rvalue reference.
+    *
+    * Example usage:
+    * ```
+    * AtTools::AtPropagator propagator;
+    * kf::TrackFitterUKF trackFitterUKF(std::move(propagator));
+    * ```
+    */
+   TrackFitterUKF(AtTools::AtPropagator &&propagator) : TrackFitterUKFBase(), fPropagator(std::move(propagator)) {}
+
+   template <typename PredictionModelCallback>
+   void predictUKF(PredictionModelCallback predictionModelFunc, const Vector<TRACKFITTER_DIM_Z> &vecZ)
+   {
+      // First we need to propagate the mean state vector to the next measurement point.
+      AtTools::AtRK4Stepper stepper; // Use RK4 stepper for propagation
+      fPropagator.PropagateToMeasurementSurface(AtTools::AtMeasurementPoint(vecZ), stepper);
+      fMeanStep = fPropagator.GetState(); // Get the mean step information from the propagator
+   }
+
+protected:
+   std::array<float32_t, TRACKFITTER_DIM_V> calculateProcessNoiseMean() override
+   {
+      // The process noise is the scaling factor for dedx. By definition the mean should be 1
+      std::array<float32_t, TRACKFITTER_DIM_V> processNoiseMean{1};
+      return processNoiseMean;
+   }
+
+   Matrix<TRACKFITTER_DIM_V, TRACKFITTER_DIM_V> calculateProcessNoiseCovariance() override
+   {
+      assert(TRACKFITTER_DIM_V == 1 && "Process noise covariance is only implemented for DIM_V = 1");
+      // Calculate the process noise covariance matrix
+      Matrix<TRACKFITTER_DIM_V, TRACKFITTER_DIM_V> matQ{Matrix<TRACKFITTER_DIM_V, TRACKFITTER_DIM_V>::Zero()};
+
+      // We need to know what the energy of the particle before/after transport.
+      double eIn = 0;
+      double eOut = 0;
+
+      if (const auto *elossModel = fPropagator.GetELossModel()) {
+         double dedx_straggle = elossModel->GetdEdxStraggling(eIn, eOut);
+         double factor = dedx_straggle / elossModel->GetdEdx(eIn);
+         matQ(0, 0) = factor * factor; // Variance for the dedx straggling.
+
+      } else {
+         throw std::runtime_error("Cannot calculate process noise covariance without an energy loss model");
+      }
+      // TODO: Add multiple scattering
+      return matQ;
+   }
+};
 } // namespace kf
 
-#endif // UNSCENTED_KALMAN_FILTER_LIB_H
+#endif // TRACKFITTERUKF_H

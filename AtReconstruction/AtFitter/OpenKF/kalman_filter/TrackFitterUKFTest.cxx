@@ -209,11 +209,22 @@ TEST_F(TrackFitterUKFExampleTest, PredictionAndCorrection)
    ASSERT_NEAR(m_ukf.matP()(3, 3), 0.1333886F, FLOAT_EPSILON);
 }
 
-class TrackFitterUKFPhysicsTest : public testing::Test {
+namespace {
+
+std::string getEnergyPath()
+{
+   auto env = std::getenv("VMCWORKDIR");
+   if (env == nullptr) {
+      return "../../resources/energy_loss/HinH.txt"; // Default path assuming cwd is build/AtTools
+   }
+   return std::string(env) + "/resources/energy_loss/HinH.txt"; // Use environment variable
+}
+} // namespace
+
+class TrackFitterUKFFixture : public testing::Test {
 public:
    using XYZVector = ROOT::Math::XYZVector;
 
-   virtual void SetUp() override {}
    virtual void TearDown() override {}
 
    static constexpr float FLOAT_EPSILON{0.001F};
@@ -227,7 +238,17 @@ public:
    XYZVector fEField{0, 0, 0};             // E-field in V/m
    static constexpr double fC = 299792458; // m/s
 
-   kf::TrackFitterUKFBase<DIM_X, DIM_Z, DIM_V, DIM_N> m_ukf;
+   std::unique_ptr<kf::TrackFitterUKF> m_ukf{nullptr};
+
+   void SetUp() override
+   {
+      const double mass_p = 938.272;           // Mass of proton in MeV/c^2
+      const double charge_p = 1.602176634e-19; // Charge of protonble
+      auto elossModel = std::make_unique<AtTools::AtELossTable>(0);
+      elossModel->LoadSrimTable(getEnergyPath()); // Use the function to get the path
+      AtTools::AtPropagator propagator(charge_p, mass_p, std::move(elossModel));
+      m_ukf = std::make_unique<kf::TrackFitterUKF>(std::move(propagator));
+   }
 
    /// @brief to propagate the state vector using the process model
    /// @param x state vector
@@ -239,3 +260,8 @@ public:
       return {};
    }
 };
+
+TEST_F(TrackFitterUKFFixture, TestInstantiation)
+{
+   assert(true);
+}
