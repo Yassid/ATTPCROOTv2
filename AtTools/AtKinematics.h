@@ -85,6 +85,9 @@ double GetSpeed(double p, double mass); /// Calculate the speed of a particle gi
  * @returns Kinetic energy in MeV
  */
 double KE(ROOT::Math::XYZVector mom, double mass);
+double KE(double mom, double mass);
+
+double GetRelMomFromKE(double KE, double mass);
 
 /**
  * Calculate the velocity vector from momentum and mass

@@ -194,6 +194,8 @@ public:
    virtual AtPropagator::StepState Step(const AtPropagator::StepState &state) const = 0;
    virtual double GetInitialStep() const { return 1e-4; } /// Default initial step size in m
 
+   virtual ~AtStepper() = default;
+
 protected:
    static constexpr double fReltoSImom = 1.60218e-13 / 299792458; // Conversion factor from MeV/c to kg m/s (SI units)
 };

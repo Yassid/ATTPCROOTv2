@@ -120,6 +120,7 @@ if(TARGET Eigen3::Eigen)
   set(SRCS ${SRCS}
   AtPatternRecognition/triplclust/src/orthogonallsq.cxx
   AtFitter/AtOpenKFTest.cxx
+  AtFitter/OpenKF/kalman_filter/TrackFitterUKF.cxx
   
   )
   message(STATUS "Current sources: ${SRCS}")

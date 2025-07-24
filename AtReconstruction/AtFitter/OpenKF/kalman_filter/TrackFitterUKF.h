@@ -12,12 +12,18 @@
 #ifndef TRACKFITTERUKF_H
 #define TRACKFITTERUKF_H
 
+#include "AtKinematics.h"
 #include "AtPropagator.h"
+
+#include <FairLogger.h>
+
+#include <Math/Plane3D.h>
+#include <Math/Vector3D.h>
+#include <TMatrixDfwd.h>
 
 #include "kalman_filter.h"
 #include "kf_util.h"
 #include "unscented_kalman_filter.h"
-
 namespace kf {
 
 /// @brief Class for fitting tracks using the Unscented Kalman Filter (UKF) algorithm.
@@ -27,17 +33,31 @@ namespace kf {
 /// @tparam DIM_N Dimension of the measurement noise vector.
 template <int32_t DIM_X = 6, int32_t DIM_Z = 3, int32_t DIM_V = 2, int32_t DIM_N = 3>
 class TrackFitterUKFBase : public KalmanFilter<DIM_X, DIM_Z> {
+
 public:
    // Augmented state vector is just the process noise and state vector. The measurement noise is not included as that
    // is independent of the propagation and measurement model and just adds linearly.
    static constexpr int32_t DIM_A{DIM_X + DIM_V};       ///< @brief Augmented state dimension
    static constexpr int32_t SIGMA_DIM_A{2 * DIM_A + 1}; ///< @brief Sigma points dimension for augmented state
-   float32_t m_kappa{0};                                ///< @brief Kappa parameter for finding sigma points
+
+protected:
+   using KalmanFilter<DIM_X, DIM_Z>::m_vecX; // from Base KalmanFilter class
+   using KalmanFilter<DIM_X, DIM_Z>::m_matP; // from Base KalmanFilter class
+
+   float32_t m_weight0;  /// @brief unscented transform weight 0 for mean
+   float32_t m_weighti;  /// @brief unscented transform weight i for none mean samples
+   float32_t m_kappa{0}; ///< @brief Kappa parameter for finding sigma points
+
+   Vector<DIM_A> m_vecXa{Vector<DIM_A>::Zero()};               /// @brief augmented state vector (incl. process
+                                                               /// and measurement noise means)
+   Matrix<DIM_A, DIM_A> m_matPa{Matrix<DIM_A, DIM_A>::Zero()}; /// @brief augmented state covariance (incl.
+                                                               /// process and measurement noise covariances)
 
    // Add variables to track the covariances of the process and measurement noise.
    Matrix<DIM_V, DIM_V> m_matQ; // @brief Process noise covariance matrix
    Matrix<DIM_N, DIM_N> m_matR; // @brief Measurement noise covariance matrix
 
+public:
    Matrix<DIM_A, SIGMA_DIM_A> m_matSigmaXa{Matrix<DIM_A, SIGMA_DIM_A>::Zero()}; ///< @brief Sigma points matrix
 
    TrackFitterUKFBase()
@@ -55,13 +75,6 @@ public:
       m_kappa = kappa; // Set the kappa parameter for sigma point calculation
       updateWeights(); // Update the weights based on the new kappa value
    }
-
-   // This code uses two different conventions for managing noise.
-   // The state vector noise is set in the updateAugmentedStateAndCovariance() method, while
-   // the noise vectors for the process and measurement models are set in the setCovarianceQ() and
-   // setCovarianceR() methods. This is an odd choice. We will be moving everything into a common
-   // structure where updateAugmentedStateAndCovariance() handle all covariance updates that are actually
-   // part of the augmented state vector.
 
    ///
    /// @brief adding process noise covariance Q to the augmented state covariance
@@ -232,18 +245,7 @@ public:
       m_matP -= matK * matPzz * matK.transpose();
    }
 
-private:
-   using KalmanFilter<DIM_X, DIM_Z>::m_vecX; // from Base KalmanFilter class
-   using KalmanFilter<DIM_X, DIM_Z>::m_matP; // from Base KalmanFilter class
-
-   float32_t m_weight0; /// @brief unscented transform weight 0 for mean
-   float32_t m_weighti; /// @brief unscented transform weight i for none mean samples
-
-   Vector<DIM_A> m_vecXa{Vector<DIM_A>::Zero()};               /// @brief augmented state vector (incl. process
-                                                               /// and measurement noise means)
-   Matrix<DIM_A, DIM_A> m_matPa{Matrix<DIM_A, DIM_A>::Zero()}; /// @brief augmented state covariance (incl.
-                                                               /// process and measurement noise covariances)
-
+protected:
    ///
    /// @brief algorithm to calculate the weights used to draw the sigma points
    ///
@@ -276,6 +278,10 @@ private:
       // cholesky factorization to get matrix Pxx square-root
       Eigen::LLT<Matrix<STATE_DIM, STATE_DIM>> lltOfPa(matPa);
       if (lltOfPa.info() != Eigen::Success) {
+         LOG(error) << "Cholesky decomposition failed, matrix is not positive definite.";
+         for (int32_t i{0}; i < STATE_DIM; ++i) {
+            LOG(error) << "Pxx[" << i << "]: " << matPa(i, i);
+         }
          throw std::runtime_error("Cholesky decomposition failed, matrix is not positive definite.");
       }
       Matrix<STATE_DIM, STATE_DIM> matSa{lltOfPa.matrixL()}; // sqrt(P_{a})
@@ -375,16 +381,17 @@ private:
 
 // Define template dimension variables for clarity and reuse
 
-class TrackFitterUKF : public TrackFitterUKFBase<6, 1, 3, 3> {
+class TrackFitterUKF : public TrackFitterUKFBase<6, 3, 1, 3> {
 protected:
-   static constexpr int32_t TRACKFITTER_DIM_X = 6;
-   static constexpr int32_t TRACKFITTER_DIM_Z = 1;
-   static constexpr int32_t TRACKFITTER_DIM_V = 3;
-   static constexpr int32_t TRACKFITTER_DIM_N = 3;
+   static constexpr int32_t TF_DIM_X = 6;
+   static constexpr int32_t TF_DIM_Z = 3;
+   static constexpr int32_t TF_DIM_V = 1;
+   static constexpr int32_t TF_DIM_N = 3;
 
-   AtTools::AtPropagator fPropagator;          ///< @brief Propagator for the track fitter
+   AtTools::AtPropagator fPropagator; ///< @brief Propagator for the track fitter
+   std::unique_ptr<AtTools::AtStepper> fStepper{nullptr};
    AtTools::AtPropagator::StepState fMeanStep; /// Holds the step information for POCA propagation of mean state
-
+   ROOT::Math::Plane3D fMeasurementPlane;      ///< Holds the measurement plane for the track fitter
 public:
    /**
     * @brief Constructor for the TrackFitterUKF class.
@@ -396,46 +403,37 @@ public:
     * kf::TrackFitterUKF trackFitterUKF(std::move(propagator));
     * ```
     */
-   TrackFitterUKF(AtTools::AtPropagator &&propagator) : TrackFitterUKFBase(), fPropagator(std::move(propagator)) {}
+   TrackFitterUKF(AtTools::AtPropagator &&propagator, std::unique_ptr<AtTools::AtStepper> &&stepper)
+      : TrackFitterUKFBase(), fPropagator(std::move(propagator)), fStepper(std::move(stepper))
+   {
+   }
 
-   template <typename PredictionModelCallback>
-   void predictUKF(PredictionModelCallback predictionModelFunc, const Vector<TRACKFITTER_DIM_Z> &vecZ)
+   void SetInitialState(const ROOT::Math::XYZPoint &initialPosition, const ROOT::Math::XYZVector &initialMomentum,
+                        const TMatrixD &initialCovariance);
+
+   kf::Vector<TF_DIM_X>
+   funcF(const kf::Vector<TF_DIM_X> &x, const kf::Vector<TF_DIM_V> &v, const kf::Vector<TF_DIM_Z> &z);
+
+   void predictUKF(const Vector<TF_DIM_Z> &z)
    {
       // First we need to propagate the mean state vector to the next measurement point.
-      AtTools::AtRK4Stepper stepper; // Use RK4 stepper for propagation
-      fPropagator.PropagateToMeasurementSurface(AtTools::AtMeasurementPoint(vecZ), stepper);
+      fPropagator.PropagateToMeasurementSurface(AtTools::AtMeasurementPoint(z), *fStepper);
       fMeanStep = fPropagator.GetState(); // Get the mean step information from the propagator
+
+      // Now we can construct the reference plane.
+      using namespace ROOT::Math;
+      fMeasurementPlane = Plane3D(fMeanStep.fMom.Unit(),
+                                  XYZPoint(z)); // Create a plane using the momentum direction and position
+
+      auto callback = [this](const kf::Vector<TF_DIM_X> &x_, const kf::Vector<TF_DIM_V> &v_,
+                             const kf::Vector<TF_DIM_Z> &z_) { return funcF(x_, v_, z_); };
+      TrackFitterUKFBase::predictUKF(callback, z);
    }
 
 protected:
-   std::array<float32_t, TRACKFITTER_DIM_V> calculateProcessNoiseMean() override
-   {
-      // The process noise is the scaling factor for dedx. By definition the mean should be 1
-      std::array<float32_t, TRACKFITTER_DIM_V> processNoiseMean{1};
-      return processNoiseMean;
-   }
+   std::array<float32_t, TF_DIM_V> calculateProcessNoiseMean() override;
 
-   Matrix<TRACKFITTER_DIM_V, TRACKFITTER_DIM_V> calculateProcessNoiseCovariance() override
-   {
-      assert(TRACKFITTER_DIM_V == 1 && "Process noise covariance is only implemented for DIM_V = 1");
-      // Calculate the process noise covariance matrix
-      Matrix<TRACKFITTER_DIM_V, TRACKFITTER_DIM_V> matQ{Matrix<TRACKFITTER_DIM_V, TRACKFITTER_DIM_V>::Zero()};
-
-      // We need to know what the energy of the particle before/after transport.
-      double eIn = 0;
-      double eOut = 0;
-
-      if (const auto *elossModel = fPropagator.GetELossModel()) {
-         double dedx_straggle = elossModel->GetdEdxStraggling(eIn, eOut);
-         double factor = dedx_straggle / elossModel->GetdEdx(eIn);
-         matQ(0, 0) = factor * factor; // Variance for the dedx straggling.
-
-      } else {
-         throw std::runtime_error("Cannot calculate process noise covariance without an energy loss model");
-      }
-      // TODO: Add multiple scattering
-      return matQ;
-   }
+   Matrix<TF_DIM_V, TF_DIM_V> calculateProcessNoiseCovariance() override;
 };
 } // namespace kf
 

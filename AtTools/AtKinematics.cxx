@@ -291,6 +291,11 @@ double GetRelMom(double gamma, double mass)
 {
    return std::sqrt(gamma * gamma - 1) * mass;
 }
+double GetRelMomFromKE(double KE, double mass)
+{
+
+   return std::sqrt((KE + mass) * (KE + mass) - mass * mass);
+}
 
 /**
  * Get the mass in MeV of a fragment of mass in amu (or A)
@@ -316,5 +321,9 @@ ROOT::Math::XYZVector GetVel(ROOT::Math::XYZVector mom, double mass)
 double KE(ROOT::Math::XYZVector mom, double mass)
 {
    return std::sqrt(mom.Mag2() + mass * mass) - mass; // Kinetic energy in MeV
+}
+double KE(double mom, double mass)
+{
+   return std::sqrt(mom * mom + mass * mass) - mass;
 }
 } // namespace AtTools::Kinematics
