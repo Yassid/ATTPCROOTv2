@@ -223,8 +223,8 @@ public:
    static constexpr size_t DIM_Z{3}; // Measurement vector is (x,y,z)
    static constexpr size_t DIM_N{3}; // Measurement noise vector
 
-   static XYZVector fBField{0, 0, 2.85};   // B-field in tesla
-   static XYZVector fEField{0, 0, 0};      // E-field in V/m
+   XYZVector fBField{0, 0, 2.85};          // B-field in tesla
+   XYZVector fEField{0, 0, 0};             // E-field in V/m
    static constexpr double fC = 299792458; // m/s
 
    kf::TrackFitterUKF<DIM_X, DIM_Z, DIM_V, DIM_N> m_ukf;
@@ -236,5 +236,6 @@ public:
    /// @return propagated (unaugmented) state vector
    static kf::Vector<DIM_X> funcF(const kf::Vector<DIM_X> &x, const kf::Vector<DIM_V> &v, const kf::Vector<DIM_Z> &z)
    {
-      ASSERT_EQ(true, true);
+      return {};
    }
+};
