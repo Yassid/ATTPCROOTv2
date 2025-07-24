@@ -79,11 +79,15 @@ void AtPropagator::PropagateToMeasurementSurface(const AtMeasurementSurface &sur
    fState.h = stepper.GetInitialStep(); // Set the initial step size
 
    auto KE_initial = Kinematics::KE(fState.fMom, fState.fMass);
+   if (KE_initial < fStopTol) {
+      LOG(warning) << "Initial kinetic energy is below stopping threshold, cannot propagate.";
+      return; // Cannot propagate if the initial kinetic energy is below the stopping threshold
+   }
    stepper.fDeriv = [this](const XYZPoint &pos, const XYZVector &mom) { return this->Derivatives(pos, mom); };
 
    while (true) {
-      LOG(info) << "Position: " << GetPosition().X() / 10 << ", " << GetPosition().Y() / 10 << ", "
-                << GetPosition().Z() / 10;
+      LOG(debug) << "Position: " << GetPosition().X() / 10 << ", " << GetPosition().Y() / 10 << ", "
+                 << GetPosition().Z() / 10;
       LOG(debug) << "Momentum: " << GetMomentum().X() << ", " << GetMomentum().Y() << ", " << GetMomentum().Z();
 
       auto result = stepper.Step(fState);

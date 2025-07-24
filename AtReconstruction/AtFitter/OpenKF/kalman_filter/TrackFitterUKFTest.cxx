@@ -234,6 +234,7 @@ public:
    Matrix<DIM_A, SIGMA_DIM_A> matSigmaXa() { return m_matSigmaXa; }
    AtTools::AtPropagator &getPropagator() { return fPropagator; }
    AtTools::AtPropagator::StepState &getState() { return fMeanStep; }
+   Vector<TF_DIM_X> getStateVector() { return m_vecX; }
 
    void calcSigmaPoints() { m_matSigmaXa = calculateSigmaPoints(m_vecXa, m_matPa); }
    void calcMeanAndCovFromSigma(const Matrix<DIM_A, SIGMA_DIM_A> &sigmaXa, Vector<DIM_A> &meanXa,
@@ -268,10 +269,12 @@ public:
    const double charge_p = 1.602176634e-19; // Charge of protonble
 
    std::unique_ptr<kf::TrackFitterUKF> m_ukf{nullptr};
+   AtTools::AtELossModel *fElossModel{nullptr};
 
    void SetUp() override
    {
       auto elossModel = std::make_unique<AtTools::AtELossTable>(0);
+      fElossModel = elossModel.get();             // Store the model for later use
       elossModel->LoadSrimTable(getEnergyPath()); // Use the function to get the path
       AtTools::AtPropagator propagator(charge_p, mass_p, std::move(elossModel));
       propagator.SetBField(fBField);
@@ -398,30 +401,136 @@ TEST_F(TrackFitterUKFFixture, TestSigmaPoints)
 
 TEST_F(TrackFitterUKFFixture, TestPredictionStep)
 {
+   using namespace AtTools;
+   using namespace ROOT::Math;
+
+   // Set the conditions for simulated data
    auto testPtr = dynamic_cast<kf::TrackFitterUKFTest *>(m_ukf.get());
+   fElossModel->SetDensity(3.3084e-05);
+   testPtr->getPropagator().SetEField({0, 0, 0});    // No electric field
+   testPtr->getPropagator().SetBField({0, 0, 2.85}); // Magnetic field
 
-   // Create a state change where a proton has lost 1 MeV of energy (to rest)
-   auto p = AtTools::Kinematics::GetRelMomFromKE(1.0, mass_p);
-   AtTools::AtPropagator::StepState fInitialState;
-   fInitialState.fMass = mass_p;
-   fInitialState.fQ = charge_p;
+   // Attempt to predict the state of a proton from simulation
+   XYZPoint startPos(-3.40046e-05, -1.49863e-05, 0.10018); // Start position in cm
+   startPos *= 10;                                         // Convert to mm
+   XYZVector startMom(0.00935463, -0.0454279, 0.00826042); // Start momentum in GeV/c
+   startMom *= 1e3;                                        // Convert to MeV/c
 
-   // Current state
-   fInitialState.fLastPos = {0, 0, 0};
-   fInitialState.fLastMom = {p, 0, 0};
-   // State at next measurement point
-   fInitialState.fPos = {202.78, 0, 0}; // Pulled from SRIM table
-   fInitialState.fMom = {0, 0, 0};
-   double var = 0.01;
+   double sigma_pos = 10;                 // Position uncertainty of 10 mm
+   double sigma_mom = 0.1 * startMom.R(); // Momentum uncertainty of 10% MeV/c
+   double sigma_theta = 1 * M_PI / 180;   // Angular uncertainty of 1 degree
+   double sigma_phi = 1 * M_PI / 180;     // Angular uncertainty of 1 degree
+
    TMatrixD cov(6, 6);
    cov.Zero();
-   for (int i = 0; i < 6; ++i) {
-      cov(i, i) = var; // Set diagonal covariance to some small number
+   for (int i = 0; i < 3; ++i) {
+
+      cov(i, i) = sigma_pos * sigma_pos; // Set diagonal covariance to some small number
    }
+   cov(3, 3) = sigma_mom * sigma_mom;     // Momentum uncertainty
+   cov(4, 4) = sigma_theta * sigma_theta; // Angular uncertainty
+   cov(5, 5) = sigma_phi * sigma_phi;     // Angular uncertainty
 
-   m_ukf->SetInitialState(fInitialState.fLastPos, fInitialState.fLastMom, cov);
-   testPtr->getState() = fInitialState; // Set the mean state in the test class (rather than propagate)
+   m_ukf->SetInitialState(startPos, startMom, cov);
 
-   // Fill m_vecXa and m_matPa with the provided state
-   m_ukf->updateAugmentedStateAndCovariance();
+   XYZPoint point({-1.4895, -4.8787, 1.01217}); // measurement point in cm
+   point *= 10;                                 // Convert to mm
+   m_ukf->predictUKF(point);
+
+   // Check the predicted state vector before correction
+   auto stateVec = testPtr->getStateVector();
+   XYZPoint predictedPos(stateVec[0], stateVec[1], stateVec[2]);
+   Polar3DVector predictedMom(stateVec[3], stateVec[4], stateVec[5]);
+   LOG(info) << "Measurement point: " << point;
+   LOG(info) << "Mean position: " << testPtr->getState().fLastPos;
+   LOG(info) << "Predicted position (sigma): " << predictedPos;
+
+   LOG(info) << "Mean momentum: " << testPtr->getState().fLastMom;
+   LOG(info) << "Predicted momentum (sigma): " << XYZPoint(predictedMom);
+
+   LOG(info) << "Initial covariance matrix:\n";
+   cov.Print();
+   LOG(info) << "Predicted covariance matrix:\n" << testPtr->matP();
+}
+
+TEST_F(TrackFitterUKFFixture, TestPredictionAndCorrectStep)
+{
+   using namespace AtTools;
+   using namespace ROOT::Math;
+
+   // Set the conditions for simulated data
+   auto testPtr = dynamic_cast<kf::TrackFitterUKFTest *>(m_ukf.get());
+   fElossModel->SetDensity(3.3084e-05);
+   testPtr->getPropagator().SetEField({0, 0, 0});    // No electric field
+   testPtr->getPropagator().SetBField({0, 0, 2.85}); // Magnetic field
+
+   // Attempt to predict the state of a proton from simulation
+   XYZPoint startPos(-3.40046e-05, -1.49863e-05, 0.10018); // Start position in cm
+   startPos *= 10;                                         // Convert to mm
+   XYZVector startMom(0.00935463, -0.0454279, 0.00826042); // Start momentum in GeV/c
+   startMom *= 1e3;                                        // Convert to MeV/c
+
+   double sigma_pos = 1;                   // Position uncertainty of 10 mm
+   double sigma_mom = 0.01 * startMom.R(); // Momentum uncertainty of 10% MeV/c
+   double sigma_theta = 5 * M_PI / 180;    // Angular uncertainty of 1 degree
+   double sigma_phi = 5 * M_PI / 180;      // Angular uncertainty of 1 degree
+
+   TMatrixD cov(6, 6);
+   cov.Zero();
+   for (int i = 0; i < 3; ++i) {
+
+      cov(i, i) = sigma_pos * sigma_pos; // Set diagonal covariance to some small number
+   }
+   cov(3, 3) = sigma_mom * sigma_mom;     // Momentum uncertainty
+   cov(4, 4) = sigma_theta * sigma_theta; // Angular uncertainty
+   cov(5, 5) = sigma_phi * sigma_phi;     // Angular uncertainty
+
+   m_ukf->SetInitialState(startPos, startMom, cov);
+
+   XYZPoint point({-1.4895, -4.8787, 1.01217}); // measurement point in cm
+   point *= 10;                                 // Convert to mm
+   TMatrixD cov_meas(3, 3);
+   cov_meas.Zero();
+   for (int i = 0; i < 3; ++i) {
+      cov_meas(i, i) = sigma_pos * sigma_pos;
+   }
+   m_ukf->SetMeasCov(cov_meas); // Set measurement noise covariance
+
+   /** Make prediction */
+   m_ukf->predictUKF(point);
+
+   // Check the predicted state vector before correction
+   auto stateVec = testPtr->getStateVector();
+   XYZPoint predictedPos(stateVec[0], stateVec[1], stateVec[2]);
+   Polar3DVector predictedMom(stateVec[3], stateVec[4], stateVec[5]);
+
+   LOG(info) << "Prediction step complete: " << std::endl;
+
+   LOG(info) << "Measurement point: " << point;
+   LOG(info) << "Mean position: " << testPtr->getState().fLastPos;
+   LOG(info) << "Predicted position (sigma): " << predictedPos;
+
+   LOG(info) << "Mean momentum: " << testPtr->getState().fLastMom;
+   LOG(info) << "Predicted momentum (sigma): " << XYZPoint(predictedMom);
+
+   LOG(info) << "Initial covariance matrix:\n";
+   cov.Print();
+   LOG(info) << "Predicted covariance matrix:\n" << testPtr->matP();
+
+   // Now correct the state with the measurement
+   m_ukf->correctUKF(point);
+   auto correctedStateVec = testPtr->getStateVector();
+   XYZPoint correctedPos(correctedStateVec[0], correctedStateVec[1], correctedStateVec[2]);
+   Polar3DVector correctedMom(correctedStateVec[3], correctedStateVec[4], correctedStateVec[5]);
+
+   LOG(info) << "Correction complete: " << std::endl;
+
+   LOG(info) << "Measurement point: " << point;
+   LOG(info) << "Predicted position (sigma): " << predictedPos;
+   LOG(info) << "Corrected position: " << correctedPos;
+
+   LOG(info) << "Predicted momentum (sigma): " << XYZPoint(predictedMom);
+   LOG(info) << "Corrected momentum: " << XYZPoint(correctedMom);
+
+   LOG(info) << "Corrected covariance matrix:\n" << testPtr->matP();
 }

@@ -12,17 +12,31 @@ namespace kf {
 void TrackFitterUKF::SetInitialState(const ROOT::Math::XYZPoint &initialPosition,
                                      const ROOT::Math::XYZVector &initialMomentum, const TMatrixD &initialCovariance)
 {
-   m_vecX[0] = initialPosition.X();     // X position
-   m_vecX[1] = initialPosition.Y();     // Y position
-   m_vecX[2] = initialPosition.Z();     // Z position
-   m_vecX[3] = initialMomentum.R();     // Momentum magnitude
-   m_vecX[4] = initialMomentum.Theta(); // Polar angle
-   m_vecX[5] = initialMomentum.Phi();   // Azimuthal angle
+   fPropagator.SetState(initialPosition, initialMomentum); // Set the initial state in the propagator
+   m_vecX[0] = initialPosition.X();                        // X position
+   m_vecX[1] = initialPosition.Y();                        // Y position
+   m_vecX[2] = initialPosition.Z();                        // Z position
+   m_vecX[3] = initialMomentum.R();                        // Momentum magnitude
+   m_vecX[4] = initialMomentum.Theta();                    // Polar angle
+   m_vecX[5] = initialMomentum.Phi();                      // Azimuthal angle
 
    // Copy elements from initialCovariance to m_matP
    for (int i = 0; i < m_matP.rows(); ++i) {
       for (int j = 0; j < m_matP.cols(); ++j) {
          m_matP(i, j) = initialCovariance(i, j);
+      }
+   }
+}
+
+void TrackFitterUKF::SetMeasCov(const TMatrixD &measCov)
+{
+   if (measCov.GetNrows() != TF_DIM_Z || measCov.GetNcols() != TF_DIM_Z) {
+      throw std::runtime_error("Measurement covariance matrix must be of size " + std::to_string(TF_DIM_Z) + "x" +
+                               std::to_string(TF_DIM_Z));
+   }
+   for (int i = 0; i < TF_DIM_Z; ++i) {
+      for (int j = 0; j < TF_DIM_Z; ++j) {
+         m_matR(i, j) = measCov(i, j); // Copy measurement covariance to m_matR
       }
    }
 }
@@ -81,6 +95,21 @@ Vector<TrackFitterUKF::TF_DIM_X> TrackFitterUKF::funcF(const Vector<TrackFitterU
    vecX[5] = fState.fMom.Phi();   // Azimuthal
 
    return vecX; // Return the propagated state vector
+}
+
+Vector<TrackFitterUKF::TF_DIM_Z> TrackFitterUKF::funcH(const Vector<TrackFitterUKF::TF_DIM_X> &x)
+{
+   // Measurement function to convert state vector to measurement vector
+   using namespace ROOT::Math;
+   Vector<TF_DIM_Z> vecZ;
+   XYZPoint fPos(x[0], x[1], x[2]); // Position from state vector
+
+   // Calculate the measurement vector based on the position and momentum
+   vecZ[0] = fPos.X(); // X coordinate
+   vecZ[1] = fPos.Y(); // Y coordinate
+   vecZ[2] = fPos.Z(); // Z coordinate
+
+   return vecZ; // Return the measurement vector
 }
 
 } // namespace kf

@@ -411,11 +411,15 @@ public:
    void SetInitialState(const ROOT::Math::XYZPoint &initialPosition, const ROOT::Math::XYZVector &initialMomentum,
                         const TMatrixD &initialCovariance);
 
+   void SetMeasCov(const TMatrixD &measCov);
+
    kf::Vector<TF_DIM_X>
    funcF(const kf::Vector<TF_DIM_X> &x, const kf::Vector<TF_DIM_V> &v, const kf::Vector<TF_DIM_Z> &z);
+   kf::Vector<TF_DIM_Z> funcH(const kf::Vector<TF_DIM_X> &x);
 
-   void predictUKF(const Vector<TF_DIM_Z> &z)
+   void predictUKF(const ROOT::Math::XYZPoint &z)
    {
+
       // First we need to propagate the mean state vector to the next measurement point.
       fPropagator.PropagateToMeasurementSurface(AtTools::AtMeasurementPoint(z), *fStepper);
       fMeanStep = fPropagator.GetState(); // Get the mean step information from the propagator
@@ -424,10 +428,23 @@ public:
       using namespace ROOT::Math;
       fMeasurementPlane = Plane3D(fMeanStep.fMom.Unit(),
                                   XYZPoint(z)); // Create a plane using the momentum direction and position
-
+      Vector<TF_DIM_Z> zVec;                    // Initialize the measurement vector
+      zVec[0] = z.X();
+      zVec[1] = z.Y();
+      zVec[2] = z.Z();
       auto callback = [this](const kf::Vector<TF_DIM_X> &x_, const kf::Vector<TF_DIM_V> &v_,
                              const kf::Vector<TF_DIM_Z> &z_) { return funcF(x_, v_, z_); };
-      TrackFitterUKFBase::predictUKF(callback, z);
+      TrackFitterUKFBase::predictUKF(callback, zVec);
+   }
+
+   void correctUKF(const ROOT::Math::XYZPoint &z)
+   {
+      Vector<TF_DIM_Z> zVec; // Initialize the measurement vector
+      zVec[0] = z.X();
+      zVec[1] = z.Y();
+      zVec[2] = z.Z();
+      auto callback = [this](const kf::Vector<TF_DIM_X> &x_) { return funcH(x_); };
+      TrackFitterUKFBase::correctUKF(callback, zVec);
    }
 
 protected:

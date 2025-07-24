@@ -26,7 +26,7 @@ void AtELossTable::SetDensity(double density)
       elem = fScaling / elem; // scale dx/de by the density
    }
    for (auto &elem : r_var) {
-      LOG(info) << "Scaling range variance by " << fScaling * fScaling;
+      LOG(debug) << "Scaling range variance by " << fScaling * fScaling;
       elem = elem / (fScaling * fScaling); // scale range variance by the density
    }
    LoadTable(x, y);
