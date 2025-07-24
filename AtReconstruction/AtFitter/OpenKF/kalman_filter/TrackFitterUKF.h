@@ -24,7 +24,7 @@ namespace kf {
 /// @tparam DIM_V Dimension of the process noise vector.
 /// @tparam DIM_N Dimension of the measurement noise vector.
 template <int32_t DIM_X = 6, int32_t DIM_Z = 3, int32_t DIM_V = 2, int32_t DIM_N = 3>
-class TrackFitterUKF : public KalmanFilter<DIM_X, DIM_Z> {
+class TrackFitterUKFBase : public KalmanFilter<DIM_X, DIM_Z> {
 public:
    // Augmented state vector is just the process noise and state vector. The measurement noise is not included as that
    // is independent of the propagation and measurement model and just adds linearly.
@@ -38,7 +38,7 @@ public:
 
    Matrix<DIM_A, SIGMA_DIM_A> m_matSigmaXa{Matrix<DIM_A, SIGMA_DIM_A>::Zero()}; ///< @brief Sigma points matrix
 
-   TrackFitterUKF()
+   TrackFitterUKFBase()
       : KalmanFilter<DIM_X, DIM_Z>(), m_kappa(3 - DIM_A), m_matQ(Matrix<DIM_V, DIM_V>::Zero()),
         m_matR(Matrix<DIM_N, DIM_N>::Zero())
    {
@@ -46,7 +46,7 @@ public:
       updateWeights();
    }
 
-   ~TrackFitterUKF() {}
+   ~TrackFitterUKFBase() {}
 
    void setKappa(float32_t kappa)
    {
@@ -95,7 +95,7 @@ public:
       }
    }
 
-   std::array<float32_t, DIM_V> calculateProcessNoiseMean()
+   virtual std::array<float32_t, DIM_V> calculateProcessNoiseMean()
    {
       // Calculate the expectation value of the process noise using the current value of the state vector m_vecX
       std::array<float32_t, DIM_V> processNoiseMean{0};
@@ -104,7 +104,7 @@ public:
       return processNoiseMean;
    }
 
-   Matrix<DIM_V, DIM_V> calculateProcessNoiseCovariance()
+   virtual Matrix<DIM_V, DIM_V> calculateProcessNoiseCovariance()
    {
       // Calculate the process noise covariance matrix
       Matrix<DIM_V, DIM_V> matQ{Matrix<DIM_V, DIM_V>::Zero()};

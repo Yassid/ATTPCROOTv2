@@ -18,7 +18,7 @@ public:
    static constexpr size_t DIM_Z{2};
    static constexpr size_t DIM_N{2};
 
-   kf::TrackFitterUKF<DIM_X, DIM_Z, DIM_V, DIM_N> m_ukf;
+   kf::TrackFitterUKFBase<DIM_X, DIM_Z, DIM_V, DIM_N> m_ukf;
 
    /// @brief to propagate the state vector using the process model
    /// @param x state vector
@@ -227,7 +227,7 @@ public:
    XYZVector fEField{0, 0, 0};             // E-field in V/m
    static constexpr double fC = 299792458; // m/s
 
-   kf::TrackFitterUKF<DIM_X, DIM_Z, DIM_V, DIM_N> m_ukf;
+   kf::TrackFitterUKFBase<DIM_X, DIM_Z, DIM_V, DIM_N> m_ukf;
 
    /// @brief to propagate the state vector using the process model
    /// @param x state vector
