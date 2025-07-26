@@ -79,10 +79,13 @@ void UKFSingleTrack()
    XYZPoint startPos(-3.40046e-05, -1.49863e-05, 0.10018); // Start position in cm
    startPos *= 10;                                         // Convert to mm
    XYZVector startMom(0.00935463, -0.0454279, 0.00826042); // Start momentum in GeV/c
-   startMom *= 1e3;                                        // Convert to MeV/c
+   startMom *= 1e3;
+
+   XYZPoint nextPos(x[1], y[1], z[1]);
+   startMom = startMom.R() * (nextPos - startPos).Unit(); // Set momentum direction towards the first hit
 
    // Initial uncertainties
-   double sigma_pos = 5;                   // Position uncertainty of 10 mm
+   double sigma_pos = 1;                   // Position uncertainty of 10 mm
    double sigma_mom = 0.01 * startMom.R(); // Momentum uncertainty of 10% MeV/c
    double sigma_theta = 1 * M_PI / 180;    // Angular uncertainty of 1 degree
    double sigma_phi = 1 * M_PI / 180;      // Angular uncertainty of 1 degree
@@ -115,8 +118,8 @@ void UKFSingleTrack()
    ROOT::Math::XYZVector lastMom = ROOT::Math::XYZVector(startMom.X(), startMom.Y(), startMom.Z());
 
    // Skip the first point since it is the initial state.
-   // Stop when things break.
-   for (size_t i = 1; i < 21; ++i) {
+   // Stop when things break (point 21).
+   for (size_t i = 1; i < x.size() && i < 100; ++i) {
       std::cout << "Processing hit " << i << " of " << x.size() << std::endl;
       XYZPoint point(x[i], y[i], z[i]); // measurement point in mm
       ukf.SetMeasCov(cov_meas);         // Set measurement noise covariance
