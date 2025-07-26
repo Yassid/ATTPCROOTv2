@@ -275,14 +275,21 @@ protected:
    {
       const float32_t scalarMultiplier{std::sqrt(STATE_DIM + m_kappa)}; // sqrt(n + \kappa)
 
-      // cholesky factorization to get matrix Pxx square-root
       Eigen::LLT<Matrix<STATE_DIM, STATE_DIM>> lltOfPa(matPa);
       if (lltOfPa.info() != Eigen::Success) {
-         LOG(error) << "Cholesky decomposition failed, matrix is not positive definite.";
-         for (int32_t i{0}; i < STATE_DIM; ++i) {
-            LOG(error) << "Pxx[" << i << "]: " << matPa(i, i);
+         LOG(error) << "Cholesky decomposition failed, matrix is not positive definite. Attempting recovery...";
+         // Add a small value to the diagonal to regularize the matrix
+         Matrix<STATE_DIM, STATE_DIM> matPaReg = matPa;
+         matPaReg = (matPaReg + matPaReg.transpose()) * 0.5;          // Ensure symmetry
+         matPaReg += Matrix<STATE_DIM, STATE_DIM>::Identity() * 1e-6; // Regularization value
+         lltOfPa.compute(matPaReg);
+         if (lltOfPa.info() != Eigen::Success) {
+            for (int32_t i{0}; i < STATE_DIM; ++i) {
+               LOG(error) << "\n" << matPaReg;
+            }
+            throw std::runtime_error(
+               "Cholesky decomposition failed, matrix is not positive definite even after regularization.");
          }
-         throw std::runtime_error("Cholesky decomposition failed, matrix is not positive definite.");
       }
       Matrix<STATE_DIM, STATE_DIM> matSa{lltOfPa.matrixL()}; // sqrt(P_{a})
 
@@ -412,6 +419,10 @@ public:
                         const TMatrixD &initialCovariance);
 
    void SetMeasCov(const TMatrixD &measCov);
+   std::array<double, 6> GetStateVector() const
+   {
+      return {m_vecX[0], m_vecX[1], m_vecX[2], m_vecX[3], m_vecX[4], m_vecX[5]};
+   }
 
    kf::Vector<TF_DIM_X>
    funcF(const kf::Vector<TF_DIM_X> &x, const kf::Vector<TF_DIM_V> &v, const kf::Vector<TF_DIM_Z> &z);
