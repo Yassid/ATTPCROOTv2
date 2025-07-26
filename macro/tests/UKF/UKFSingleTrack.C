@@ -21,6 +21,7 @@ void LoadHits()
    double eLoss = 0;
 
    // Save first point.
+   infile >> xi >> yi >> zi >> Ei;
    eLoss = Ei * 1e3;     // Initialize energy loss
    x.push_back(xi * 10); // Convert to mm
    y.push_back(yi * 10); // Convert to mm
@@ -47,6 +48,7 @@ void LoadHits()
    }
 
    std::cout << "Finished loading hits. Total points: " << x.size() << std::endl;
+   std::cout << x[0] << " " << x[1] << " " << x[2] << std::endl;
 }
 
 // This test should plot the trajectory of a particle in a magnetic field using
@@ -82,8 +84,8 @@ void UKFSingleTrack()
    // Initial uncertainties
    double sigma_pos = 5;                   // Position uncertainty of 10 mm
    double sigma_mom = 0.01 * startMom.R(); // Momentum uncertainty of 10% MeV/c
-   double sigma_theta = 5 * M_PI / 180;    // Angular uncertainty of 1 degree
-   double sigma_phi = 5 * M_PI / 180;      // Angular uncertainty of 1 degree
+   double sigma_theta = 1 * M_PI / 180;    // Angular uncertainty of 1 degree
+   double sigma_phi = 1 * M_PI / 180;      // Angular uncertainty of 1 degree
 
    TMatrixD cov(6, 6);
    cov.Zero();
@@ -112,13 +114,17 @@ void UKFSingleTrack()
 
    ROOT::Math::XYZVector lastMom = ROOT::Math::XYZVector(startMom.X(), startMom.Y(), startMom.Z());
 
-   for (size_t i = 0; i < x.size(); ++i) {
+   // Skip the first point since it is the initial state.
+   // Stop when things break.
+   for (size_t i = 1; i < 21; ++i) {
       std::cout << "Processing hit " << i << " of " << x.size() << std::endl;
       XYZPoint point(x[i], y[i], z[i]); // measurement point in mm
       ukf.SetMeasCov(cov_meas);         // Set measurement noise covariance
 
       ukf.predictUKF(point);
+      std::cout << std::endl << "Prediction step complete." << std::endl;
       ukf.correctUKF(point);
+      std::cout << std::endl << "Correction step complete." << std::endl;
 
       auto state = ukf.GetStateVector();
       ROOT::Math::XYZPoint pos(state[0], state[1], state[2]);
@@ -127,6 +133,7 @@ void UKFSingleTrack()
 
       std::cout << "Predicted position: " << pos << std::endl;
       std::cout << "Predicted momentum: " << mom << std::endl;
+
       std::cout << "Measurement point: " << point << std::endl;
 
       auto KE_in = Kinematics::KE(lastMom, mass_p);

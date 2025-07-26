@@ -284,9 +284,12 @@ protected:
          matPaReg += Matrix<STATE_DIM, STATE_DIM>::Identity() * 1e-6; // Regularization value
          lltOfPa.compute(matPaReg);
          if (lltOfPa.info() != Eigen::Success) {
-            for (int32_t i{0}; i < STATE_DIM; ++i) {
-               LOG(error) << "\n" << matPaReg;
-            }
+            LOG(error) << "Cholesky decomposition failed even after regularization. Attempting again";
+            matPaReg += Matrix<STATE_DIM, STATE_DIM>::Identity() * 1e-3; // Increase regularization value
+            lltOfPa.compute(matPaReg);
+         }
+         if (lltOfPa.info() != Eigen::Success) {
+            LOG(error) << "\n" << matPaReg;
             throw std::runtime_error(
                "Cholesky decomposition failed, matrix is not positive definite even after regularization.");
          }
