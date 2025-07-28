@@ -75,7 +75,7 @@ void AtPropagator::PropagateOneStep(AtStepper &stepper)
 
 void AtPropagator::PropagateToMeasurementSurface(const AtMeasurementSurface &surface, AtStepper &stepper)
 {
-   LOG(info) << "Propagating to measurement surface from: " << fState.fPos;
+   LOG(debug) << "Propagating to measurement surface from: " << fState.fPos;
    fState.h = stepper.GetInitialStep(); // Set the initial step size
 
    auto KE_initial = Kinematics::KE(fState.fMom, fState.fMass);
@@ -103,16 +103,16 @@ void AtPropagator::PropagateToMeasurementSurface(const AtMeasurementSurface &sur
 
       if (reachedMeasurementPoint && !particleStopped && !momentumReversed) {
          // We reached the measurement surface, so we should figure out how far we are from the measurement point
-         LOG(info) << "------ Reached measurement surface ------";
+         LOG(debug) << "------ Reached measurement surface ------";
          double finalH = (fState.fLastPos - fState.fPos).R(); // Distance traveled in the last step
          double approach = surface.Distance(fState.fLastPos);
 
-         LOG(info) << "Distance to plane: " << approach << " mm";
-         LOG(info) << "Final step size: " << finalH << " mm";
-         LOG(info) << "Position before surface: " << fState.fLastPos.X() << ", " << fState.fLastPos.Y() << ", "
-                   << fState.fLastPos.Z();
-         LOG(info) << "Momentum before surface: " << fState.fLastMom.X() << ", " << fState.fLastMom.Y() << ", "
-                   << fState.fLastMom.Z();
+         LOG(debug) << "Distance to plane: " << approach << " mm";
+         LOG(debug) << "Final step size: " << finalH << " mm";
+         LOG(debug) << "Position before surface: " << fState.fLastPos.X() << ", " << fState.fLastPos.Y() << ", "
+                    << fState.fLastPos.Z();
+         LOG(debug) << "Momentum before surface: " << fState.fLastMom.X() << ", " << fState.fLastMom.Y() << ", "
+                    << fState.fLastMom.Z();
 
          finalH = approach * 1e-3;      // Convert to meters for the RK4 step
          fState.h = finalH;             // Set the step size to the distance to the surface
@@ -139,10 +139,10 @@ void AtPropagator::PropagateToMeasurementSurface(const AtMeasurementSurface &sur
          double deltaE = KE_last - fStopTol;
          deltaE = std::max(deltaE, 0.0); // Ensure we don't have negative energy loss
 
-         LOG(info) << "Last KE: " << KE_last << " MeV";
-         LOG(info) << "Energy to loose to stop: " << deltaE << " MeV";
+         LOG(debug) << "Last KE: " << KE_last << " MeV";
+         LOG(debug) << "Energy to loose to stop: " << deltaE << " MeV";
          double h_Stop = deltaE / fELossModel->GetdEdx(KE_last); // Distance to stop in mm
-         LOG(info) << "Estimated distance to stop: " << h_Stop << " mm";
+         LOG(debug) << "Estimated distance to stop: " << h_Stop << " mm";
 
          fState.h = h_Stop * 1e-3;      // Convert to meters for the RK4 step
          fState.fPos = fState.fLastPos; // Set position to last position
@@ -155,9 +155,9 @@ void AtPropagator::PropagateToMeasurementSurface(const AtMeasurementSurface &sur
          auto origH = fState.h; // Save original step size
          fState = result;       // Update the internal state
          fState.h = origH;      // Restore original step size
-         LOG(info) << "Propagated to stopping point: " << fState.fPos.X() << ", " << fState.fPos.Y() << ", "
-                   << fState.fPos.Z();
-         LOG(info) << "Energy after stopping: " << Kinematics::KE(fState.fMom, fState.fMass) << " MeV";
+         LOG(debug) << "Propagated to stopping point: " << fState.fPos.X() << ", " << fState.fPos.Y() << ", "
+                    << fState.fPos.Z();
+         LOG(debug) << "Energy after stopping: " << Kinematics::KE(fState.fMom, fState.fMass) << " MeV";
 
          while (surface.fClipToSurface) {
             fScalingFactor = 0; // Turn off energy loss.
@@ -168,7 +168,7 @@ void AtPropagator::PropagateToMeasurementSurface(const AtMeasurementSurface &sur
                reachedMeasurementPoint = true;
                break;
             }
-            LOG(info) << "Propagating to surface after stopping with step size: " << h << " mm";
+            LOG(debug) << "Propagating to surface after stopping with step size: " << h << " mm";
             fState.h = h * 1e-3; // Convert to meters for the RK4 step
             result = stepper.Step(fState);
             if (!result) {
@@ -176,8 +176,8 @@ void AtPropagator::PropagateToMeasurementSurface(const AtMeasurementSurface &sur
                return; // Abort propagation if step failed
             }
             fState = result; // Update the internal state
-            LOG(info) << "New position after adjusting step size: " << fState.fPos.X() << ", " << fState.fPos.Y()
-                      << ", " << fState.fPos.Z();
+            LOG(debug) << "New position after adjusting step size: " << fState.fPos.X() << ", " << fState.fPos.Y()
+                       << ", " << fState.fPos.Z();
          }
          fState.fLastMom = fState.fMom;
          fState.fMom = XYZVector(0, 0, 0); // Set momentum to zero since we stopped
@@ -187,23 +187,24 @@ void AtPropagator::PropagateToMeasurementSurface(const AtMeasurementSurface &sur
          double distanceToSurface = surface.Distance(fState.fPos);
 
          double KE_final = Kinematics::KE(fState.fMom, fState.fMass);
-         LOG(info) << "Initial KE: " << KE_initial << " MeV";
-         LOG(info) << "Final KE: " << KE_final << " MeV";
+         LOG(debug) << "Initial KE: " << KE_initial << " MeV";
+         LOG(debug) << "Final KE: " << KE_final << " MeV";
          auto calc_eLoss = KE_initial - KE_final; // Energy loss in MeV
-         LOG(info) << "Particle stopped: " << particleStopped;
-         LOG(info) << "Reached measurement point: " << reachedMeasurementPoint;
-         LOG(info) << "Distance to surface: " << distanceToSurface << " mm";
-         LOG(info) << "Calculated energy loss: " << calc_eLoss << " MeV";
-         LOG(info) << "Scaling factor: " << fScalingFactor;
-         LOG(info) << "Final Position: " << fState.fPos.X() << ", " << fState.fPos.Y() << ", " << fState.fPos.Z();
-         LOG(info) << "------- End of RK4 interation  ---------" << std::endl;
+         LOG(debug) << "Particle stopped: " << particleStopped;
+         LOG(debug) << "Reached measurement point: " << reachedMeasurementPoint;
+         LOG(debug) << "Distance to surface: " << distanceToSurface << " mm";
+         LOG(debug) << "Calculated energy loss: " << calc_eLoss << " MeV";
+         LOG(debug) << "Scaling factor: " << fScalingFactor;
+         LOG(debug) << "Final Position: " << fState.fPos.X() << ", " << fState.fPos.Y() << ", " << fState.fPos.Z();
+         LOG(debug) << "------- End of RK4 interation  ---------" << std::endl;
 
          // If we reached the measurement surface, we should project the position onto the surface
          if (reachedMeasurementPoint) {
             fState.fPos = surface.ProjectToSurface(fState.fPos);
          }
-         LOG(info) << "Projected on surface: " << fState.fPos.X() << ", " << fState.fPos.Y() << ", " << fState.fPos.Z();
-         LOG(info) << "Final Momentum: " << fState.fMom.X() << ", " << fState.fMom.Y() << ", " << fState.fMom.Z();
+         LOG(debug) << "Projected on surface: " << fState.fPos.X() << ", " << fState.fPos.Y() << ", "
+                    << fState.fPos.Z();
+         LOG(debug) << "Final Momentum: " << fState.fMom.X() << ", " << fState.fMom.Y() << ", " << fState.fMom.Z();
          return;
       }
    } // End of loop over RK4 integration
@@ -211,7 +212,7 @@ void AtPropagator::PropagateToMeasurementSurface(const AtMeasurementSurface &sur
 
 void AtPropagator::PropagateToMeasurementSurface(const AtMeasurementSurface &surface, double eLoss, AtStepper &stepper)
 {
-   LOG(info) << "Propagating to surface with eLoss: " << eLoss;
+   LOG(debug) << "Propagating to surface with eLoss: " << eLoss;
 
    if (eLoss == 0) {
       LOG(warn) << "No energy loss specified, propagating without energy loss adjustment.";
@@ -243,15 +244,15 @@ void AtPropagator::PropagateToMeasurementSurface(const AtMeasurementSurface &sur
       double KE_final = Kinematics::KE(fState.fMom, fState.fMass);
       calc_eLoss = KE_initial - KE_final; // Energy loss in MeV
       fScalingFactor *= eLoss / calc_eLoss;
-      LOG(info) << "Desired energy loss: " << eLoss << " MeV";
-      LOG(info) << "Calculated energy loss: " << calc_eLoss << " MeV";
-      LOG(info) << "Difference: " << calc_eLoss - eLoss << " MeV";
-      LOG(info) << "New scaling factor: " << fScalingFactor;
-      LOG(info) << "Condition: " << (std::abs(calc_eLoss - eLoss) > 1e-4);
+      LOG(debug) << "Desired energy loss: " << eLoss << " MeV";
+      LOG(debug) << "Calculated energy loss: " << calc_eLoss << " MeV";
+      LOG(debug) << "Difference: " << calc_eLoss - eLoss << " MeV";
+      LOG(debug) << "New scaling factor: " << fScalingFactor;
+      LOG(debug) << "Condition: " << (std::abs(calc_eLoss - eLoss) > 1e-4);
 
    } // End loop over energy loss convergence
 
-   LOG(info) << "Energy loss converged after " << iterations << " iterations.";
+   LOG(debug) << "Energy loss converged after " << iterations << " iterations.";
 
    fScalingFactor = 1; // Reset scaling factor after convergence
 }
