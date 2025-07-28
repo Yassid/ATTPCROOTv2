@@ -403,6 +403,9 @@ protected:
    AtTools::AtPropagator::StepState fMeanStep; /// Holds the step information for POCA propagation of mean state
    ROOT::Math::Plane3D fMeasurementPlane;      ///< Holds the measurement plane for the track fitter
 public:
+   bool fEnableEnStraggling{true};       ///< @brief Flag to enable/disable energy straggling
+   double fMaxStragglingFactor{1. / 3.}; ///< @brief Maximum straggling factor for energy loss
+
    /**
     * @brief Constructor for the TrackFitterUKF class.
     * @param propagator The propagator to be used for the track fitting, must be passed as an rvalue reference.
@@ -426,6 +429,9 @@ public:
    {
       return {m_vecX[0], m_vecX[1], m_vecX[2], m_vecX[3], m_vecX[4], m_vecX[5]};
    }
+   TMatrixD GetStateCovariance() const;
+   TMatrixD GetAugStateCovariance() const;
+   std::array<double, DIM_A> GetAugStateVector() const;
 
    kf::Vector<TF_DIM_X>
    funcF(const kf::Vector<TF_DIM_X> &x, const kf::Vector<TF_DIM_V> &v, const kf::Vector<TF_DIM_Z> &z);
@@ -433,13 +439,25 @@ public:
 
    void predictUKF(const ROOT::Math::XYZPoint &z)
    {
+      using namespace ROOT::Math;
 
       // First we need to propagate the mean state vector to the next measurement point.
+      XYZPoint startingPosition{m_vecX[0], m_vecX[1], m_vecX[2]}; // Get the starting position from the state vector
+      Polar3DVector startingMomentum{m_vecX[3], m_vecX[4],
+                                     m_vecX[5]}; // Get the starting momentum from the state vector
+
+      LOG(info) << "Propagating reference state from position: " << startingPosition
+                << " with momentum: " << XYZVector(startingMomentum);
+
+      fPropagator.SetState(startingPosition, XYZVector(startingMomentum));
       fPropagator.PropagateToMeasurementSurface(AtTools::AtMeasurementPoint(z), *fStepper);
-      fMeanStep = fPropagator.GetState(); // Get the mean step information from the propagator
+      fMeanStep = fPropagator.GetState();    // Get the mean step information from the propagator
+      fMeanStep.fLastPos = startingPosition; // Store the last position
+      fMeanStep.fLastMom = startingMomentum; // Store the last momentum
+
+      LOG(info) << "Propagated to position: " << fMeanStep.fPos << " with momentum: " << fMeanStep.fMom;
 
       // Now we can construct the reference plane.
-      using namespace ROOT::Math;
       fMeasurementPlane = Plane3D(fMeanStep.fMom.Unit(),
                                   XYZPoint(z)); // Create a plane using the momentum direction and position
       Vector<TF_DIM_Z> zVec;                    // Initialize the measurement vector

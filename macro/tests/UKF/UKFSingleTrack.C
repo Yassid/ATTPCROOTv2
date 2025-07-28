@@ -12,7 +12,7 @@ const double charge_p = 1.602176634e-19; // Charge of proton
 
 // Simulated (measurement) hits
 std::vector<double> x, y, z, Eloss;
-
+int pointsToCluster = 5;
 void LoadHits()
 {
    std::ifstream infile("hits.txt");
@@ -22,15 +22,15 @@ void LoadHits()
 
    // Save first point.
    infile >> xi >> yi >> zi >> Ei;
-   eLoss = Ei * 1e3;     // Initialize energy loss
+   eLoss = Ei;           // Initialize energy loss
    x.push_back(xi * 10); // Convert to mm
    y.push_back(yi * 10); // Convert to mm
    z.push_back(zi * 10); // Convert to mm
 
    while (infile >> xi >> yi >> zi >> Ei) {
-      Ei *= 1e3; // Convert to MeV
+      // Ei *= 1e3; // Convert to MeV
 
-      if (i++ % 5 != 0) {
+      if (++i % pointsToCluster != 0) {
          eLoss += Ei;
          continue; // Skip every 5th point
       }
@@ -60,13 +60,20 @@ void UKFSingleTrack()
    std::cout << " Creating the UKF class" << std::endl;
    using namespace AtTools;
 
-   std::vector<double> x2, y2, z2, Eloss2;
+   std::vector<double> x2, y2, z2, Eloss2, p2, sigmap2, lambda2, sigmalambda2, residual;
 
    // Setup the Propagator for UKF
    auto elossModel = std::make_unique<AtTools::AtELossTable>(0);
    elossModel->LoadSrimTable(getEnergyPath()); // Use the function to get the path
    elossModel->SetDensity(3.553e-5);           // Set density in g/cm^3 for 300 torr H2
-   AtTools::AtPropagator propagator(charge_p, mass_p, std::move(elossModel));
+
+   auto elossModel2 = std::make_unique<AtTools::AtELossCATIMA>(3.553e-5);
+   elossModel2->SetProjectile(1, 1, 1);
+   std::vector<std::tuple<int, int, int>> mat;
+   mat.push_back({1, 1, 1});
+   elossModel2->SetMaterial(mat);
+
+   AtTools::AtPropagator propagator(charge_p, mass_p, std::move(elossModel2));
    propagator.SetEField({0, 0, 0});    // No electric field
    propagator.SetBField({0, 0, 2.85}); // Magnetic field
 
@@ -89,6 +96,7 @@ void UKFSingleTrack()
    double sigma_mom = 0.01 * startMom.R(); // Momentum uncertainty of 10% MeV/c
    double sigma_theta = 1 * M_PI / 180;    // Angular uncertainty of 1 degree
    double sigma_phi = 1 * M_PI / 180;      // Angular uncertainty of 1 degree
+   ukf.fEnableEnStraggling = true;         // Enable energy straggling
 
    TMatrixD cov(6, 6);
    cov.Zero();
@@ -114,6 +122,9 @@ void UKFSingleTrack()
    x2.push_back(startPos.X());
    y2.push_back(startPos.Y());
    z2.push_back(startPos.Z());
+   p2.push_back(startMom.R());
+   sigmap2.push_back(sigma_mom);
+   residual.push_back(0); // Initial residual is zero
 
    ROOT::Math::XYZVector lastMom = ROOT::Math::XYZVector(startMom.X(), startMom.Y(), startMom.Z());
 
@@ -125,11 +136,15 @@ void UKFSingleTrack()
       ukf.SetMeasCov(cov_meas);         // Set measurement noise covariance
 
       ukf.predictUKF(point);
+      auto augState = ukf.GetAugStateVector();
+      auto augCov = ukf.GetAugStateCovariance();
       std::cout << std::endl << "Prediction step complete." << std::endl;
       ukf.correctUKF(point);
       std::cout << std::endl << "Correction step complete." << std::endl;
 
       auto state = ukf.GetStateVector();
+      auto cov = ukf.GetStateCovariance();
+
       ROOT::Math::XYZPoint pos(state[0], state[1], state[2]);
       ROOT::Math::Polar3DVector momPolar(state[3], state[4], state[5]);
       ROOT::Math::XYZVector mom(momPolar);
@@ -143,10 +158,17 @@ void UKFSingleTrack()
       auto KE_out = Kinematics::KE(mom, mass_p);
       lastMom = mom;
 
+      double residualValue = (point - pos).R();
+
       x2.push_back(pos.X());
       y2.push_back(pos.Y());
       z2.push_back(pos.Z());
       Eloss2.push_back((KE_in - KE_out));
+      p2.push_back(mom.R());
+      sigmap2.push_back(std::sqrt(cov(3, 3)));         // Propagate momentum uncertainty
+      lambda2.push_back(augState[6]);                  // Energy straggling factor
+      sigmalambda2.push_back(std::sqrt(augCov(6, 6))); // Propagate energy straggling uncertainty
+      residual.push_back(residualValue);               // Store the residual for this hit
    }
 
    TGraph2D *track = new TGraph2D(x.size(), x.data(), y.data(), z.data());
@@ -179,7 +201,44 @@ void UKFSingleTrack()
    eloss2Graph->SetMarkerStyle(21);
    eloss2Graph->SetMarkerColor(kRed);
 
+   TGraphErrors *pGraph = new TGraphErrors(p2.size());
+   for (size_t i = 0; i < p2.size(); ++i) {
+      pGraph->SetPoint(i, i, p2[i] * 1e-3 * pointsToCluster / 5.);
+      pGraph->SetPointError(i, 0,
+                            sigmap2[i] * 5 * 1e-3 * pointsToCluster /
+                               5.); // Error bars from sigmap2, converted to GeV/c
+   }
+   pGraph->SetTitle("Momentum per Hit;Hit Number;Momentum [MeV/c]");
+   pGraph->SetMarkerStyle(20);
+   pGraph->SetMarkerColor(kBlue);
+
+   TGraphErrors *lambdaGraph = new TGraphErrors(lambda2.size());
+   for (size_t i = 0; i < lambda2.size(); ++i) {
+      lambdaGraph->SetPoint(i, i, lambda2[i] * 0.03 * pointsToCluster / 5.);
+      lambdaGraph->SetPointError(i, 0, sigmalambda2[i] * 0.03 * pointsToCluster / 5.);
+      std::cout << "Lambda: " << lambda2[i] << ", Error: " << sigmalambda2[i] << std::endl;
+   }
+   lambdaGraph->SetTitle("Lambda per Hit (scaled);Hit Number;Lambda [scaled]");
+   lambdaGraph->SetMarkerStyle(22);
+   lambdaGraph->SetMarkerColor(kGreen + 2);
+
+   TGraph *residualGraph = new TGraph(residual.size());
+   for (size_t i = 0; i < residual.size(); ++i) {
+      residualGraph->SetPoint(i, i, residual[i] * .1);
+   }
+   residualGraph->SetTitle("Residual per Hit;Hit Number;Residual [mm]");
+   residualGraph->SetMarkerStyle(23);
+   residualGraph->SetMarkerColor(kMagenta);
+
    TCanvas *c2 = new TCanvas("c2", "Energy Loss per Hit", 800, 600);
    elossGraph->Draw("AP");
-   // eloss2Graph->Draw("PSAME");
+   eloss2Graph->Draw("PSAME");
+   pGraph->Draw("PSAME");
+   // lambdaGraph->Draw("PSAME");
+   residualGraph->Draw("PSAME");
+
+   double sumEloss = std::accumulate(Eloss.begin(), Eloss.end(), 0.0);
+   double sumEloss2 = std::accumulate(Eloss2.begin(), Eloss2.end(), 0.0);
+   std::cout << "Sum of Eloss: " << sumEloss << std::endl;
+   std::cout << "Sum of Eloss2: " << sumEloss2 << std::endl;
 }

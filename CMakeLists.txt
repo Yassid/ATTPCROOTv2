@@ -138,8 +138,11 @@ if(NOT CATIMA_FOUND)
   set(APPS OFF CACHE BOOL "Disable CATIMA applications" FORCE)
   set(GENERATE_DATA OFF CACHE BOOL "Disable CATIMA data generator" FORCE)
   
-  FetchContent_MakeAvailable(catima)
-
+FetchContent_GetProperties(catima)
+  if (NOT catima_POPULATED)
+    FetchContent_Populate(catima)
+    add_subdirectory(${catima_SOURCE_DIR} ${catima_BINARY_DIR})
+  endif()
   # Suppress shadow warnings for CATIMA target
   if(TARGET catima)
     get_target_property(catima_compile_options catima COMPILE_OPTIONS)

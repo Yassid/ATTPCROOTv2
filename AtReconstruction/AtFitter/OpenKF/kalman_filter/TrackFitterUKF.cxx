@@ -28,6 +28,33 @@ void TrackFitterUKF::SetInitialState(const ROOT::Math::XYZPoint &initialPosition
    }
 }
 
+TMatrixD TrackFitterUKF::GetStateCovariance() const
+{
+   TMatrixD cov(m_matP.rows(), m_matP.cols());
+   for (int i = 0; i < m_matP.rows(); ++i) {
+      for (int j = 0; j < m_matP.cols(); ++j) {
+         cov(i, j) = m_matP(i, j); // Copy covariance matrix to TMatrixD
+      }
+   }
+   return cov;
+}
+
+std::array<double, TrackFitterUKF::DIM_A> TrackFitterUKF::GetAugStateVector() const
+{
+   return {m_vecXa[0], m_vecXa[1], m_vecXa[2], m_vecXa[3],
+           m_vecXa[4], m_vecXa[5], m_vecXa[6]}; // Return the augmented state vector as an array
+}
+TMatrixD TrackFitterUKF::GetAugStateCovariance() const
+{
+   TMatrixD cov(m_matPa.rows(), m_matPa.cols());
+   for (int i = 0; i < m_matPa.rows(); ++i) {
+      for (int j = 0; j < m_matPa.cols(); ++j) {
+         cov(i, j) = m_matPa(i, j); // Copy augmented covariance matrix to TMatrixD
+      }
+   }
+   return cov;
+}
+
 void TrackFitterUKF::SetMeasCov(const TMatrixD &measCov)
 {
    if (measCov.GetNrows() != TF_DIM_Z || measCov.GetNcols() != TF_DIM_Z) {
@@ -58,10 +85,27 @@ Matrix<TrackFitterUKF::TF_DIM_V, TrackFitterUKF::TF_DIM_V> TrackFitterUKF::calcu
    double eIn = AtTools::Kinematics::KE(fMeanStep.fLastMom, fMeanStep.fMass);
    double eOut = AtTools::Kinematics::KE(fMeanStep.fMom, fMeanStep.fMass);
 
+   if (!fEnableEnStraggling) {
+      // If energy straggling is disabled, we set the process noise to zero.
+      matQ(0, 0) = 0.0;
+      return matQ;
+   }
+
    if (const auto *elossModel = fPropagator.GetELossModel()) {
       double dedx_straggle = elossModel->GetdEdxStraggling(eIn, eOut);
       double factor = dedx_straggle / elossModel->GetdEdx(eIn);
+      if (factor > fMaxStragglingFactor) {
+         LOG(warn) << "Process noise factor for energy straggling is greater than " << fMaxStragglingFactor
+                   << ". To maintain stability, we will "
+                      "use a factor of "
+                   << fMaxStragglingFactor << ".";
+         factor = fMaxStragglingFactor;
+      }
       matQ(0, 0) = factor * factor; // Variance for the dedx straggling.
+      LOG(info) << "Calculating process noise for straggling between " << eIn << " MeV and " << eOut << " MeV over "
+                << elossModel->GetRange(eIn, eOut) << " mm.";
+      LOG(info) << "Process noise covariance for energy straggling: " << matQ(0, 0) << " (factor: " << factor
+                << ", dedx_straggle: " << dedx_straggle << ", dEdx: " << elossModel->GetdEdx(eIn) << ")";
 
    } else {
       throw std::runtime_error("Cannot calculate process noise covariance without an energy loss model");
