@@ -64,8 +64,10 @@ protected:
    /// Measurement noise covariance matrix (R)
    Matrix<DIM_N, DIM_N> m_matR{Matrix<DIM_N, DIM_N>::Zero()};
 
-   /// Unscented transform weight for the mean sigma point
-   float32_t m_weight0;
+   /// Unscented transform weight for the mean sigma point in mean
+   float32_t m_weightM0;
+   /// Unscented transform weight for the mean sigma point in covariance
+   float32_t m_weightC0;
    /// Unscented transform weight for the other sigma points
    float32_t m_weighti;
    /// Kappa parameter for sigma point calculation
@@ -204,9 +206,15 @@ protected:
    {
       static_assert(DIM_A > 0, "DIM_A is Zero which leads to numerical issue.");
 
-      const float32_t denoTerm{m_kappa + static_cast<float32_t>(DIM_A)};
+      constexpr float alpha = 1.0; // Scaling parameter, set to 1 to match orig
+      constexpr float beta = 2.0;  // Optimal for Gaussian distributions
 
-      m_weight0 = m_kappa / denoTerm;
+      float lambda{alpha * alpha * (DIM_A + m_kappa) - DIM_A}; // Lambda parameter for sigma points
+      // lambda = m_kappa
+      const float32_t denoTerm{lambda + static_cast<float32_t>(DIM_A)};
+
+      m_weightM0 = lambda / denoTerm;
+      m_weightC0 = m_weightM0 + (1.0F - alpha * alpha + beta); // Weight for the mean sigma point in covariance
       m_weighti = 0.5F / denoTerm;
    }
    /**
@@ -333,7 +341,7 @@ protected:
                                            Matrix<STATE_DIM, STATE_DIM> &matPxx)
    {
       // 1. calculate mean of the sigma points
-      vecX = m_weight0 * util::getColumnAt<STATE_DIM, SIGMA_DIM>(0, sigmaX);
+      vecX = m_weightM0 * util::getColumnAt<STATE_DIM, SIGMA_DIM>(0, sigmaX);
       for (int32_t i{1}; i < SIGMA_DIM; ++i) {
          vecX += m_weighti * util::getColumnAt<STATE_DIM, SIGMA_DIM>(i, sigmaX); // y += W[0, i] Y[:, i]
       }
@@ -342,8 +350,8 @@ protected:
       // \bar{y}) (Y[:, i] - \bar{y})^T
       Vector<STATE_DIM> devXi{util::getColumnAt<STATE_DIM, SIGMA_DIM>(0, sigmaX) - vecX}; // Y[:, 0] - \bar{ y }
 
-      matPxx = m_weight0 * devXi * devXi.transpose(); // P_0 = W[0, 0] (Y[:, 0] - \bar{y}) (Y[:, 0] -
-                                                      // \bar{y})^T
+      matPxx = m_weightC0 * devXi * devXi.transpose(); // P_0 = W[0, 0] (Y[:, 0] - \bar{y}) (Y[:, 0] -
+                                                       // \bar{y})^T
 
       for (int32_t i{1}; i < SIGMA_DIM; ++i) {
          devXi = util::getColumnAt<STATE_DIM, SIGMA_DIM>(i, sigmaX) - vecX; // Y[:, i] - \bar{y}
@@ -375,7 +383,7 @@ protected:
       Vector<MEAS_DIM> devYi{util::getColumnAt<MEAS_DIM, SIGMA_DIM>(0, sigmaY) - vecY};   // Y[:, 0] - \bar{ y }
 
       // P_0 = W[0, 0] (X[:, 0] - \bar{x}) (Y[:, 0] - \bar{y})^T
-      Matrix<STATE_DIM, MEAS_DIM> matPxy{m_weight0 * (devXi * devYi.transpose())};
+      Matrix<STATE_DIM, MEAS_DIM> matPxy{m_weightC0 * (devXi * devYi.transpose())};
 
       for (int32_t i{1}; i < SIGMA_DIM; ++i) {
          devXi = util::getColumnAt<STATE_DIM, SIGMA_DIM>(i, sigmaX) - vecX; // X[:, i] - \bar{x}

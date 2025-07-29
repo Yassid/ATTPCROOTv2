@@ -268,6 +268,7 @@ void TrackFitterUKF::smoothUKF()
    m_vecXSmooth.back() = m_vecXHist.back(); // The last smoothed state is the last corrected state
    m_matPSmooth.back() = m_matPHist.back(); // The last smoothed covariance is the last corrected covariance
    for (size_t i = m_vecXPredHist.size() - 1; i > 0; --i) {
+      LOG(info) << "Smoothing step " << i << " of " << m_vecXPredHist.size() - 1;
 
       // Get the predicted state and covariance at step i
       const auto &xPred = m_vecXPredHist[i]; // m_{k+1}^-
@@ -283,9 +284,10 @@ void TrackFitterUKF::smoothUKF()
       auto &pSmooth = m_matPSmooth[i]; // P^s_{k+1}
 
       auto llt = calculateCholesky(pPred); // Perform Cholesky decomposition
-      auto D = ccor * pPred.inverse();     // D = C_{k+1} * (P_{k+1}^-)^{-1}
+      auto D = ccor * llt.solve(Matrix<TF_DIM_X, TF_DIM_X>::Identity());
+      // auto D = ccor * pPred.inverse();     // D = C_{k+1} * (P_{k+1}^-)^{-1}
 
-      std::cout << "D matrix at step " << i << ":\n" << D << "\n";
+      // std::cout << "D matrix at step " << i << ":\n" << D << "\n";
       m_vecXSmooth[i - 1] = xFilt + D * (xSmooth - xPred); // m^s_{k} = m_{k} + D * (m^s_{k+1} - m_{k+1}^-)
       m_matPSmooth[i - 1] =
          pFilt + D * (pSmooth - pPred) * D.transpose(); // P^s_{k} = P_{k} + D * (P^s_{k+1} - P_{k+1}^-) * D^T

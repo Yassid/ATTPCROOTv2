@@ -61,6 +61,7 @@ void UKFSingleTrack()
    using namespace AtTools;
 
    std::vector<double> x2, y2, z2, Eloss2, p2, sigmap2, lambda2, sigmalambda2, residual;
+   std::vector<double> xSmooth, ySmooth, zSmooth, pSmooth, sigmapSmooth;
 
    // Setup the Propagator for UKF
    auto elossModel = std::make_unique<AtTools::AtELossTable>(0);
@@ -182,6 +183,11 @@ void UKFSingleTrack()
       auto &filteredState = filteredStates[i];
       std::cout << "Smoothed state " << i << ": " << state.transpose() << std::endl;
       std::cout << "Filtered state " << i << ": " << filteredState.transpose() << std::endl;
+      xSmooth.push_back(state[0]);
+      ySmooth.push_back(state[1]);
+      zSmooth.push_back(state[2]);
+      pSmooth.push_back(state[3]);
+      sigmapSmooth.push_back(std::sqrt(smoothedCovariances[i](3, 3))); // Momentum uncertainty
    }
 
    TGraph2D *track = new TGraph2D(x.size(), x.data(), y.data(), z.data());
@@ -195,9 +201,29 @@ void UKFSingleTrack()
    track2->SetMarkerSize(0.8);
    track2->SetMarkerColor(kRed);
 
+   TGraph2D *smoothedTrack = new TGraph2D(xSmooth.size(), xSmooth.data(), ySmooth.data(), zSmooth.data());
+   smoothedTrack->SetTitle("Smoothed Particle Track;X [mm];Y [mm];Z [mm]");
+   smoothedTrack->SetMarkerStyle(22);
+   smoothedTrack->SetMarkerSize(0.8);
+   smoothedTrack->SetMarkerColor(kGreen + 2);
+
    TCanvas *c1 = new TCanvas("c1", "Particle Track", 800, 600);
+
+   // Set axis ranges based on track and track2
+   double xmin = std::min(*std::min_element(x.begin(), x.end()), *std::min_element(x2.begin(), x2.end()));
+   double xmax = std::max(*std::max_element(x.begin(), x.end()), *std::max_element(x2.begin(), x2.end()));
+   double ymin = std::min(*std::min_element(y.begin(), y.end()), *std::min_element(y2.begin(), y2.end()));
+   double ymax = std::max(*std::max_element(y.begin(), y.end()), *std::max_element(y2.begin(), y2.end()));
+   double zmin = std::min(*std::min_element(z.begin(), z.end()), *std::min_element(z2.begin(), z2.end()));
+   double zmax = std::max(*std::max_element(z.begin(), z.end()), *std::max_element(z2.begin(), z2.end()));
+
+   track->GetXaxis()->SetLimits(xmin, xmax);
+   track->GetYaxis()->SetLimits(ymin, ymax);
+   track->GetZaxis()->SetLimits(zmin, zmax);
+
    track->Draw("P");
    track2->Draw("PSAME");
+   smoothedTrack->Draw("PSAME");
 
    TGraph *elossGraph = new TGraph(Eloss.size());
    for (size_t i = 0; i < Eloss.size(); ++i) {
