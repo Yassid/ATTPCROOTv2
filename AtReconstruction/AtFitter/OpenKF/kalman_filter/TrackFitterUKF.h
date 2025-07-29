@@ -70,17 +70,29 @@ protected:
    float32_t m_weightC0;
    /// Unscented transform weight for the other sigma points
    float32_t m_weighti;
-   /// Kappa parameter for sigma point calculation
-   float32_t m_kappa{3 - DIM_A};
+   /// Lambda parameter for sigma point calculation
+   float32_t m_lambda{0};
 
 public:
-   TrackFitterUKFBase() { updateWeights(); }
+   TrackFitterUKFBase() { setParameters(1, 2, 0); }
    ~TrackFitterUKFBase() = default;
 
-   void setKappa(float32_t kappa)
+   /**
+    * @brief Set the weights used to calculate sigma points.
+    */
+   void setParameters(float alpha, float beta, float kappa)
    {
-      m_kappa = kappa; // Set the kappa parameter for sigma point calculation
-      updateWeights(); // Update the weights based on the new kappa value
+      static_assert(DIM_A > 0, "DIM_A is Zero which leads to numerical issue.");
+
+      m_lambda = alpha * alpha * (DIM_A + kappa) - DIM_A;
+      float32_t denoTerm = m_lambda + static_cast<float32_t>(DIM_A);
+
+      m_weightM0 = m_lambda / denoTerm;
+      m_weightC0 = m_weightM0 + (1.0F - alpha * alpha + beta); // Weight for the mean sigma point in covariance
+      m_weighti = 0.5F / denoTerm;
+      LOG(info) << "Mean weight " << m_weightM0;
+      LOG(info) << "Cov weight: " << m_weightC0;
+      LOG(info) << "Shared weight: " << m_weighti;
    }
 
    /**
@@ -201,24 +213,6 @@ public:
 
 protected:
    /**
-    * @brief Set the weights used to calculate sigma points.
-    */
-   void updateWeights()
-   {
-      static_assert(DIM_A > 0, "DIM_A is Zero which leads to numerical issue.");
-
-      constexpr float alpha = 1.0; // Scaling parameter, set to 1 to match orig
-      constexpr float beta = 2.0;  // Optimal for Gaussian distributions
-
-      float lambda{alpha * alpha * (DIM_A + m_kappa) - DIM_A}; // Lambda parameter for sigma points
-      // lambda = m_kappa
-      const float32_t denoTerm{lambda + static_cast<float32_t>(DIM_A)};
-
-      m_weightM0 = lambda / denoTerm;
-      m_weightC0 = m_weightM0 + (1.0F - alpha * alpha + beta); // Weight for the mean sigma point in covariance
-      m_weighti = 0.5F / denoTerm;
-   }
-   /**
     * @brief Add state vector and state covariance matrix to the augmented state vector covariance  matrix.
     */
    void updateAugWithState()
@@ -328,7 +322,7 @@ protected:
    Matrix<STATE_DIM, SIGMA_DIM>
    calculateSigmaPoints(const Vector<STATE_DIM> &vecXa, const Matrix<STATE_DIM, STATE_DIM> &matPa)
    {
-      const float32_t scalarMultiplier{std::sqrt(STATE_DIM + m_kappa)}; // sqrt(n + \kappa)
+      const float32_t scalarMultiplier{std::sqrt(STATE_DIM + m_lambda)}; // sqrt(n + \kappa)
 
       Eigen::LLT<Matrix<STATE_DIM, STATE_DIM>> lltOfPa = calculateCholesky<STATE_DIM>(matPa);
 
@@ -447,6 +441,7 @@ protected:
    using EigenVectorDimX = std::vector<Vector<TF_DIM_X>, Eigen::aligned_allocator<Vector<TF_DIM_X>>>;
    using VectorEigenMatDimX =
       std::vector<Matrix<TF_DIM_X, TF_DIM_X>, Eigen::aligned_allocator<Matrix<TF_DIM_X, TF_DIM_X>>>;
+
    // vectors to hold the information needed for smoothing the UKF
    EigenVectorDimX m_vecXPredHist;    /// @brief History of predicted state vectors at k+1
    VectorEigenMatDimX m_matPPredHist; /// @brief History of predicted state covariances at k+1

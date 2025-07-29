@@ -33,7 +33,14 @@ void AtPropagator()
    auto elossModel = std::make_unique<AtTools::AtELossTable>(0);
    elossModel->LoadSrimTable(getEnergyPath()); // Use the function to get the path
    elossModel->SetDensity(3.553e-5);           // Set density in g/cm^3 for 300 torr H2
-   AtTools::AtPropagator propagator(charge, mass, std::move(elossModel));
+
+   auto elossModel2 = std::make_unique<AtTools::AtELossCATIMA>(3.553e-5);
+   elossModel2->SetProjectile(1, 1, 1);
+   std::vector<std::tuple<int, int, int>> mat;
+   mat.push_back({1, 1, 1});
+   elossModel2->SetMaterial(mat);
+
+   AtTools::AtPropagator propagator(charge, mass, std::move(elossModel2));
    propagator.SetEField({0, 0, 0});    // No electric field
    propagator.SetBField({0, 0, 2.85}); // Magnetic field
    AtTools::AtRK4Stepper stepper;

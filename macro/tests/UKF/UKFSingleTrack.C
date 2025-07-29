@@ -88,6 +88,7 @@ void UKFSingleTrack()
    startPos *= 10;                                         // Convert to mm
    XYZVector startMom(0.00935463, -0.0454279, 0.00826042); // Start momentum in GeV/c
    startMom *= 1e3;
+   double beginMom = startMom.R(); // Initial momentum in MeV/c
 
    XYZPoint nextPos(x[1], y[1], z[1]);
    startMom = startMom.R() * (nextPos - startPos).Unit(); // Set momentum direction towards the first hit
@@ -98,6 +99,7 @@ void UKFSingleTrack()
    double sigma_theta = 1 * M_PI / 180;    // Angular uncertainty of 1 degree
    double sigma_phi = 1 * M_PI / 180;      // Angular uncertainty of 1 degree
    ukf.fEnableEnStraggling = true;         // Enable energy straggling
+   ukf.setParameters(1e-2, 2, 0);          // Set kappa to match the original implementation
 
    TMatrixD cov(6, 6);
    cov.Zero();
@@ -200,6 +202,9 @@ void UKFSingleTrack()
          eLossSmooth.push_back(0); // First point has no previous state to compare
       }
    }
+   LOG(info) << "Initial smoothed momentum: " << smoothedStates[0][3];
+   LOG(info) << "Starting momentum: " << beginMom;
+   LOG(info) << "Error in momentum reconstruction: " << (smoothedStates[0][3] - beginMom) / beginMom * 100 << "%";
 
    TGraph2D *track = new TGraph2D(x.size(), x.data(), y.data(), z.data());
    track->SetTitle("Particle Track;X [mm];Y [mm];Z [mm]");
@@ -272,7 +277,7 @@ void UKFSingleTrack()
    for (size_t i = 0; i < lambda2.size(); ++i) {
       lambdaGraph->SetPoint(i, i, lambda2[i] * 0.03 * pointsToCluster / 5.);
       lambdaGraph->SetPointError(i, 0, sigmalambda2[i] * 0.03 * pointsToCluster / 5.);
-      std::cout << "Lambda: " << lambda2[i] << ", Error: " << sigmalambda2[i] << std::endl;
+      // std::cout << "Lambda: " << lambda2[i] << ", Error: " << sigmalambda2[i] << std::endl;
    }
    lambdaGraph->SetTitle("Lambda per Hit (scaled);Hit Number;Lambda [scaled]");
    lambdaGraph->SetMarkerStyle(22);
@@ -326,4 +331,5 @@ void UKFSingleTrack()
    double sumEloss2 = std::accumulate(Eloss2.begin(), Eloss2.end(), 0.0);
    std::cout << "Sum of Eloss: " << sumEloss << std::endl;
    std::cout << "Sum of Eloss2: " << sumEloss2 << std::endl;
+   std::cout << "Initial energy: " << Kinematics::KE(beginMom, mass_p) << " MeV" << std::endl;
 }
