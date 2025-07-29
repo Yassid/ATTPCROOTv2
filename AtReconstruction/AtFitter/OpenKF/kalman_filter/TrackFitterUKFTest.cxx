@@ -432,6 +432,7 @@ TEST_F(TrackFitterUKFFixture, TestPredictionStep)
    cov(5, 5) = sigma_phi * sigma_phi;     // Angular uncertainty
 
    m_ukf->SetInitialState(startPos, startMom, cov);
+   LOG(info) << "Finished setting initial state";
 
    XYZPoint point({-1.4895, -4.8787, 1.01217}); // measurement point in cm
    point *= 10;                                 // Convert to mm

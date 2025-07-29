@@ -107,6 +107,7 @@ public:
    {
       updateAugWithState();
       updateAugWithProcessNoise();
+      ensurePD(m_matPa); // Ensure the augmented covariance matrix is positive definite
    }
 
    /**
@@ -127,7 +128,9 @@ public:
 
       // Calculate the sigma points for the augmented state vector and save in a matrix where each column is a sigma
       // point.
+      LOG(info) << "Calculating sigma points for prediction step2.";
       m_matSigmaXa = calculateSigmaPoints(m_vecXa, m_matPa);
+      LOG(info) << "Finished calculating sigma points for prediction step2.";
 
       // Pull out the sigma points for the state vector and process noise in two different matrices.
       Matrix<DIM_X, SIGMA_DIM_A> sigmaXx{m_matSigmaXa.block(0, 0, DIM_X, SIGMA_DIM_A)}; // Sigma points for state vector
@@ -260,29 +263,56 @@ protected:
       }
    }
 
+   /**
+    * @brief Calculate Cholesky decomposition of a covariance matrix and update the matrix so it is PD.
+    *
+    * Modifies the input matrix to ensure it is symmetric and positive definite.
+    * If the decomposition fails, it attempts to regularize the matrix by adding a small value
+    * to the diagonal and retrying the decomposition.
+    */
    template <int32_t STATE_DIM>
    Eigen::LLT<Matrix<STATE_DIM, STATE_DIM>> calculateCholesky(const Matrix<STATE_DIM, STATE_DIM> &matP)
    {
       Eigen::LLT<Matrix<STATE_DIM, STATE_DIM>> lltOfP(matP);
       if (lltOfP.info() != Eigen::Success) {
-         LOG(error) << "Cholesky decomposition failed, matrix is not positive definite. Attempting recovery...";
+         throw std::runtime_error("Cholesky decomposition failed, matrix is not positive definite.");
+      }
+
+      return lltOfP; // Return the Cholesky decomposition of the covariance matrix
+   }
+
+   template <int32_t STATE_DIM>
+   Eigen::LLT<Matrix<STATE_DIM, STATE_DIM>> ensurePD(Matrix<STATE_DIM, STATE_DIM> &matP)
+   {
+      Eigen::LLT<Matrix<STATE_DIM, STATE_DIM>> lltOfP(matP);
+      if (lltOfP.info() != Eigen::Success) {
+         LOG(warn) << "Cholesky decomposition failed, matrix is not positive definite. Attempting recovery...";
          // Add a small value to the diagonal to regularize the matrix
-         Matrix<STATE_DIM, STATE_DIM> matPReg = matP;
-         matPReg = (matPReg + matPReg.transpose()) * 0.5;            // Ensure symmetry
-         matPReg += Matrix<STATE_DIM, STATE_DIM>::Identity() * 1e-6; // Regularization value
-         lltOfP.compute(matPReg);
-         if (lltOfP.info() != Eigen::Success) {
-            LOG(error) << "Cholesky decomposition failed even after regularization. Attempting again";
-            matPReg += Matrix<STATE_DIM, STATE_DIM>::Identity() * 1e-3; // Increase regularization value
-            lltOfP.compute(matPReg);
+         int i = 0;
+         while (lltOfP.info() != Eigen::Success && i < 3) {
+            LOG(debug) << "Attempting to regularize covariance matrix, iteration: " << i;
+
+            symmetrize(matP); // Ensure symmetry before regularization
+            matP += Matrix<STATE_DIM, STATE_DIM>::Identity() * std::pow(10, -6 + i); // Regularization value
+            lltOfP.compute(matP);
+            i = i + 1;
+            // Check if the regularized matrix is now positive definite
          }
          if (lltOfP.info() != Eigen::Success) {
-            LOG(error) << "\n" << matPReg;
+            LOG(error) << "\n" << matP;
             throw std::runtime_error(
                "Cholesky decomposition failed, matrix is not positive definite even after regularization.");
-         }
+         } else
+            LOG(warn) << "Cholesky decomposition succeeded after regularization of order " << i - 1;
       }
       return lltOfP; // Return the Cholesky decomposition of the covariance matrix
+   }
+
+   template <int STATE_DIM>
+   void symmetrize(Matrix<STATE_DIM, STATE_DIM> &matP)
+   {
+      // Ensure the matrix is symmetric
+      matP = (matP + matP.transpose()) * 0.5;
    }
 
    /**
@@ -361,6 +391,7 @@ protected:
 
          matPxx += Pi; // y += W[0, i] (Y[:, i] - \bar{y}) (Y[:, i] - \bar{y})^T
       }
+      ensurePD(matPxx); // Ensure the covariance matrix is positive definite
    }
 
    /**

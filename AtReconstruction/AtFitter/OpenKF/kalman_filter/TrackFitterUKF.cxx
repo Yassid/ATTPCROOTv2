@@ -223,7 +223,9 @@ void TrackFitterUKF::predictUKF(const ROOT::Math::XYZPoint &z)
 
    // Calculate the sigma points for the augmented state vector and save in a matrix where each column is a sigma
    // point.
+   LOG(info) << "Calculating sigma points for prediction step.";
    auto sigmaPoints = calculateSigmaPoints(m_vecXa, m_matPa);
+   LOG(info) << "Finished calculating sigma points for prediction step.";
 
    // Pull out the sigma points for the state vector and process noise in two different matrices.
    Matrix<TF_DIM_X, SIGMA_DIM_A> sigmaXxPrior{
@@ -231,6 +233,7 @@ void TrackFitterUKF::predictUKF(const ROOT::Math::XYZPoint &z)
    m_matSigmaXPred = sigmaXxPrior;                     // Store the sigma points for the state vector
 
    TrackFitterUKFBase::predictUKF(callback, zVec);
+   LOG(info) << "Finished prediction step.";
 
    // Now we need to store the predicted state and covariance for smoothing later.
    m_vecXPredHist.push_back(m_vecX); // Store the predicted state vector
