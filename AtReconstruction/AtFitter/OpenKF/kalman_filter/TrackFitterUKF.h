@@ -128,9 +128,7 @@ public:
 
       // Calculate the sigma points for the augmented state vector and save in a matrix where each column is a sigma
       // point.
-      LOG(info) << "Calculating sigma points for prediction step2.";
       m_matSigmaXa = calculateSigmaPoints(m_vecXa, m_matPa);
-      LOG(info) << "Finished calculating sigma points for prediction step2.";
 
       // Pull out the sigma points for the state vector and process noise in two different matrices.
       Matrix<DIM_X, SIGMA_DIM_A> sigmaXx{m_matSigmaXa.block(0, 0, DIM_X, SIGMA_DIM_A)}; // Sigma points for state vector
@@ -284,6 +282,7 @@ protected:
    template <int32_t STATE_DIM>
    Eigen::LLT<Matrix<STATE_DIM, STATE_DIM>> ensurePD(Matrix<STATE_DIM, STATE_DIM> &matP)
    {
+      symmetrize(matP);
       Eigen::LLT<Matrix<STATE_DIM, STATE_DIM>> lltOfP(matP);
       if (lltOfP.info() != Eigen::Success) {
          LOG(warn) << "Cholesky decomposition failed, matrix is not positive definite. Attempting recovery...";

@@ -61,7 +61,7 @@ void UKFSingleTrack()
    using namespace AtTools;
 
    std::vector<double> x2, y2, z2, Eloss2, p2, sigmap2, lambda2, sigmalambda2, residual;
-   std::vector<double> xSmooth, ySmooth, zSmooth, pSmooth, sigmapSmooth;
+   std::vector<double> xSmooth, ySmooth, zSmooth, pSmooth, sigmapSmooth, residualSmooth, eLossSmooth;
 
    // Setup the Propagator for UKF
    auto elossModel = std::make_unique<AtTools::AtELossTable>(0);
@@ -188,6 +188,17 @@ void UKFSingleTrack()
       zSmooth.push_back(state[2]);
       pSmooth.push_back(state[3]);
       sigmapSmooth.push_back(std::sqrt(smoothedCovariances[i](3, 3))); // Momentum uncertainty
+      residualSmooth.push_back(
+         (XYZPoint(state[0], state[1], state[2]) - XYZPoint(filteredState[0], filteredState[1], filteredState[2])).R());
+      if (i > 0) {
+         auto lastMom = smoothedStates[i - 1][3];
+         auto mom = smoothedStates[i][3];
+         auto KE_in = Kinematics::KE(lastMom, mass_p);
+         auto KE_out = Kinematics::KE(mom, mass_p);
+         eLossSmooth.push_back(KE_in - KE_out); // Energy loss between smoothed states
+      } else {
+         eLossSmooth.push_back(0); // First point has no previous state to compare
+      }
    }
 
    TGraph2D *track = new TGraph2D(x.size(), x.data(), y.data(), z.data());
@@ -239,13 +250,19 @@ void UKFSingleTrack()
    eloss2Graph->SetTitle("Propagated Energy Loss per Hit;Hit Number;Energy Loss [MeV]");
    eloss2Graph->SetMarkerStyle(21);
    eloss2Graph->SetMarkerColor(kRed);
+   TGraph *elossSmoothGraph = new TGraph(eLossSmooth.size());
+   for (size_t i = 0; i < eLossSmooth.size(); ++i) {
+      elossSmoothGraph->SetPoint(i, i, eLossSmooth[i]);
+   }
+   elossSmoothGraph->SetTitle("Smoothed Energy Loss per Hit;Hit Number;Energy Loss [MeV]");
+   elossSmoothGraph->SetMarkerStyle(22);
+   elossSmoothGraph->SetMarkerColor(kGreen + 2);
 
    TGraphErrors *pGraph = new TGraphErrors(p2.size());
    for (size_t i = 0; i < p2.size(); ++i) {
-      pGraph->SetPoint(i, i, p2[i] * 1e-3 * pointsToCluster / 5.);
+      pGraph->SetPoint(i, i, p2[i]);
       pGraph->SetPointError(i, 0,
-                            sigmap2[i] * 5 * 1e-3 * pointsToCluster /
-                               5.); // Error bars from sigmap2, converted to GeV/c
+                            sigmap2[i] * 5); // Error bars from sigmap2, converted to GeV/c
    }
    pGraph->SetTitle("Momentum per Hit;Hit Number;Momentum [MeV/c]");
    pGraph->SetMarkerStyle(20);
@@ -265,16 +282,45 @@ void UKFSingleTrack()
    for (size_t i = 0; i < residual.size(); ++i) {
       residualGraph->SetPoint(i, i, residual[i] * .1);
    }
-   residualGraph->SetTitle("Residual per Hit;Hit Number;Residual [mm]");
+   residualGraph->SetTitle("Residual per Hit;Hit Number;Residual [cm]");
    residualGraph->SetMarkerStyle(23);
    residualGraph->SetMarkerColor(kMagenta);
+
+   TGraphErrors *pSmoothGraph = new TGraphErrors(pSmooth.size());
+   for (size_t i = 0; i < pSmooth.size(); ++i) {
+      pSmoothGraph->SetPoint(i, i, pSmooth[i]);
+      pSmoothGraph->SetPointError(i, 0,
+                                  sigmapSmooth[i] * 5); // Error bars from sigmapSmooth, converted to GeV/c
+   }
+   pSmoothGraph->SetTitle("Smoothed Momentum per Hit;Hit Number;Momentum [MeV/c]");
+   pSmoothGraph->SetMarkerStyle(22);
+   pSmoothGraph->SetMarkerColor(kGreen + 2);
+
+   TGraph *residualSmoothGraph = new TGraph(residualSmooth.size());
+   for (size_t i = 0; i < residualSmooth.size(); ++i) {
+      residualSmoothGraph->SetPoint(i, i, residualSmooth[i] * .1);
+   }
+   residualSmoothGraph->SetTitle("Smoothed Residual per Hit;Hit Number;Residual [cm]");
+   residualSmoothGraph->SetMarkerStyle(24);
+   residualSmoothGraph->SetMarkerColor(kOrange + 7);
 
    TCanvas *c2 = new TCanvas("c2", "Energy Loss per Hit", 800, 600);
    elossGraph->Draw("AP");
    eloss2Graph->Draw("PSAME");
-   pGraph->Draw("PSAME");
-   // lambdaGraph->Draw("PSAME");
-   residualGraph->Draw("PSAME");
+   elossSmoothGraph->Draw("PSAME");
+   // pGraph->Draw("PSAME");
+   //  lambdaGraph->Draw("PSAME");
+   // residualGraph->Draw("PSAME");
+   // pSmoothGraph->Draw("PSAME");
+   // residualSmoothGraph->Draw("PSAME");
+
+   TCanvas *c3 = new TCanvas("c3", "Momentum at Hit (error bars 5X)", 800, 600);
+   pGraph->Draw("AP");
+   pSmoothGraph->Draw("PSAME");
+
+   TCanvas *c4 = new TCanvas("c4", "Residual at Hit", 800, 600);
+   residualGraph->Draw("AP");
+   residualSmoothGraph->Draw("PSAME");
 
    double sumEloss = std::accumulate(Eloss.begin(), Eloss.end(), 0.0);
    double sumEloss2 = std::accumulate(Eloss2.begin(), Eloss2.end(), 0.0);
