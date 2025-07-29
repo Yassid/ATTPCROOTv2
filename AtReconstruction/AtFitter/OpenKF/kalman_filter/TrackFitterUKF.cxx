@@ -8,10 +8,31 @@
 #include <AtPropagator.h>
 
 namespace kf {
+void TrackFitterUKF::Reset()
+{
+   // Reset the state vector and covariance matrix
+   m_vecX.setZero();
+   m_matP.setZero();
+   m_vecXa.setZero();
+   m_matPa.setZero();
+   m_matQ.setZero();
+   m_matR.setZero();
+   m_matSigmaXa.setZero();
+
+   // Clear the history vectors
+   m_vecXPredHist.clear();
+   m_matPPredHist.clear();
+   m_matCPredHist.clear();
+   m_vecXHist.clear();
+   m_matPHist.clear();
+   fMeanStep = AtTools::AtPropagator::StepState(); // Reset the step state
+}
 
 void TrackFitterUKF::SetInitialState(const ROOT::Math::XYZPoint &initialPosition,
                                      const ROOT::Math::XYZVector &initialMomentum, const TMatrixD &initialCovariance)
 {
+   // If we are setting the initial state, then we should clear the history.
+   Reset();
    fPropagator.SetState(initialPosition, initialMomentum); // Set the initial state in the propagator
    m_vecX[0] = initialPosition.X();                        // X position
    m_vecX[1] = initialPosition.Y();                        // Y position
@@ -26,6 +47,19 @@ void TrackFitterUKF::SetInitialState(const ROOT::Math::XYZPoint &initialPosition
          m_matP(i, j) = initialCovariance(i, j);
       }
    }
+
+   // Save the initial state in our history vectors
+   m_vecXHist.push_back(m_vecX);
+   m_matPHist.push_back(m_matP);
+   m_vecXPredHist.push_back(m_vecX);
+   m_matPPredHist.push_back(m_matP);
+   m_matCPredHist.push_back(Matrix<TF_DIM_X, TF_DIM_X>::Zero()); // Cross-correlation is not defined for the first point
+
+   // We need to calculate the sigma points for the initial state
+   updateAugmentedStateAndCovariance();                   // Update the augmented state vector and covariance matrix
+   m_matSigmaXa = calculateSigmaPoints(m_vecXa, m_matPa); // Calculate the sigma points for the initial state
+   // Now we grab the sigma points only for the state.
+   m_matSigmaXPred = m_matSigmaXa.block(0, 0, TF_DIM_X, SIGMA_DIM_A); // Extract the state sigma points
 }
 
 TMatrixD TrackFitterUKF::GetStateCovariance() const
@@ -154,6 +188,63 @@ Vector<TrackFitterUKF::TF_DIM_Z> TrackFitterUKF::funcH(const Vector<TrackFitterU
    vecZ[2] = fPos.Z(); // Z coordinate
 
    return vecZ; // Return the measurement vector
+}
+
+void TrackFitterUKF::predictUKF(const ROOT::Math::XYZPoint &z)
+{
+   using namespace ROOT::Math;
+
+   // First we need to propagate the mean state vector to the next measurement point.
+   XYZPoint startingPosition{m_vecX[0], m_vecX[1], m_vecX[2]};      // Get the starting position from the state vector
+   Polar3DVector startingMomentum{m_vecX[3], m_vecX[4], m_vecX[5]}; // Get the starting momentum from the state vector
+
+   LOG(info) << "Propagating reference state from position: " << startingPosition
+             << " with momentum: " << XYZVector(startingMomentum);
+
+   fPropagator.SetState(startingPosition, XYZVector(startingMomentum));
+   fPropagator.PropagateToMeasurementSurface(AtTools::AtMeasurementPoint(z), *fStepper);
+   fMeanStep = fPropagator.GetState();    // Get the mean step information from the propagator
+   fMeanStep.fLastPos = startingPosition; // Store the last position
+   fMeanStep.fLastMom = startingMomentum; // Store the last momentum
+
+   LOG(info) << "Propagated to position: " << fMeanStep.fPos << " with momentum: " << fMeanStep.fMom;
+
+   // Now we can construct the reference plane.
+   fMeasurementPlane = Plane3D(fMeanStep.fMom.Unit(),
+                               XYZPoint(z)); // Create a plane using the momentum direction and position
+   Vector<TF_DIM_Z> zVec;                    // Initialize the measurement vector
+   zVec[0] = z.X();
+   zVec[1] = z.Y();
+   zVec[2] = z.Z();
+   auto callback = [this](const kf::Vector<TF_DIM_X> &x_, const kf::Vector<TF_DIM_V> &v_,
+                          const kf::Vector<TF_DIM_Z> &z_) { return funcF(x_, v_, z_); };
+   TrackFitterUKFBase::predictUKF(callback, zVec);
+
+   // Now we need to store the predicted state and covariance for smoothing later.
+   m_vecXPredHist.push_back(m_vecX); // Store the predicted state vector
+   m_matPPredHist.push_back(m_matP); // Store the predicted covariance matrix
+
+   // Get the sigma points belonging to the predicted state
+   Matrix<TF_DIM_X, SIGMA_DIM_A> sigmaXx{m_matSigmaXa.block(0, 0, TF_DIM_X, SIGMA_DIM_A)};
+
+   // Calculate the cross-corelation between the filtered state at k and predicted state at k+1
+   auto matCPred =
+      calculateCrossCorrelation<TF_DIM_X>(m_matSigmaXPred, m_vecXHist.back(), sigmaXx, m_vecXPredHist.back());
+   m_matCPredHist.push_back(matCPred); // Store the cross-correlation matrix
+}
+
+void TrackFitterUKF::correctUKF(const ROOT::Math::XYZPoint &z)
+{
+   Vector<TF_DIM_Z> zVec; // Initialize the measurement vector
+   zVec[0] = z.X();
+   zVec[1] = z.Y();
+   zVec[2] = z.Z();
+   auto callback = [this](const kf::Vector<TF_DIM_X> &x_) { return funcH(x_); };
+   TrackFitterUKFBase::correctUKF(callback, zVec);
+
+   // After correction we need to save the filtered state
+   m_vecXHist.push_back(m_vecX); // Store the filtered state vector
+   m_matPHist.push_back(m_matP); // Store the filtered covariance matrix
 }
 
 } // namespace kf

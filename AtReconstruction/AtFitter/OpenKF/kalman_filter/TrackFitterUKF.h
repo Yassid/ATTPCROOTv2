@@ -358,19 +358,20 @@ protected:
     * @param vecY mean of the second set of sigma points
     * @return matPxy, the cross-correlation matrix
     */
-   template <int32_t SIGMA_DIM>
-   Matrix<DIM_X, DIM_Z> calculateCrossCorrelation(const Matrix<DIM_X, SIGMA_DIM> &sigmaX, const Vector<DIM_X> &vecX,
-                                                  const Matrix<DIM_Z, SIGMA_DIM> &sigmaY, const Vector<DIM_Z> &vecY)
+   template <int32_t STATE_DIM, int32_t MEAS_DIM, int32_t SIGMA_DIM>
+   Matrix<STATE_DIM, MEAS_DIM>
+   calculateCrossCorrelation(const Matrix<STATE_DIM, SIGMA_DIM> &sigmaX, const Vector<STATE_DIM> &vecX,
+                             const Matrix<MEAS_DIM, SIGMA_DIM> &sigmaY, const Vector<MEAS_DIM> &vecY)
    {
-      Vector<DIM_X> devXi{util::getColumnAt<DIM_X, SIGMA_DIM>(0, sigmaX) - vecX}; // X[:, 0] - \bar{ x }
-      Vector<DIM_Z> devYi{util::getColumnAt<DIM_Z, SIGMA_DIM>(0, sigmaY) - vecY}; // Y[:, 0] - \bar{ y }
+      Vector<STATE_DIM> devXi{util::getColumnAt<STATE_DIM, SIGMA_DIM>(0, sigmaX) - vecX}; // X[:, 0] - \bar{ x }
+      Vector<MEAS_DIM> devYi{util::getColumnAt<MEAS_DIM, SIGMA_DIM>(0, sigmaY) - vecY};   // Y[:, 0] - \bar{ y }
 
       // P_0 = W[0, 0] (X[:, 0] - \bar{x}) (Y[:, 0] - \bar{y})^T
-      Matrix<DIM_X, DIM_Z> matPxy{m_weight0 * (devXi * devYi.transpose())};
+      Matrix<STATE_DIM, MEAS_DIM> matPxy{m_weight0 * (devXi * devYi.transpose())};
 
       for (int32_t i{1}; i < SIGMA_DIM; ++i) {
-         devXi = util::getColumnAt<DIM_X, SIGMA_DIM>(i, sigmaX) - vecX; // X[:, i] - \bar{x}
-         devYi = util::getColumnAt<DIM_Z, SIGMA_DIM>(i, sigmaY) - vecY; // Y[:, i] - \bar{y}
+         devXi = util::getColumnAt<STATE_DIM, SIGMA_DIM>(i, sigmaX) - vecX; // X[:, i] - \bar{x}
+         devYi = util::getColumnAt<MEAS_DIM, SIGMA_DIM>(i, sigmaY) - vecY;  // Y[:, i] - \bar{y}
 
          matPxy += m_weighti * (devXi * devYi.transpose()); // y += W[0, i] (Y[:, i] -
                                                             // \bar{y}) (Y[:, i] - \bar{y})^T
@@ -397,6 +398,19 @@ protected:
    AtTools::AtPropagator::StepState fMeanStep; /// Holds the step information for POCA propagation of mean state
    ROOT::Math::Plane3D fMeasurementPlane;      ///< Holds the measurement plane for the track fitter
 
+   // vectors to hold the information needed for smoothing the UKF
+   std::vector<Vector<TF_DIM_X>> m_vecXPredHist;           /// @brief History of predicted state vectors at k+1
+   std::vector<Matrix<TF_DIM_X, TF_DIM_X>> m_matPPredHist; /// @brief History of predicted state covariances at k+1
+   /// History of cross correlation between filtered state at k and predicted at k+1
+   std::vector<Matrix<TF_DIM_X, TF_DIM_X>> m_matCPredHist;
+   /// History of filtered (after correction) state vectors at k
+   std::vector<Vector<TF_DIM_X>> m_vecXHist;
+   /// History of filtered (after correction) state covariances at k
+   std::vector<Matrix<TF_DIM_X, TF_DIM_X>> m_matPHist;
+
+   /// The sigma points after propagation for the last prediction step.
+   Matrix<TF_DIM_X, SIGMA_DIM_A> m_matSigmaXPred{Matrix<TF_DIM_X, SIGMA_DIM_A>::Zero()};
+
 public:
    bool fEnableEnStraggling{true};       ///< @brief Flag to enable/disable energy straggling
    double fMaxStragglingFactor{1. / 3.}; ///< @brief Maximum straggling factor for energy loss
@@ -415,7 +429,7 @@ public:
       : TrackFitterUKFBase(), fPropagator(std::move(propagator)), fStepper(std::move(stepper))
    {
    }
-
+   void Reset();
    void SetInitialState(const ROOT::Math::XYZPoint &initialPosition, const ROOT::Math::XYZVector &initialMomentum,
                         const TMatrixD &initialCovariance);
 
@@ -428,56 +442,16 @@ public:
    TMatrixD GetAugStateCovariance() const;
    std::array<double, DIM_A> GetAugStateVector() const;
 
-   kf::Vector<TF_DIM_X>
-   funcF(const kf::Vector<TF_DIM_X> &x, const kf::Vector<TF_DIM_V> &v, const kf::Vector<TF_DIM_Z> &z);
-   kf::Vector<TF_DIM_Z> funcH(const kf::Vector<TF_DIM_X> &x);
-
-   void predictUKF(const ROOT::Math::XYZPoint &z)
-   {
-      using namespace ROOT::Math;
-
-      // First we need to propagate the mean state vector to the next measurement point.
-      XYZPoint startingPosition{m_vecX[0], m_vecX[1], m_vecX[2]}; // Get the starting position from the state vector
-      Polar3DVector startingMomentum{m_vecX[3], m_vecX[4],
-                                     m_vecX[5]}; // Get the starting momentum from the state vector
-
-      LOG(info) << "Propagating reference state from position: " << startingPosition
-                << " with momentum: " << XYZVector(startingMomentum);
-
-      fPropagator.SetState(startingPosition, XYZVector(startingMomentum));
-      fPropagator.PropagateToMeasurementSurface(AtTools::AtMeasurementPoint(z), *fStepper);
-      fMeanStep = fPropagator.GetState();    // Get the mean step information from the propagator
-      fMeanStep.fLastPos = startingPosition; // Store the last position
-      fMeanStep.fLastMom = startingMomentum; // Store the last momentum
-
-      LOG(info) << "Propagated to position: " << fMeanStep.fPos << " with momentum: " << fMeanStep.fMom;
-
-      // Now we can construct the reference plane.
-      fMeasurementPlane = Plane3D(fMeanStep.fMom.Unit(),
-                                  XYZPoint(z)); // Create a plane using the momentum direction and position
-      Vector<TF_DIM_Z> zVec;                    // Initialize the measurement vector
-      zVec[0] = z.X();
-      zVec[1] = z.Y();
-      zVec[2] = z.Z();
-      auto callback = [this](const kf::Vector<TF_DIM_X> &x_, const kf::Vector<TF_DIM_V> &v_,
-                             const kf::Vector<TF_DIM_Z> &z_) { return funcF(x_, v_, z_); };
-      TrackFitterUKFBase::predictUKF(callback, zVec);
-   }
-
-   void correctUKF(const ROOT::Math::XYZPoint &z)
-   {
-      Vector<TF_DIM_Z> zVec; // Initialize the measurement vector
-      zVec[0] = z.X();
-      zVec[1] = z.Y();
-      zVec[2] = z.Z();
-      auto callback = [this](const kf::Vector<TF_DIM_X> &x_) { return funcH(x_); };
-      TrackFitterUKFBase::correctUKF(callback, zVec);
-   }
+   void predictUKF(const ROOT::Math::XYZPoint &z);
+   void correctUKF(const ROOT::Math::XYZPoint &z);
 
 protected:
    std::array<float32_t, TF_DIM_V> calculateProcessNoiseMean() override;
-
    Matrix<TF_DIM_V, TF_DIM_V> calculateProcessNoiseCovariance() override;
+
+   kf::Vector<TF_DIM_X>
+   funcF(const kf::Vector<TF_DIM_X> &x, const kf::Vector<TF_DIM_V> &v, const kf::Vector<TF_DIM_Z> &z);
+   kf::Vector<TF_DIM_Z> funcH(const kf::Vector<TF_DIM_X> &x);
 };
 } // namespace kf
 
