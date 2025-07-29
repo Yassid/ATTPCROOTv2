@@ -207,11 +207,13 @@ public:
 
       // kalman gain
       auto llt = calculateCholesky(matPzz);
-      const Matrix<DIM_X, DIM_Z> matK = llt.solve(matPxz.transpose()).transpose();
-      // Matrix<DIM_X, DIM_Z> matK = {matPxz * llt.solve(Matrix<DIM_Z, DIM_Z>::Identity())};
+      // const Matrix<DIM_X, DIM_Z> matK = llt.solve(matPxz.transpose()).transpose();
+      Matrix<DIM_X, DIM_Z> matK = {matPxz * llt.solve(Matrix<DIM_Z, DIM_Z>::Identity())};
+      // Matrix<DIM_X, DIM_Z> matK = matPxz * matPzz.inverse(); By far the worst method for filter stability
 
       m_vecX += matK * (vecZ - vecZhat);
       m_matP -= matK * matPzz * matK.transpose();
+      // m_matP -= matPxz * matK.transpose();
       ensurePD(m_matP); // Ensure the covariance matrix is positive definite
    }
 
