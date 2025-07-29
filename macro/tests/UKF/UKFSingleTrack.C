@@ -171,6 +171,19 @@ void UKFSingleTrack()
       residual.push_back(residualValue);               // Store the residual for this hit
    }
 
+   // At this point we have the full trajectory of the particle
+   ukf.smoothUKF(); // Perform smoothing
+   auto smoothedStates = ukf.GetSmoothedStates();
+   auto smoothedCovariances = ukf.GetSmoothedCovariances();
+   auto filteredStates = ukf.GetFilteredStates();
+   auto filteredCovariances = ukf.GetFilteredCovariances();
+   for (int i = 0; i < smoothedStates.size(); ++i) {
+      auto &state = smoothedStates[i];
+      auto &filteredState = filteredStates[i];
+      std::cout << "Smoothed state " << i << ": " << state.transpose() << std::endl;
+      std::cout << "Filtered state " << i << ": " << filteredState.transpose() << std::endl;
+   }
+
    TGraph2D *track = new TGraph2D(x.size(), x.data(), y.data(), z.data());
    track->SetTitle("Particle Track;X [mm];Y [mm];Z [mm]");
    track->SetMarkerStyle(20);

@@ -252,6 +252,31 @@ protected:
       }
    }
 
+   template <int32_t STATE_DIM>
+   Eigen::LLT<Matrix<STATE_DIM, STATE_DIM>> calculateCholesky(const Matrix<STATE_DIM, STATE_DIM> &matP)
+   {
+      Eigen::LLT<Matrix<STATE_DIM, STATE_DIM>> lltOfP(matP);
+      if (lltOfP.info() != Eigen::Success) {
+         LOG(error) << "Cholesky decomposition failed, matrix is not positive definite. Attempting recovery...";
+         // Add a small value to the diagonal to regularize the matrix
+         Matrix<STATE_DIM, STATE_DIM> matPReg = matP;
+         matPReg = (matPReg + matPReg.transpose()) * 0.5;            // Ensure symmetry
+         matPReg += Matrix<STATE_DIM, STATE_DIM>::Identity() * 1e-6; // Regularization value
+         lltOfP.compute(matPReg);
+         if (lltOfP.info() != Eigen::Success) {
+            LOG(error) << "Cholesky decomposition failed even after regularization. Attempting again";
+            matPReg += Matrix<STATE_DIM, STATE_DIM>::Identity() * 1e-3; // Increase regularization value
+            lltOfP.compute(matPReg);
+         }
+         if (lltOfP.info() != Eigen::Success) {
+            LOG(error) << "\n" << matPReg;
+            throw std::runtime_error(
+               "Cholesky decomposition failed, matrix is not positive definite even after regularization.");
+         }
+      }
+      return lltOfP; // Return the Cholesky decomposition of the covariance matrix
+   }
+
    /**
     * @brief Algorithm to calculate the deterministic sigma points for
     * the unscented transformation.
@@ -268,25 +293,8 @@ protected:
    {
       const float32_t scalarMultiplier{std::sqrt(STATE_DIM + m_kappa)}; // sqrt(n + \kappa)
 
-      Eigen::LLT<Matrix<STATE_DIM, STATE_DIM>> lltOfPa(matPa);
-      if (lltOfPa.info() != Eigen::Success) {
-         LOG(error) << "Cholesky decomposition failed, matrix is not positive definite. Attempting recovery...";
-         // Add a small value to the diagonal to regularize the matrix
-         Matrix<STATE_DIM, STATE_DIM> matPaReg = matPa;
-         matPaReg = (matPaReg + matPaReg.transpose()) * 0.5;          // Ensure symmetry
-         matPaReg += Matrix<STATE_DIM, STATE_DIM>::Identity() * 1e-6; // Regularization value
-         lltOfPa.compute(matPaReg);
-         if (lltOfPa.info() != Eigen::Success) {
-            LOG(error) << "Cholesky decomposition failed even after regularization. Attempting again";
-            matPaReg += Matrix<STATE_DIM, STATE_DIM>::Identity() * 1e-3; // Increase regularization value
-            lltOfPa.compute(matPaReg);
-         }
-         if (lltOfPa.info() != Eigen::Success) {
-            LOG(error) << "\n" << matPaReg;
-            throw std::runtime_error(
-               "Cholesky decomposition failed, matrix is not positive definite even after regularization.");
-         }
-      }
+      Eigen::LLT<Matrix<STATE_DIM, STATE_DIM>> lltOfPa = calculateCholesky<STATE_DIM>(matPa);
+
       Matrix<STATE_DIM, STATE_DIM> matSa{lltOfPa.matrixL()}; // sqrt(P_{a})
 
       matSa *= scalarMultiplier; // sqrt( (n + \kappa) * P_{a} )
@@ -398,15 +406,23 @@ protected:
    AtTools::AtPropagator::StepState fMeanStep; /// Holds the step information for POCA propagation of mean state
    ROOT::Math::Plane3D fMeasurementPlane;      ///< Holds the measurement plane for the track fitter
 
+   using EigenVectorDimX = std::vector<Vector<TF_DIM_X>, Eigen::aligned_allocator<Vector<TF_DIM_X>>>;
+   using VectorEigenMatDimX =
+      std::vector<Matrix<TF_DIM_X, TF_DIM_X>, Eigen::aligned_allocator<Matrix<TF_DIM_X, TF_DIM_X>>>;
    // vectors to hold the information needed for smoothing the UKF
-   std::vector<Vector<TF_DIM_X>> m_vecXPredHist;           /// @brief History of predicted state vectors at k+1
-   std::vector<Matrix<TF_DIM_X, TF_DIM_X>> m_matPPredHist; /// @brief History of predicted state covariances at k+1
+   EigenVectorDimX m_vecXPredHist;    /// @brief History of predicted state vectors at k+1
+   VectorEigenMatDimX m_matPPredHist; /// @brief History of predicted state covariances at k+1
    /// History of cross correlation between filtered state at k and predicted at k+1
-   std::vector<Matrix<TF_DIM_X, TF_DIM_X>> m_matCPredHist;
+   VectorEigenMatDimX m_matCPredHist;
    /// History of filtered (after correction) state vectors at k
-   std::vector<Vector<TF_DIM_X>> m_vecXHist;
+   EigenVectorDimX m_vecXHist;
    /// History of filtered (after correction) state covariances at k
-   std::vector<Matrix<TF_DIM_X, TF_DIM_X>> m_matPHist;
+   VectorEigenMatDimX m_matPHist;
+
+   /// Smoothed state vector and covariance
+   EigenVectorDimX m_vecXSmooth;
+   /// Smoothed state covariance
+   VectorEigenMatDimX m_matPSmooth;
 
    /// The sigma points after propagation for the last prediction step.
    Matrix<TF_DIM_X, SIGMA_DIM_A> m_matSigmaXPred{Matrix<TF_DIM_X, SIGMA_DIM_A>::Zero()};
@@ -441,9 +457,14 @@ public:
    TMatrixD GetStateCovariance() const;
    TMatrixD GetAugStateCovariance() const;
    std::array<double, DIM_A> GetAugStateVector() const;
+   const EigenVectorDimX &GetSmoothedStates() const { return m_vecXSmooth; };
+   const VectorEigenMatDimX &GetSmoothedCovariances() const { return m_matPSmooth; };
+   const EigenVectorDimX &GetFilteredStates() const { return m_vecXHist; };
+   const VectorEigenMatDimX &GetFilteredCovariances() const { return m_matPHist; };
 
    void predictUKF(const ROOT::Math::XYZPoint &z);
    void correctUKF(const ROOT::Math::XYZPoint &z);
+   void smoothUKF();
 
 protected:
    std::array<float32_t, TF_DIM_V> calculateProcessNoiseMean() override;

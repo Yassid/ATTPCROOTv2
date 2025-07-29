@@ -218,6 +218,18 @@ void TrackFitterUKF::predictUKF(const ROOT::Math::XYZPoint &z)
    zVec[2] = z.Z();
    auto callback = [this](const kf::Vector<TF_DIM_X> &x_, const kf::Vector<TF_DIM_V> &v_,
                           const kf::Vector<TF_DIM_Z> &z_) { return funcF(x_, v_, z_); };
+
+   updateAugmentedStateAndCovariance();
+
+   // Calculate the sigma points for the augmented state vector and save in a matrix where each column is a sigma
+   // point.
+   auto sigmaPoints = calculateSigmaPoints(m_vecXa, m_matPa);
+
+   // Pull out the sigma points for the state vector and process noise in two different matrices.
+   Matrix<TF_DIM_X, SIGMA_DIM_A> sigmaXxPrior{
+      sigmaPoints.block(0, 0, TF_DIM_X, SIGMA_DIM_A)}; // Sigma points for state vector
+   m_matSigmaXPred = sigmaXxPrior;                     // Store the sigma points for the state vector
+
    TrackFitterUKFBase::predictUKF(callback, zVec);
 
    // Now we need to store the predicted state and covariance for smoothing later.
@@ -228,8 +240,7 @@ void TrackFitterUKF::predictUKF(const ROOT::Math::XYZPoint &z)
    Matrix<TF_DIM_X, SIGMA_DIM_A> sigmaXx{m_matSigmaXa.block(0, 0, TF_DIM_X, SIGMA_DIM_A)};
 
    // Calculate the cross-corelation between the filtered state at k and predicted state at k+1
-   auto matCPred =
-      calculateCrossCorrelation<TF_DIM_X>(m_matSigmaXPred, m_vecXHist.back(), sigmaXx, m_vecXPredHist.back());
+   auto matCPred = calculateCrossCorrelation<TF_DIM_X>(sigmaXxPrior, m_vecXHist.back(), sigmaXx, m_vecXPredHist.back());
    m_matCPredHist.push_back(matCPred); // Store the cross-correlation matrix
 }
 
@@ -245,6 +256,40 @@ void TrackFitterUKF::correctUKF(const ROOT::Math::XYZPoint &z)
    // After correction we need to save the filtered state
    m_vecXHist.push_back(m_vecX); // Store the filtered state vector
    m_matPHist.push_back(m_matP); // Store the filtered covariance matrix
+}
+
+void TrackFitterUKF::smoothUKF()
+{
+
+   // Smoothing is done by iterating backwards over the history of predicted states and covariances.
+   // Here i = k+1
+   m_vecXSmooth.resize(m_vecXPredHist.size());
+   m_matPSmooth.resize(m_matPPredHist.size());
+   m_vecXSmooth.back() = m_vecXHist.back(); // The last smoothed state is the last corrected state
+   m_matPSmooth.back() = m_matPHist.back(); // The last smoothed covariance is the last corrected covariance
+   for (size_t i = m_vecXPredHist.size() - 1; i > 0; --i) {
+
+      // Get the predicted state and covariance at step i
+      const auto &xPred = m_vecXPredHist[i]; // m_{k+1}^-
+      const auto &pPred = m_matPPredHist[i]; // P_{k+1}^-
+      const auto &ccor = m_matCPredHist[i];  // C_{k+1}
+
+      // Get the filtered state and covariance at step i-1
+      const auto &xFilt = m_vecXHist[i - 1]; // m_{k}
+      const auto &pFilt = m_matPHist[i - 1]; // P_{k}
+
+      // Get the smoothed state and covariance at step i
+      auto &xSmooth = m_vecXSmooth[i]; // m^s_{k+1}
+      auto &pSmooth = m_matPSmooth[i]; // P^s_{k+1}
+
+      auto llt = calculateCholesky(pPred); // Perform Cholesky decomposition
+      auto D = ccor * pPred.inverse();     // D = C_{k+1} * (P_{k+1}^-)^{-1}
+
+      std::cout << "D matrix at step " << i << ":\n" << D << "\n";
+      m_vecXSmooth[i - 1] = xFilt + D * (xSmooth - xPred); // m^s_{k} = m_{k} + D * (m^s_{k+1} - m_{k+1}^-)
+      m_matPSmooth[i - 1] =
+         pFilt + D * (pSmooth - pPred) * D.transpose(); // P^s_{k} = P_{k} + D * (P^s_{k+1} - P_{k+1}^-) * D^T
+   }
 }
 
 } // namespace kf
