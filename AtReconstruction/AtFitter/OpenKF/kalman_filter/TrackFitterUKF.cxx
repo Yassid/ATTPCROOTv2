@@ -285,7 +285,8 @@ void TrackFitterUKF::smoothUKF()
 
       auto llt = calculateCholesky(pPred); // Perform Cholesky decomposition
       auto D = ccor * llt.solve(Matrix<TF_DIM_X, TF_DIM_X>::Identity());
-      // auto D = ccor * pPred.inverse();     // D = C_{k+1} * (P_{k+1}^-)^{-1}
+      // auto D = llt.solve(ccor.transpose()).transpose();
+      //  auto D = ccor * pPred.inverse();     // D = C_{k+1} * (P_{k+1}^-)^{-1}
 
       // std::cout << "D matrix at step " << i << ":\n" << D << "\n";
       m_vecXSmooth[i - 1] = xFilt + D * (xSmooth - xPred); // m^s_{k} = m_{k} + D * (m^s_{k+1} - m_{k+1}^-)

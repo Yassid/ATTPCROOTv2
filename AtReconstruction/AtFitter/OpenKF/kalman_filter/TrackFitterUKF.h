@@ -195,20 +195,24 @@ public:
 
       // calculate the mean measurement vector and covariance matrix
       // from the sigma points.
-      Vector<DIM_Z> vecZhat;
-      Matrix<DIM_Z, DIM_Z> matPzz;
+      Vector<DIM_Z> vecZhat;       // Predicted measurement vector
+      Matrix<DIM_Z, DIM_Z> matPzz; // Measurement covariance matrix
       calculateWeightedMeanAndCovariance<DIM_Z>(sigmaZ, vecZhat, matPzz);
 
       // Add in the measurement noise covariance matrix to the measurement covariance matrix.
-      matPzz += m_matR; // Add measurement noise covariance
+      matPzz += m_matR; // Add measurement noise covariance so we gen the innovation covariance matrix.
+      ensurePD(matPzz); // Ensure the covariance matrix is positive definite
 
       const Matrix<DIM_X, DIM_Z> matPxz{calculateCrossCorrelation(sigmaXx, m_vecX, sigmaZ, vecZhat)};
 
       // kalman gain
-      const Matrix<DIM_X, DIM_Z> matK{matPxz * matPzz.inverse()};
+      auto llt = calculateCholesky(matPzz);
+      const Matrix<DIM_X, DIM_Z> matK = llt.solve(matPxz.transpose()).transpose();
+      // Matrix<DIM_X, DIM_Z> matK = {matPxz * llt.solve(Matrix<DIM_Z, DIM_Z>::Identity())};
 
       m_vecX += matK * (vecZ - vecZhat);
       m_matP -= matK * matPzz * matK.transpose();
+      ensurePD(m_matP); // Ensure the covariance matrix is positive definite
    }
 
 protected:
@@ -279,7 +283,7 @@ protected:
       symmetrize(matP);
       Eigen::LLT<Matrix<STATE_DIM, STATE_DIM>> lltOfP(matP);
       if (lltOfP.info() != Eigen::Success) {
-         LOG(warn) << "Cholesky decomposition failed, matrix is not positive definite. Attempting recovery...";
+         LOG(warn) << "Cholesky decomposition failed while ensuring PD. Attempting recovery...";
          // Add a small value to the diagonal to regularize the matrix
          int i = 0;
          while (lltOfP.info() != Eigen::Success && i < 3) {

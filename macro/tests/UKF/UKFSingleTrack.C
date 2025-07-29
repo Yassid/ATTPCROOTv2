@@ -99,7 +99,7 @@ void UKFSingleTrack()
    double sigma_theta = 1 * M_PI / 180;    // Angular uncertainty of 1 degree
    double sigma_phi = 1 * M_PI / 180;      // Angular uncertainty of 1 degree
    ukf.fEnableEnStraggling = true;         // Enable energy straggling
-   ukf.setParameters(1e-2, 2, 0);          // Set kappa to match the original implementation
+   ukf.setParameters(1e-1, 2, 0);          // Set kappa to match the original implementation
 
    TMatrixD cov(6, 6);
    cov.Zero();
