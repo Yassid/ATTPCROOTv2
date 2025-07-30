@@ -59,6 +59,9 @@ public:
    bool kLogEigen{false};
 
 protected:
+   using VectorEigenVecDimX = std::vector<Vector<DIM_X>, Eigen::aligned_allocator<Vector<DIM_X>>>;
+   using VectorEigenMatDimX = std::vector<Matrix<DIM_X, DIM_X>, Eigen::aligned_allocator<Matrix<DIM_X, DIM_X>>>;
+
    Vector<DIM_X> m_vecX{Vector<DIM_X>::Zero()};               /// @brief estimated state vector
    Matrix<DIM_X, DIM_X> m_matP{Matrix<DIM_X, DIM_X>::Zero()}; /// @brief state covariance matrix
 
@@ -67,12 +70,10 @@ protected:
    /// @brief augmented state covariance (incl. process and measurement noise covariances)
    Matrix<DIM_A, DIM_A> m_matPa{Matrix<DIM_A, DIM_A>::Zero()};
 
-   // Process and measurement noise covariance matrices
    /// Process noise covariance matrix incorporated in propagator (Q_aug)
    Matrix<DIM_V, DIM_V> m_matQaug{Matrix<DIM_V, DIM_V>::Zero()};
    /// Process noise covariance matrix for model noise (Q_mod)
    Matrix<DIM_X, DIM_X> m_matQmod{Matrix<DIM_X, DIM_X>::Zero()};
-
    /// Measurement noise covariance matrix (R)
    Matrix<DIM_N, DIM_N> m_matR{Matrix<DIM_N, DIM_N>::Zero()};
 
@@ -85,9 +86,41 @@ protected:
    /// Lambda parameter for sigma point calculation
    float32_t m_lambda{0};
 
+   // Track state over time (can be used for smoothing or diagnostics)
+   VectorEigenVecDimX m_vecXPredHist; /// @brief History of predicted state vectors at k+1
+   VectorEigenMatDimX m_matPPredHist; /// @brief History of predicted state covariances at k+1
+   /// History of cross correlation between filtered state at k and predicted at k+1
+   VectorEigenMatDimX m_matCPredHist;
+   /// History of filtered (after correction) state vectors at k
+   VectorEigenVecDimX m_vecXHist;
+   /// History of filtered (after correction) state covariances at k
+   VectorEigenMatDimX m_matPHist;
+   /// The sigma points after propagation for the last prediction step.
+   Matrix<DIM_X, SIGMA_DIM_A> m_matSigmaXPred{Matrix<DIM_X, SIGMA_DIM_A>::Zero()};
+
 public:
    TrackFitterUKFBase() { setParameters(1, 2, 0); }
    ~TrackFitterUKFBase() = default;
+
+   virtual void Reset()
+   {
+      m_vecX.setZero();
+      m_matP.setZero();
+      m_vecXa.setZero();
+      m_matPa.setZero();
+      m_matQaug.setZero();
+      m_matQmod.setZero();
+      m_matR.setZero();
+      m_matSigmaXa.setZero();
+      m_matSigmaXPred.setZero();
+
+      // Clear the history vectors
+      m_vecXPredHist.clear();
+      m_matPPredHist.clear();
+      m_matCPredHist.clear();
+      m_vecXHist.clear();
+      m_matPHist.clear();
+   }
 
    /**
     * @brief Set the weights used to calculate sigma points.
@@ -136,7 +169,7 @@ public:
    {
       updateAugWithState();
       updateAugWithProcessNoise();
-      ensurePD(m_matPa); // Ensure the augmented covariance matrix is positive definite
+      // ensurePD(m_matPa); // Ensure the augmented covariance matrix is positive definite
    }
 
    /**
@@ -478,33 +511,17 @@ protected:
    static constexpr int32_t TF_DIM_Z = 3;
    static constexpr int32_t TF_DIM_V = 1;
    static constexpr int32_t TF_DIM_N = 3;
+   // using DIM_X = TrackFitterUKFBase::DIM_X;
 
    AtTools::AtPropagator fPropagator; ///< @brief Propagator for the track fitter
    std::unique_ptr<AtTools::AtStepper> fStepper{nullptr};
    AtTools::AtPropagator::StepState fMeanStep; /// Holds the step information for POCA propagation of mean state
    ROOT::Math::Plane3D fMeasurementPlane;      ///< Holds the measurement plane for the track fitter
 
-   using EigenVectorDimX = std::vector<Vector<TF_DIM_X>, Eigen::aligned_allocator<Vector<TF_DIM_X>>>;
-   using VectorEigenMatDimX =
-      std::vector<Matrix<TF_DIM_X, TF_DIM_X>, Eigen::aligned_allocator<Matrix<TF_DIM_X, TF_DIM_X>>>;
-
-   // vectors to hold the information needed for smoothing the UKF
-   EigenVectorDimX m_vecXPredHist;    /// @brief History of predicted state vectors at k+1
-   VectorEigenMatDimX m_matPPredHist; /// @brief History of predicted state covariances at k+1
-   /// History of cross correlation between filtered state at k and predicted at k+1
-   VectorEigenMatDimX m_matCPredHist;
-   /// History of filtered (after correction) state vectors at k
-   EigenVectorDimX m_vecXHist;
-   /// History of filtered (after correction) state covariances at k
-   VectorEigenMatDimX m_matPHist;
-
    /// Smoothed state vector and covariance
-   EigenVectorDimX m_vecXSmooth;
+   VectorEigenVecDimX m_vecXSmooth;
    /// Smoothed state covariance
    VectorEigenMatDimX m_matPSmooth;
-
-   /// The sigma points after propagation for the last prediction step.
-   Matrix<TF_DIM_X, SIGMA_DIM_A> m_matSigmaXPred{Matrix<TF_DIM_X, SIGMA_DIM_A>::Zero()};
 
 public:
    bool fEnableEnStraggling{true};       ///< @brief Flag to enable/disable energy straggling
@@ -524,21 +541,18 @@ public:
       : TrackFitterUKFBase(), fPropagator(std::move(propagator)), fStepper(std::move(stepper))
    {
    }
-   void Reset();
+   virtual void Reset() override;
    void SetInitialState(const ROOT::Math::XYZPoint &initialPosition, const ROOT::Math::XYZVector &initialMomentum,
                         const TMatrixD &initialCovariance);
 
    void SetMeasCov(const TMatrixD &measCov);
-   std::array<double, 6> GetStateVector() const
-   {
-      return {m_vecX[0], m_vecX[1], m_vecX[2], m_vecX[3], m_vecX[4], m_vecX[5]};
-   }
+
    TMatrixD GetStateCovariance() const;
    TMatrixD GetAugStateCovariance() const;
    std::array<double, DIM_A> GetAugStateVector() const;
-   const EigenVectorDimX &GetSmoothedStates() const { return m_vecXSmooth; };
+   const VectorEigenVecDimX &GetSmoothedStates() const { return m_vecXSmooth; };
    const VectorEigenMatDimX &GetSmoothedCovariances() const { return m_matPSmooth; };
-   const EigenVectorDimX &GetFilteredStates() const { return m_vecXHist; };
+   const VectorEigenVecDimX &GetFilteredStates() const { return m_vecXHist; };
    const VectorEigenMatDimX &GetFilteredCovariances() const { return m_matPHist; };
 
    void predictUKF(const ROOT::Math::XYZPoint &z);

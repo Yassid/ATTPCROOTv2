@@ -8,24 +8,11 @@
 #include <AtPropagator.h>
 
 namespace kf {
+
 void TrackFitterUKF::Reset()
 {
    // Reset the state vector and covariance matrix
-   m_vecX.setZero();
-   m_matP.setZero();
-   m_vecXa.setZero();
-   m_matPa.setZero();
-   m_matQaug.setZero();
-   m_matR.setZero();
-   m_matSigmaXa.setZero();
-   m_matSigmaXPred.setZero();
-
-   // Clear the history vectors
-   m_vecXPredHist.clear();
-   m_matPPredHist.clear();
-   m_matCPredHist.clear();
-   m_vecXHist.clear();
-   m_matPHist.clear();
+   TrackFitterUKFBase::Reset();
    m_vecXSmooth.clear();
    m_matPSmooth.clear();
    fMeanStep = AtTools::AtPropagator::StepState(); // Reset the step state
