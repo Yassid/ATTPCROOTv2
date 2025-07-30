@@ -150,6 +150,7 @@ void AtPropagator::PropagateToMeasurementSurface(const AtMeasurementSurface &sur
          result = stepper.Step(fState);
          if (!result) {
             LOG(error) << "Failed to propagate to stopping point, aborting.";
+            fState.status = AtPropagator::StepStateStatus::kStopped;
             return; // Abort propagation if step failed
          }
          auto origH = fState.h; // Save original step size
@@ -202,6 +203,8 @@ void AtPropagator::PropagateToMeasurementSurface(const AtMeasurementSurface &sur
          if (reachedMeasurementPoint) {
             fState.fPos = surface.ProjectToSurface(fState.fPos);
          }
+         if (particleStopped || momentumReversed)
+            fState.status = AtPropagator::StepStateStatus::kStopped;
          LOG(debug) << "Projected on surface: " << fState.fPos.X() << ", " << fState.fPos.Y() << ", "
                     << fState.fPos.Z();
          LOG(debug) << "Final Momentum: " << fState.fMom.X() << ", " << fState.fMom.Y() << ", " << fState.fMom.Z();

@@ -17,6 +17,8 @@ std::vector<double> x_sim, y_sim, z_sim, Eloss_sim;
 TH1F *hMom = nullptr;
 TH1F *hMomSampled = nullptr;
 TH1F *hMomError = nullptr;
+TH1F *hMomError2 = nullptr;
+
 TCanvas *c1 = new TCanvas();
 TCanvas *c2 = new TCanvas();
 
@@ -57,6 +59,10 @@ void TestManyTracks(int n, double bias = 0)
    XYZPoint fTruePos(-3.40046e-04, -1.49863e-04, 1.0018);
    XYZVector fTrueMom(0.00935463, -0.0454279, 0.00826042);
    fTrueMom *= 1e3;
+   double prevKE = AtTools::Kinematics::KE(fTrueMom.R(), mass_p) - Eloss_sim[0];
+   double fMomPrev = AtTools::Kinematics::GetRelMomFromKE(prevKE, mass_p);
+   std::cout << "Initial mom: " << fTrueMom.R() << " past mom " << fMomPrev << std::endl;
+
    double fSigmaMom = fTrueMom.R() * sigma_mom_sample;
 
    hMom = new TH1F("hMom", "Reconstructed Momentum (MeV/c)", 100, fTrueMom.R() - 4 * fSigmaMom,
@@ -65,6 +71,8 @@ void TestManyTracks(int n, double bias = 0)
                           fTrueMom.R() + 4 * fSigmaMom);
    hMomError =
       new TH1F("hMomError", "Error (%)", 100, -4 * fSigmaMom / fTrueMom.R() * 100, 4 * fSigmaMom / fTrueMom.R() * 100);
+   hMomError2 =
+      new TH1F("hMomError2", "Error (%)", 100, -4 * fSigmaMom / fTrueMom.R() * 100, 4 * fSigmaMom / fTrueMom.R() * 100);
 
    for (int i = 0; i < n; ++i) {
 
@@ -87,6 +95,8 @@ void TestManyTracks(int n, double bias = 0)
       hMom->Fill(pReco);
       double error = (pReco - fTrueMom.R()) / fTrueMom.R() * 100;
       hMomError->Fill(error);
+      double errorPrev = (ukf->GetSmoothedStates()[1][3] - fMomPrev) / fMomPrev * 100;
+      hMomError2->Fill(errorPrev);
 
       std::cout << std::endl
                 << std::endl
@@ -105,8 +115,11 @@ void TestManyTracks(int n, double bias = 0)
    legend->AddEntry(hMom, "Reconstructed", "l");
    legend->AddEntry(hMomSampled, "Sampled", "l");
    legend->Draw();
+
    c2->cd();
    hMomError->Draw("hist");
+   hMomError2->SetLineColor(kRed);
+   hMomError2->Draw("same hist");
 }
 
 /*********** Function implementations **************/

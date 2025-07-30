@@ -28,8 +28,9 @@ class AtStepper;
 class AtPropagator {
 public:
    enum class StepStateStatus {
-      kSuccess,        /// Step was successful
-      kInvalidStepSize /// Step failed
+      kSuccess,         /// Step was successful
+      kInvalidStepSize, /// Step failed
+      kStopped          /// Particle is stopped in material
    };
    struct StepState {
       ROOT::Math::XYZPoint fPos;                          /// Position of the particle in mm

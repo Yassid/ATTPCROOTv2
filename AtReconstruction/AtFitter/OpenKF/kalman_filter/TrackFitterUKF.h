@@ -57,6 +57,7 @@ public:
    // Controls and variables for running numerical diagnostics.
    int nTouch{0}; // Variable to track the number of times a matrix has a floor added.
    bool kLogEigen{false};
+   bool kReplaceFirstCov{true}; /// If true, replace the seed COV with the predicted cov of the second point
 
 protected:
    using VectorEigenVecDimX = std::vector<Vector<DIM_X>, Eigen::aligned_allocator<Vector<DIM_X>>>;
@@ -225,6 +226,14 @@ public:
       m_matP += m_matQmod;       // Add the model process noise covariance to the state covariance matrix.
       ensurePD(m_matP);          // Ensure the covariance matrix is positive definite
 
+      if (m_vecXPredHist.size() == 1 && kReplaceFirstCov) {
+         // If this is the first prediction step, we replace the initial covariance with the predicted covariance
+         // of the second point. This is to avoid numerical issues with the first point on smoothing.
+         LOG(info) << "Replacing initial covariance with predicted covariance of second point.";
+         LOG(info) << "Initial COV: " << m_matPPredHist[0];
+         m_matPPredHist[0] = m_matP;
+         LOG(info) << "Replaced COV: " << m_matPPredHist[0];
+      }
       // Now we need to store the predicted state and covariance for smoothing later.
       m_vecXPredHist.push_back(m_vecX); // Store the predicted state vector
       m_matPPredHist.push_back(m_matP); // Store the predicted covariance matrix
