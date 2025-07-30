@@ -156,8 +156,8 @@ void UKFSingleTrack()
       }
       ukf.correctUKF(point);
 
-      auto state = ukf.GetStateVector();
-      auto cov = ukf.GetStateCovariance();
+      auto state = ukf.vecX();
+      auto cov = ukf.matP();
 
       ROOT::Math::XYZPoint pos(state[0], state[1], state[2]);
       ROOT::Math::Polar3DVector momPolar(state[3], state[4], state[5]);

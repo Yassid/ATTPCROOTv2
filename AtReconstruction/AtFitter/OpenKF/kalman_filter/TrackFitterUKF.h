@@ -60,6 +60,7 @@ public:
 
 protected:
    using VectorEigenVecDimX = std::vector<Vector<DIM_X>, Eigen::aligned_allocator<Vector<DIM_X>>>;
+   using VectorEigenVecDimZ = std::vector<Vector<DIM_Z>, Eigen::aligned_allocator<Vector<DIM_Z>>>;
    using VectorEigenMatDimX = std::vector<Matrix<DIM_X, DIM_X>, Eigen::aligned_allocator<Matrix<DIM_X, DIM_X>>>;
 
    Vector<DIM_X> m_vecX{Vector<DIM_X>::Zero()};               /// @brief estimated state vector
@@ -89,12 +90,12 @@ protected:
    // Track state over time (can be used for smoothing or diagnostics)
    VectorEigenVecDimX m_vecXPredHist; /// @brief History of predicted state vectors at k+1
    VectorEigenMatDimX m_matPPredHist; /// @brief History of predicted state covariances at k+1
-   /// History of cross correlation between filtered state at k and predicted at k+1
-   VectorEigenMatDimX m_matCPredHist;
    /// History of filtered (after correction) state vectors at k
-   VectorEigenVecDimX m_vecXHist;
+   VectorEigenVecDimX m_vecXFiltHist;
    /// History of filtered (after correction) state covariances at k
-   VectorEigenMatDimX m_matPHist;
+   VectorEigenMatDimX m_matPFiltHist;
+   /// History of measurement points
+   VectorEigenVecDimZ m_vecZHist;
    /// The sigma points after propagation for the last prediction step.
    Matrix<DIM_X, SIGMA_DIM_A> m_matSigmaXPred{Matrix<DIM_X, SIGMA_DIM_A>::Zero()};
 
@@ -117,9 +118,8 @@ public:
       // Clear the history vectors
       m_vecXPredHist.clear();
       m_matPPredHist.clear();
-      m_matCPredHist.clear();
-      m_vecXHist.clear();
-      m_matPHist.clear();
+      m_vecXFiltHist.clear();
+      m_matPFiltHist.clear();
    }
 
    /**
@@ -158,6 +158,10 @@ public:
 
    virtual Matrix<DIM_X, DIM_X> &matP() { return m_matP; }
    virtual const Matrix<DIM_X, DIM_X> &matP() const { return m_matP; }
+   const VectorEigenVecDimX &GetFilteredStates() const { return m_vecXFiltHist; }
+   const VectorEigenMatDimX &GetFilteredCovariances() const { return m_matPFiltHist; }
+   const VectorEigenVecDimX &GetPredictedStates() const { return m_vecXPredHist; }
+   const VectorEigenMatDimX &GetPredictedCovariances() const { return m_matPPredHist; }
 
    /**
     * @brief update the augmented state vector and covariance matrix
@@ -192,6 +196,9 @@ public:
       // point.
       m_matSigmaXa = calculateSigmaPoints(m_vecXa, m_matPa);
 
+      // Pull out the sigma points for the state vector
+      m_matSigmaXPred = m_matSigmaXa.block(0, 0, DIM_X, SIGMA_DIM_A);
+
       // Pull out the sigma points for the state vector and process noise in two different matrices.
       Matrix<DIM_X, SIGMA_DIM_A> sigmaXx{m_matSigmaXa.block(0, 0, DIM_X, SIGMA_DIM_A)}; // Sigma points for state vector
       Matrix<DIM_V, SIGMA_DIM_A> sigmaXv{
@@ -213,11 +220,20 @@ public:
 
       // Calculate the weighted mean and covariance of the sigma points for the state vector.
       // This will be the new state vector and covariance matrix.
-      calculateWeightedMeanAndCovariance<DIM_X>(sigmaXx, m_vecX, m_matP, "P-");
+      calculateWeightedMeanAndCovariance<DIM_X>(sigmaXx, m_vecX, m_matP);
+      logEigen("P-", m_matP, 0); // Log the eigenvalues of the covariance matrix
+
+      // Here we add process noise
       m_matP(0, 0) += 1e-4;
       m_matP(1, 1) += 1e-4;
       m_matP(2, 2) += 1e-4;
+
       ensurePD(m_matP); // Ensure the covariance matrix is positive definite
+
+      // Now we need to store the predicted state and covariance for smoothing later.
+      m_vecXPredHist.push_back(m_vecX); // Store the predicted state vector
+      m_matPPredHist.push_back(m_matP); // Store the predicted covariance matrix
+
       logEigen("P-Post", m_matP, 0);
    }
 
@@ -252,7 +268,7 @@ public:
       // from the sigma points.
       Vector<DIM_Z> vecZhat;       // Predicted measurement vector
       Matrix<DIM_Z, DIM_Z> matPzz; // Measurement covariance matrix
-      calculateWeightedMeanAndCovariance<DIM_Z>(sigmaZ, vecZhat, matPzz, "SnoR");
+      calculateWeightedMeanAndCovariance<DIM_Z>(sigmaZ, vecZhat, matPzz);
 
       // Add in the measurement noise covariance matrix to the measurement covariance matrix.
       matPzz += m_matR; // Add measurement noise covariance so we gen the innovation covariance matrix.
@@ -271,6 +287,10 @@ public:
       m_matP -= matK * matPzz * matK.transpose();
       // m_matP -= matPxz * matK.transpose();
       ensurePD(m_matP); // Ensure the covariance matrix is positive definite
+
+      // After correction we need to save the filtered state
+      m_vecXFiltHist.push_back(m_vecX); // Store the filtered state vector
+      m_matPFiltHist.push_back(m_matP); // Store the filtered covariance matrix
    }
 
    template <typename T>
@@ -439,7 +459,7 @@ protected:
     */
    template <int32_t STATE_DIM, int32_t SIGMA_DIM>
    void calculateWeightedMeanAndCovariance(const Matrix<STATE_DIM, SIGMA_DIM> &sigmaX, Vector<STATE_DIM> &vecX,
-                                           Matrix<STATE_DIM, STATE_DIM> &matPxx, std::string tag = "")
+                                           Matrix<STATE_DIM, STATE_DIM> &matPxx)
    {
       // 1. calculate mean of the sigma points
       vecX = m_weightM0 * util::getColumnAt<STATE_DIM, SIGMA_DIM>(0, sigmaX);
@@ -462,7 +482,6 @@ protected:
 
          matPxx += Pi; // y += W[0, i] (Y[:, i] - \bar{y}) (Y[:, i] - \bar{y})^T
       }
-      logEigen(tag, matPxx, 0); // Log the eigenvalues of the covariance matrix
       // ensurePD(matPxx);         // Ensure the covariance matrix is positive definite
    }
 
@@ -522,6 +541,8 @@ protected:
    VectorEigenVecDimX m_vecXSmooth;
    /// Smoothed state covariance
    VectorEigenMatDimX m_matPSmooth;
+   /// History of cross correlation between filtered state at k and predicted at k+1
+   VectorEigenMatDimX m_matCPredHist;
 
 public:
    bool fEnableEnStraggling{true};       ///< @brief Flag to enable/disable energy straggling
@@ -552,8 +573,6 @@ public:
    std::array<double, DIM_A> GetAugStateVector() const;
    const VectorEigenVecDimX &GetSmoothedStates() const { return m_vecXSmooth; };
    const VectorEigenMatDimX &GetSmoothedCovariances() const { return m_matPSmooth; };
-   const VectorEigenVecDimX &GetFilteredStates() const { return m_vecXHist; };
-   const VectorEigenMatDimX &GetFilteredCovariances() const { return m_matPHist; };
 
    void predictUKF(const ROOT::Math::XYZPoint &z);
    void correctUKF(const ROOT::Math::XYZPoint &z);

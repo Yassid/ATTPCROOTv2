@@ -15,6 +15,7 @@ void TrackFitterUKF::Reset()
    TrackFitterUKFBase::Reset();
    m_vecXSmooth.clear();
    m_matPSmooth.clear();
+   m_matCPredHist.clear();
    fMeanStep = AtTools::AtPropagator::StepState(); // Reset the step state
 }
 
@@ -39,8 +40,8 @@ void TrackFitterUKF::SetInitialState(const ROOT::Math::XYZPoint &initialPosition
    }
 
    // Save the initial state in our history vectors
-   m_vecXHist.push_back(m_vecX);
-   m_matPHist.push_back(m_matP);
+   m_vecXFiltHist.push_back(m_vecX);
+   m_matPFiltHist.push_back(m_matP);
    m_vecXPredHist.push_back(m_vecX);
    m_matPPredHist.push_back(m_matP);
    m_matCPredHist.push_back(Matrix<TF_DIM_X, TF_DIM_X>::Zero()); // Cross-correlation is not defined for the first point
@@ -170,15 +171,11 @@ Vector<TrackFitterUKF::TF_DIM_X> TrackFitterUKF::funcF(const Vector<TrackFitterU
 
 Vector<TrackFitterUKF::TF_DIM_Z> TrackFitterUKF::funcH(const Vector<TrackFitterUKF::TF_DIM_X> &x)
 {
-   // Measurement function to convert state vector to measurement vector
-   using namespace ROOT::Math;
    Vector<TF_DIM_Z> vecZ;
-   XYZPoint fPos(x[0], x[1], x[2]); // Position from state vector
-
    // Calculate the measurement vector based on the position and momentum
-   vecZ[0] = fPos.X(); // X coordinate
-   vecZ[1] = fPos.Y(); // Y coordinate
-   vecZ[2] = fPos.Z(); // Z coordinate
+   vecZ[0] = x[0]; // X coordinate
+   vecZ[1] = x[1]; // Y coordinate
+   vecZ[2] = x[2]; // Z coordinate
 
    return vecZ; // Return the measurement vector
 }
@@ -212,30 +209,14 @@ void TrackFitterUKF::predictUKF(const ROOT::Math::XYZPoint &z)
    auto callback = [this](const kf::Vector<TF_DIM_X> &x_, const kf::Vector<TF_DIM_V> &v_,
                           const kf::Vector<TF_DIM_Z> &z_) { return funcF(x_, v_, z_); };
 
-   updateAugmentedStateAndCovariance();
-
-   // Calculate the sigma points for the augmented state vector and save in a matrix where each column is a sigma
-   // point.
-   auto sigmaPoints = calculateSigmaPoints(m_vecXa, m_matPa);
-
-   // Pull out the sigma points for the state vector and process noise in two different matrices.
-   Matrix<TF_DIM_X, SIGMA_DIM_A> sigmaXxPrior{
-      sigmaPoints.block(0, 0, TF_DIM_X, SIGMA_DIM_A)}; // Sigma points for state vector
-   m_matSigmaXPred = sigmaXxPrior;                     // Store the sigma points for the state vector
-
    TrackFitterUKFBase::predictUKF(callback, zVec);
-
-   // logEigen("State P-", m_matP, m_matPPredHist.size());
-
-   // Now we need to store the predicted state and covariance for smoothing later.
-   m_vecXPredHist.push_back(m_vecX); // Store the predicted state vector
-   m_matPPredHist.push_back(m_matP); // Store the predicted covariance matrix
 
    // Get the sigma points belonging to the predicted state
    Matrix<TF_DIM_X, SIGMA_DIM_A> sigmaXx{m_matSigmaXa.block(0, 0, TF_DIM_X, SIGMA_DIM_A)};
 
    // Calculate the cross-corelation between the filtered state at k and predicted state at k+1
-   auto matCPred = calculateCrossCorrelation<TF_DIM_X>(sigmaXxPrior, m_vecXHist.back(), sigmaXx, m_vecXPredHist.back());
+   auto matCPred =
+      calculateCrossCorrelation<TF_DIM_X>(m_matSigmaXPred, m_vecXFiltHist.back(), sigmaXx, m_vecXPredHist.back());
    m_matCPredHist.push_back(matCPred); // Store the cross-correlation matrix
 }
 
@@ -248,11 +229,7 @@ void TrackFitterUKF::correctUKF(const ROOT::Math::XYZPoint &z)
    auto callback = [this](const kf::Vector<TF_DIM_X> &x_) { return funcH(x_); };
    TrackFitterUKFBase::correctUKF(callback, zVec);
 
-   // logEigen("State PCorr", m_matP, m_matPHist.size());
-
-   // After correction we need to save the filtered state
-   m_vecXHist.push_back(m_vecX); // Store the filtered state vector
-   m_matPHist.push_back(m_matP); // Store the filtered covariance matrix
+   // logEigen("State PCorr", m_matP, m_matPCorrHist.size());
 }
 
 void TrackFitterUKF::smoothUKF()
@@ -262,8 +239,8 @@ void TrackFitterUKF::smoothUKF()
    // Here i = k+1
    m_vecXSmooth.resize(m_vecXPredHist.size());
    m_matPSmooth.resize(m_matPPredHist.size());
-   m_vecXSmooth.back() = m_vecXHist.back(); // The last smoothed state is the last corrected state
-   m_matPSmooth.back() = m_matPHist.back(); // The last smoothed covariance is the last corrected covariance
+   m_vecXSmooth.back() = m_vecXFiltHist.back(); // The last smoothed state is the last corrected state
+   m_matPSmooth.back() = m_matPFiltHist.back(); // The last smoothed covariance is the last corrected covariance
    for (size_t i = m_vecXPredHist.size() - 1; i > 0; --i) {
       LOG(debug) << "Smoothing step " << i << " of " << m_vecXPredHist.size() - 1;
 
@@ -273,8 +250,8 @@ void TrackFitterUKF::smoothUKF()
       const auto &ccor = m_matCPredHist[i];  // C_{k+1}
 
       // Get the filtered state and covariance at step i-1
-      const auto &xFilt = m_vecXHist[i - 1]; // m_{k}
-      const auto &pFilt = m_matPHist[i - 1]; // P_{k}
+      const auto &xFilt = m_vecXFiltHist[i - 1]; // m_{k}
+      const auto &pFilt = m_matPFiltHist[i - 1]; // P_{k}
 
       // Get the smoothed state and covariance at step i
       auto &xSmooth = m_vecXSmooth[i]; // m^s_{k+1}
