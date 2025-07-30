@@ -63,6 +63,9 @@ void TrackFitterUKF::SetInitialState(const ROOT::Math::XYZPoint &initialPosition
    m_matSigmaXa = calculateSigmaPoints(m_vecXa, m_matPa); // Calculate the sigma points for the initial state
    // Now we grab the sigma points only for the state.
    m_matSigmaXPred = m_matSigmaXa.block(0, 0, TF_DIM_X, SIGMA_DIM_A); // Extract the state sigma points
+
+   logEigen("Initial cov", m_matP, 0); // Log the eigenvalues of the initial covariance matrix
+   LOG(info) << "Initial COV:" << std::endl << m_matP;
 }
 
 TMatrixD TrackFitterUKF::GetStateCovariance() const
@@ -235,6 +238,8 @@ void TrackFitterUKF::predictUKF(const ROOT::Math::XYZPoint &z)
 
    TrackFitterUKFBase::predictUKF(callback, zVec);
 
+   // logEigen("State P-", m_matP, m_matPPredHist.size());
+
    // Now we need to store the predicted state and covariance for smoothing later.
    m_vecXPredHist.push_back(m_vecX); // Store the predicted state vector
    m_matPPredHist.push_back(m_matP); // Store the predicted covariance matrix
@@ -255,6 +260,8 @@ void TrackFitterUKF::correctUKF(const ROOT::Math::XYZPoint &z)
    zVec[2] = z.Z();
    auto callback = [this](const kf::Vector<TF_DIM_X> &x_) { return funcH(x_); };
    TrackFitterUKFBase::correctUKF(callback, zVec);
+
+   // logEigen("State PCorr", m_matP, m_matPHist.size());
 
    // After correction we need to save the filtered state
    m_vecXHist.push_back(m_vecX); // Store the filtered state vector
@@ -294,6 +301,7 @@ void TrackFitterUKF::smoothUKF()
       m_vecXSmooth[i - 1] = xFilt + D * (xSmooth - xPred); // m^s_{k} = m_{k} + D * (m^s_{k+1} - m_{k+1}^-)
       m_matPSmooth[i - 1] =
          pFilt + D * (pSmooth - pPred) * D.transpose(); // P^s_{k} = P_{k} + D * (P^s_{k+1} - P_{k+1}^-) * D^T
+      logEigen("State P+", m_matPSmooth[i - 1], i - 1);
    }
 }
 

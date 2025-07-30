@@ -12,7 +12,7 @@ const double charge_p = 1.602176634e-19; // Charge of proton
 
 // Simulated (measurement) hits
 std::vector<double> x, y, z, Eloss;
-int pointsToCluster = 20;
+int pointsToCluster = 5;
 void LoadHits()
 {
    std::ifstream infile("hits.txt");
@@ -99,7 +99,7 @@ void UKFSingleTrack()
    double sigma_theta = 1 * M_PI / 180;    // Angular uncertainty of 1 degree
    double sigma_phi = 1 * M_PI / 180;      // Angular uncertainty of 1 degree
    ukf.fEnableEnStraggling = true;         // Enable energy straggling
-   ukf.setParameters(1e-1, 2, 0);          // alpha, beta, kappa
+   ukf.setParameters(1e-2, 2, 0);          // alpha, beta, kappa
 
    TMatrixD cov(6, 6);
    cov.Zero();
@@ -141,6 +141,19 @@ void UKFSingleTrack()
       ukf.predictUKF(point);
       auto augState = ukf.GetAugStateVector();
       auto augCov = ukf.GetAugStateCovariance();
+      auto covP = ukf.matP();
+
+      if (i == 1) {
+         LOG(info) << "P-: " << std::endl << covP;
+         Eigen::SelfAdjointEigenSolver<decltype(covP)> es(covP); // float version
+         float λmin = es.eigenvalues()(0);
+         auto vmin = es.eigenvectors().col(0); // length-6
+
+         std::printf("λmin = %.3e  eigvec = [", λmin);
+         for (int i = 0; i < 6; ++i)
+            std::printf(" %.2e", vmin(i));
+         std::printf(" ]\n");
+      }
       ukf.correctUKF(point);
 
       auto state = ukf.GetStateVector();
@@ -170,6 +183,8 @@ void UKFSingleTrack()
       sigmalambda2.push_back(std::sqrt(augCov(6, 6))); // Propagate energy straggling uncertainty
       residual.push_back(residualValue);               // Store the residual for this hit
    }
+
+   LOG(info) << "After forward pass " << ukf.nTouch << " touches.";
 
    // At this point we have the full trajectory of the particle
    ukf.smoothUKF(); // Perform smoothing

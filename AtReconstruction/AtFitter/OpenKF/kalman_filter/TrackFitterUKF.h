@@ -49,6 +49,7 @@ public:
    static constexpr int32_t SIGMA_DIM_A{2 * DIM_A + 1}; ///< @brief Sigma points dimension for augmented state
    Matrix<DIM_A, SIGMA_DIM_A> m_matSigmaXa{Matrix<DIM_A, SIGMA_DIM_A>::Zero()}; ///< @brief Sigma points matrix
 
+   int nTouch = 0; // Variable to track the number of times a matrix has a floor added.
 protected:
    Vector<DIM_X> m_vecX{Vector<DIM_X>::Zero()};               /// @brief estimated state vector
    Matrix<DIM_X, DIM_X> m_matP{Matrix<DIM_X, DIM_X>::Zero()}; /// @brief state covariance matrix
@@ -163,7 +164,12 @@ public:
 
       // Calculate the weighted mean and covariance of the sigma points for the state vector.
       // This will be the new state vector and covariance matrix.
-      calculateWeightedMeanAndCovariance<DIM_X>(sigmaXx, m_vecX, m_matP);
+      calculateWeightedMeanAndCovariance<DIM_X>(sigmaXx, m_vecX, m_matP, "P-");
+      m_matP(0, 0) += 1e-4;
+      m_matP(1, 1) += 1e-4;
+      m_matP(2, 2) += 1e-4;
+      ensurePD(m_matP); // Ensure the covariance matrix is positive definite
+      logEigen("P-Post", m_matP, 0);
    }
 
    /**
@@ -197,10 +203,11 @@ public:
       // from the sigma points.
       Vector<DIM_Z> vecZhat;       // Predicted measurement vector
       Matrix<DIM_Z, DIM_Z> matPzz; // Measurement covariance matrix
-      calculateWeightedMeanAndCovariance<DIM_Z>(sigmaZ, vecZhat, matPzz);
+      calculateWeightedMeanAndCovariance<DIM_Z>(sigmaZ, vecZhat, matPzz, "SnoR");
 
       // Add in the measurement noise covariance matrix to the measurement covariance matrix.
       matPzz += m_matR; // Add measurement noise covariance so we gen the innovation covariance matrix.
+      logEigen("S", matPzz, 0);
       ensurePD(matPzz); // Ensure the covariance matrix is positive definite
 
       const Matrix<DIM_X, DIM_Z> matPxz{calculateCrossCorrelation(sigmaXx, m_vecX, sigmaZ, vecZhat)};
@@ -215,6 +222,18 @@ public:
       m_matP -= matK * matPzz * matK.transpose();
       // m_matP -= matPxz * matK.transpose();
       ensurePD(m_matP); // Ensure the covariance matrix is positive definite
+   }
+
+   template <typename T>
+   void logEigen(std::string tag, const T &P, int k)
+   {
+      Eigen::SelfAdjointEigenSolver<T> es(P);
+      double lmin = es.eigenvalues().minCoeff();
+      double lmax = es.eigenvalues().maxCoeff();
+      double cond = lmax / lmin;
+
+      LOG(info) << "k: " << k << " " << tag << " Eval: min = " << lmin << ", max = " << lmax
+                << ", condition number = " << cond;
    }
 
 protected:
@@ -295,6 +314,7 @@ protected:
             matP += Matrix<STATE_DIM, STATE_DIM>::Identity() * std::pow(10, -6 + i); // Regularization value
             lltOfP.compute(matP);
             i = i + 1;
+            nTouch++;
             // Check if the regularized matrix is now positive definite
          }
          if (lltOfP.info() != Eigen::Success) {
@@ -367,7 +387,7 @@ protected:
     */
    template <int32_t STATE_DIM, int32_t SIGMA_DIM>
    void calculateWeightedMeanAndCovariance(const Matrix<STATE_DIM, SIGMA_DIM> &sigmaX, Vector<STATE_DIM> &vecX,
-                                           Matrix<STATE_DIM, STATE_DIM> &matPxx)
+                                           Matrix<STATE_DIM, STATE_DIM> &matPxx, std::string tag = "")
    {
       // 1. calculate mean of the sigma points
       vecX = m_weightM0 * util::getColumnAt<STATE_DIM, SIGMA_DIM>(0, sigmaX);
@@ -390,7 +410,8 @@ protected:
 
          matPxx += Pi; // y += W[0, i] (Y[:, i] - \bar{y}) (Y[:, i] - \bar{y})^T
       }
-      ensurePD(matPxx); // Ensure the covariance matrix is positive definite
+      logEigen(tag, matPxx, 0); // Log the eigenvalues of the covariance matrix
+      // ensurePD(matPxx);         // Ensure the covariance matrix is positive definite
    }
 
    /**
