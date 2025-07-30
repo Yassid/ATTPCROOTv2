@@ -12,7 +12,7 @@ const double charge_p = 1.602176634e-19; // Charge of proton
 
 // Simulated (measurement) hits
 std::vector<double> x, y, z, Eloss;
-int pointsToCluster = 5;
+int pointsToCluster = 20;
 void LoadHits()
 {
    std::ifstream infile("hits.txt");
@@ -99,7 +99,7 @@ void UKFSingleTrack()
    double sigma_theta = 1 * M_PI / 180;    // Angular uncertainty of 1 degree
    double sigma_phi = 1 * M_PI / 180;      // Angular uncertainty of 1 degree
    ukf.fEnableEnStraggling = true;         // Enable energy straggling
-   ukf.setParameters(1e-1, 2, 0);          // Set kappa to match the original implementation
+   ukf.setParameters(1e-1, 2, 0);          // alpha, beta, kappa
 
    TMatrixD cov(6, 6);
    cov.Zero();
@@ -141,9 +141,7 @@ void UKFSingleTrack()
       ukf.predictUKF(point);
       auto augState = ukf.GetAugStateVector();
       auto augCov = ukf.GetAugStateCovariance();
-      std::cout << std::endl << "Prediction step complete." << std::endl;
       ukf.correctUKF(point);
-      std::cout << std::endl << "Correction step complete." << std::endl;
 
       auto state = ukf.GetStateVector();
       auto cov = ukf.GetStateCovariance();
@@ -154,7 +152,6 @@ void UKFSingleTrack()
 
       std::cout << "Predicted position: " << pos << std::endl;
       std::cout << "Predicted momentum: " << mom << std::endl;
-
       std::cout << "Measurement point: " << point << std::endl;
 
       auto KE_in = Kinematics::KE(lastMom, mass_p);
@@ -183,8 +180,6 @@ void UKFSingleTrack()
    for (int i = 0; i < smoothedStates.size(); ++i) {
       auto &state = smoothedStates[i];
       auto &filteredState = filteredStates[i];
-      std::cout << "Smoothed state " << i << ": " << state.transpose() << std::endl;
-      std::cout << "Filtered state " << i << ": " << filteredState.transpose() << std::endl;
       xSmooth.push_back(state[0]);
       ySmooth.push_back(state[1]);
       zSmooth.push_back(state[2]);
