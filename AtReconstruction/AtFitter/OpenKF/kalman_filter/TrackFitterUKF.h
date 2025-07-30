@@ -49,7 +49,10 @@ public:
    static constexpr int32_t SIGMA_DIM_A{2 * DIM_A + 1}; ///< @brief Sigma points dimension for augmented state
    Matrix<DIM_A, SIGMA_DIM_A> m_matSigmaXa{Matrix<DIM_A, SIGMA_DIM_A>::Zero()}; ///< @brief Sigma points matrix
 
-   int nTouch = 0; // Variable to track the number of times a matrix has a floor added.
+   // Controls and variables for running numerical diagnostics.
+   int nTouch{0}; // Variable to track the number of times a matrix has a floor added.
+   bool kLogEigen{false};
+
 protected:
    Vector<DIM_X> m_vecX{Vector<DIM_X>::Zero()};               /// @brief estimated state vector
    Matrix<DIM_X, DIM_X> m_matP{Matrix<DIM_X, DIM_X>::Zero()}; /// @brief state covariance matrix
@@ -227,6 +230,9 @@ public:
    template <typename T>
    void logEigen(std::string tag, const T &P, int k)
    {
+      if (!kLogEigen) {
+         return; // If logging is disabled, do not log the eigenvalues.
+      }
       Eigen::SelfAdjointEigenSolver<T> es(P);
       double lmin = es.eigenvalues().minCoeff();
       double lmax = es.eigenvalues().maxCoeff();
