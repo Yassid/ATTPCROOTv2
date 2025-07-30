@@ -279,9 +279,9 @@ public:
 
       // kalman gain
       auto llt = calculateCholesky(matPzz);
-      // const Matrix<DIM_X, DIM_Z> matK = llt.solve(matPxz.transpose()).transpose();
-      Matrix<DIM_X, DIM_Z> matK = {matPxz * llt.solve(Matrix<DIM_Z, DIM_Z>::Identity())};
-      // Matrix<DIM_X, DIM_Z> matK = matPxz * matPzz.inverse(); By far the worst method for filter stability
+      const Matrix<DIM_X, DIM_Z> matK = llt.solve(matPxz.transpose()).transpose();
+      // Matrix<DIM_X, DIM_Z> matK = {matPxz * llt.solve(Matrix<DIM_Z, DIM_Z>::Identity())};
+      //  Matrix<DIM_X, DIM_Z> matK = matPxz * matPzz.inverse(); By far the worst method for filter stability
 
       m_vecX += matK * (vecZ - vecZhat);
       m_matP -= matK * matPzz * matK.transpose();
@@ -530,7 +530,6 @@ protected:
    static constexpr int32_t TF_DIM_Z = 3;
    static constexpr int32_t TF_DIM_V = 1;
    static constexpr int32_t TF_DIM_N = 3;
-   // using DIM_X = TrackFitterUKFBase::DIM_X;
 
    AtTools::AtPropagator fPropagator; ///< @brief Propagator for the track fitter
    std::unique_ptr<AtTools::AtStepper> fStepper{nullptr};
