@@ -15,7 +15,7 @@ void TrackFitterUKF::Reset()
    m_matP.setZero();
    m_vecXa.setZero();
    m_matPa.setZero();
-   m_matQ.setZero();
+   m_matQaug.setZero();
    m_matR.setZero();
    m_matSigmaXa.setZero();
    m_matSigmaXPred.setZero();

@@ -32,6 +32,11 @@ namespace kf {
  * the machinery that underlies the UKF formalism. It is a modified version of the UKF provided
  * by OpenKF, that has been expanded to allow for more hooks into the method.
  *
+ * Introduces two different types of process noise. We have augmented process noise and
+ * model process noise. Augmented process noise acts during the propagator, model process
+ * noise can be used to describe noise in the propagation itself and allows for accounting
+ * for uncertainty that may arise from unmodeled dynamics.
+ *
  * Templated because I believe Eigen can do quite a bit of operation for small matrices like we have here if
  * the size is known at compile time. Worth checking that though.
  *
@@ -63,8 +68,11 @@ protected:
    Matrix<DIM_A, DIM_A> m_matPa{Matrix<DIM_A, DIM_A>::Zero()};
 
    // Process and measurement noise covariance matrices
-   /// Process noise covariance matrix (Q)
-   Matrix<DIM_V, DIM_V> m_matQ{Matrix<DIM_V, DIM_V>::Zero()};
+   /// Process noise covariance matrix incorporated in propagator (Q_aug)
+   Matrix<DIM_V, DIM_V> m_matQaug{Matrix<DIM_V, DIM_V>::Zero()};
+   /// Process noise covariance matrix for model noise (Q_mod)
+   Matrix<DIM_X, DIM_X> m_matQmod{Matrix<DIM_X, DIM_X>::Zero()};
+
    /// Measurement noise covariance matrix (R)
    Matrix<DIM_N, DIM_N> m_matR{Matrix<DIM_N, DIM_N>::Zero()};
 
@@ -102,11 +110,16 @@ public:
    /**
     * @brief Set process noise covariance Q to be used in the prediction step.
     */
-   void setCovarianceQ(const Matrix<DIM_V, DIM_V> &matQ) { m_matQ = matQ; }
+   void setAugmentNoise(const Matrix<DIM_V, DIM_V> &matQ) { m_matQaug = matQ; }
+   /**
+    * @brief Set the process noise covariance Q_mod to be used in the prediction step.
+    */
+   void setModelNoise(const Matrix<DIM_X, DIM_X> &matQmod) { m_matQmod = matQmod; }
+
    /**
     * @brief Set the measurement noise covariance R to be used in the update step.
     */
-   void setCovarianceR(const Matrix<DIM_N, DIM_N> &matR) { m_matR = matR; }
+   void SetMeasurementNoise(const Matrix<DIM_N, DIM_N> &matR) { m_matR = matR; }
    virtual Vector<DIM_X> &vecX() { return m_vecX; }
    virtual const Vector<DIM_X> &vecX() const { return m_vecX; }
 
@@ -263,12 +276,12 @@ protected:
 
    virtual std::array<float32_t, DIM_V> calculateProcessNoiseMean() { return std::array<float32_t, DIM_V>{0}; }
 
-   virtual Matrix<DIM_V, DIM_V> calculateProcessNoiseCovariance() { return m_matQ; }
+   virtual Matrix<DIM_V, DIM_V> calculateProcessNoiseCovariance() { return m_matQaug; }
 
    void updateAugWithProcessNoise()
    {
       auto processNoiseMean = calculateProcessNoiseMean();
-      m_matQ = calculateProcessNoiseCovariance();
+      m_matQaug = calculateProcessNoiseCovariance();
 
       // Add the mean process noise to the augmented state vector
       for (int32_t i{0}; i < DIM_V; ++i) {
@@ -281,7 +294,7 @@ protected:
 
       for (int32_t i{S_IDX}; i < L_IDX; ++i) {
          for (int32_t j{S_IDX}; j < L_IDX; ++j) {
-            m_matPa(i, j) = m_matQ(i - S_IDX, j - S_IDX);
+            m_matPa(i, j) = m_matQaug(i - S_IDX, j - S_IDX);
          }
       }
    }

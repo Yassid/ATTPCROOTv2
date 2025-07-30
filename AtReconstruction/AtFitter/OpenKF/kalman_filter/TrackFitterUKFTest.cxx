@@ -75,8 +75,8 @@ TEST_F(TrackFitterUKFExampleTest, Prediction)
    m_ukf.vecX() = x;
    m_ukf.matP() = P;
 
-   m_ukf.setCovarianceQ(Q);
-   m_ukf.setCovarianceR(R);
+   m_ukf.setAugmentNoise(Q);
+   m_ukf.SetMeasurementNoise(R);
    m_ukf.setParameters(1, 0, 3 - m_ukf.DIM_A); // Set kappa to match the original implementation
 
    m_ukf.predictUKF(funcF, z);
@@ -137,8 +137,8 @@ TEST_F(TrackFitterUKFExampleTest, PredictionAndCorrection)
    m_ukf.vecX() = x;
    m_ukf.matP() = P;
 
-   m_ukf.setCovarianceQ(Q);
-   m_ukf.setCovarianceR(R);
+   m_ukf.setAugmentNoise(Q);
+   m_ukf.SetMeasurementNoise(R);
    m_ukf.setParameters(1, 0, 3 - m_ukf.DIM_A); // Set kappa to match the original implementation
 
    m_ukf.predictUKF(funcF, z);
