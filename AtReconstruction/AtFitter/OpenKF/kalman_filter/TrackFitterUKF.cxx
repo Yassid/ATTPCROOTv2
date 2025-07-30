@@ -18,6 +18,7 @@ void TrackFitterUKF::Reset()
    m_matQ.setZero();
    m_matR.setZero();
    m_matSigmaXa.setZero();
+   m_matSigmaXPred.setZero();
 
    // Clear the history vectors
    m_vecXPredHist.clear();
@@ -25,6 +26,8 @@ void TrackFitterUKF::Reset()
    m_matCPredHist.clear();
    m_vecXHist.clear();
    m_matPHist.clear();
+   m_vecXSmooth.clear();
+   m_matPSmooth.clear();
    fMeanStep = AtTools::AtPropagator::StepState(); // Reset the step state
 }
 
@@ -136,10 +139,10 @@ Matrix<TrackFitterUKF::TF_DIM_V, TrackFitterUKF::TF_DIM_V> TrackFitterUKF::calcu
          factor = fMaxStragglingFactor;
       }
       matQ(0, 0) = factor * factor; // Variance for the dedx straggling.
-      LOG(info) << "Calculating process noise for straggling between " << eIn << " MeV and " << eOut << " MeV over "
-                << elossModel->GetRange(eIn, eOut) << " mm.";
-      LOG(info) << "Process noise covariance for energy straggling: " << matQ(0, 0) << " (factor: " << factor
-                << ", dedx_straggle: " << dedx_straggle << ", dEdx: " << elossModel->GetdEdx(eIn) << ")";
+      LOG(debug) << "Calculating process noise for straggling between " << eIn << " MeV and " << eOut << " MeV over "
+                 << elossModel->GetRange(eIn, eOut) << " mm.";
+      LOG(debug) << "Process noise covariance for energy straggling: " << matQ(0, 0) << " (factor: " << factor
+                 << ", dedx_straggle: " << dedx_straggle << ", dEdx: " << elossModel->GetdEdx(eIn) << ")";
 
    } else {
       throw std::runtime_error("Cannot calculate process noise covariance without an energy loss model");
@@ -198,8 +201,8 @@ void TrackFitterUKF::predictUKF(const ROOT::Math::XYZPoint &z)
    XYZPoint startingPosition{m_vecX[0], m_vecX[1], m_vecX[2]};      // Get the starting position from the state vector
    Polar3DVector startingMomentum{m_vecX[3], m_vecX[4], m_vecX[5]}; // Get the starting momentum from the state vector
 
-   LOG(info) << "Propagating reference state from position: " << startingPosition
-             << " with momentum: " << XYZVector(startingMomentum);
+   LOG(debug) << "Propagating reference state from position: " << startingPosition
+              << " with momentum: " << XYZVector(startingMomentum);
 
    fPropagator.SetState(startingPosition, XYZVector(startingMomentum));
    fPropagator.PropagateToMeasurementSurface(AtTools::AtMeasurementPoint(z), *fStepper);
@@ -207,7 +210,7 @@ void TrackFitterUKF::predictUKF(const ROOT::Math::XYZPoint &z)
    fMeanStep.fLastPos = startingPosition; // Store the last position
    fMeanStep.fLastMom = startingMomentum; // Store the last momentum
 
-   LOG(info) << "Propagated to position: " << fMeanStep.fPos << " with momentum: " << fMeanStep.fMom;
+   LOG(debug) << "Propagated to position: " << fMeanStep.fPos << " with momentum: " << fMeanStep.fMom;
 
    // Now we can construct the reference plane.
    fMeasurementPlane = Plane3D(fMeanStep.fMom.Unit(),
@@ -268,7 +271,7 @@ void TrackFitterUKF::smoothUKF()
    m_vecXSmooth.back() = m_vecXHist.back(); // The last smoothed state is the last corrected state
    m_matPSmooth.back() = m_matPHist.back(); // The last smoothed covariance is the last corrected covariance
    for (size_t i = m_vecXPredHist.size() - 1; i > 0; --i) {
-      LOG(info) << "Smoothing step " << i << " of " << m_vecXPredHist.size() - 1;
+      LOG(debug) << "Smoothing step " << i << " of " << m_vecXPredHist.size() - 1;
 
       // Get the predicted state and covariance at step i
       const auto &xPred = m_vecXPredHist[i]; // m_{k+1}^-
