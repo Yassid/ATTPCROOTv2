@@ -15,6 +15,7 @@ const double charge_p = 1.602176634e-19; // Charge of proton
 // Vectors to store the simulated points to compare to
 std::vector<double> x_sim, y_sim, z_sim, Eloss_sim;
 TH1F *hMom = nullptr;
+TH1F *hMomSampled = nullptr;
 TH1F *hMomError = nullptr;
 TCanvas *c1 = new TCanvas();
 TCanvas *c2 = new TCanvas();
@@ -22,7 +23,8 @@ TCanvas *c2 = new TCanvas();
 // Parameters for model
 const int pointsToCluster = 5;
 const double sigma_pos = 1;                // Position uncertainty of 10 mm
-const double sigma_mom = 0.01;             // Momentum uncertainty in percentage
+const double sigma_mom = 0.1;              // Momentum uncertainty in percentage
+const double sigma_mom_sample = 0.05;      // Sampled momentum uncertainty in percentage
 const double sigma_theta = 1 * M_PI / 180; // Angular uncertainty of 1 degree
 const double sigma_phi = 1 * M_PI / 180;   // Angular uncertainty of 1 degree
 const double gasDensity = 3.553e-5;        // g/cm^3
@@ -55,10 +57,12 @@ void TestManyTracks(int n, double bias = 0)
    XYZPoint fTruePos(-3.40046e-04, -1.49863e-04, 1.0018);
    XYZVector fTrueMom(0.00935463, -0.0454279, 0.00826042);
    fTrueMom *= 1e3;
-   double fSigmaMom = fTrueMom.R() * sigma_mom;
+   double fSigmaMom = fTrueMom.R() * sigma_mom_sample;
 
    hMom = new TH1F("hMom", "Reconstructed Momentum (MeV/c)", 100, fTrueMom.R() - 4 * fSigmaMom,
                    fTrueMom.R() + 4 * fSigmaMom);
+   hMomSampled = new TH1F("hMom", "Reconstructed Momentum (MeV/c)", 100, fTrueMom.R() - 4 * fSigmaMom,
+                          fTrueMom.R() + 4 * fSigmaMom);
    hMomError =
       new TH1F("hMomError", "Error (%)", 100, -4 * fSigmaMom / fTrueMom.R() * 100, 4 * fSigmaMom / fTrueMom.R() * 100);
 
@@ -67,18 +71,14 @@ void TestManyTracks(int n, double bias = 0)
       if (i % 100 == 0)
          std::cout << "On iteration " << i << std::endl;
 
-      double pSampled = gRandom->Gaus(fTrueMom.R(), sigma_mom * fTrueMom.R());
+      double pSampled = gRandom->Gaus(fTrueMom.R(), sigma_mom_sample * fTrueMom.R());
       pSampled += bias;
+      hMomSampled->Fill(pSampled);
 
       // pSampled = fTrueMom.R();
 
       ROOT::Math::Polar3DVector sampledMom(pSampled, fTrueMom.Theta(), fTrueMom.Phi());
-      // try {
       SingleUKF(fTruePos, XYZVector(sampledMom), CalculateInitialCov(pSampled));
-      //} catch (...) {
-      // std::cerr << "Failed to propagate iteration " << i << " with seed momentum " << pSampled << std::endl;
-      // continue;
-      //}
 
       auto filtState = ukf->GetFilteredStates()[0];
       auto smoothState = ukf->GetSmoothedStates()[0];
@@ -98,6 +98,13 @@ void TestManyTracks(int n, double bias = 0)
    // Draw results
    c1->cd();
    hMom->Draw("hist");
+   hMomSampled->SetLineColor(kRed);
+   hMomSampled->Draw("same hist");
+
+   auto legend = new TLegend(0.65, 0.75, 0.88, 0.88);
+   legend->AddEntry(hMom, "Reconstructed", "l");
+   legend->AddEntry(hMomSampled, "Sampled", "l");
+   legend->Draw();
    c2->cd();
    hMomError->Draw("hist");
 }
