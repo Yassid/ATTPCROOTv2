@@ -222,13 +222,8 @@ public:
       // This will be the new state vector and covariance matrix.
       calculateWeightedMeanAndCovariance<DIM_X>(sigmaXx, m_vecX, m_matP);
       logEigen("P-", m_matP, 0); // Log the eigenvalues of the covariance matrix
-
-      // Here we add process noise
-      m_matP(0, 0) += 1e-4;
-      m_matP(1, 1) += 1e-4;
-      m_matP(2, 2) += 1e-4;
-
-      ensurePD(m_matP); // Ensure the covariance matrix is positive definite
+      m_matP += m_matQmod;       // Add the model process noise covariance to the state covariance matrix.
+      ensurePD(m_matP);          // Ensure the covariance matrix is positive definite
 
       // Now we need to store the predicted state and covariance for smoothing later.
       m_vecXPredHist.push_back(m_vecX); // Store the predicted state vector
@@ -546,6 +541,13 @@ protected:
 public:
    bool fEnableEnStraggling{true};       ///< @brief Flag to enable/disable energy straggling
    double fMaxStragglingFactor{1. / 3.}; ///< @brief Maximum straggling factor for energy loss
+                                         /**
+                                          * Uncertainty in the position of the propagated track. Used to set a floor
+                                          * in the model error covariance. Physically this represents the unmodeled
+                                          * properties (error in RK4, etc.) Numerically is breaks the strong correlation that
+                                          * exists between x/y/z in the propagator when the track is basically straight.
+                                          */
+   double fPosModelNoise{1e-4};
 
    /**
     * @brief Constructor for the TrackFitterUKF class.

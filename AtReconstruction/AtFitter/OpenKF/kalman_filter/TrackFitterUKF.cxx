@@ -39,6 +39,10 @@ void TrackFitterUKF::SetInitialState(const ROOT::Math::XYZPoint &initialPosition
       }
    }
 
+   for (int i = 0; i < m_matQmod.rows(); ++i) {
+      m_matQmod(i, i) = fPosModelNoise; // Initialize model noise covariance to zero
+   }
+
    // Save the initial state in our history vectors
    m_vecXFiltHist.push_back(m_vecX);
    m_matPFiltHist.push_back(m_matP);
