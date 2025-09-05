@@ -210,3 +210,8 @@ std::vector<Double_t> AtPatternLine::lineIntersecR(Double_t rMax, Double_t tMin,
    }
    return result;
 }
+
+Double_t AtPatternLine::DistanceAlongPattern(XYZPoint point1, XYZPoint point2) const
+{
+   return DefaultDistanceAlongPattern(point1, point2);
+}

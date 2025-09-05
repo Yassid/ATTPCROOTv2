@@ -150,12 +150,25 @@ public:
    void SetPatternPar(std::vector<double> par) { fPatternPar = std::move(par); }
    void SetChi2(double chi2) { fChi2 = chi2; }
 
+   /**
+    * Calculate the distance in mm along the line from the closest point on pattern from point1 to
+    * the closest point on pattern from point2. This definition may not be correct for all AtPatterns!
+    * This function may need to be overriden for any specific AtPattern subclass in order to be useful.
+    */
+   virtual Double_t DistanceAlongPattern(XYZPoint point1, XYZPoint point2) const;
+
 protected:
    /**
     * Called by other versions of FitPattern. If pointCharge is not empty does charge weighted fit.
     * Sets fPatternPar, fChi2, and fNFree
     */
    virtual void FitPattern(const std::vector<XYZPoint> &pointsToFit, const std::vector<double> &pointCharge) = 0;
+
+   /**
+    * Default function that computes the distance along the pattern assuming that the pattern is
+    * straight.
+    */
+   Double_t DefaultDistanceAlongPattern(XYZPoint point1, XYZPoint point2) const;
 
    ClassDef(AtPattern, 1)
 };
