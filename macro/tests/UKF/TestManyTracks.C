@@ -69,8 +69,7 @@ void TestManyTracks(int n, double bias = 0)
                    fTrueMom.R() + 4 * fSigmaMom);
    hMomSampled = new TH1F("hMom", "Reconstructed Momentum (MeV/c)", 100, fTrueMom.R() - 4 * fSigmaMom,
                           fTrueMom.R() + 4 * fSigmaMom);
-   hMomError =
-      new TH1F("hMomError", "Error (%)", 100, -4 * fSigmaMom / fTrueMom.R() * 100, 4 * fSigmaMom / fTrueMom.R() * 100);
+   hMomError = new TH1F("hMomError", "Error (%)", 100, -2, 2);
    hMomError2 =
       new TH1F("hMomError2", "Error (%)", 100, -4 * fSigmaMom / fTrueMom.R() * 100, 4 * fSigmaMom / fTrueMom.R() * 100);
 
@@ -90,8 +89,9 @@ void TestManyTracks(int n, double bias = 0)
 
       auto filtState = ukf->GetFilteredStates()[0];
       auto smoothState = ukf->GetSmoothedStates()[0];
+      auto smoothStatePrev = ukf->GetSmoothedStates()[1];
 
-      double pReco = smoothState[3];
+      double pReco = (smoothState[3] + smoothStatePrev[3]) / 2; // Average of current and previous state
       hMom->Fill(pReco);
       double error = (pReco - fTrueMom.R()) / fTrueMom.R() * 100;
       hMomError->Fill(error);
@@ -107,19 +107,22 @@ void TestManyTracks(int n, double bias = 0)
 
    // Draw results
    c1->cd();
+   hMomSampled->Scale(10);
+   hMomSampled->SetStats(0);
+   hMom->SetStats(0);
    hMom->Draw("hist");
    hMomSampled->SetLineColor(kRed);
    hMomSampled->Draw("same hist");
 
    auto legend = new TLegend(0.65, 0.75, 0.88, 0.88);
    legend->AddEntry(hMom, "Reconstructed", "l");
-   legend->AddEntry(hMomSampled, "Sampled", "l");
+   legend->AddEntry(hMomSampled, "Sampled (scale x10)", "l");
    legend->Draw();
 
    c2->cd();
    hMomError->Draw("hist");
-   hMomError2->SetLineColor(kRed);
-   hMomError2->Draw("same hist");
+   // hMomError2->SetLineColor(kRed);
+   // hMomError2->Draw("same hist");
 }
 
 /*********** Function implementations **************/

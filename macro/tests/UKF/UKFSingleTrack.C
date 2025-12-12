@@ -89,17 +89,18 @@ void UKFSingleTrack()
    XYZVector startMom(0.00935463, -0.0454279, 0.00826042); // Start momentum in GeV/c
    startMom *= 1e3;
    double beginMom = startMom.R(); // Initial momentum in MeV/c
+   std::cout << " Initial momentum: " << beginMom << " MeV/c" << std::endl;
 
    XYZPoint nextPos(x[1], y[1], z[1]);
    startMom = startMom.R() * (nextPos - startPos).Unit(); // Set momentum direction towards the first hit
 
    // Initial uncertainties
-   double sigma_pos = 1;                   // Position uncertainty of 10 mm
-   double sigma_mom = 0.01 * startMom.R(); // Momentum uncertainty of 10% MeV/c
-   double sigma_theta = 1 * M_PI / 180;    // Angular uncertainty of 1 degree
-   double sigma_phi = 1 * M_PI / 180;      // Angular uncertainty of 1 degree
-   ukf.fEnableEnStraggling = true;         // Enable energy straggling
-   ukf.setParameters(1e-3, 2, 0);          // alpha, beta, kappa
+   double sigma_pos = 1;                  // Position uncertainty of 10 mm
+   double sigma_mom = 0.1 * startMom.R(); // Momentum uncertainty of 10% MeV/c
+   double sigma_theta = 1 * M_PI / 180;   // Angular uncertainty of 1 degree
+   double sigma_phi = 1 * M_PI / 180;     // Angular uncertainty of 1 degree
+   ukf.fEnableEnStraggling = true;        // Enable energy straggling
+   ukf.setParameters(1e-3, 2, 0);         // alpha, beta, kappa
 
    TMatrixD cov(6, 6);
    cov.Zero();
@@ -207,7 +208,8 @@ void UKFSingleTrack()
          auto mom = smoothedStates[i][3];
          auto KE_in = Kinematics::KE(lastMom, mass_p);
          auto KE_out = Kinematics::KE(mom, mass_p);
-         eLossSmooth.push_back(KE_in - KE_out); // Energy loss between smoothed states
+         if (i > 1)
+            eLossSmooth.push_back(KE_in - KE_out); // Energy loss between smoothed states
       } else {
          eLossSmooth.push_back(0); // First point has no previous state to compare
       }
@@ -248,7 +250,7 @@ void UKFSingleTrack()
    track->GetZaxis()->SetLimits(zmin, zmax);
 
    track->Draw("P");
-   track2->Draw("PSAME");
+   // track2->Draw("PSAME");
    smoothedTrack->Draw("PSAME");
 
    TGraph *elossGraph = new TGraph(Eloss.size());
@@ -277,11 +279,11 @@ void UKFSingleTrack()
    for (size_t i = 0; i < p2.size(); ++i) {
       pGraph->SetPoint(i, i, p2[i]);
       pGraph->SetPointError(i, 0,
-                            sigmap2[i] * 5); // Error bars from sigmap2, converted to GeV/c
+                            sigmap2[i] * 1); // Error bars from sigmap2, converted to GeV/c
    }
    pGraph->SetTitle("Momentum per Hit;Hit Number;Momentum [MeV/c]");
    pGraph->SetMarkerStyle(20);
-   pGraph->SetMarkerColor(kBlue);
+   pGraph->SetMarkerColor(kRed);
 
    TGraphErrors *lambdaGraph = new TGraphErrors(lambda2.size());
    for (size_t i = 0; i < lambda2.size(); ++i) {
@@ -305,7 +307,7 @@ void UKFSingleTrack()
    for (size_t i = 0; i < pSmooth.size(); ++i) {
       pSmoothGraph->SetPoint(i, i, pSmooth[i]);
       pSmoothGraph->SetPointError(i, 0,
-                                  sigmapSmooth[i] * 5); // Error bars from sigmapSmooth, converted to GeV/c
+                                  sigmapSmooth[i] * 1); // Error bars from sigmapSmooth, converted to GeV/c
    }
    pSmoothGraph->SetTitle("Smoothed Momentum per Hit;Hit Number;Momentum [MeV/c]");
    pSmoothGraph->SetMarkerStyle(22);

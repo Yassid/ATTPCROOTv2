@@ -19,6 +19,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse
 
+# Increase font sizes for better readability
+plt.rcParams['font.size'] = 18
+plt.rcParams['axes.labelsize'] = 18
+plt.rcParams['axes.titlesize'] = 18
+plt.rcParams['xtick.labelsize'] = 14
+plt.rcParams['ytick.labelsize'] = 14
+plt.rcParams['legend.fontsize'] = 14
+
 
 # ---------------------------------------------------------------------------
 # Problem setup: range–bearing measurement of a target at (0, 1)
@@ -157,53 +165,97 @@ mu_ut, P_ut, sigma_pts, sigma_cart = unscented_transform(mu_polar, P_polar,
 print("Finished computations")
 
 # ---------------------------------------------------------------------------
-# Make the figure
+# Make the figures
 # ---------------------------------------------------------------------------
 
-fig, ax = plt.subplots(figsize=(6, 6))
+# ---------------------------------------------------------------------------
+# Figure 1: Sigma points pre-transform (polar space)
+# ---------------------------------------------------------------------------
+fig1, ax_pre = plt.subplots(figsize=(6, 6))
+
+ax_pre.scatter(mu_polar[0], mu_polar[1], color="black", marker="x", s=100,
+               label="Mean (polar)", zorder=5)
+ax_pre.scatter(sigma_pts[:, 0], sigma_pts[:, 1], color="C2", marker="o", s=50,
+               alpha=0.7, label="Sigma points", zorder=4)
+
+# Covariance ellipse in polar space
+plot_cov_ellipse(mu_polar, P_polar, ax_pre,
+                 edgecolor="C2", facecolor="C2", alpha=0.2, linewidth=2)
+
+ax_pre.set_xlabel("r (m)")
+ax_pre.set_ylabel(r"$\theta$ (rad)")
+ax_pre.set_title("Sigma Points Pre-Transform (Polar)")
+ax_pre.legend(loc="best")
+ax_pre.grid(True, alpha=0.3)
+ax_pre.set_aspect("auto")
+
+plt.tight_layout()
+fig1.savefig("sigma_points_pre_transform.png", dpi=300)
+
+# ---------------------------------------------------------------------------
+# Figure 2: Sigma points post-transform (Cartesian space)
+# ---------------------------------------------------------------------------
+fig2, ax_post = plt.subplots(figsize=(6, 6))
+
+ax_post.scatter(mu_ut[0], mu_ut[1], color="black", marker="x", s=100,
+                label="UT mean", zorder=5)
+ax_post.scatter(sigma_cart[:, 0], sigma_cart[:, 1], color="C2", marker="o", s=50,
+                alpha=0.7, label="Transformed sigma points", zorder=4)
+
+# Covariance ellipse from UT
+plot_cov_ellipse(mu_ut, P_ut, ax_post,
+                 edgecolor="C2", facecolor="C2", alpha=0.2, linewidth=2)
+
+ax_post.set_xlabel("x (m)")
+ax_post.set_ylabel("y (m)")
+ax_post.set_title("Sigma Points Post-Transform (Cartesian)")
+ax_post.legend(loc="lower center")
+ax_post.grid(True, alpha=0.3)
+#ax_post.set_aspect("equal")
+
+plt.tight_layout()
+fig2.savefig("sigma_points_post_transform.png", dpi=300)
+
+# ---------------------------------------------------------------------------
+# Figure 3: Comparison of methods (original plot)
+# ---------------------------------------------------------------------------
+fig3, ax_compare = plt.subplots(figsize=(6, 6))
 
 # Means
-ax.scatter(mu_true[0], mu_true[1], color="C0", marker="x", s=80,
-           label="True mean (Monte Carlo)")
-ax.scatter(mu_ekf[0], mu_ekf[1], color="C1", marker="o", s=60,
-           label="Linearisation / EKF mean")
-ax.scatter(mu_ut[0], mu_ut[1], color="C2", marker="^", s=70,
-           label="Unscented transform mean")
+ax_compare.scatter(mu_true[0], mu_true[1], color="C0", marker="x", s=80,
+                   label="True mean (Monte Carlo)")
+ax_compare.scatter(mu_ekf[0], mu_ekf[1], color="C1", marker="o", s=60,
+                   label="Linearisation / EKF mean")
+ax_compare.scatter(mu_ut[0], mu_ut[1], color="C2", marker="^", s=70,
+                   label="Unscented transform mean")
 
 # 1σ covariance ellipses
-plot_cov_ellipse(mu_true, P_true, ax,
+plot_cov_ellipse(mu_true, P_true, ax_compare,
                  edgecolor="C0", facecolor="none", linewidth=2)
-plot_cov_ellipse(mu_ekf, P_ekf, ax,
+plot_cov_ellipse(mu_ekf, P_ekf, ax_compare,
                  edgecolor="C1", linestyle="--", facecolor="none", linewidth=2)
-plot_cov_ellipse(mu_ut, P_ut, ax,
+plot_cov_ellipse(mu_ut, P_ut, ax_compare,
                  edgecolor="C2", linestyle="-.", facecolor="none", linewidth=2)
 
 # Optionally: show UT sigma points in Cartesian space
 print(sigma_cart.shape, "sigma points in Cartesian")
 i = 2
-#ax.scatter(sigma_cart[:, 0], sigma_cart[:, 1],
-#           color="b", alpha=1, s=20, label="Sigma points")
 print("Sigma point", i, "in polar:", sigma_pts[i])
 print("Sigma point", i, "in Cartesian:", sigma_cart[i])
 
-
 # Formatting
-ax.set_xlabel("x (m)")
-ax.set_ylabel("y (m)")
+ax_compare.set_xlabel("x (m)")
+ax_compare.set_ylabel("y (m)")
+ax_compare.set_title("Method Comparison")
+ax_compare.set_aspect("auto", adjustable="box")
+ax_compare.grid(True, alpha=0.3)
 
-ax.set_aspect("auto", adjustable="box")
-
-# Match the visual window of the original figures
-#ax.set_xlim(-0.4, 0.4)
-#x.set_ylim(0.9, 1.04)
-
-# De-duplicate legend entries (sigma points share label color)
-handles, labels = ax.get_legend_handles_labels()
+# De-duplicate legend entries
+handles, labels = ax_compare.get_legend_handles_labels()
 by_label = dict(zip(labels, handles))
-ax.legend(by_label.values(), by_label.keys(), loc="lower center")
+ax_compare.legend(by_label.values(), by_label.keys(), loc="lower center")
 
 plt.tight_layout()
-plt.show()
+fig3.savefig("julier97_fig3_color.png", dpi=300)
 
-# Optionally save straight to file:
-fig.savefig("julier97_fig3_color.png", dpi=300)
+plt.show()
