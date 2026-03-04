@@ -18,6 +18,8 @@ ${CMAKE_SOURCE_DIR}/AtReconstruction/AtFilter
 ${CMAKE_SOURCE_DIR}/AtReconstruction/AtPatternRecognition/triplclust/src
 ${CMAKE_SOURCE_DIR}/AtReconstruction/AtPatternRecognition/triplclust/src/hclust
 ${CMAKE_SOURCE_DIR}/AtReconstruction/AtPatternRecognition/triplclust/src/kdtree
+
+${CMAKE_SOURCE_DIR}/AtReconstruction/AtPatternModification
 )
 
 Set(DEPENDENCIES
@@ -101,14 +103,24 @@ set(SRCS
   AtPatternRecognition/triplclust/src/postprocess.cxx
   AtPatternRecognition/AtTrackFinderTC.cxx
 
+  AtPatternModificationTask.cxx
+  AtPatternModification/AtPatternModification.cxx
+  AtPatternModification/AtBraggCurveFinder.cxx
 
   AtFitter/ParameterDistributions/AtParameterDistribution.cxx
   AtFitter/ParameterDistributions/AtUniformDistribution.cxx
   AtFitter/ParameterDistributions/AtStudentDistribution.cxx
 
+  AtFitter/AtFitter.cxx
   AtFitter/AtMCFitter.cxx
   AtFitter/AtMCFitterTask.cxx
   AtFitter/AtMCFission.cxx
+  AtFitterTask.cxx
+
+  # Deprecated...
+  AtFitter/AtMCFitterOld.cxx
+  AtFitter/AtMCFitterTaskOld.cxx
+
   )
 
 
@@ -151,10 +163,12 @@ endif()
 
 if(GENFIT2_FOUND)
   set(SRCS ${SRCS}
-    AtFitter/AtFitter.cxx
     AtFitter/AtGenfit.cxx
     AtFitter/AtSpacePointMeasurement.cxx
-    AtFitterTask.cxx
+
+    # Deprecated, to be removed:
+    AtFitter/AtFitterOld.cxx
+    AtFitter/AtFitterTaskOld.cxx
     )
   set(DEPENDENCIES ${DEPENDENCIES}
     GENFIT2::genfit2

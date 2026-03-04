@@ -37,6 +37,10 @@
 #pragma link C++ class SampleConsensus::AtEstimator - !;
 #pragma link C++ enum SampleConsensus::Estimators;
 
+#pragma link C++ class AtPatternModification - !;
+#pragma link C++ class AtBraggCurveFinder - !;
+#pragma link C++ class AtPatternModificationTask + ;
+
 #pragma link C++ class AtMacroTask + ;
 
 #pragma link C++ namespace kf;
@@ -44,20 +48,26 @@
 #pragma link C++ class kf::TrackFitterUKFBase - !;
 #pragma link C++ class kf::TrackFitterUKF - !;
 
-/* Classes that depend on Genfit2 */
-#pragma link C++ class genfit::AtSpacepointMeasurement + ;
-#pragma link C++ class AtFITTER::AtFitter + ;
-#pragma link C++ class AtFITTER::AtGenfit + ;
-#pragma link C++ namespace AtFITTER;
+#pragma link C++ namespace EventFit;
 #pragma link C++ class AtFitterTask + ;
+#pragma link C++ class EventFit::AtFitter - !;
+
+/* Classes that depend on Genfit2 */
+#pragma link C++ namespace AtFITTER;
+#pragma link C++ class genfit::AtSpacepointMeasurement + ;
+#pragma link C++ class AtFITTER::AtFitterOld + ;
+#pragma link C++ class AtFitterTaskOld + ;
+#pragma link C++ class AtFITTER::AtGenfit + ;
 
 #pragma link C++ namespace MCFitter;
 #pragma link C++ class MCFitter::AtParameterDistribution - !;
 #pragma link C++ class MCFitter::AtUniformDistribution - !;
 #pragma link C++ class MCFitter::AtStudentDistribution - !;
 #pragma link C++ class MCFitter::AtMCFitter - !;
+#pragma link C++ class MCFitter::AtMCFitterOld - !;
 #pragma link C++ class MCFitter::AtMCFission - !;
 #pragma link C++ class AtMCFitterTask + ;
+#pragma link C++ class AtMCFitterTaskOld + ;
 
 /* Tasks in AtReconstruction */
 #pragma link C++ class AtPSAtask + ;

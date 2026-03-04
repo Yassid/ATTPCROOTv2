@@ -96,6 +96,7 @@ double GetRelMomFromKE(double KE, double mass);
  * @returns Velocity vector in m/s
  */
 ROOT::Math::XYZVector GetVel(ROOT::Math::XYZVector mom, double mass);
+std::tuple<double, double> GetMomFromBrho(double mass, int Z, double brho);
 
 template <class Vector>
 ROOT::Math::PxPyPzEVector Get4Vector(Vector mom, double m)

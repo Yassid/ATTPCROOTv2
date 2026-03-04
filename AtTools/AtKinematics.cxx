@@ -326,4 +326,13 @@ double KE(double mom, double mass)
 {
    return std::sqrt(mom * mom + mass * mass) - mass;
 }
+
+std::tuple<double, double> GetMomFromBrho(double mass, int Z, double brho)
+{
+   const Double_t M_Ener = mass * 931.49401;                                        // In MeV
+   Double_t p = brho * Z * (2.99792458 / 10.0) * 1000.0;                            // In MeV
+   Double_t E = TMath::Sqrt(TMath::Power(p, 2) + TMath::Power(M_Ener, 2)) - M_Ener; // In MeV
+
+   return std::make_tuple(p, E);
+}
 } // namespace AtTools::Kinematics
