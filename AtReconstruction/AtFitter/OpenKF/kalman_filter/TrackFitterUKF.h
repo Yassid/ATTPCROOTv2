@@ -578,6 +578,9 @@ public:
 
    void SetMeasCov(const TMatrixD &measCov);
 
+   void SetBField(const ROOT::Math::XYZVector &bField) { fPropagator.SetBField(bField); }
+   void SetEField(const ROOT::Math::XYZVector &eField) { fPropagator.SetEField(eField); }
+
    TMatrixD GetStateCovariance() const;
    TMatrixD GetAugStateCovariance() const;
    std::array<double, DIM_A> GetAugStateVector() const;

@@ -34,11 +34,27 @@ namespace {
 constexpr double kElectronCharge = 1.602176634e-19;
 // Proton mass in amu equivalent — used for mass unit conversion.
 constexpr double kAMU_MeV = 931.494;
+// Initial angular uncertainty in the state covariance (degrees, converted to radians when squared).
+constexpr double kInitAngSigma_deg = 1.0;
 } // namespace
 
 AtFitterUKF::AtFitterUKF(double charge, double mass_MeV, std::unique_ptr<AtTools::AtELossModel> elossModel)
    : fCharge(charge), fMass_MeV(mass_MeV), fELossModel(std::move(elossModel))
 {
+}
+
+void AtFitterUKF::SetBField(ROOT::Math::XYZVector bField)
+{
+   fBField = bField;
+   if (fUKF)
+      fUKF->SetBField(bField);
+}
+
+void AtFitterUKF::SetEField(ROOT::Math::XYZVector eField)
+{
+   fEField = eField;
+   if (fUKF)
+      fUKF->SetEField(eField);
 }
 
 void AtFitterUKF::SetUKFParameters(double alpha, double beta, double kappa)
@@ -97,7 +113,7 @@ TMatrixD AtFitterUKF::GetInitialCovariance(double p_mag_MeV) const
    cov.Zero();
    double sigma_pos2 = fMeasSigma_mm * fMeasSigma_mm;
    double sigma_mom2 = (fMomSigmaFrac * p_mag_MeV) * (fMomSigmaFrac * p_mag_MeV);
-   double sigma_ang2 = (1.0 * TMath::Pi() / 180.0) * (1.0 * TMath::Pi() / 180.0); // 1 degree
+   double sigma_ang2 = (kInitAngSigma_deg * TMath::Pi() / 180.0) * (kInitAngSigma_deg * TMath::Pi() / 180.0);
    cov(0, 0) = sigma_pos2;
    cov(1, 1) = sigma_pos2;
    cov(2, 2) = sigma_pos2;
@@ -170,6 +186,8 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
    const auto &smoothedStates = fUKF->GetSmoothedStates();
 
    // Build vertex kinematics from the first smoothed state.
+   // smoothedStates[0] is the vertex: SetInitialState seeds index 0, and the RTS smoother
+   // back-propagates all the way to index 0, so this is the best-estimate vertex state.
    double vx = 0, vy = 0, vz = 0, p_s = p_MeV, theta_s = 0, phi_s = 0;
    if (fitConverged && !smoothedStates.empty()) {
       const auto &s0 = smoothedStates[0];
@@ -184,7 +202,9 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
    double KE = std::sqrt(p_s * p_s + fMass_MeV * fMass_MeV) - fMass_MeV;
 
    // --- 7. Build AtFittedTrack ---
-   auto *fittedTrack = new AtFittedTrack();
+   // Use a unique_ptr internally so that any exception thrown by the setters below does not leak.
+   auto fittedTrackOwner = std::make_unique<AtFittedTrack>();
+   auto *fittedTrack = fittedTrackOwner.get();
    fittedTrack->SetTrackID(track->GetTrackID());
    fittedTrack->SetKinematics(KE, theta_s, phi_s);
    fittedTrack->SetVertex(ROOT::Math::XYZVector(vx, vy, vz));
@@ -255,7 +275,7 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
       fitMetadata->SetTrackMetadatasVector(track->GetTrackID(), std::move(metaVec));
    }
 
-   return fittedTrack;
+   return fittedTrackOwner.release();
 }
 
 } // namespace EventFit

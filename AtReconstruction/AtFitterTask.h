@@ -72,7 +72,7 @@ private:
 
    std::unique_ptr<EventFit::AtFitter> fFitter;
    AtDigiPar *fPar{nullptr};
-   TClonesArray *fPatternEventArray;
+   TClonesArray *fPatternEventArray{nullptr};
    TClonesArray fTrackingEventArray;
 
    std::size_t fEventCnt{0};
@@ -80,8 +80,8 @@ private:
    // Include the option to input AtRawEvent and AtEvent in case some specific AtFitter needs it.
    TString fRawEventBranchName;
    TString fEventBranchName;
-   TClonesArray *fRawEventArray;
-   TClonesArray *fEventArray;
+   TClonesArray *fRawEventArray{nullptr};
+   TClonesArray *fEventArray{nullptr};
 
    // Include the option to store all the fit metadata in a AtFitResult branch.
    TString fFitMetadataBranchName;

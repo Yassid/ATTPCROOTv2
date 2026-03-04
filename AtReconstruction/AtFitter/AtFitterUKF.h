@@ -45,10 +45,10 @@ public:
    AtFitterUKF(double charge, double mass_MeV, std::unique_ptr<AtTools::AtELossModel> elossModel);
    ~AtFitterUKF(); // defined in .cxx so kf::TrackFitterUKF is complete there
 
-   /// Set the magnetic field (Tesla).  Must be called before the first GetFittedTrack().
-   void SetBField(ROOT::Math::XYZVector bField) { fBField = bField; }
-   /// Set the electric field (V/m, default {0,0,0}).
-   void SetEField(ROOT::Math::XYZVector eField) { fEField = eField; }
+   /// Set the magnetic field (Tesla).  May be called at any time; if the UKF is already initialized the update is propagated immediately.
+   void SetBField(ROOT::Math::XYZVector bField);
+   /// Set the electric field (V/m, default {0,0,0}).  May be called at any time; if the UKF is already initialized the update is propagated immediately.
+   void SetEField(ROOT::Math::XYZVector eField);
    /// Set UKF sigma-point scaling parameters (alpha, beta, kappa).
    void SetUKFParameters(double alpha, double beta, double kappa);
    /// Set position measurement sigma (mm, default 1.0).

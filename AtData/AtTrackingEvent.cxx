@@ -30,10 +30,10 @@ void AtTrackingEvent::SetVertexEnergy(Double_t vertexEner)
    fVertexEnergy = vertexEner;
 }
 
-/*std::vector<AtTrack> AtTrackingEvent::GetTrackArray()
+std::vector<AtTrack> AtTrackingEvent::GetTrackArray()
 {
    return fTrackArray;
-}*/
+}
 Double_t AtTrackingEvent::GetVertex()
 {
    return fVertex;

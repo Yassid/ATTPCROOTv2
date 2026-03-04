@@ -127,14 +127,14 @@ public:
    void SetSmoothedPositions(std::vector<XYZPoint> pos) { fTrackProperties.fSmoothedPositions = std::move(pos); }
    const std::vector<XYZPoint> &GetSmoothedPositions() const { return fTrackProperties.fSmoothedPositions; }
 
-   const Int_t GetTrackID() { return fTrackID; }
+   Int_t GetTrackID() const { return fTrackID; }
 
-   const Kinematics GetKinematics(int particleIdx = 0) { return fKinematics[particleIdx]; }
-   const Kinematics GetKinematicsXtr(int particleIdx = 0) { return fKinematicsXtr[particleIdx]; }
-   const ParticleInfo GetParticleInfo(int particleIdx = 0) { return fParticleInfo[particleIdx]; }
-   const XYZVector GetVertex(int particleIdx = 0) { return fVertex[particleIdx]; }
+   const Kinematics &GetKinematics(int particleIdx = 0) const { return fKinematics.at(particleIdx); }
+   const Kinematics &GetKinematicsXtr(int particleIdx = 0) const { return fKinematicsXtr.at(particleIdx); }
+   const ParticleInfo &GetParticleInfo(int particleIdx = 0) const { return fParticleInfo.at(particleIdx); }
+   const XYZVector &GetVertex(int particleIdx = 0) const { return fVertex.at(particleIdx); }
 
-   const TrackProperties GetTrackPropertiesStruct() { return fTrackProperties; }
+   const TrackProperties &GetTrackPropertiesStruct() const { return fTrackProperties; }
 
    TrackMetadataPtr &GetTrackMetadata() { return fTrackMetadata; }
 
@@ -143,9 +143,9 @@ public:
    SetEnergyAngles(Float_t energy, Float_t energyxtr, Float_t theta, Float_t phi, Float_t energypra, Float_t thetapra,
                    Float_t phipra)
    {
-      fKinematics[0].kineticEnergy = energy;
-      fKinematics[0].theta = theta;
-      fKinematics[0].phi = phi;
+      SetKinematics(0, energy, theta, phi); // ensures fKinematics[0] exists
+      if (fKinematicsXtr.empty())
+         fKinematicsXtr.emplace_back();
       fKinematicsXtr[0].kineticEnergy = energyxtr;
       fEnergyPRA = energypra;
       fThetaPRA = thetapra;
@@ -156,7 +156,7 @@ public:
    {
       fTrackProperties.initialPosition = inipos;
       fInitialPosPRA = iniposPRA;
-      fVertex[0] = iniposxtr;
+      SetVertex(0, iniposxtr); // ensures fVertex[0] exists
    }
    [[deprecated("Statistics now live inside the AtFitTrackMetadata. Check SetTrackMetadata().")]] void
    SetStats(Float_t pvalue, Float_t chi2, Float_t bchi2, Float_t ndf, Float_t bndf, Bool_t conv)
@@ -175,11 +175,13 @@ public:
    [[deprecated("The TrackProperties have changed. Please check the new SetTrackProperties() method.")]] void
    SetTrackProperties(Int_t charge, Float_t brho, Float_t eloss, Float_t dedx, std::string pdg, Int_t points)
    {
+      if (fParticleInfo.empty())
+         fParticleInfo.emplace_back();
       fParticleInfo[0].charge = charge;
+      fParticleInfo[0].idPDG = pdg;
       fBrho = brho;
       fTrackProperties.estimateTotalCharge = eloss;
       fTrackProperties.estimateDeDx = dedx;
-      fParticleInfo[0].idPDG = pdg;
       fTrackProperties.trackPoints = points;
    }
    [[deprecated("Ion chamber information is no longer saved in the AtFittedTrack. This has been saved here still, but "
@@ -208,12 +210,12 @@ public:
       Float_t, Float_t, Float_t, Float_t, Float_t, Float_t, Float_t>
    GetEnergyAngles()
    {
-      return std::forward_as_tuple(fKinematics[0].kineticEnergy, fKinematicsXtr[0].kineticEnergy, fKinematics[0].theta,
-                                   fKinematics[0].phi, fEnergyPRA, fThetaPRA, fPhiPRA);
+      return std::forward_as_tuple(fKinematics.at(0).kineticEnergy, fKinematicsXtr.at(0).kineticEnergy,
+                                   fKinematics.at(0).theta, fKinematics.at(0).phi, fEnergyPRA, fThetaPRA, fPhiPRA);
    }
    [[deprecated("Please check GetVertex().")]] const std::tuple<XYZVector, XYZVector, XYZVector> GetVertices()
    {
-      return std::forward_as_tuple(fTrackProperties.initialPosition, fInitialPosPRA, fVertex[0]);
+      return std::forward_as_tuple(fTrackProperties.initialPosition, fInitialPosPRA, fVertex.at(0));
    }
    [[deprecated("Statistics now live inside the AtFitTrackMetadata. Check GetTrackMetadata().")]] const std::tuple<
       Float_t, Float_t, Float_t, Float_t, Float_t, Bool_t>
@@ -228,8 +230,8 @@ public:
       tuple<Int_t, Float_t, Float_t, Float_t, std::string, Int_t>
       GetTrackProperties()
    {
-      return std::forward_as_tuple(fParticleInfo[0].charge, fBrho, fTrackProperties.estimateTotalCharge,
-                                   fTrackProperties.estimateDeDx, fParticleInfo[0].idPDG.Data(),
+      return std::forward_as_tuple(fParticleInfo.at(0).charge, fBrho, fTrackProperties.estimateTotalCharge,
+                                   fTrackProperties.estimateDeDx, fParticleInfo.at(0).idPDG.Data(),
                                    fTrackProperties.trackPoints);
    }
    [[deprecated("Ion chamber information is no longer saved in the AtFittedTrack. This has been saved here still, but "
