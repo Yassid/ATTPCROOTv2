@@ -29,6 +29,8 @@
 #pragma link C++ class AtProtoQuadrant + ;
 #pragma link C++ class AtTrack + ;
 #pragma link C++ class AtFittedTrack + ;
+#pragma link C++ struct AtFittedTrack::TrackProperties + ;
+#pragma link C++ class std::vector < ROOT::Math::XYZPoint> + ;
 #pragma link C++ class AtFissionEvent + ;
 #pragma link C++ class AtGenericTrace + ;
 

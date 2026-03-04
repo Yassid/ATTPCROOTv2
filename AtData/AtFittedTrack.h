@@ -25,6 +25,7 @@ class TMemberInspector;
 class AtFittedTrack : public TObject {
 public:
    using XYZVector = ROOT::Math::XYZVector;
+   using XYZPoint = ROOT::Math::XYZPoint;
    using TrackMetadataPtr = std::unique_ptr<AtFitTrackMetadata>;
 
    struct Kinematics {
@@ -49,6 +50,7 @@ public:
       Double_t estimateTotalCharge{-1};  // Sum of the charge of all hits
       Double_t estimateDeDx{-1};         // Sum of the charge of all hits divided by range
       Int_t trackPoints{-1};             // Number of hits in the track
+      std::vector<ROOT::Math::XYZPoint> fSmoothedPositions; // UKF-fitted positions at each cluster
    };
 
 private:
@@ -122,6 +124,8 @@ public:
    }
 
    void SetTrackMetadata(TrackMetadataPtr trackMetadata) { fTrackMetadata = std::move(trackMetadata); }
+   void SetSmoothedPositions(std::vector<XYZPoint> pos) { fTrackProperties.fSmoothedPositions = std::move(pos); }
+   const std::vector<XYZPoint> &GetSmoothedPositions() const { return fTrackProperties.fSmoothedPositions; }
 
    const Int_t GetTrackID() { return fTrackID; }
 
@@ -249,7 +253,7 @@ public:
                                    fTrackProperties.distancePOCA);
    }
 
-   ClassDef(AtFittedTrack, 2);
+   ClassDef(AtFittedTrack, 3);
 };
 
 #endif
