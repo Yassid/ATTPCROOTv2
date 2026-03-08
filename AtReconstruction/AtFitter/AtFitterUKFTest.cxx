@@ -148,7 +148,7 @@ TEST_F(AtFitterUKFFixture, FittedTrackKinematicsWithinTolerance)
 
    auto kin = result->GetKinematics();
    double relErr = std::abs(kin.kineticEnergy - kTrueKE_MeV) / kTrueKE_MeV;
-   EXPECT_LT(relErr, 0.20) << "Fitted KE = " << kin.kineticEnergy << " MeV, expected ~" << kTrueKE_MeV << " MeV";
+   EXPECT_LT(relErr, 0.1) << "Fitted KE = " << kin.kineticEnergy << " MeV, expected ~" << kTrueKE_MeV << " MeV";
 
    delete result;
 }
