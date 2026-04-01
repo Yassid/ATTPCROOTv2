@@ -125,8 +125,10 @@ Matrix<TrackFitterUKF::TF_DIM_V, TrackFitterUKF::TF_DIM_V> TrackFitterUKF::calcu
    double eOut = AtTools::Kinematics::KE(fMeanStep.fMom, fMeanStep.fMass);
 
    if (!fEnableEnStraggling) {
-      // If energy straggling is disabled, we set the process noise to zero.
-      matQ(0, 0) = 0.0;
+      // Set a small floor rather than exactly zero. A zero variance makes the
+      // augmented covariance matrix singular, which causes the Cholesky
+      // decomposition in calculateSigmaPoints() to fail.
+      matQ(0, 0) = 1e-12;
       return matQ;
    }
 
