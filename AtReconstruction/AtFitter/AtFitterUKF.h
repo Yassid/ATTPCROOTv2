@@ -90,7 +90,7 @@ private:
    std::unique_ptr<AtTools::AtELossModel> fELossModel; // Moved to propagator on first use
 
    // UKF tuning parameters
-   double fAlpha{0.5};
+   double fAlpha{1e-3};
    double fBeta{2.0};
    double fKappa{0.0};
    double fMeasSigma_mm{1.0};

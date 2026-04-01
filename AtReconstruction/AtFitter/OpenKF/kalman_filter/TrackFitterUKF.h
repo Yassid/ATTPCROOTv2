@@ -557,8 +557,8 @@ public:
                                           * exists between x/y/z in the propagator when the track is basically straight.
                                           */
    double fPosModelNoise{1e-4};
-   double fMomModelNoise{1e-2};
-   double fAngModelNoise{1e-4};
+   double fMomModelNoise{1e-4};
+   double fAngModelNoise{1e-6};
 
    /**
     * @brief Constructor for the TrackFitterUKF class.

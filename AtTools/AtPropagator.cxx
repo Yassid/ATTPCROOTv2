@@ -85,7 +85,13 @@ void AtPropagator::PropagateToMeasurementSurface(const AtMeasurementSurface &sur
    }
    stepper.fDeriv = [this](const XYZPoint &pos, const XYZVector &mom) { return this->Derivatives(pos, mom); };
 
+   int nIter = 0;
    while (true) {
+      if (++nIter > fMaxPropIter) {
+         LOG(error) << "Propagation did not converge after " << fMaxPropIter << " iterations, aborting.";
+         fState.status = StepStateStatus::kStopped;
+         return;
+      }
       LOG(debug) << "Position: " << GetPosition().X() / 10 << ", " << GetPosition().Y() / 10 << ", "
                  << GetPosition().Z() / 10;
       LOG(debug) << "Momentum: " << GetMomentum().X() << ", " << GetMomentum().Y() << ", " << GetMomentum().Z();

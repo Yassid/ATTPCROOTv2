@@ -101,9 +101,14 @@ Integration/demo macros in `macro/tests/UKF/`:
   `fMomModelNoise` (momentum), and `fAngModelNoise` (angles).
 - Defaults: `fPosModelNoise=1e-4`, `fMomModelNoise=1e-2`, `fAngModelNoise=1e-4`.
 
-**Bug 2: Sigma-point weight explosion with alpha=1e-3** — FIXED
-- Default `fAlpha` in `AtFitterUKF` changed from `1e-3` to `0.5`.
-- Users can still override via `SetUKFParameters()`.
+**Bug 2: Sigma-point weight explosion with alpha=1e-3** — INVESTIGATED
+- Default `fAlpha=1e-3` is KEPT. Testing showed that larger alpha values (>=0.1)
+  cause sigma points to miss measurement planes in the highly nonlinear magnetic
+  field propagation, leading to Cholesky failures.
+- The weight explosion with small alpha is a theoretical concern but does not cause
+  practical issues because sigma points stay close to the mean and the propagation
+  model is well-behaved locally.
+- For numerically safer alternative, use the square-root UKF variant.
 
 **Bug 3: kReplaceFirstCov breaks RTS smoother consistency** — FIXED
 - Default changed from `true` to `false`. Can still be toggled: `ukf.kReplaceFirstCov = true`.
