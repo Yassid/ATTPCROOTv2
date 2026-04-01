@@ -39,9 +39,13 @@ void TrackFitterUKF::SetInitialState(const ROOT::Math::XYZPoint &initialPosition
       }
    }
 
-   for (int i = 0; i < m_matQmod.rows(); ++i) {
-      m_matQmod(i, i) = fPosModelNoise; // Initialize model noise covariance to zero
-   }
+   // Set model noise per-dimension: position (mm^2), momentum (MeV/c)^2, angles (rad^2)
+   m_matQmod(0, 0) = fPosModelNoise; // X position
+   m_matQmod(1, 1) = fPosModelNoise; // Y position
+   m_matQmod(2, 2) = fPosModelNoise; // Z position
+   m_matQmod(3, 3) = fMomModelNoise; // Momentum magnitude
+   m_matQmod(4, 4) = fAngModelNoise; // Theta
+   m_matQmod(5, 5) = fAngModelNoise; // Phi
 
    // Save the initial state in our history vectors
    m_vecXFiltHist.push_back(m_vecX);
@@ -73,8 +77,11 @@ TMatrixD TrackFitterUKF::GetStateCovariance() const
 
 std::array<double, TrackFitterUKF::DIM_A> TrackFitterUKF::GetAugStateVector() const
 {
-   return {m_vecXa[0], m_vecXa[1], m_vecXa[2], m_vecXa[3],
-           m_vecXa[4], m_vecXa[5], m_vecXa[6]}; // Return the augmented state vector as an array
+   std::array<double, DIM_A> result;
+   for (int i = 0; i < DIM_A; ++i) {
+      result[i] = m_vecXa[i];
+   }
+   return result;
 }
 TMatrixD TrackFitterUKF::GetAugStateCovariance() const
 {

@@ -57,7 +57,7 @@ public:
    // Controls and variables for running numerical diagnostics.
    int nTouch{0}; // Variable to track the number of times a matrix has a floor added.
    bool kLogEigen{false};
-   bool kReplaceFirstCov{true}; /// If true, replace the seed COV with the predicted cov of the second point
+   bool kReplaceFirstCov{false}; /// If true, replace the seed COV with the predicted cov of the second point
 
 protected:
    using VectorEigenVecDimX = std::vector<Vector<DIM_X>, Eigen::aligned_allocator<Vector<DIM_X>>>;
@@ -557,6 +557,8 @@ public:
                                           * exists between x/y/z in the propagator when the track is basically straight.
                                           */
    double fPosModelNoise{1e-4};
+   double fMomModelNoise{1e-2};
+   double fAngModelNoise{1e-4};
 
    /**
     * @brief Constructor for the TrackFitterUKF class.

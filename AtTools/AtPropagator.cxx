@@ -181,7 +181,29 @@ void AtPropagator::PropagateToMeasurementSurface(const AtMeasurementSurface &sur
                        << ", " << fState.fPos.Z();
          }
          fState.fLastMom = fState.fMom;
-         fState.fMom = XYZVector(0, 0, 0); // Set momentum to zero since we stopped
+
+         // Preserve the momentum *direction* from the last valid step, but set the
+         // magnitude to a small value (fStopTol ≈ kinetic-energy tolerance in MeV,
+         // reused here as a momentum floor in MeV/c).
+         //
+         // Why not set momentum to zero?
+         //   The UKF propagates sigma points through this function.  When a sigma
+         //   point's particle stops, returning p = (0,0,0) creates a catastrophic
+         //   outlier: the other sigma points carry p ~ 300 MeV/c with well-defined
+         //   theta/phi, while this one has p = 0 and undefined angles.  That single
+         //   outlier corrupts the predicted mean, inflates the covariance, and — most
+         //   critically — poisons the cross-covariance C_{k,k+1} used by the RTS
+         //   smoother, degrading or crashing the backward pass.
+         //
+         // By keeping a tiny momentum with the correct direction we ensure the sigma
+         // point remains close to its neighbours in state space, preserving the
+         // Gaussian approximation the UKF relies on.
+         if (fState.fMom.R() > 0) {
+            fState.fMom = fState.fMom.Unit() * fStopTol;
+         } else {
+            // fMom is already zero (e.g. step failed); fall back to last valid direction
+            fState.fMom = fState.fLastMom.R() > 0 ? fState.fLastMom.Unit() * fStopTol : XYZVector(0, 0, 0);
+         }
       }
 
       if (reachedMeasurementPoint || particleStopped || momentumReversed) {

@@ -247,7 +247,11 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
          chi2 += dist * dist / (fMeasSigma_mm * fMeasSigma_mm);
       }
    }
-   int ndf = std::max(1, nClusters - 1);
+   // Subtract the number of fitted parameters (6: x,y,z,p,theta,phi) from the
+   // degrees of freedom.  Each cluster contributes 3 measurements (x,y,z), so
+   // the total number of measurements is 3*(nClusters-1) (we skip the seed point).
+   // ndf = nMeasurements - nParams = 3*(nClusters-1) - 6.
+   int ndf = std::max(1, 3 * (nClusters - 1) - 6);
 
    // Per-track metadata.
    auto trackMeta = std::make_unique<AtFitTrackMetadata>();

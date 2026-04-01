@@ -4,6 +4,7 @@
 #include "AtELossModel.h"
 
 #include <functional>
+#include <memory>
 
 #include "Math/Plane3D.h"
 #include "Math/Point3D.h"
