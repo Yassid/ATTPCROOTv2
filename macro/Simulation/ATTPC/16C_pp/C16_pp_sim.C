@@ -1,4 +1,4 @@
-void C16_pp_sim(Int_t nEvents = 10000, TString mcEngine = "TGeant4")
+void C16_pp_sim(Int_t nEvents = 100, TString mcEngine = "TGeant4")
 {
 
    TString dir = getenv("VMCWORKDIR");
@@ -69,7 +69,7 @@ void C16_pp_sim(Int_t nEvents = 10000, TString mcEngine = "TGeant4")
    Double_t pz = 2.297 / a; // Z-Momentum / per nucleon!!!!!!
    Double_t BExcEner = 0.0;
    Double_t Bmass = 16.014701;
-   Double_t NomEnergy = 0;
+   Double_t NomEnergy = 8;
 
    AtTPCIonGenerator *ionGen = new AtTPCIonGenerator("Ion", z, a, q, m, px, py, pz, BExcEner, Bmass, NomEnergy);
    ionGen->SetSpotRadius(0, -100, 0);
