@@ -64,6 +64,11 @@ public:
    void SetPrunning() { kSetPrunning = kTRUE; }
    void SetClusterRadius(Double_t clusterRadius) { fClusterRadius = clusterRadius; }
    void SetClusterDistance(Double_t clusterDistance) { fClusterDistance = clusterDistance; }
+   /// Set diffusion parameters for cluster covariance calculation.
+   void SetDiffusionParams(double coefT, double coefL, double driftVel, double tbTime, double padResXY = -1)
+   {
+      fTrackTransformer->SetDiffusionParams(coefT, coefL, driftVel, tbTime, padResXY);
+   }
 
    virtual std::unique_ptr<AtPatternEvent> FindTracks(AtEvent &event) = 0;
 

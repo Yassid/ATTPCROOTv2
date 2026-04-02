@@ -20,6 +20,17 @@
 
 AtTools::AtTrackTransformer::AtTrackTransformer() = default;
 AtTools::AtTrackTransformer::~AtTrackTransformer() = default;
+
+void AtTools::AtTrackTransformer::SetDiffusionParams(double coefT, double coefL, double driftVel, double tbTime,
+                                                     double padResXY)
+{
+   fCoefT = coefT;
+   fCoefL = coefL;
+   fDriftVel = driftVel;
+   fTBTime = tbTime;
+   if (padResXY > 0)
+      fPadResXY = padResXY;
+}
 using XYZPoint = ROOT::Math::XYZPoint;
 
 void AtTools::AtTrackTransformer::ClusterizeSmooth3D(AtTrack &track, Float_t radius, Float_t distance)
@@ -39,13 +50,12 @@ void AtTools::AtTrackTransformer::ClusterizeSmooth3D(AtTrack &track, Float_t rad
        //std::cout<<" Pos : "<<pos.X()<<" - "<<pos.Y()<<" - "<<pos.Z()<<" - TB : "<<TB<<" - Charge : "<<Q<<"\n";
        }*/
 
-   // Diffusion coefficients (TODO: Get them from the parameter file)
-   Double_t driftVel = 1.0;       // cm/us
-   Double_t samplingRate = 0.320; // us
-   Double_t d_t = 0.0009;         // cm^2/us
-   Double_t d_l = 0.0009;         // cm^2/us
-   Double_t D_T = TMath::Sqrt((2.0 * d_t) / driftVel);
-   Double_t D_L = TMath::Sqrt((2.0 * d_l) / driftVel);
+   // Diffusion coefficients from member variables (set via SetDiffusionParams or defaults)
+   Double_t driftVel = fDriftVel;
+   Double_t samplingRate = fTBTime;
+   Double_t D_T = TMath::Sqrt((2.0 * fCoefT) / driftVel);
+   Double_t D_L = TMath::Sqrt((2.0 * fCoefL) / driftVel);
+   Double_t padRes = fPadResXY; // pad position resolution in mm
 
    if (hitArray.size() > 0) {
 
@@ -88,7 +98,7 @@ void AtTools::AtTrackTransformer::ClusterizeSmooth3D(AtTrack &track, Float_t rad
                Double_t hitQ = 0.0;
                std::for_each(hitTBArray.begin(), hitTBArray.end(),
                              [&x, &y, &z, &hitQ, &timeStamp, &sigma_x, &sigma_y, &sigma_z, &D_T, &D_L, &driftVel,
-                              &samplingRate](AtHit &hitInQ) {
+                              &samplingRate, &padRes](AtHit &hitInQ) {
                                 XYZPoint pos = hitInQ.GetPosition();
                                 x += pos.X() * hitInQ.GetCharge();
                                 y += pos.Y() * hitInQ.GetCharge();
@@ -99,8 +109,8 @@ void AtTools::AtTrackTransformer::ClusterizeSmooth3D(AtTrack &track, Float_t rad
                                 // Calculation of variance (DOI: 10.1051/,00010 (2017)715001EPJ Web of
                                 // Conferences50epjconf/2010010)
                                 sigma_x += hitInQ.GetCharge() *
-                                           TMath::Sqrt(TMath::Power(0.2, 2) +
-                                                       pos.Z() * TMath::Power(D_T, 2)); // 0.2 mm of position resolution
+                                           TMath::Sqrt(TMath::Power(padRes, 2) +
+                                                       pos.Z() * TMath::Power(D_T, 2));
                                 sigma_y += sigma_x;
                                 sigma_z += TMath::Sqrt((1.0 / 6.0) * TMath::Power(driftVel * samplingRate, 2) +
                                                        pos.Z() * TMath::Power(D_L, 2));
@@ -203,7 +213,7 @@ void AtTools::AtTrackTransformer::ClusterizeSmooth3D(AtTrack &track, Float_t rad
                   Double_t hitQ = 0.0;
                   std::for_each(hitTBArray.begin(), hitTBArray.end(),
                                 [&x, &y, &z, &hitQ, &timeStamp, &sigma_x, &sigma_y, &sigma_z, &D_T, &D_L, &driftVel,
-                                 &samplingRate](AtHit &hitInQ) {
+                                 &samplingRate, &padRes](AtHit &hitInQ) {
                                    auto pos = hitInQ.GetPosition();
                                    x += pos.X() * hitInQ.GetCharge();
                                    y += pos.Y() * hitInQ.GetCharge();
@@ -215,8 +225,8 @@ void AtTools::AtTrackTransformer::ClusterizeSmooth3D(AtTrack &track, Float_t rad
                                    // Conferences50epjconf/2010010)
                                    sigma_x +=
                                       hitInQ.GetCharge() *
-                                      TMath::Sqrt(TMath::Power(0.2, 2) +
-                                                  pos.Z() * TMath::Power(D_T, 2)); // 0.2 mm of position resolution
+                                      TMath::Sqrt(TMath::Power(padRes, 2) +
+                                                  pos.Z() * TMath::Power(D_T, 2));
                                    sigma_y += sigma_x;
                                    sigma_z += TMath::Sqrt((1.0 / 6.0) * TMath::Power(driftVel * samplingRate, 2) +
                                                           pos.Z() * TMath::Power(D_L, 2));

@@ -13,6 +13,15 @@ public:
    AtTrackTransformer();
    ~AtTrackTransformer();
 
+   /// Set diffusion and drift parameters for cluster covariance calculation.
+   /// If not called, defaults are used (which may not match the detector).
+   /// @param coefT Transverse diffusion coefficient [cm^2/us]
+   /// @param coefL Longitudinal diffusion coefficient [cm^2/us]
+   /// @param driftVel Electron drift velocity [cm/us]
+   /// @param tbTime Time bucket duration [us]
+   /// @param padResXY Pad position resolution in X/Y [mm] (default: padSize/sqrt(12))
+   void SetDiffusionParams(double coefT, double coefL, double driftVel, double tbTime, double padResXY = -1);
+
    void ClusterizeSmooth3D(AtTrack &track, Float_t radius, Float_t distance);
    const std::tuple<Double_t, Double_t> GetPIDFromHits(AtTrack &track, Double_t theta);
 
@@ -22,6 +31,11 @@ public:
                       Bool_t enableSingleVertexTrack, Double_t clusterRadius, Double_t clusterDistance);
 
 private:
+   double fCoefT{0.00009};      ///< Transverse diffusion coefficient [cm^2/us]
+   double fCoefL{0.0000009};    ///< Longitudinal diffusion coefficient [cm^2/us]
+   double fDriftVel{1.0};       ///< Electron drift velocity [cm/us]
+   double fTBTime{0.320};       ///< Time bucket duration [us]
+   double fPadResXY{2.3};       ///< Pad position resolution in X/Y [mm] (default: 8mm/sqrt(12))
 };
 
 } // namespace AtTools

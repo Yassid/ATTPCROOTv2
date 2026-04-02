@@ -132,6 +132,16 @@ InitStatus AtPRAtask::Init()
       fPRA->SetkNNDist(fkNNDist);
    }
 
+   // Pass diffusion parameters from AtDigiPar to the track transformer for covariance calculation
+   if (fPar && fPRA) {
+      double tbTime = fPar->GetTBTime() * 1e-3; // ns → us
+      fPRA->SetDiffusionParams(fPar->GetCoefDiffusionTrans(), fPar->GetCoefDiffusionLong(),
+                               fPar->GetDriftVelocity(), tbTime);
+      LOG(info) << "AtPRAtask: diffusion params from AtDigiPar — CoefT=" << fPar->GetCoefDiffusionTrans()
+                << " CoefL=" << fPar->GetCoefDiffusionLong() << " DriftVel=" << fPar->GetDriftVelocity()
+                << " TBTime=" << tbTime << " us";
+   }
+
    // Get a handle from the IO manager
    FairRootManager *ioMan = FairRootManager::Instance();
    if (ioMan == nullptr) {
