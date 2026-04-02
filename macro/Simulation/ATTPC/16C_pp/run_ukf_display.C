@@ -6,10 +6,14 @@
 ///   2. Optionally run run_ukf_only.C → output_ukf_only.root
 ///
 /// Run: root -l run_ukf_display.C
+///      root -l 'run_ukf_display.C(3)' // start at event 3
+///
+/// For Eve/OpenGL mode (requires working OpenGL):
+///   root -l -e 'TEveManager::Create()' run_ukf_display.C
 
-void run_ukf_display()
+void run_ukf_display(int startEvent = 1)
 {
    auto *display = AtUKFDisplay::GetInstance();
    display->LoadFiles("data/output_digi.root", "data/output_ukf_only.root");
-   display->GotoEvent(1);
+   display->GotoEvent(startEvent);
 }

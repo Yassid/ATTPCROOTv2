@@ -134,6 +134,7 @@ if(TARGET Eigen3::Eigen)
   AtFitter/AtOpenKFTest.cxx
   AtFitter/OpenKF/kalman_filter/TrackFitterUKF.cxx
   AtFitter/AtFitterUKF.cxx
+  AtFitter/AtUKFDisplay.cxx
 
   )
   message(STATUS "Current sources: ${SRCS}")
@@ -148,6 +149,7 @@ if(TARGET Eigen3::Eigen)
     )
   set(DEPENDENCIES ${DEPENDENCIES}
     Eigen3::Eigen
+    ROOT::Gui
    )
 
    set(TEST_SRCS_OPENKF

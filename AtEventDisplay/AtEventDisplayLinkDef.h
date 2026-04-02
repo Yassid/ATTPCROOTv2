@@ -41,6 +41,4 @@
 #pragma link C++ class AtSidebarPSAIterDeconv + ;
 #pragma link C++ class AtSidebarPSATBAvg + ;
 
-#pragma link C++ class AtUKFDisplay -! ;
-
 #endif

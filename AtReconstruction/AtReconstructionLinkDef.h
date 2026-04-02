@@ -52,6 +52,7 @@
 #pragma link C++ class AtFitterTask + ;
 #pragma link C++ class EventFit::AtFitter - !;
 #pragma link C++ class EventFit::AtFitterUKF - !;
+#pragma link C++ class AtUKFDisplay +;
 
 /* Classes that depend on Genfit2 */
 #pragma link C++ namespace AtFITTER;
