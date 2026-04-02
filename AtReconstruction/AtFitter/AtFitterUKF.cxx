@@ -143,8 +143,7 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
    if (!fUKF)
       InitUKF();
 
-   // --- 1. Get and sort clusters ---
-   track->SortClusterHitArrayZ();
+   // --- 1. Get clusters (PRA already orders them by Z/time along the track) ---
    auto *clusters = track->GetHitClusterArray();
 
    // Convert digi→lab coordinates if ZPadPlane is set
@@ -153,10 +152,9 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
          auto pos = cl.GetPosition();
          cl.SetPosition({pos.X(), pos.Y(), fZPadPlane - pos.Z()});
       }
-      // Re-sort in lab frame (descending Z_lab = vertex first, Bragg peak last)
-      std::sort(clusters->begin(), clusters->end(), [](const AtHitCluster &a, const AtHitCluster &b) {
-         return a.GetPosition().Z() > b.GetPosition().Z();
-      });
+      // Reverse: PRA ordered by ascending Z_digi (Bragg peak → vertex),
+      // after flip this becomes descending Z_lab. Reverse to get vertex first.
+      std::reverse(clusters->begin(), clusters->end());
    }
    if (static_cast<int>(clusters->size()) < fMinClusters) {
       LOG(info) << "AtFitterUKF: track " << track->GetTrackID() << " has " << clusters->size()
