@@ -246,6 +246,13 @@ void AtUKFDisplay::MakeControlPanel(TGMainFrame *mf)
    momFrame->AddFrame(fMomSeedEntry, new TGLayoutHints(kLHintsRight, 2, 2, 2, 2));
    vf->AddFrame(momFrame, new TGLayoutHints(kLHintsExpandX, 2, 2, 1, 1));
 
+   // Momentum sigma fraction (initial covariance)
+   auto *sigFracFrame = new TGHorizontalFrame(vf);
+   sigFracFrame->AddFrame(new TGLabel(sigFracFrame, "p sigma frac:"), new TGLayoutHints(kLHintsLeft, 2, 2, 3, 2));
+   fMomSigmaEntry = new TGNumberEntry(sigFracFrame, 0.3, 6, -1, TGNumberFormat::kNESRealTwo);
+   sigFracFrame->AddFrame(fMomSigmaEntry, new TGLayoutHints(kLHintsRight, 2, 2, 2, 2));
+   vf->AddFrame(sigFracFrame, new TGLayoutHints(kLHintsExpandX, 2, 2, 1, 1));
+
    // Checkboxes
    fStragglingBtn = new TGCheckButton(vf, "Energy straggling");
    vf->AddFrame(fStragglingBtn, new TGLayoutHints(kLHintsLeft, 5, 2, 3, 1));
@@ -585,7 +592,8 @@ void AtUKFDisplay::CreateFitter()
    fFitter->SetEnableEnergyStraggling(straggling);
    fFitter->SetUsePerClusterCov(perClusterCov);
    fFitter->SetZPadPlane(zPadPlane);
-   fFitter->SetMomentumSigmaFrac(0.3);
+   double momSigmaFrac = fMomSigmaEntry ? fMomSigmaEntry->GetNumber() : 0.3;
+   fFitter->SetMomentumSigmaFrac(momSigmaFrac);
 
    // Momentum seed override (0 = use Brho from pattern recognition)
    double momSeed = fMomSeedEntry ? fMomSeedEntry->GetNumber() : 0;
@@ -625,9 +633,19 @@ void AtUKFDisplay::FitCurrentTrack()
 
    auto kin = fittedTracks[0]->GetKinematics();
    double pFit = std::sqrt(2 * 938.272 * kin.kineticEnergy + kin.kineticEnergy * kin.kineticEnergy);
-   std::cout << "AtUKFDisplay: fitted event " << fCurrentEvent << " — p=" << pFit
-             << " MeV/c, KE=" << kin.kineticEnergy << " MeV, theta="
-             << kin.theta * 180.0 / TMath::Pi() << " deg" << std::endl;
+
+   // Print fit summary with initial covariance info
+   double momSeed = fMomSeedEntry ? fMomSeedEntry->GetNumber() : 0;
+   double momSigmaFrac = fMomSigmaEntry ? fMomSigmaEntry->GetNumber() : 0.3;
+   double pSeed = momSeed > 0 ? momSeed : 37.0; // approximate Brho value
+   std::cout << "=== UKF Fit Result ===" << std::endl;
+   std::cout << "  Event:    " << fCurrentEvent << std::endl;
+   std::cout << "  Seed:     p=" << pSeed << " MeV/c" << std::endl;
+   std::cout << "  Init Cov: sigma_pos=" << 2.0 << " mm, sigma_p=" << momSigmaFrac * pSeed
+             << " MeV/c (" << momSigmaFrac * 100 << "%), sigma_ang=" << 5.0 << " deg" << std::endl;
+   std::cout << "  Result:   p=" << pFit << " MeV/c, KE=" << kin.kineticEnergy
+             << " MeV, theta=" << kin.theta * 180.0 / TMath::Pi() << " deg" << std::endl;
+   std::cout << "======================" << std::endl;
 
    // Use largest track for display
    int bestTrack = 0;

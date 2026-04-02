@@ -135,6 +135,7 @@ private:
    TGCheckButton *fAutoFitBtn{nullptr};
    TGComboBox *fParticleBox{nullptr};
    TGNumberEntry *fMomSeedEntry{nullptr};
+   TGNumberEntry *fMomSigmaEntry{nullptr};
 
    // Canvases
    TCanvas *fTrackCanvas{nullptr}; // 2D projections (TCanvas mode)
