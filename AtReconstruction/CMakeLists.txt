@@ -158,6 +158,7 @@ if(TARGET Eigen3::Eigen)
     AtFitter/OpenKF/kalman_filter/TrackFitterUKFTest.cxx
     AtFitter/AtFitterUKFTest.cxx
     AtFitter/AtClusteringScanTest.cxx
+    AtFitter/AtClusteringDigiScanTest.cxx
     )
  
  attpcroot_generate_tests(OpenKFTests
