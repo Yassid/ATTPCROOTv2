@@ -92,11 +92,14 @@ private:
    // Fitter management
    void CreateFitter();
 
-   // GUI callbacks
-   void GuiGotoEvent();
-   void GuiNextEvent();
-   void GuiPrevEvent();
-   void GuiFit();
+public:
+   // GUI callbacks (must be public for ROOT signal/slot)
+   void GuiGotoEvent(); // *SIGNAL*
+   void GuiNextEvent(); // *SIGNAL*
+   void GuiPrevEvent(); // *SIGNAL*
+   void GuiFit();       // *SIGNAL*
+
+private:
 
    // Singleton
    static AtUKFDisplay *fInstance;
