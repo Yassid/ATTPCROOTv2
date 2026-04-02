@@ -559,6 +559,7 @@ public:
    double fPosModelNoise{1e-4};
    double fMomModelNoise{1e-4};
    double fAngModelNoise{1e-6};
+   double fELossScaleFactor{1.0}; ///< Baseline scaling for energy loss model (e.g., 0.95 to reduce CATIMA dE/dx by 5%)
 
    /**
     * @brief Constructor for the TrackFitterUKF class.

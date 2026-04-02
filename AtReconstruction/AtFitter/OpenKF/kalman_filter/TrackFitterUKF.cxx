@@ -166,9 +166,9 @@ Vector<TrackFitterUKF::TF_DIM_X> TrackFitterUKF::funcF(const Vector<TrackFitterU
 
    fPropagator.SetState(fPos, XYZVector(fMom));
 
-   fPropagator.fScalingFactor = v[0]; // Set the scaling factor for energy loss
+   fPropagator.fScalingFactor = v[0] * fELossScaleFactor; // Augmented noise × baseline calibration
    fPropagator.PropagateToMeasurementSurface(AtTools::AtMeasurementPlane(fMeasurementPlane), *fStepper);
-   fPropagator.fScalingFactor = 1.0; // Reset the scaling factor after propagation
+   fPropagator.fScalingFactor = fELossScaleFactor; // Reset to baseline after propagation
 
    auto fState = fPropagator.GetState(); // Get the propagated state
    Vector<TF_DIM_X> vecX{Vector<TF_DIM_X>::Zero()};

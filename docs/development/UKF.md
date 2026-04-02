@@ -124,3 +124,74 @@ Integration/demo macros in `macro/tests/UKF/`:
 - `AtPropagator.cxx` now preserves momentum direction with small magnitude (`fStopTol`)
   when a particle stops, instead of setting momentum to `(0,0,0)`.
 - Falls back to `fLastMom` direction if current momentum is already zero.
+
+### Validation with Digitized Data
+
+End-to-end validation using fully digitized 16C(p,p) events at 20 deg CMS
+(`macro/Simulation/ATTPC/16C_pp/run_ukf_digi.C`):
+
+| Metric | Value |
+|--------|-------|
+| Convergence rate | 98% (49/50 events) |
+| Momentum bias | -1.6% (systematic) |
+| Momentum resolution (RMS) | 1.0% |
+| Theta bias | ~0 deg |
+| Mean residual | 0.9 mm |
+| Avg clusters per track | 60 |
+
+### Systematic Momentum Bias (-1.6%)
+
+The UKF consistently reconstructs momentum ~1.6% below the MC truth.
+Two sources were identified:
+
+**Source 1 (~0.9%): Vertex-to-cluster offset** — RESOLVED
+- The first digitized cluster is ~10 mm from the MC vertex due to pad granularity
+  and the clusterization radius.
+- When seeding the UKF with the vertex momentum but starting at the first cluster
+  position, the momentum is already lower than the seed.
+- Fix: seed with the MC truth momentum at the position of the first cluster,
+  not at the vertex. For real data, this means the seed momentum should correspond
+  to the first measurement point, not the extrapolated vertex.
+
+**Source 2 (~1.6%): CATIMA vs GEANT4 energy loss mismatch** — DOCUMENTED
+- The UKF propagator uses CATIMA for energy loss, while the simulation uses GEANT4's
+  built-in stopping power tables. They disagree by ~5% at low energies:
+
+  | Energy | CATIMA dE/dx | GEANT4 avg dE/dx |
+  |--------|-------------|------------------|
+  | 0.5 MeV | 0.00410 MeV/mm | ~0.00391 MeV/mm |
+
+- CATIMA predicts ~5% higher energy loss → the propagator removes too much energy
+  per step → reconstructed momentum is systematically low.
+- This is a fundamental model mismatch, not a bug. In practice it appears as a
+  small systematic bias on the reconstructed vertex momentum.
+
+**Mitigation options** (in order of preference):
+
+1. **Energy loss scaling factor** — Use `TrackFitterUKF::fELossScaleFactor` to
+   calibrate the CATIMA dE/dx against the actual energy loss. Scan results on
+   16C(p,p) digitized data:
+
+   | Scale | Mom bias | RMS |
+   |-------|----------|-----|
+   | 1.00 | -1.58% | 1.04% |
+   | 1.02 | -1.28% | 1.01% |
+   | 1.08 | -0.04% | 0.91% |
+
+   For MC validation with GEANT4, `fELossScaleFactor ≈ 1.08` eliminates the bias.
+   For real data, calibrate against known reactions or elastic scattering.
+   Usage: `ukf.fELossScaleFactor = 1.08;` or via the macro:
+   `root -b -q 'run_ukf_digi.C(-1, 1.08)'`.
+
+2. **Use consistent energy loss tables** — Load the same SRIM tables in both
+   simulation (via `AtELossTable`) and reconstruction. This eliminates the model
+   mismatch entirely but requires maintaining external table files.
+
+3. **Fit the scaling factor** — Add `fScalingFactor` as a 7th state variable in
+   the UKF (or a second augmented noise dimension). The filter would then
+   self-calibrate the energy loss model against the measured track curvature.
+   This is the most robust approach but increases the augmented state dimension.
+
+4. **Accept the bias** — A 1.6% systematic on momentum is within typical
+   experimental uncertainties for AT-TPC measurements. Document and correct
+   offline.

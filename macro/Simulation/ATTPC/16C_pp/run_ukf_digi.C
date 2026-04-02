@@ -10,7 +10,8 @@
 ///   2. Run run_digi_attpc.C to generate output_digi.root
 ///
 /// Run: root -b -q run_ukf_digi.C
-///      root -b -q 'run_ukf_digi.C(5)' // process only 5 events
+///      root -b -q 'run_ukf_digi.C(5)'          // process only 5 events
+///      root -b -q 'run_ukf_digi.C(-1, 0.95)'   // apply energy loss scaling
 
 using ROOT::Math::Polar3DVector;
 using ROOT::Math::XYZPoint;
@@ -28,7 +29,7 @@ XYZPoint DigiToLab(const XYZPoint &p)
    return {p.X(), p.Y(), ZPadPlane - p.Z()};
 }
 
-void run_ukf_digi(int maxEvents = -1)
+void run_ukf_digi(int maxEvents = -1, double eLossScale = 1.0)
 {
    FairLogger::GetLogger()->SetLogScreenLevel("ERROR");
 
@@ -72,6 +73,10 @@ void run_ukf_digi(int maxEvents = -1)
    kf::TrackFitterUKF ukf(std::move(propagator), std::move(stepper));
    ukf.setParameters(1e-3, 2.0, 0.0);
    ukf.fEnableEnStraggling = true;
+   ukf.fELossScaleFactor = eLossScale; // Scale CATIMA dE/dx (1.0 = no correction)
+
+   if (std::abs(eLossScale - 1.0) > 1e-6)
+      std::cout << "Energy loss scaling factor: " << eLossScale << std::endl;
 
    // --- Summary histograms ---
    TH1F *hMomErr = new TH1F("hMomErr", "Momentum Error;(p_{reco} - p_{true}) / p_{true} [%];Events", 50, -20, 20);
@@ -96,21 +101,35 @@ void run_ukf_digi(int maxEvents = -1)
       if (tracks.empty())
          continue;
 
-      // Find the proton MC track (PDG 2212)
+      // Find the proton MC track (PDG 2212) and collect MC points along it
       int protonTrackID = -1;
-      XYZVector trueMom;
+      XYZVector trueMomVertex; // momentum at vertex
       XYZPoint trueVertex;
       for (int j = 0; j < mcTracks->GetEntries(); j++) {
          auto *t = (AtMCTrack *)mcTracks->At(j);
          if (t->GetPdgCode() == 2212) {
             protonTrackID = j;
-            trueMom = XYZVector(t->GetPx() * 1e3, t->GetPy() * 1e3, t->GetPz() * 1e3); // GeV → MeV
+            trueMomVertex = XYZVector(t->GetPx() * 1e3, t->GetPy() * 1e3, t->GetPz() * 1e3); // GeV → MeV
             trueVertex = XYZPoint(t->GetStartX() * 10, t->GetStartY() * 10, t->GetStartZ() * 10); // cm → mm
             break;
          }
       }
       if (protonTrackID < 0)
          continue; // No proton in this event (beam-only event)
+
+      // Collect proton MC points (position + momentum in lab frame, mm and MeV/c)
+      struct MCPointInfo {
+         XYZPoint pos;
+         XYZVector mom;
+      };
+      std::vector<MCPointInfo> mcProtonPoints;
+      for (int j = 0; j < mcPoints->GetEntries(); j++) {
+         auto *p = (AtMCPoint *)mcPoints->At(j);
+         if (p->GetTrackID() != protonTrackID)
+            continue;
+         mcProtonPoints.push_back(
+            {{p->GetX() * 10, p->GetY() * 10, p->GetZ() * 10}, {p->GetPx() * 1e3, p->GetPy() * 1e3, p->GetPz() * 1e3}});
+      }
 
       // Take the largest track (most hits = likely the proton)
       int bestTrack = 0;
@@ -187,13 +206,28 @@ void run_ukf_digi(int maxEvents = -1)
 
       hNClusters->Fill(orderedClusters.size());
 
-      // --- Prepare UKF initial state from MC truth ---
-      double pTrue = trueMom.R();
-      double thetaTrue = trueMom.Theta();
-      double phiTrue = trueMom.Phi();
+      // --- Find MC truth at the first cluster position ---
+      // The first cluster is ~10 mm from the vertex. Use the MC point closest
+      // to the first cluster as the "local truth" for seeding and comparison.
+      XYZPoint firstCluster = orderedClusters.front();
+      double bestMCDist = 1e9;
+      int bestMCIdx = 0;
+      for (size_t j = 0; j < mcProtonPoints.size(); j++) {
+         double d = (mcProtonPoints[j].pos - firstCluster).R();
+         if (d < bestMCDist) {
+            bestMCDist = d;
+            bestMCIdx = j;
+         }
+      }
+      XYZVector trueMomLocal = mcProtonPoints[bestMCIdx].mom; // MC momentum near first cluster
 
-      XYZPoint initialPos = orderedClusters.front();
-      XYZVector initialMom = trueMom;
+      // --- Prepare UKF initial state ---
+      double pTrue = trueMomLocal.R();
+      double thetaTrue = trueMomLocal.Theta();
+      double phiTrue = trueMomLocal.Phi();
+
+      XYZPoint initialPos = firstCluster;
+      XYZVector initialMom = trueMomLocal;
 
       // Initial covariance
       double sigma_pos = 2.0; // mm (wider for digitized data)
