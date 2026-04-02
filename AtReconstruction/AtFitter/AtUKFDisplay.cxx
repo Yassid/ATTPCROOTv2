@@ -623,27 +623,107 @@ void AtUKFDisplay::FitCurrentTrack()
       return;
    }
 
-   std::cout << "AtUKFDisplay: fitted event " << fCurrentEvent << " — KE="
-             << fittedTracks[0]->GetKinematics().kineticEnergy << " MeV" << std::endl;
+   auto kin = fittedTracks[0]->GetKinematics();
+   double pFit = std::sqrt(2 * 938.272 * kin.kineticEnergy + kin.kineticEnergy * kin.kineticEnergy);
+   std::cout << "AtUKFDisplay: fitted event " << fCurrentEvent << " — p=" << pFit
+             << " MeV/c, KE=" << kin.kineticEnergy << " MeV, theta="
+             << kin.theta * 180.0 / TMath::Pi() << " deg" << std::endl;
 
-   // Redraw with the new fit result
-   ClearEveElements();
-
-   // Use largest track
+   // Use largest track for display
    int bestTrack = 0;
    for (size_t t = 1; t < tracks.size(); t++) {
       if (tracks[t].GetHitArray().size() > tracks[bestTrack].GetHitArray().size())
          bestTrack = t;
    }
 
-   if (fDrawOptions.find('C') != std::string::npos)
-      DrawClusters(tracks[bestTrack]);
-   if (fDrawOptions.find('S') != std::string::npos)
-      DrawFittedTrack(*fittedTracks[0]);
+   // Redraw track canvas with fit overlaid
+   if (fTrackCanvas) {
+      auto *clusters = tracks[bestTrack].GetHitClusterArray();
+      std::vector<double> cx, cy, cz;
+      for (auto &cl : *clusters) {
+         auto pos = cl.GetPosition();
+         cx.push_back(pos.X());
+         cy.push_back(pos.Y());
+         cz.push_back(fZPadPlane - pos.Z());
+      }
 
+      std::vector<double> sx, sy, sz;
+      auto vtx = fittedTracks[0]->GetVertex();
+      sx.push_back(vtx.X());
+      sy.push_back(vtx.Y());
+      sz.push_back(vtx.Z());
+      for (auto &sp : fittedTracks[0]->GetSmoothedPositions()) {
+         sx.push_back(sp.X());
+         sy.push_back(sp.Y());
+         sz.push_back(sp.Z());
+      }
+
+      auto drawLegend = [](TGraph *gCl, TGraph *gFit) {
+         auto *leg = new TLegend(0.12, 0.75, 0.45, 0.88);
+         leg->SetTextSize(0.035);
+         leg->SetFillStyle(0);
+         leg->SetBorderSize(0);
+         leg->AddEntry(gCl, "Clusters", "p");
+         if (gFit)
+            leg->AddEntry(gFit, "Fitted (UKF)", "p");
+         leg->Draw();
+      };
+
+      fTrackCanvas->cd(1);
+      gPad->Clear();
+      auto *g1 = new TGraph(cx.size(), cx.data(), cy.data());
+      g1->SetTitle(Form("Event %d XY (live fit);X [mm];Y [mm]", fCurrentEvent));
+      g1->SetMarkerStyle(20);
+      g1->SetMarkerSize(0.6);
+      g1->SetMarkerColor(kBlue);
+      g1->Draw("AP");
+      auto *g1f = new TGraph(sx.size(), sx.data(), sy.data());
+      g1f->SetMarkerStyle(24);
+      g1f->SetMarkerSize(0.5);
+      g1f->SetMarkerColor(kRed);
+      g1f->Draw("P SAME");
+      drawLegend(g1, g1f);
+
+      fTrackCanvas->cd(2);
+      gPad->Clear();
+      auto *g2 = new TGraph(cx.size(), cz.data(), cx.data());
+      g2->SetTitle("XZ;Z_{lab} [mm];X [mm]");
+      g2->SetMarkerStyle(20);
+      g2->SetMarkerSize(0.6);
+      g2->SetMarkerColor(kBlue);
+      g2->Draw("AP");
+      auto *g2f = new TGraph(sx.size(), sz.data(), sx.data());
+      g2f->SetMarkerStyle(24);
+      g2f->SetMarkerSize(0.5);
+      g2f->SetMarkerColor(kRed);
+      g2f->Draw("P SAME");
+      drawLegend(g2, g2f);
+
+      fTrackCanvas->cd(3);
+      gPad->Clear();
+      auto *g3 = new TGraph(cy.size(), cz.data(), cy.data());
+      g3->SetTitle("YZ;Z_{lab} [mm];Y [mm]");
+      g3->SetMarkerStyle(20);
+      g3->SetMarkerSize(0.6);
+      g3->SetMarkerColor(kBlue);
+      g3->Draw("AP");
+      auto *g3f = new TGraph(sy.size(), sz.data(), sy.data());
+      g3f->SetMarkerStyle(24);
+      g3f->SetMarkerSize(0.5);
+      g3f->SetMarkerColor(kRed);
+      g3f->Draw("P SAME");
+      drawLegend(g3, g3f);
+
+      fTrackCanvas->Update();
+   }
+
+   // Update diagnostics
    UpdateDiagnostics(tracks[bestTrack], fittedTracks[0].get());
 
-   // No Eve redraw needed in TCanvas mode
+   // Update info label
+   if (fEventInfoLabel)
+      fEventInfoLabel->SetText(Form("Ev %d: FITTED p=%.1f MeV/c, KE=%.2f MeV",
+                                    fCurrentEvent, pFit, kin.kineticEnergy));
 }
 
 // ===========================================================================
