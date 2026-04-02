@@ -649,12 +649,13 @@ void AtUKFDisplay::CreateFitter()
    fZPadPlane = zPadPlane;
 }
 
-void AtUKFDisplay::FitCurrentTrack()
+void AtUKFDisplay::FitCurrentTrack(bool skipReload)
 {
    if (!fTreeDigi)
       return;
 
-   fTreeDigi->GetEntry(fCurrentEvent);
+   if (!skipReload)
+      fTreeDigi->GetEntry(fCurrentEvent);
    if (!fPatEvtArr || fPatEvtArr->GetEntries() == 0)
       return;
 
@@ -867,6 +868,6 @@ void AtUKFDisplay::GuiRecluster()
    std::cout << "Re-clustered: radius=" << radius << " distance=" << distance
              << " → " << nNewClusters << " clusters" << std::endl;
 
-   // Now fit with the new clusters
-   FitCurrentTrack();
+   // Now fit with the new clusters (don't reload from file!)
+   FitCurrentTrack(true);
 }

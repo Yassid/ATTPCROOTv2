@@ -68,7 +68,8 @@ public:
    int GetCurrentEvent() const { return fCurrentEvent; }
 
    /// Fit the current track with current parameters
-   void FitCurrentTrack();
+   /// @param skipReload If true, don't re-read tree (used after re-clustering)
+   void FitCurrentTrack(bool skipReload = false);
 
    /// Display options: string of flags
    /// C=clusters, S=smoothed, F=filtered, R=residuals, E=errors
