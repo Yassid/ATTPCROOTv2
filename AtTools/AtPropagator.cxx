@@ -95,7 +95,7 @@ void AtPropagator::PropagateToMeasurementSurface(const AtMeasurementSurface &sur
    int nIter = 0;
    while (true) {
       if (++nIter > fMaxPropIter) {
-         LOG(error) << "Propagation did not converge after " << fMaxPropIter << " iterations, aborting.";
+         LOG(debug) << "Propagation did not converge after " << fMaxPropIter << " iterations.";
          fState.status = StepStateStatus::kStopped;
          return;
       }
@@ -369,7 +369,7 @@ AtPropagator::StepState AtRK4AdaptiveStepper::Step(const AtPropagator::StepState
    int stepAttempts = 0;
    while (true) {
       if (++stepAttempts > 100) {
-         LOG(error) << "Adaptive stepper did not converge after 100 attempts, aborting.";
+         LOG(debug) << "Adaptive stepper did not converge after 100 attempts.";
          result.status = AtPropagator::StepStateStatus::kInvalidStepSize;
          result.hUsed = h;
          return result;

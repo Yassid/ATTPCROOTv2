@@ -13,6 +13,8 @@
 
 void run_ukf_display(int startEvent = 1)
 {
+   FairLogger::GetLogger()->SetLogScreenLevel("WARNING");
+
    auto *display = AtUKFDisplay::GetInstance();
    display->LoadFiles("data/output_digi.root", "data/output_ukf_only.root");
    display->GotoEvent(startEvent);

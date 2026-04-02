@@ -7,6 +7,9 @@
 
 void run_ukf_only(int nEvents = 10000)
 {
+   // Suppress verbose logging — only show errors
+   FairLogger::GetLogger()->SetLogScreenLevel("ERROR");
+
    TString inOutDir = "./data/";
    TString inputFile = inOutDir + "output_digi.root";
    TString outputFile = inOutDir + "output_ukf_only.root";
