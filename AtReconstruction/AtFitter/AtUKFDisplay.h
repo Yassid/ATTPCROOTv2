@@ -146,6 +146,8 @@ private:
    TGCheckButton *fShowRawHitsBtn{nullptr};
    TGNumberEntry *fClusterRadiusEntry{nullptr};
    TGNumberEntry *fClusterDistEntry{nullptr};
+   TGNumberEntry *fHitsPerClusterEntry{nullptr};
+   TGComboBox *fClusterMethodBox{nullptr};
 
    // Canvases
    TCanvas *fTrackCanvas{nullptr}; // 2D projections (TCanvas mode)

@@ -271,17 +271,36 @@ void AtUKFDisplay::MakeControlPanel(TGMainFrame *mf)
    auto *clLabel = new TGLabel(vf, "=== Clustering ===");
    vf->AddFrame(clLabel, new TGLayoutHints(kLHintsCenterX, 2, 2, 2, 2));
 
+   // Clustering method
+   auto *methFrame = new TGHorizontalFrame(vf);
+   methFrame->AddFrame(new TGLabel(methFrame, "Method:"), new TGLayoutHints(kLHintsLeft, 2, 2, 3, 2));
+   fClusterMethodBox = new TGComboBox(methFrame, -1);
+   fClusterMethodBox->AddEntry("Smooth3D", 0);
+   fClusterMethodBox->AddEntry("GroupByN", 1);
+   fClusterMethodBox->Select(0);
+   fClusterMethodBox->Resize(100, 20);
+   methFrame->AddFrame(fClusterMethodBox, new TGLayoutHints(kLHintsRight | kLHintsExpandX, 2, 2, 2, 2));
+   vf->AddFrame(methFrame, new TGLayoutHints(kLHintsExpandX, 2, 2, 1, 1));
+
+   // Smooth3D params
    auto *radFrame = new TGHorizontalFrame(vf);
    radFrame->AddFrame(new TGLabel(radFrame, "Radius [mm]:"), new TGLayoutHints(kLHintsLeft, 2, 2, 3, 2));
-   fClusterRadiusEntry = new TGNumberEntry(radFrame, 15.0, 6, -1, TGNumberFormat::kNESRealOne);
+   fClusterRadiusEntry = new TGNumberEntry(radFrame, 10.0, 6, -1, TGNumberFormat::kNESRealOne);
    radFrame->AddFrame(fClusterRadiusEntry, new TGLayoutHints(kLHintsRight, 2, 2, 2, 2));
    vf->AddFrame(radFrame, new TGLayoutHints(kLHintsExpandX, 2, 2, 1, 1));
 
    auto *distFrame = new TGHorizontalFrame(vf);
    distFrame->AddFrame(new TGLabel(distFrame, "Distance [mm]:"), new TGLayoutHints(kLHintsLeft, 2, 2, 3, 2));
-   fClusterDistEntry = new TGNumberEntry(distFrame, 30.5, 6, -1, TGNumberFormat::kNESRealOne);
+   fClusterDistEntry = new TGNumberEntry(distFrame, 20.0, 6, -1, TGNumberFormat::kNESRealOne);
    distFrame->AddFrame(fClusterDistEntry, new TGLayoutHints(kLHintsRight, 2, 2, 2, 2));
    vf->AddFrame(distFrame, new TGLayoutHints(kLHintsExpandX, 2, 2, 1, 1));
+
+   // GroupByN param
+   auto *hpcFrame = new TGHorizontalFrame(vf);
+   hpcFrame->AddFrame(new TGLabel(hpcFrame, "Hits/cluster:"), new TGLayoutHints(kLHintsLeft, 2, 2, 3, 2));
+   fHitsPerClusterEntry = new TGNumberEntry(hpcFrame, 15, 4, -1, TGNumberFormat::kNESInteger);
+   hpcFrame->AddFrame(fHitsPerClusterEntry, new TGLayoutHints(kLHintsRight, 2, 2, 2, 2));
+   vf->AddFrame(hpcFrame, new TGLayoutHints(kLHintsExpandX, 2, 2, 1, 1));
 
    fShowRawHitsBtn = new TGCheckButton(vf, "Show raw hits");
    vf->AddFrame(fShowRawHitsBtn, new TGLayoutHints(kLHintsLeft, 5, 2, 3, 1));
@@ -857,16 +876,26 @@ void AtUKFDisplay::GuiRecluster()
    }
 
    // Re-cluster with GUI parameters
-   double radius = fClusterRadiusEntry ? fClusterRadiusEntry->GetNumber() : 15.0;
-   double distance = fClusterDistEntry ? fClusterDistEntry->GetNumber() : 30.5;
+   int method = fClusterMethodBox ? fClusterMethodBox->GetSelected() : 0;
 
    tracks[bestTrack].ResetHitClusterArray();
    AtTools::AtTrackTransformer transformer;
-   transformer.ClusterizeSmooth3D(tracks[bestTrack], radius, distance);
+
+   if (method == 0) {
+      // Smooth3D
+      double radius = fClusterRadiusEntry ? fClusterRadiusEntry->GetNumber() : 10.0;
+      double distance = fClusterDistEntry ? fClusterDistEntry->GetNumber() : 20.0;
+      transformer.ClusterizeSmooth3D(tracks[bestTrack], radius, distance);
+      std::cout << "Smooth3D: radius=" << radius << " distance=" << distance;
+   } else {
+      // GroupByN
+      int hitsPerCluster = fHitsPerClusterEntry ? fHitsPerClusterEntry->GetIntNumber() : 15;
+      transformer.ClusterizeByGroup(tracks[bestTrack], hitsPerCluster);
+      std::cout << "GroupByN: hitsPerCluster=" << hitsPerCluster;
+   }
 
    int nNewClusters = tracks[bestTrack].GetHitClusterArray()->size();
-   std::cout << "Re-clustered: radius=" << radius << " distance=" << distance
-             << " → " << nNewClusters << " clusters" << std::endl;
+   std::cout << " → " << nNewClusters << " clusters" << std::endl;
 
    // Now fit with the new clusters (don't reload from file!)
    FitCurrentTrack(true);

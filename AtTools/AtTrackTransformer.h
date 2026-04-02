@@ -23,6 +23,15 @@ public:
    void SetDiffusionParams(double coefT, double coefL, double driftVel, double tbTime, double padResXY = -1);
 
    void ClusterizeSmooth3D(AtTrack &track, Float_t radius, Float_t distance);
+
+   /// @brief Group consecutive hits into clusters of fixed size along the track.
+   ///
+   /// Simpler alternative to ClusterizeSmooth3D: no smoothing pass, no midpoint
+   /// insertion. Groups `hitsPerCluster` consecutive hits and computes charge-weighted
+   /// centroid. Produces clusters that sit directly on the track.
+   /// @param track Track with raw hits
+   /// @param hitsPerCluster Number of hits per cluster (default 15 → ~18 clusters for 280 hits)
+   void ClusterizeByGroup(AtTrack &track, int hitsPerCluster = 15);
    const std::tuple<Double_t, Double_t> GetPIDFromHits(AtTrack &track, Double_t theta);
 
    Bool_t FindVertexTrack(AtTrack *trA, AtTrack *trB);

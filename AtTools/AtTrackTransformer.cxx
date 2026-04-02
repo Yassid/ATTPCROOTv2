@@ -303,6 +303,87 @@ void AtTools::AtTrackTransformer::ClusterizeSmooth3D(AtTrack &track, Float_t rad
    } // if array size
 }
 
+void AtTools::AtTrackTransformer::ClusterizeByGroup(AtTrack &track, int hitsPerCluster)
+{
+   auto hitArray = track.GetHitArrayObject(); // copy as value (vector<AtHit>)
+   if (hitArray.empty())
+      return;
+
+   // Diffusion/resolution params for covariance
+   Double_t driftVel = fDriftVel;
+   Double_t samplingRate = fTBTime;
+   Double_t padResXY = fPadResXY;
+   Double_t padResZ = fPadResXY * 1.5;
+
+   int nHits = hitArray.size();
+   int clusterID = 0;
+
+   for (int start = 0; start < nHits; start += hitsPerCluster) {
+      int end = std::min(start + hitsPerCluster, nHits);
+      int groupSize = end - start;
+      if (groupSize < 2)
+         continue;
+
+      // Charge-weighted centroid
+      double x = 0, y = 0, z = 0;
+      double totalQ = 0;
+      double var_x = 0, var_y = 0, var_z = 0;
+      int timeStamp = 0;
+
+      for (int i = start; i < end; i++) {
+         auto &hit = hitArray[i];
+         auto pos = hit.GetPosition();
+         double q = hit.GetCharge();
+
+         x += pos.X() * q;
+         y += pos.Y() * q;
+         z += pos.Z();
+         totalQ += q;
+         timeStamp += hit.GetTimeStamp();
+
+         // Per-hit variance
+         double driftTime = pos.Z() / (10.0 * driftVel);
+         double varT = 100.0 * fCoefT * 2.0 * driftTime;
+         double varL = 100.0 * fCoefL * 2.0 * driftTime;
+         double tbRes_mm = driftVel * samplingRate * 10.0;
+         double varTB = tbRes_mm * tbRes_mm / 12.0;
+
+         var_x += q * q * (padResXY * padResXY + varT);
+         var_y += q * q * (padResXY * padResXY + varT);
+         var_z += q * q * (padResZ * padResZ + varTB + varL);
+      }
+
+      if (totalQ <= 0)
+         continue;
+
+      x /= totalQ;
+      y /= totalQ;
+      z /= groupSize;
+      timeStamp /= groupSize;
+
+      double sigma_x = TMath::Sqrt(var_x) / totalQ;
+      double sigma_y = TMath::Sqrt(var_y) / totalQ;
+      double sigma_z = TMath::Sqrt(var_z) / totalQ;
+
+      auto hitCluster = std::make_shared<AtHitCluster>();
+      hitCluster->SetClusterID(clusterID++);
+      hitCluster->SetCharge(totalQ);
+      hitCluster->SetPosition({x, y, z});
+      hitCluster->SetTimeStamp(timeStamp);
+
+      TMatrixDSym cov(3);
+      cov(0, 0) = sigma_x * sigma_x;
+      cov(1, 1) = sigma_y * sigma_y;
+      cov(2, 2) = sigma_z * sigma_z;
+      cov(0, 1) = cov(1, 0) = 0;
+      cov(0, 2) = cov(2, 0) = 0;
+      cov(1, 2) = cov(2, 1) = 0;
+      hitCluster->SetCovMatrix(cov);
+
+      track.AddClusterHit(hitCluster);
+   }
+}
+
 Bool_t AtTools::AtTrackTransformer::FindVertexTrack(AtTrack *trA, AtTrack *trB)
 {
    // Determination of first hit distance. NB: Assuming both tracks have the same angle sign
