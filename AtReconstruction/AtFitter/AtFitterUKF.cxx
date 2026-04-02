@@ -156,9 +156,27 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
       // after flip this becomes descending Z_lab. Reverse to get vertex first.
       std::reverse(clusters->begin(), clusters->end());
    }
+   // Filter clusters: remove those too close together and trim from Bragg peak end.
+   // After ordering, clusters go vertex → Bragg peak. We keep from vertex and
+   // stop when clusters get too close (proton decelerating near Bragg peak).
+   {
+      std::vector<AtHitCluster> filtered;
+      filtered.push_back(clusters->front());
+      for (size_t i = 1; i < clusters->size(); i++) {
+         double dist = (clusters->at(i).GetPosition() - filtered.back().GetPosition()).R();
+         if (dist >= fMinClusterSpacing)
+            filtered.push_back(clusters->at(i));
+      }
+      // Trim last 10% of clusters (near Bragg peak where proton stops)
+      int nKeep = std::max(fMinClusters, static_cast<int>(filtered.size() * 0.9));
+      if (static_cast<int>(filtered.size()) > nKeep)
+         filtered.resize(nKeep);
+      *clusters = std::move(filtered);
+   }
+
    if (static_cast<int>(clusters->size()) < fMinClusters) {
-      LOG(info) << "AtFitterUKF: track " << track->GetTrackID() << " has " << clusters->size()
-                << " clusters, fewer than fMinClusters=" << fMinClusters << ". Skipping.";
+      LOG(debug) << "AtFitterUKF: track " << track->GetTrackID() << " has " << clusters->size()
+                 << " clusters after filtering. Skipping.";
       return nullptr;
    }
 

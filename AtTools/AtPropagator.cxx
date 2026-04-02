@@ -87,7 +87,7 @@ void AtPropagator::PropagateToMeasurementSurface(const AtMeasurementSurface &sur
 
    auto KE_initial = Kinematics::KE(fState.fMom, fState.fMass);
    if (KE_initial < fStopTol) {
-      LOG(warning) << "Initial kinetic energy is below stopping threshold, cannot propagate.";
+      LOG(debug) << "Initial kinetic energy is below stopping threshold, cannot propagate.";
       return; // Cannot propagate if the initial kinetic energy is below the stopping threshold
    }
    stepper.fDeriv = [this](const XYZPoint &pos, const XYZVector &mom) { return this->Derivatives(pos, mom); };
@@ -145,7 +145,7 @@ void AtPropagator::PropagateToMeasurementSurface(const AtMeasurementSurface &sur
          // In this case the particle stopped before hitting the plane
          // we should throw a warning to let the user know that there wasn't
          // enough energy to reach the surface.
-         LOG(warning) << "------ Particle stopped before reaching measurement surface ------";
+         LOG(debug) << "------ Particle stopped before reaching measurement surface ------";
 
          // Calculate how far to travel before stopping
          double KE_last = Kinematics::KE(fState.fLastMom, fState.fMass);
