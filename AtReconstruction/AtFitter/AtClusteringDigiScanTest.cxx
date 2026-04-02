@@ -68,20 +68,15 @@ protected:
       return fitter;
    }
 
-   FitResult FitWithClustering(AtTrack &track, double radius, double distance, int eventId)
+   /// Fit a track that already has clusters
+   FitResult FitTrack(AtTrack &track, int eventId)
    {
-      FitResult result{eventId, radius, distance, 0, -1, -1, false, false};
-
-      // Re-cluster
-      track.ResetHitClusterArray();
-      AtTools::AtTrackTransformer transformer;
-      transformer.ClusterizeSmooth3D(track, radius, distance);
+      FitResult result{eventId, 0, 0, 0, -1, -1, false, false};
 
       result.nClusters = track.GetHitClusterArray()->size();
       if (result.nClusters < 5)
          return result;
 
-      // Create fitter and fit
       auto fitter = CreateFitter();
       fitter->Init();
 
@@ -123,12 +118,27 @@ TEST_F(ClusteringDigiScanTest, ScanDigitizedData)
    int nEvents = tree->GetEntries();
 
    struct Config {
-      double radius;
-      double distance;
+      int method;       // 0=Smooth3D, 1=GroupByN
+      double radius;    // Smooth3D
+      double distance;  // Smooth3D
+      int hitsPerClust; // GroupByN
+      std::string label;
    };
    std::vector<Config> configs = {
-      {5.0, 10.0},  {5.0, 15.0},  {10.0, 10.0}, {10.0, 15.0}, {10.0, 20.0},
-      {15.0, 20.0}, {15.0, 30.0}, {15.0, 30.5}, {20.0, 30.0}, {20.0, 40.0},
+      // Smooth3D configs
+      {0, 5.0, 10.0, 0, "S3D r5 d10"},
+      {0, 5.0, 15.0, 0, "S3D r5 d15"},
+      {0, 10.0, 15.0, 0, "S3D r10 d15"},
+      {0, 10.0, 20.0, 0, "S3D r10 d20"},
+      {0, 15.0, 20.0, 0, "S3D r15 d20"},
+      {0, 15.0, 30.5, 0, "S3D r15 d30 (def)"},
+      {0, 20.0, 30.0, 0, "S3D r20 d30"},
+      // GroupByN configs
+      {1, 0, 0, 5, "GrpN 5"},
+      {1, 0, 0, 10, "GrpN 10"},
+      {1, 0, 0, 15, "GrpN 15"},
+      {1, 0, 0, 20, "GrpN 20"},
+      {1, 0, 0, 30, "GrpN 30"},
    };
 
    // Accumulate results per config
@@ -165,8 +175,15 @@ TEST_F(ClusteringDigiScanTest, ScanDigitizedData)
 
       // Scan clustering configs
       for (size_t c = 0; c < configs.size(); c++) {
-         AtTrack trackCopy = tracks[bestTrack]; // copy to re-cluster independently
-         auto result = FitWithClustering(trackCopy, configs[c].radius, configs[c].distance, iEvt);
+         AtTrack trackCopy = tracks[bestTrack];
+         trackCopy.ResetHitClusterArray();
+         AtTools::AtTrackTransformer transformer;
+         if (configs[c].method == 0) {
+            transformer.ClusterizeSmooth3D(trackCopy, configs[c].radius, configs[c].distance);
+         } else {
+            transformer.ClusterizeByGroup(trackCopy, configs[c].hitsPerClust);
+         }
+         auto result = FitTrack(trackCopy, iEvt);
 
          stats[c].nTried++;
          if (result.converged) {
@@ -184,20 +201,19 @@ TEST_F(ClusteringDigiScanTest, ScanDigitizedData)
    std::cout << "\n=============================================================" << std::endl;
    std::cout << " Clustering Scan on Digitized 16C(p,p) Data" << std::endl;
    std::cout << "=============================================================" << std::endl;
-   std::cout << std::setw(8) << "radius" << std::setw(8) << "dist" << std::setw(8) << "tried" << std::setw(8) << "conv"
-             << std::setw(8) << "good" << std::setw(10) << "good(%)" << std::setw(10) << "avgCl" << std::setw(10)
-             << "avgKE" << std::endl;
-   std::cout << std::string(70, '-') << std::endl;
+   std::cout << std::setw(20) << "config" << std::setw(8) << "tried" << std::setw(8) << "conv" << std::setw(8) << "good"
+             << std::setw(10) << "good(%)" << std::setw(10) << "avgCl" << std::setw(10) << "avgKE" << std::endl;
+   std::cout << std::string(74, '-') << std::endl;
 
    for (size_t c = 0; c < configs.size(); c++) {
       auto &s = stats[c];
       double goodPct = s.nTried > 0 ? 100.0 * s.nGood / s.nTried : 0;
       double avgCl = s.nConverged > 0 ? s.sumClusters / s.nConverged : 0;
       double avgKE = s.nGood > 0 ? s.sumKE / s.nGood : 0;
-      std::cout << std::setw(8) << configs[c].radius << std::setw(8) << configs[c].distance << std::setw(8) << s.nTried
-                << std::setw(8) << s.nConverged << std::setw(8) << s.nGood << std::setw(10) << std::fixed
-                << std::setprecision(1) << goodPct << std::setw(10) << std::setprecision(0) << avgCl << std::setw(10)
-                << std::setprecision(2) << avgKE << std::endl;
+      std::cout << std::setw(20) << configs[c].label << std::setw(8) << s.nTried << std::setw(8) << s.nConverged
+                << std::setw(8) << s.nGood << std::setw(10) << std::fixed << std::setprecision(1) << goodPct
+                << std::setw(10) << std::setprecision(0) << avgCl << std::setw(10) << std::setprecision(2) << avgKE
+                << std::endl;
    }
    std::cout << "=============================================================" << std::endl;
 
