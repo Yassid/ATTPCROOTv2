@@ -71,20 +71,31 @@ void AtUKFDisplay::LoadFiles(const char *digiFile, const char *fittedFile)
       return;
    }
    fTreeDigi = (TTree *)fFileDigi->Get("cbmsim");
+   if (!fTreeDigi) {
+      std::cerr << "AtUKFDisplay: no cbmsim tree in " << digiFile << std::endl;
+      return;
+   }
    fTreeDigi->SetBranchAddress("AtPatternEvent", &fPatEvtArr);
    fNEvents = fTreeDigi->GetEntries();
+   std::cout << "AtUKFDisplay: loaded " << fNEvents << " events from " << digiFile << std::endl;
 
    if (fittedFile) {
       fFileFit.reset(TFile::Open(fittedFile));
       if (fFileFit && !fFileFit->IsZombie()) {
          fTreeFit = (TTree *)fFileFit->Get("cbmsim");
-         fTreeFit->SetBranchAddress("AtTrackingEvent", &fTrackingEvtArr);
+         if (fTreeFit) {
+            fTreeFit->SetBranchAddress("AtTrackingEvent", &fTrackingEvtArr);
+            std::cout << "AtUKFDisplay: fitted data loaded from " << fittedFile << std::endl;
+         } else {
+            std::cerr << "AtUKFDisplay: no cbmsim tree in " << fittedFile << " (skipping)" << std::endl;
+            fTreeFit = nullptr;
+         }
+      } else {
+         std::cerr << "AtUKFDisplay: cannot open " << fittedFile << " (skipping, use Fit button)" << std::endl;
+         fFileFit.reset();
+         fTreeFit = nullptr;
       }
    }
-
-   std::cout << "AtUKFDisplay: loaded " << fNEvents << " events from " << digiFile << std::endl;
-   if (fTreeFit)
-      std::cout << "AtUKFDisplay: fitted data loaded from " << fittedFile << std::endl;
 }
 
 // ===========================================================================
