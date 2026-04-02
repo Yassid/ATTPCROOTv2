@@ -349,6 +349,18 @@ void AtUKFDisplay::DrawEvent()
          }
       }
 
+      // Helper to draw legend on each pad
+      auto drawLegend = [&](TGraph *gCl, TGraph *gFit) {
+         auto *leg = new TLegend(0.12, 0.75, 0.45, 0.88);
+         leg->SetTextSize(0.035);
+         leg->SetFillStyle(0);
+         leg->SetBorderSize(0);
+         leg->AddEntry(gCl, "Clusters", "p");
+         if (gFit)
+            leg->AddEntry(gFit, "Smoothed (UKF)", "p");
+         leg->Draw();
+      };
+
       fTrackCanvas->cd(1);
       gPad->Clear();
       auto *gXY = new TGraph(cx.size(), cx.data(), cy.data());
@@ -357,13 +369,15 @@ void AtUKFDisplay::DrawEvent()
       gXY->SetMarkerSize(0.6);
       gXY->SetMarkerColor(kBlue);
       gXY->Draw("AP");
+      TGraph *gXYf = nullptr;
       if (!sx.empty()) {
-         auto *gXYf = new TGraph(sx.size(), sx.data(), sy.data());
+         gXYf = new TGraph(sx.size(), sx.data(), sy.data());
          gXYf->SetMarkerStyle(24);
          gXYf->SetMarkerSize(0.5);
          gXYf->SetMarkerColor(kRed);
          gXYf->Draw("P SAME");
       }
+      drawLegend(gXY, gXYf);
 
       fTrackCanvas->cd(2);
       gPad->Clear();
@@ -373,13 +387,15 @@ void AtUKFDisplay::DrawEvent()
       gXZ->SetMarkerSize(0.6);
       gXZ->SetMarkerColor(kBlue);
       gXZ->Draw("AP");
+      TGraph *gXZf = nullptr;
       if (!sz.empty()) {
-         auto *gXZf = new TGraph(sx.size(), sz.data(), sx.data());
+         gXZf = new TGraph(sx.size(), sz.data(), sx.data());
          gXZf->SetMarkerStyle(24);
          gXZf->SetMarkerSize(0.5);
          gXZf->SetMarkerColor(kRed);
          gXZf->Draw("P SAME");
       }
+      drawLegend(gXZ, gXZf);
 
       fTrackCanvas->cd(3);
       gPad->Clear();
@@ -389,13 +405,15 @@ void AtUKFDisplay::DrawEvent()
       gYZ->SetMarkerSize(0.6);
       gYZ->SetMarkerColor(kBlue);
       gYZ->Draw("AP");
+      TGraph *gYZf = nullptr;
       if (!sz.empty()) {
-         auto *gYZf = new TGraph(sy.size(), sz.data(), sy.data());
+         gYZf = new TGraph(sy.size(), sz.data(), sy.data());
          gYZf->SetMarkerStyle(24);
          gYZf->SetMarkerSize(0.5);
          gYZf->SetMarkerColor(kRed);
          gYZf->Draw("P SAME");
       }
+      drawLegend(gYZ, gYZf);
 
       fTrackCanvas->Update();
    }
