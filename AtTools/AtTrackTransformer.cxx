@@ -50,12 +50,16 @@ void AtTools::AtTrackTransformer::ClusterizeSmooth3D(AtTrack &track, Float_t rad
        //std::cout<<" Pos : "<<pos.X()<<" - "<<pos.Y()<<" - "<<pos.Z()<<" - TB : "<<TB<<" - Charge : "<<Q<<"\n";
        }*/
 
-   // Diffusion coefficients from member variables (set via SetDiffusionParams or defaults)
-   Double_t driftVel = fDriftVel;
-   Double_t samplingRate = fTBTime;
-   Double_t D_T = TMath::Sqrt((2.0 * fCoefT) / driftVel);
-   Double_t D_L = TMath::Sqrt((2.0 * fCoefL) / driftVel);
-   Double_t padRes = fPadResXY; // pad position resolution in mm
+   // Diffusion and resolution parameters.
+   // The transverse/longitudinal diffusion sigmas (in mm) at drift distance z_mm are:
+   //   σ_T(z) = 10 * sqrt(CoefT * 2 * z_mm / (10 * vDrift))   [mm]
+   //   σ_L(z) = 10 * sqrt(CoefL * 2 * z_mm / (10 * vDrift))   [mm]
+   // where CoefT/L are in cm²/µs, vDrift in cm/µs, and z_mm is the drift distance in mm.
+   // This matches the digitization in AtClusterize::getTransverseDiffusion/getLongitudinalDiffusion.
+   Double_t driftVel = fDriftVel;       // cm/us
+   Double_t samplingRate = fTBTime;     // us
+   Double_t padResXY = fPadResXY;       // mm (transverse pad resolution)
+   Double_t padResZ = fPadResXY * 1.5;  // mm (longitudinal — pads are typically longer in Z)
 
    if (hitArray.size() > 0) {
 
@@ -90,39 +94,59 @@ void AtTools::AtTrackTransformer::ClusterizeSmooth3D(AtTrack &track, Float_t rad
 
             if (hitTBArray.size() > 0) {
                double x = 0, y = 0, z = 0;
-               double sigma_x = 0, sigma_y = 0, sigma_z = 0;
+               double var_x = 0, var_y = 0, var_z = 0; // accumulate variance (σ²)
 
-               int timeStamp;
+               int timeStamp = 0;
                std::shared_ptr<AtHitCluster> hitCluster = std::make_shared<AtHitCluster>();
                hitCluster->SetClusterID(clusterID);
                Double_t hitQ = 0.0;
-               std::for_each(hitTBArray.begin(), hitTBArray.end(),
-                             [&x, &y, &z, &hitQ, &timeStamp, &sigma_x, &sigma_y, &sigma_z, &D_T, &D_L, &driftVel,
-                              &samplingRate, &padRes](AtHit &hitInQ) {
-                                XYZPoint pos = hitInQ.GetPosition();
-                                x += pos.X() * hitInQ.GetCharge();
-                                y += pos.Y() * hitInQ.GetCharge();
-                                z += pos.Z();
-                                hitQ += hitInQ.GetCharge();
-                                timeStamp += hitInQ.GetTimeStamp();
+               Double_t hitQ2 = 0.0; // sum of charge² for weighted variance
+               int nHits = 0;
 
-                                // Calculation of variance (DOI: 10.1051/,00010 (2017)715001EPJ Web of
-                                // Conferences50epjconf/2010010)
-                                sigma_x += hitInQ.GetCharge() *
-                                           TMath::Sqrt(TMath::Power(padRes, 2) +
-                                                       pos.Z() * TMath::Power(D_T, 2));
-                                sigma_y += sigma_x;
-                                sigma_z += TMath::Sqrt((1.0 / 6.0) * TMath::Power(driftVel * samplingRate, 2) +
-                                                       pos.Z() * TMath::Power(D_L, 2));
-                             });
+               for (auto &hitInQ : hitTBArray) {
+                  XYZPoint pos = hitInQ.GetPosition();
+                  double q = hitInQ.GetCharge();
+                  x += pos.X() * q;
+                  y += pos.Y() * q;
+                  z += pos.Z();
+                  hitQ += q;
+                  hitQ2 += q * q;
+                  timeStamp += hitInQ.GetTimeStamp();
+                  nHits++;
+
+                  // Per-hit position variance (σ² in mm²).
+                  // Drift distance: pos.Z() is in mm (digi frame, distance from pad plane).
+                  // Convert to drift time: t_drift = z_mm / (10 * vDrift_cm_per_us) [µs]
+                  double driftTime = pos.Z() / (10.0 * driftVel); // µs
+
+                  // Transverse diffusion variance: σ_T² = (10*sqrt(CoefT*2*t))² = 100*CoefT*2*t [mm²]
+                  double varT = 100.0 * fCoefT * 2.0 * driftTime; // mm²
+
+                  // Longitudinal diffusion: σ_L in time [µs] → convert to mm
+                  // σ_L_us = sqrt(CoefL*2*t), σ_L_mm = σ_L_us * vDrift * 10
+                  double varL = 100.0 * fCoefL * 2.0 * driftTime; // mm²
+
+                  // Time bucket resolution: uniform distribution → σ² = (vDrift*tbTime*10)²/12 [mm²]
+                  double tbRes_mm = driftVel * samplingRate * 10.0; // mm per time bucket
+                  double varTB = tbRes_mm * tbRes_mm / 12.0;       // mm²
+
+                  // Charge-weighted accumulation of per-hit variance
+                  var_x += q * q * (padResXY * padResXY + varT);
+                  var_y += q * q * (padResXY * padResXY + varT);
+                  var_z += q * q * (padResZ * padResZ + varTB + varL);
+               }
+
+               // Charge-weighted mean position
                x /= hitQ;
                y /= hitQ;
-               z /= hitTBArray.size();
-               timeStamp /= hitTBArray.size();
+               z /= nHits;
+               timeStamp /= nHits;
 
-               sigma_x /= hitQ;
-               sigma_y /= hitQ;
-               sigma_z /= hitTBArray.size();
+               // Variance of the charge-weighted mean: Var(x_bar) = Σ(w²*σ²) / (Σw)²
+               // where w = charge. This gives the 1/√N improvement for the cluster.
+               double sigma_x = TMath::Sqrt(var_x) / hitQ;
+               double sigma_y = TMath::Sqrt(var_y) / hitQ;
+               double sigma_z = TMath::Sqrt(var_z) / hitQ;
 
                XYZPoint clustPos(x, y, z);
                Bool_t checkDistance = kTRUE;
@@ -205,40 +229,43 @@ void AtTools::AtTrackTransformer::ClusterizeSmooth3D(AtTrack &track, Float_t rad
 
                if (hitTBArray.size() > 0) {
                   double x = 0, y = 0, z = 0;
-                  double sigma_x = 0, sigma_y = 0, sigma_z = 0;
+                  double var_x = 0, var_y = 0, var_z = 0;
 
                   int timeStamp = 0;
                   std::shared_ptr<AtHitCluster> hitCluster = std::make_shared<AtHitCluster>();
                   hitCluster->SetClusterID(clusterID);
                   Double_t hitQ = 0.0;
-                  std::for_each(hitTBArray.begin(), hitTBArray.end(),
-                                [&x, &y, &z, &hitQ, &timeStamp, &sigma_x, &sigma_y, &sigma_z, &D_T, &D_L, &driftVel,
-                                 &samplingRate, &padRes](AtHit &hitInQ) {
-                                   auto pos = hitInQ.GetPosition();
-                                   x += pos.X() * hitInQ.GetCharge();
-                                   y += pos.Y() * hitInQ.GetCharge();
-                                   z += pos.Z();
-                                   hitQ += hitInQ.GetCharge();
-                                   timeStamp += hitInQ.GetTimeStamp();
+                  int nHits = 0;
 
-                                   // Calculation of variance (DOI: 10.1051/,00010 (2017)715001EPJ Web of
-                                   // Conferences50epjconf/2010010)
-                                   sigma_x +=
-                                      hitInQ.GetCharge() *
-                                      TMath::Sqrt(TMath::Power(padRes, 2) +
-                                                  pos.Z() * TMath::Power(D_T, 2));
-                                   sigma_y += sigma_x;
-                                   sigma_z += TMath::Sqrt((1.0 / 6.0) * TMath::Power(driftVel * samplingRate, 2) +
-                                                          pos.Z() * TMath::Power(D_L, 2));
-                                });
+                  for (auto &hitInQ : hitTBArray) {
+                     auto pos = hitInQ.GetPosition();
+                     double q = hitInQ.GetCharge();
+                     x += pos.X() * q;
+                     y += pos.Y() * q;
+                     z += pos.Z();
+                     hitQ += q;
+                     timeStamp += hitInQ.GetTimeStamp();
+                     nHits++;
+
+                     double driftTime = pos.Z() / (10.0 * driftVel);
+                     double varT = 100.0 * fCoefT * 2.0 * driftTime;
+                     double varL = 100.0 * fCoefL * 2.0 * driftTime;
+                     double tbRes_mm = driftVel * samplingRate * 10.0;
+                     double varTB = tbRes_mm * tbRes_mm / 12.0;
+
+                     var_x += q * q * (padResXY * padResXY + varT);
+                     var_y += q * q * (padResXY * padResXY + varT);
+                     var_z += q * q * (padResZ * padResZ + varTB + varL);
+                  }
+
                   x /= hitQ;
                   y /= hitQ;
-                  z /= hitTBArray.size();
-                  timeStamp /= hitTBArray.size();
+                  z /= nHits;
+                  timeStamp /= nHits;
 
-                  sigma_x /= hitQ;
-                  sigma_y /= hitQ;
-                  sigma_z /= hitTBArray.size();
+                  double sigma_x = TMath::Sqrt(var_x) / hitQ;
+                  double sigma_y = TMath::Sqrt(var_y) / hitQ;
+                  double sigma_z = TMath::Sqrt(var_z) / hitQ;
 
                   TVector3 clustPos(x, y, z);
                   hitCluster->SetCharge(hitQ);
