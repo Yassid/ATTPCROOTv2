@@ -6,6 +6,7 @@
 #include "AtHitCluster.h"
 #include "AtPatternEvent.h"
 #include "AtTrack.h"
+#include "AtMCTrack.h"
 #include "AtTrackingEvent.h"
 
 #include <TApplication.h>
@@ -63,7 +64,7 @@ AtUKFDisplay::~AtUKFDisplay()
 // ===========================================================================
 // File loading
 // ===========================================================================
-void AtUKFDisplay::LoadFiles(const char *digiFile, const char *fittedFile)
+void AtUKFDisplay::LoadFiles(const char *digiFile, const char *fittedFile, const char *mcFile)
 {
    fFileDigi.reset(TFile::Open(digiFile));
    if (!fFileDigi || fFileDigi->IsZombie()) {
@@ -94,6 +95,17 @@ void AtUKFDisplay::LoadFiles(const char *digiFile, const char *fittedFile)
          std::cerr << "AtUKFDisplay: cannot open " << fittedFile << " (skipping, use Fit button)" << std::endl;
          fFileFit.reset();
          fTreeFit = nullptr;
+      }
+   }
+
+   if (mcFile) {
+      fFileMC.reset(TFile::Open(mcFile));
+      if (fFileMC && !fFileMC->IsZombie()) {
+         fTreeMC = (TTree *)fFileMC->Get("cbmsim");
+         if (fTreeMC) {
+            fTreeMC->SetBranchAddress("MCTrack", &fMCTrackArr);
+            std::cout << "AtUKFDisplay: MC truth loaded from " << mcFile << std::endl;
+         }
       }
    }
 }
@@ -254,6 +266,9 @@ void AtUKFDisplay::MakeControlPanel(TGMainFrame *mf)
    vf->AddFrame(sigFracFrame, new TGLayoutHints(kLHintsExpandX, 2, 2, 1, 1));
 
    // Checkboxes
+   fUseMCTruthBtn = new TGCheckButton(vf, "Use MC truth seed");
+   vf->AddFrame(fUseMCTruthBtn, new TGLayoutHints(kLHintsLeft, 5, 2, 3, 1));
+
    fStragglingBtn = new TGCheckButton(vf, "Energy straggling");
    vf->AddFrame(fStragglingBtn, new TGLayoutHints(kLHintsLeft, 5, 2, 3, 1));
 
@@ -619,6 +634,26 @@ void AtUKFDisplay::FitCurrentTrack()
 
    // Recreate fitter with current GUI parameters
    CreateFitter();
+
+   // If MC truth seed is enabled, find the proton and override the seed
+   bool useMCTruth = fUseMCTruthBtn && fUseMCTruthBtn->IsOn() && fTreeMC;
+   if (useMCTruth) {
+      fTreeMC->GetEntry(fCurrentEvent);
+      if (fMCTrackArr) {
+         for (int j = 0; j < fMCTrackArr->GetEntries(); j++) {
+            auto *mcTrack = (AtMCTrack *)fMCTrackArr->At(j);
+            if (mcTrack->GetPdgCode() == 2212) { // proton
+               double pMC = std::sqrt(mcTrack->GetPx() * mcTrack->GetPx() + mcTrack->GetPy() * mcTrack->GetPy() +
+                                      mcTrack->GetPz() * mcTrack->GetPz()) *
+                            1e3; // GeV → MeV
+               fFitter->SetMomentumSeed(pMC);
+               std::cout << "  MC truth seed: p=" << pMC << " MeV/c" << std::endl;
+               break;
+            }
+         }
+      }
+   }
+
    fFitter->Init();
 
    // Fit using the public FitEvent interface

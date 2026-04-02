@@ -57,7 +57,8 @@ public:
    /// Load input files.
    /// @param digiFile Path to output_digi.root (required: has AtPatternEvent)
    /// @param fittedFile Path to output_ukf_only.root (optional: has AtTrackingEvent)
-   void LoadFiles(const char *digiFile, const char *fittedFile = nullptr);
+   /// @param mcFile Path to attpcsim.root (optional: has MC truth for seeding)
+   void LoadFiles(const char *digiFile, const char *fittedFile = nullptr, const char *mcFile = nullptr);
 
    /// Event navigation
    void GotoEvent(int id);
@@ -107,10 +108,13 @@ private:
    // Files and trees
    std::unique_ptr<TFile> fFileDigi;
    std::unique_ptr<TFile> fFileFit;
+   std::unique_ptr<TFile> fFileMC;
    TTree *fTreeDigi{nullptr};
    TTree *fTreeFit{nullptr};
+   TTree *fTreeMC{nullptr};
    TClonesArray *fPatEvtArr{nullptr};
    TClonesArray *fTrackingEvtArr{nullptr};
+   TClonesArray *fMCTrackArr{nullptr};
 
    // Event state
    int fCurrentEvent{0};
@@ -136,6 +140,7 @@ private:
    TGComboBox *fParticleBox{nullptr};
    TGNumberEntry *fMomSeedEntry{nullptr};
    TGNumberEntry *fMomSigmaEntry{nullptr};
+   TGCheckButton *fUseMCTruthBtn{nullptr};
 
    // Canvases
    TCanvas *fTrackCanvas{nullptr}; // 2D projections (TCanvas mode)
