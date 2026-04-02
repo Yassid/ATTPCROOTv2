@@ -29,7 +29,7 @@ XYZPoint DigiToLab(const XYZPoint &p)
    return {p.X(), p.Y(), ZPadPlane - p.Z()};
 }
 
-void run_ukf_digi(int maxEvents = -1, double eLossScale = 1.0)
+void run_ukf_digi(int maxEvents = -1, double eLossScale = 1.0, double minSpacing = 3.0)
 {
    FairLogger::GetLogger()->SetLogScreenLevel("ERROR");
 
@@ -192,7 +192,7 @@ void run_ukf_digi(int maxEvents = -1, double eLossScale = 1.0)
       }
 
       // Build ordered cluster list in lab frame, skipping clusters too close
-      double minClusterSpacing = 3.0; // mm minimum between consecutive clusters
+      double minClusterSpacing = minSpacing; // mm minimum between consecutive clusters
       std::vector<XYZPoint> orderedClusters;
       orderedClusters.push_back(clusterLab[order[0]]);
       for (size_t i = 1; i < order.size(); i++) {
