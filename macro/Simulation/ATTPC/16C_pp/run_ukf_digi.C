@@ -12,6 +12,7 @@
 /// Run: root -b -q run_ukf_digi.C
 ///      root -b -q 'run_ukf_digi.C(5)'          // process only 5 events
 ///      root -b -q 'run_ukf_digi.C(-1, 0.95)'   // apply energy loss scaling
+///      root -b -q 'run_ukf_digi.C(-1, 1.0, 3.0, true)' // per-cluster covariance
 
 using ROOT::Math::Polar3DVector;
 using ROOT::Math::XYZPoint;
@@ -29,7 +30,8 @@ XYZPoint DigiToLab(const XYZPoint &p)
    return {p.X(), p.Y(), ZPadPlane - p.Z()};
 }
 
-void run_ukf_digi(int maxEvents = -1, double eLossScale = 1.0, double minSpacing = 3.0)
+void run_ukf_digi(int maxEvents = -1, double eLossScale = 1.0, double minSpacing = 3.0,
+                  bool usePerClusterCov = false)
 {
    FairLogger::GetLogger()->SetLogScreenLevel("ERROR");
 
@@ -191,14 +193,19 @@ void run_ukf_digi(int maxEvents = -1, double eLossScale = 1.0, double minSpacing
          used[bestIdx] = true;
       }
 
-      // Build ordered cluster list in lab frame, skipping clusters too close
-      double minClusterSpacing = minSpacing; // mm minimum between consecutive clusters
+      // Build ordered cluster list in lab frame, skipping clusters too close.
+      // Keep track of original cluster indices for per-cluster covariance.
+      double minClusterSpacing = minSpacing;
       std::vector<XYZPoint> orderedClusters;
+      std::vector<int> orderedIndices; // index into original clusters array
       orderedClusters.push_back(clusterLab[order[0]]);
+      orderedIndices.push_back(order[0]);
       for (size_t i = 1; i < order.size(); i++) {
          XYZPoint pos = clusterLab[order[i]];
-         if ((pos - orderedClusters.back()).R() >= minClusterSpacing)
+         if ((pos - orderedClusters.back()).R() >= minClusterSpacing) {
             orderedClusters.push_back(pos);
+            orderedIndices.push_back(order[i]);
+         }
       }
 
       if (orderedClusters.size() < 5)
@@ -241,21 +248,33 @@ void run_ukf_digi(int maxEvents = -1, double eLossScale = 1.0, double minSpacing
       cov(4, 4) = sigma_ang * sigma_ang;
       cov(5, 5) = sigma_ang * sigma_ang;
 
-      // Measurement covariance — use a fixed value for now.
-      // TODO: Use per-cluster covariance from AtHitCluster::GetCovMatrix()
-      double measSigma = 2.0; // mm — representative for digitized AT-TPC data
-      TMatrixD measCov(3, 3);
-      measCov.Zero();
+      // Measurement covariance
+      double measSigma = 2.0; // mm — fallback for fixed covariance
+      TMatrixD defaultMeasCov(3, 3);
+      defaultMeasCov.Zero();
       for (int i = 0; i < 3; i++)
-         measCov(i, i) = measSigma * measSigma;
+         defaultMeasCov(i, i) = measSigma * measSigma;
 
       // --- Run UKF ---
       ukf.SetInitialState(initialPos, initialMom, cov);
-      ukf.SetMeasCov(measCov);
+      ukf.SetMeasCov(defaultMeasCov); // Set default (used for first step or if per-cluster disabled)
 
       bool converged = true;
       try {
          for (size_t i = 1; i < orderedClusters.size(); i++) {
+            // Update measurement covariance from cluster if enabled
+            if (usePerClusterCov) {
+               const TMatrixDSym &clCov = clusters->at(orderedIndices[i]).GetCovMatrix();
+               TMatrixD mc(3, 3);
+               for (int r = 0; r < 3; r++)
+                  for (int c = 0; c < 3; c++)
+                     mc(r, c) = clCov(r, c);
+               // Floor to avoid singular matrix
+               for (int d = 0; d < 3; d++)
+                  if (mc(d, d) < 0.01)
+                     mc(d, d) = 0.01;
+               ukf.SetMeasCov(mc);
+            }
             ukf.predictUKF(orderedClusters[i]);
             ukf.correctUKF(orderedClusters[i]);
          }

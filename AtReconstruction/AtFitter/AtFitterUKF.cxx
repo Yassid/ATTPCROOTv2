@@ -164,6 +164,22 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
    try {
       for (size_t i = 1; i < clusters->size(); ++i) {
          ROOT::Math::XYZPoint meas = clusters->at(i).GetPosition();
+
+         // Update measurement covariance from cluster if enabled
+         if (fUsePerClusterCov) {
+            const auto &clCov = clusters->at(i).GetCovMatrix();
+            TMatrixD measCov(3, 3);
+            for (int r = 0; r < 3; ++r)
+               for (int c = 0; c < 3; ++c)
+                  measCov(r, c) = clCov(r, c);
+            // Ensure a minimum variance to avoid singular matrix
+            double minVar = 0.01; // 0.1 mm minimum sigma
+            for (int d = 0; d < 3; ++d)
+               if (measCov(d, d) < minVar)
+                  measCov(d, d) = minVar;
+            fUKF->SetMeasCov(measCov);
+         }
+
          fUKF->predictUKF(meas);
          fUKF->correctUKF(meas);
       }

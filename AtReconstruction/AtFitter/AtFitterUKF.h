@@ -60,6 +60,8 @@ public:
    void SetMomentumSigmaFrac(double frac) { fMomSigmaFrac = frac; }
    /// Minimum number of clusters required to attempt a fit (default 3).
    void SetMinClusters(int n) { fMinClusters = n; }
+   /// Use per-cluster covariance matrix from AtHitCluster::GetCovMatrix() instead of fixed sigma.
+   void SetUsePerClusterCov(bool use) { fUsePerClusterCov = use; }
 
    /// AtFitter interface — no-op; UKF is created lazily on first GetFittedTrack() call.
    void Init() override {}
@@ -97,6 +99,7 @@ private:
    double fMomSigmaFrac{0.1};
    int fMinClusters{3};
    bool fEnableEnStraggling{true};
+   bool fUsePerClusterCov{false};
 
    // Lazily initialised on first GetFittedTrack() call
    std::unique_ptr<kf::TrackFitterUKF> fUKF;
