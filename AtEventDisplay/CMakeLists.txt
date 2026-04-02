@@ -9,6 +9,7 @@ ${CMAKE_SOURCE_DIR}/AtEventDisplay/Deprecated
 ${CMAKE_SOURCE_DIR}/AtEventDisplay/AtTabs
 ${CMAKE_SOURCE_DIR}/AtEventDisplay/AtSidebar
 ${CMAKE_SOURCE_DIR}/AtEventDisplay/AtSidebar/PSA
+${CMAKE_SOURCE_DIR}/AtEventDisplay/AtUKFDisplay
 )
 
 set(SRCS
@@ -44,6 +45,8 @@ Deprecated/AtEventDrawTask.cxx
 Deprecated/AtEventDrawTaskProto.cxx
 Deprecated/AtEventManagerS800.cxx
 Deprecated/AtEventDrawTaskS800.cxx
+
+AtUKFDisplay/AtUKFDisplay.cxx
 )
 
 Set(DEPENDENCIES
