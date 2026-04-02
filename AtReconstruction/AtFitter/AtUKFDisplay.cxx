@@ -7,6 +7,7 @@
 #include "AtPatternEvent.h"
 #include "AtTrack.h"
 #include "AtMCTrack.h"
+#include "AtTrackTransformer.h"
 #include "AtTrackingEvent.h"
 
 #include <TApplication.h>
@@ -265,12 +266,40 @@ void AtUKFDisplay::MakeControlPanel(TGMainFrame *mf)
    sigFracFrame->AddFrame(fMomSigmaEntry, new TGLayoutHints(kLHintsRight, 2, 2, 2, 2));
    vf->AddFrame(sigFracFrame, new TGLayoutHints(kLHintsExpandX, 2, 2, 1, 1));
 
+   // === Clustering controls ===
+   vf->AddFrame(new TGHorizontalFrame(vf, 1, 2), new TGLayoutHints(kLHintsExpandX, 2, 2, 5, 5));
+   auto *clLabel = new TGLabel(vf, "=== Clustering ===");
+   vf->AddFrame(clLabel, new TGLayoutHints(kLHintsCenterX, 2, 2, 2, 2));
+
+   auto *radFrame = new TGHorizontalFrame(vf);
+   radFrame->AddFrame(new TGLabel(radFrame, "Radius [mm]:"), new TGLayoutHints(kLHintsLeft, 2, 2, 3, 2));
+   fClusterRadiusEntry = new TGNumberEntry(radFrame, 15.0, 6, -1, TGNumberFormat::kNESRealOne);
+   radFrame->AddFrame(fClusterRadiusEntry, new TGLayoutHints(kLHintsRight, 2, 2, 2, 2));
+   vf->AddFrame(radFrame, new TGLayoutHints(kLHintsExpandX, 2, 2, 1, 1));
+
+   auto *distFrame = new TGHorizontalFrame(vf);
+   distFrame->AddFrame(new TGLabel(distFrame, "Distance [mm]:"), new TGLayoutHints(kLHintsLeft, 2, 2, 3, 2));
+   fClusterDistEntry = new TGNumberEntry(distFrame, 30.5, 6, -1, TGNumberFormat::kNESRealOne);
+   distFrame->AddFrame(fClusterDistEntry, new TGLayoutHints(kLHintsRight, 2, 2, 2, 2));
+   vf->AddFrame(distFrame, new TGLayoutHints(kLHintsExpandX, 2, 2, 1, 1));
+
+   fShowRawHitsBtn = new TGCheckButton(vf, "Show raw hits");
+   vf->AddFrame(fShowRawHitsBtn, new TGLayoutHints(kLHintsLeft, 5, 2, 3, 1));
+
+   auto *reclusterBtn = new TGTextButton(vf, "  Re-cluster + Fit  ");
+   reclusterBtn->Connect("Clicked()", "AtUKFDisplay", this, "GuiRecluster()");
+   reclusterBtn->SetBackgroundColor(0x0088ff);
+   vf->AddFrame(reclusterBtn, new TGLayoutHints(kLHintsExpandX, 5, 5, 3, 3));
+
+   // === Fitter options ===
+   vf->AddFrame(new TGHorizontalFrame(vf, 1, 2), new TGLayoutHints(kLHintsExpandX, 2, 2, 5, 5));
+
    // Checkboxes
    fUseMCTruthBtn = new TGCheckButton(vf, "Use MC truth seed");
    vf->AddFrame(fUseMCTruthBtn, new TGLayoutHints(kLHintsLeft, 5, 2, 3, 1));
 
    fStragglingBtn = new TGCheckButton(vf, "Energy straggling");
-   vf->AddFrame(fStragglingBtn, new TGLayoutHints(kLHintsLeft, 5, 2, 3, 1));
+   vf->AddFrame(fStragglingBtn, new TGLayoutHints(kLHintsLeft, 5, 2, 1, 1));
 
    fPerClusterCovBtn = new TGCheckButton(vf, "Per-cluster covariance");
    vf->AddFrame(fPerClusterCovBtn, new TGLayoutHints(kLHintsLeft, 5, 2, 1, 1));
@@ -354,7 +383,20 @@ void AtUKFDisplay::DrawEvent()
    int nClusters = track.GetHitClusterArray()->size();
 
    if (fTrackCanvas) {
-      // TCanvas mode: 2D projections
+      // Raw hits (before clustering)
+      std::vector<double> hx, hy, hz;
+      bool showRaw = fShowRawHitsBtn && fShowRawHitsBtn->IsOn();
+      if (showRaw) {
+         auto &hitArr = track.GetHitArray();
+         for (auto &hit : hitArr) {
+            auto pos = hit->GetPosition();
+            hx.push_back(pos.X());
+            hy.push_back(pos.Y());
+            hz.push_back(fZPadPlane - pos.Z());
+         }
+      }
+
+      // Clusters
       auto *clusters = track.GetHitClusterArray();
       std::vector<double> cx, cy, cz;
       for (auto &cl : *clusters) {
@@ -378,71 +420,60 @@ void AtUKFDisplay::DrawEvent()
          }
       }
 
-      // Helper to draw legend on each pad
-      auto drawLegend = [&](TGraph *gCl, TGraph *gFit) {
-         auto *leg = new TLegend(0.12, 0.75, 0.45, 0.88);
-         leg->SetTextSize(0.035);
+      // Helper lambda to draw one projection pad with raw hits, clusters, and fit
+      auto drawPad = [&](int padNum, const char *title,
+                         std::vector<double> &ax, std::vector<double> &ay,   // clusters
+                         std::vector<double> &bx, std::vector<double> &by,   // raw hits
+                         std::vector<double> &fx, std::vector<double> &fy) { // fitted
+         fTrackCanvas->cd(padNum);
+         gPad->Clear();
+
+         // Draw raw hits first (background)
+         TGraph *gRaw = nullptr;
+         if (showRaw && !bx.empty()) {
+            gRaw = new TGraph(bx.size(), bx.data(), by.data());
+            gRaw->SetTitle(title);
+            gRaw->SetMarkerStyle(1);
+            gRaw->SetMarkerSize(1);
+            gRaw->SetMarkerColor(kGray + 1);
+            gRaw->Draw("AP");
+         }
+
+         // Draw clusters
+         auto *gCl = new TGraph(ax.size(), ax.data(), ay.data());
+         if (!gRaw)
+            gCl->SetTitle(title);
+         gCl->SetMarkerStyle(20);
+         gCl->SetMarkerSize(0.6);
+         gCl->SetMarkerColor(kBlue);
+         gCl->Draw(gRaw ? "P SAME" : "AP");
+
+         // Draw fitted
+         TGraph *gFit = nullptr;
+         if (!fx.empty()) {
+            gFit = new TGraph(fx.size(), fx.data(), fy.data());
+            gFit->SetMarkerStyle(24);
+            gFit->SetMarkerSize(0.5);
+            gFit->SetMarkerColor(kRed);
+            gFit->Draw("P SAME");
+         }
+
+         // Legend
+         auto *leg = new TLegend(0.12, 0.70, 0.50, 0.88);
+         leg->SetTextSize(0.03);
          leg->SetFillStyle(0);
          leg->SetBorderSize(0);
-         leg->AddEntry(gCl, "Clusters", "p");
+         if (gRaw)
+            leg->AddEntry(gRaw, Form("Raw hits (%d)", (int)bx.size()), "p");
+         leg->AddEntry(gCl, Form("Clusters (%d)", (int)ax.size()), "p");
          if (gFit)
-            leg->AddEntry(gFit, "Smoothed (UKF)", "p");
+            leg->AddEntry(gFit, "Fitted (UKF)", "p");
          leg->Draw();
       };
 
-      fTrackCanvas->cd(1);
-      gPad->Clear();
-      auto *gXY = new TGraph(cx.size(), cx.data(), cy.data());
-      gXY->SetTitle(Form("Event %d  XY;X [mm];Y [mm]", fCurrentEvent));
-      gXY->SetMarkerStyle(20);
-      gXY->SetMarkerSize(0.6);
-      gXY->SetMarkerColor(kBlue);
-      gXY->Draw("AP");
-      TGraph *gXYf = nullptr;
-      if (!sx.empty()) {
-         gXYf = new TGraph(sx.size(), sx.data(), sy.data());
-         gXYf->SetMarkerStyle(24);
-         gXYf->SetMarkerSize(0.5);
-         gXYf->SetMarkerColor(kRed);
-         gXYf->Draw("P SAME");
-      }
-      drawLegend(gXY, gXYf);
-
-      fTrackCanvas->cd(2);
-      gPad->Clear();
-      auto *gXZ = new TGraph(cx.size(), cz.data(), cx.data());
-      gXZ->SetTitle("XZ;Z_{lab} [mm];X [mm]");
-      gXZ->SetMarkerStyle(20);
-      gXZ->SetMarkerSize(0.6);
-      gXZ->SetMarkerColor(kBlue);
-      gXZ->Draw("AP");
-      TGraph *gXZf = nullptr;
-      if (!sz.empty()) {
-         gXZf = new TGraph(sx.size(), sz.data(), sx.data());
-         gXZf->SetMarkerStyle(24);
-         gXZf->SetMarkerSize(0.5);
-         gXZf->SetMarkerColor(kRed);
-         gXZf->Draw("P SAME");
-      }
-      drawLegend(gXZ, gXZf);
-
-      fTrackCanvas->cd(3);
-      gPad->Clear();
-      auto *gYZ = new TGraph(cy.size(), cz.data(), cy.data());
-      gYZ->SetTitle("YZ;Z_{lab} [mm];Y [mm]");
-      gYZ->SetMarkerStyle(20);
-      gYZ->SetMarkerSize(0.6);
-      gYZ->SetMarkerColor(kBlue);
-      gYZ->Draw("AP");
-      TGraph *gYZf = nullptr;
-      if (!sz.empty()) {
-         gYZf = new TGraph(sy.size(), sz.data(), sy.data());
-         gYZf->SetMarkerStyle(24);
-         gYZf->SetMarkerSize(0.5);
-         gYZf->SetMarkerColor(kRed);
-         gYZf->Draw("P SAME");
-      }
-      drawLegend(gYZ, gYZf);
+      drawPad(1, Form("Event %d  XY;X [mm];Y [mm]", fCurrentEvent), cx, cy, hx, hy, sx, sy);
+      drawPad(2, "XZ;Z_{lab} [mm];X [mm]", cz, cx, hz, hx, sz, sx);
+      drawPad(3, "YZ;Z_{lab} [mm];Y [mm]", cz, cy, hz, hy, sz, sy);
 
       fTrackCanvas->Update();
    }
@@ -800,5 +831,42 @@ void AtUKFDisplay::GuiPrevEvent()
 
 void AtUKFDisplay::GuiFit()
 {
+   FitCurrentTrack();
+}
+
+void AtUKFDisplay::GuiRecluster()
+{
+   if (!fTreeDigi)
+      return;
+
+   fTreeDigi->GetEntry(fCurrentEvent);
+   if (!fPatEvtArr || fPatEvtArr->GetEntries() == 0)
+      return;
+
+   auto *patEvt = (AtPatternEvent *)fPatEvtArr->At(0);
+   auto &tracks = patEvt->GetTrackCand();
+   if (tracks.empty())
+      return;
+
+   // Find largest track
+   int bestTrack = 0;
+   for (size_t t = 1; t < tracks.size(); t++) {
+      if (tracks[t].GetHitArray().size() > tracks[bestTrack].GetHitArray().size())
+         bestTrack = t;
+   }
+
+   // Re-cluster with GUI parameters
+   double radius = fClusterRadiusEntry ? fClusterRadiusEntry->GetNumber() : 15.0;
+   double distance = fClusterDistEntry ? fClusterDistEntry->GetNumber() : 30.5;
+
+   tracks[bestTrack].ResetHitClusterArray();
+   AtTools::AtTrackTransformer transformer;
+   transformer.ClusterizeSmooth3D(tracks[bestTrack], radius, distance);
+
+   int nNewClusters = tracks[bestTrack].GetHitClusterArray()->size();
+   std::cout << "Re-clustered: radius=" << radius << " distance=" << distance
+             << " → " << nNewClusters << " clusters" << std::endl;
+
+   // Now fit with the new clusters
    FitCurrentTrack();
 }

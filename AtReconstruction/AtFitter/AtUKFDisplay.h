@@ -99,6 +99,7 @@ public:
    void GuiNextEvent(); // *SIGNAL*
    void GuiPrevEvent(); // *SIGNAL*
    void GuiFit();       // *SIGNAL*
+   void GuiRecluster(); // *SIGNAL*
 
 private:
 
@@ -141,6 +142,9 @@ private:
    TGNumberEntry *fMomSeedEntry{nullptr};
    TGNumberEntry *fMomSigmaEntry{nullptr};
    TGCheckButton *fUseMCTruthBtn{nullptr};
+   TGCheckButton *fShowRawHitsBtn{nullptr};
+   TGNumberEntry *fClusterRadiusEntry{nullptr};
+   TGNumberEntry *fClusterDistEntry{nullptr};
 
    // Canvases
    TCanvas *fTrackCanvas{nullptr}; // 2D projections (TCanvas mode)
