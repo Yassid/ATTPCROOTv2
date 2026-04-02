@@ -64,7 +64,7 @@ protected:
    double fETol = 1e-4;    /// Energy tolerance for convergence when fixing energy loss
    double fStopTol = 0.01; /// Maximum kinetic energy to consider the particle stopped (MeV)
    double fDistTol = 1e-2;   /// Distance tolerance when considering positions equal. (mm)
-   int fMaxPropIter = 200; /// Maximum iterations for propagation loop
+   int fMaxPropIter = 100; /// Maximum iterations for propagation loop
 
    static constexpr double fReltoSImom = 1.60218e-13 / 299792458; // Conversion factor from MeV/c to kg m/s (SI units)
 
@@ -154,6 +154,8 @@ public:
 
    XYZVector dxds(const XYZPoint &pos, const XYZVector &mom) const
    {
+      if (mom.R() < 1e-10)
+         return {0, 0, 0};
       return mom.Unit(); // The derivative of the position is just the unit vector of the momentum.
    }
 

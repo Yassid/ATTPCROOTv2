@@ -75,8 +75,9 @@ void run_reco_ukf(int nEvents = 10000)
    ukfFitter->SetBField(ROOT::Math::XYZVector(0, 0, 2.85));
    ukfFitter->SetUKFParameters(1e-3, 2.0, 0.0);
    ukfFitter->SetMeasurementSigma(2.0);
-   ukfFitter->SetEnableEnergyStraggling(false); // Disable for speed in interpreted macros
-   ukfFitter->SetMinClusters(5);
+   ukfFitter->SetMomentumSigmaFrac(0.3); // 30% uncertainty — Brho seed can be off
+   ukfFitter->SetEnableEnergyStraggling(false);
+   ukfFitter->SetMinClusters(10); // Skip short beam tracks
    ukfFitter->SetZPadPlane(1000.0); // Convert digi→lab coordinates
 
    AtFitterTask *fitterTask = new AtFitterTask(std::move(ukfFitter));

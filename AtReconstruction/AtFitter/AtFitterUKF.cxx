@@ -73,7 +73,7 @@ void AtFitterUKF::InitUKF()
    propagator.SetBField(fBField);
    propagator.SetEField(fEField);
 
-   auto stepper = std::make_unique<AtTools::AtRK4AdaptiveStepper>();
+   auto stepper = std::make_unique<AtTools::AtRK4Stepper>();
    fUKF = std::make_unique<kf::TrackFitterUKF>(std::move(propagator), std::move(stepper));
    fUKF->setParameters(static_cast<float>(fAlpha), static_cast<float>(fBeta), static_cast<float>(fKappa));
    fUKF->fEnableEnStraggling = fEnableEnStraggling;
@@ -167,6 +167,19 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
    ROOT::Math::XYZPoint initialPos = GetInitialPosition(track);
    ROOT::Math::XYZVector initialMom = GetInitialMomentum(track);
    double p_MeV = initialMom.R();
+
+   // If we converted to lab frame, the GeoTheta/Phi from pattern recognition
+   // are in the digi frame and no longer match the cluster positions.
+   // Re-derive the momentum direction from the first two clusters instead.
+   if (fZPadPlane > 0 && clusters->size() >= 2) {
+      auto dir = clusters->at(1).GetPosition() - clusters->at(0).GetPosition();
+      initialMom = p_MeV * dir.Unit();
+   }
+
+   LOG(info) << "AtFitterUKF: seed p=" << p_MeV << " MeV/c, pos=(" << initialPos.X() << "," << initialPos.Y() << ","
+             << initialPos.Z() << "), mom=(" << initialMom.X() << "," << initialMom.Y() << "," << initialMom.Z()
+             << "), theta=" << initialMom.Theta() * 180.0 / M_PI << " deg, phi=" << initialMom.Phi() * 180.0 / M_PI
+             << " deg";
 
    // --- 3. Set initial state (also calls Reset internally) ---
    fUKF->SetInitialState(initialPos, initialMom, GetInitialCovariance(p_MeV));

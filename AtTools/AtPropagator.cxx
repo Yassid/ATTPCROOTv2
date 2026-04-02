@@ -34,6 +34,10 @@ AtPropagator::XYZVector AtPropagator::Force(XYZPoint pos, XYZVector mom) const
    auto F_lorentz = fState.fQ * (fEField + v.Cross(fBField));
    LOG(debug) << "F_lorentz: " << F_lorentz;
 
+   if (!fELossModel) {
+      LOG(error) << "AtPropagator::Force: fELossModel is null!";
+      return F_lorentz;
+   }
    auto dedx = fScalingFactor * fELossModel->GetdEdx(Kinematics::KE(mom, fState.fMass)); // Stopping power in MeV/mm
    auto dedx_si = dedx * 1.60218e-10;                                                    // de_dx in SI units (J/m)
 
@@ -45,17 +49,20 @@ AtPropagator::XYZVector AtPropagator::Force(XYZPoint pos, XYZVector mom) const
 
 AtPropagator::XYZVector AtPropagator::dpds(const XYZPoint &pos, const XYZVector &mom) const
 {
-   // Calculate the force acting on the particle at the given position and momentum
    auto speed = Kinematics::GetSpeed(mom.R(), fState.fMass); // Speed in m/s
+   if (speed < 1e-10)
+      return {0, 0, 0}; // Particle stopped — no force change per arc length
    return Force(pos, mom) / speed;
 }
 AtPropagator::XYZVector AtPropagator::d2xds2(const XYZPoint &pos, const XYZVector &mom) const
 {
-   auto phat = mom.Unit();         // Unit vector in the direction of momentum
-   auto p = mom.R();               // Magnitude of the momentum
-   auto dpds_vec = dpds(pos, mom); // Derivative of momentum w.r.t. arc length
+   auto p = mom.R();
+   if (p < 1e-10)
+      return {0, 0, 0}; // Particle stopped — no curvature
+   auto phat = mom.Unit();
+   auto dpds_vec = dpds(pos, mom);
 
-   return 1 / p * (dpds_vec - phat * (phat.Dot(dpds_vec))); // Second derivative of position w.r.t. arc length
+   return 1 / p * (dpds_vec - phat * (phat.Dot(dpds_vec)));
 }
 
 void AtPropagator::PropagateOneStep(AtStepper &stepper)
@@ -359,7 +366,14 @@ AtPropagator::StepState AtRK4AdaptiveStepper::Step(const AtPropagator::StepState
    LOG(debug) << "Starting RK4 step with initial position: " << x0_mm.X() << ", " << x0_mm.Y() << ", " << x0_mm.Z();
    LOG(debug) << "Initial momentum: " << p0.X() << ", " << p0.Y() << ", " << p0.Z();
 
+   int stepAttempts = 0;
    while (true) {
+      if (++stepAttempts > 100) {
+         LOG(error) << "Adaptive stepper did not converge after 100 attempts, aborting.";
+         result.status = AtPropagator::StepStateStatus::kInvalidStepSize;
+         result.hUsed = h;
+         return result;
+      }
       auto x_SI = fPos * 1e-3;        // Convert position to SI units (m)
       auto p_SI = fReltoSImom * fMom; // Convert momentum to SI units (kg m/s)
       XYZVector kx[7];                // kx[i] will hold the position derivatives (unitless)
