@@ -173,7 +173,12 @@ void AtPropagator::PropagateToMeasurementSurface(const AtMeasurementSurface &sur
                     << fState.fPos.Z();
          LOG(debug) << "Energy after stopping: " << Kinematics::KE(fState.fMom, fState.fMass) << " MeV";
 
+         int clipIter = 0;
          while (surface.fClipToSurface) {
+            if (++clipIter > 20) {
+               LOG(debug) << "Clip-to-surface did not converge after 20 iterations.";
+               break;
+            }
             fScalingFactor = 0; // Turn off energy loss.
 
             // If we still haven't intersected the surface, we need to adjust the step size
@@ -186,12 +191,10 @@ void AtPropagator::PropagateToMeasurementSurface(const AtMeasurementSurface &sur
             fState.h = h * 1e-3; // Convert to meters for the RK4 step
             result = stepper.Step(fState);
             if (!result) {
-               LOG(error) << "Failed to propagate to surface after stopping, aborting.";
-               return; // Abort propagation if step failed
+               LOG(debug) << "Failed to propagate to surface after stopping, aborting.";
+               break;
             }
             fState = result; // Update the internal state
-            LOG(debug) << "New position after adjusting step size: " << fState.fPos.X() << ", " << fState.fPos.Y()
-                       << ", " << fState.fPos.Z();
          }
          fState.fLastMom = fState.fMom;
 

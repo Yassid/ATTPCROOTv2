@@ -104,7 +104,8 @@ private:
    int fMinClusters{3};
    bool fEnableEnStraggling{true};
    bool fUsePerClusterCov{false};
-   double fZPadPlane{-1}; // If >0, convert digi→lab: Z_lab = fZPadPlane - Z_digi
+   double fZPadPlane{-1};     // If >0, convert digi→lab: Z_lab = fZPadPlane - Z_digi
+   int fMaxFitTime_ms{2000};  // Maximum time per track fit in milliseconds
 
    // Lazily initialised on first GetFittedTrack() call
    std::unique_ptr<kf::TrackFitterUKF> fUKF;

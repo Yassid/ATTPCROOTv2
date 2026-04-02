@@ -130,17 +130,17 @@ void AtFitterTask::Exec(Option_t *option)
    auto trackingEvent = dynamic_cast<AtTrackingEvent *>(fTrackingEventArray.ConstructedAt(0));
    auto fitMetadata = dynamic_cast<AtFitMetadata *>(fFitMetadataArray.ConstructedAt(0));
 
-   LOG(info) << " Fitting event " << fEventCnt;
-
    AtPatternEvent *patternEvent = dynamic_cast<AtPatternEvent *>(fPatternEventArray->At(0));
    std::vector<AtTrack> &tracks = patternEvent->GetTrackCand();
-   LOG(info) << " Number of candidate tracks : " << tracks.size();
+
+   std::cout << "\r Fitting event " << fEventCnt << " (" << tracks.size() << " tracks)..." << std::flush;
 
    fFitter->FitEvent(trackingEvent, patternEvent, fitMetadata, rawEvent, event);
 
    auto &fittedTracks = trackingEvent->GetFittedTracks();
 
-   LOG(info) << " Number of fitted tracks : " << fittedTracks.size();
+   std::cout << "\r Event " << fEventCnt << ": " << fittedTracks.size() << "/" << tracks.size()
+             << " tracks fitted       " << std::endl;
 
    ++fEventCnt;
 }

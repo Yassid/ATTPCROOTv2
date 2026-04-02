@@ -16,6 +16,7 @@
 #include <TMatrixD.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <memory>
 #include <stdexcept>
@@ -186,8 +187,18 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
 
    // --- 4. Forward filter pass ---
    bool fitConverged = true;
+   auto fitStart = std::chrono::steady_clock::now();
    try {
       for (size_t i = 1; i < clusters->size(); ++i) {
+         // Timeout: abort if fit takes too long (default 2 seconds per track)
+         auto elapsed = std::chrono::steady_clock::now() - fitStart;
+         if (std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count() > fMaxFitTime_ms) {
+            LOG(warn) << "AtFitterUKF: timeout after " << fMaxFitTime_ms << " ms at cluster " << i << "/"
+                      << clusters->size();
+            fitConverged = false;
+            break;
+         }
+
          ROOT::Math::XYZPoint meas = clusters->at(i).GetPosition();
 
          // Update measurement covariance from cluster if enabled
@@ -197,8 +208,7 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
             for (int r = 0; r < 3; ++r)
                for (int c = 0; c < 3; ++c)
                   measCov(r, c) = clCov(r, c);
-            // Ensure a minimum variance to avoid singular matrix
-            double minVar = 0.01; // 0.1 mm minimum sigma
+            double minVar = 0.01;
             for (int d = 0; d < 3; ++d)
                if (measCov(d, d) < minVar)
                   measCov(d, d) = minVar;
