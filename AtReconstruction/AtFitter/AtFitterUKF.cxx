@@ -15,6 +15,7 @@
 #include <TMath.h>
 #include <TMatrixD.h>
 
+#include <algorithm>
 #include <cmath>
 #include <memory>
 #include <stdexcept>
@@ -144,6 +145,18 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
    // --- 1. Get and sort clusters ---
    track->SortClusterHitArrayZ();
    auto *clusters = track->GetHitClusterArray();
+
+   // Convert digi→lab coordinates if ZPadPlane is set
+   if (fZPadPlane > 0) {
+      for (auto &cl : *clusters) {
+         auto pos = cl.GetPosition();
+         cl.SetPosition({pos.X(), pos.Y(), fZPadPlane - pos.Z()});
+      }
+      // Re-sort in lab frame (descending Z_lab = vertex first, Bragg peak last)
+      std::sort(clusters->begin(), clusters->end(), [](const AtHitCluster &a, const AtHitCluster &b) {
+         return a.GetPosition().Z() > b.GetPosition().Z();
+      });
+   }
    if (static_cast<int>(clusters->size()) < fMinClusters) {
       LOG(info) << "AtFitterUKF: track " << track->GetTrackID() << " has " << clusters->size()
                 << " clusters, fewer than fMinClusters=" << fMinClusters << ". Skipping.";

@@ -62,6 +62,10 @@ public:
    void SetMinClusters(int n) { fMinClusters = n; }
    /// Use per-cluster covariance matrix from AtHitCluster::GetCovMatrix() instead of fixed sigma.
    void SetUsePerClusterCov(bool use) { fUsePerClusterCov = use; }
+   /// Set the pad plane Z position (mm) for converting digi→lab coordinates.
+   /// When set (>0), clusters are transformed to lab frame: Z_lab = ZPadPlane - Z_digi
+   /// and sorted from vertex (high Z_lab) toward Bragg peak (low Z_lab).
+   void SetZPadPlane(double z) { fZPadPlane = z; }
 
    /// AtFitter interface — no-op; UKF is created lazily on first GetFittedTrack() call.
    void Init() override {}
@@ -100,6 +104,7 @@ private:
    int fMinClusters{3};
    bool fEnableEnStraggling{true};
    bool fUsePerClusterCov{false};
+   double fZPadPlane{-1}; // If >0, convert digi→lab: Z_lab = fZPadPlane - Z_digi
 
    // Lazily initialised on first GetFittedTrack() call
    std::unique_ptr<kf::TrackFitterUKF> fUKF;
