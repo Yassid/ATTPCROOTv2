@@ -19,25 +19,17 @@ void EventFit::AtFitter::FitEvent(AtTrackingEvent *trackingEvent, AtPatternEvent
    }
 
    // Extract the candidate AtTracks. If there are not any tracks, return earlier.
-   LOG(info) << "FitEvent: copying tracks...";
    std::vector<AtTrack> tracks = patternEvent->GetTrackCand();
    if (!tracks.size())
       return;
-   LOG(info) << "FitEvent: " << tracks.size() << " tracks copied, saving to tracking event...";
 
    // Save the original AtTracks to the AtTrackingEvent.
    trackingEvent->SetTrackArray(&tracks);
-   LOG(info) << "FitEvent: fitting tracks...";
 
    // Iterate over the AtTracks and store the AtFittedTracks in the AtTrackingEvent.
-   for (size_t i = 0; i < tracks.size(); ++i) {
-      LOG(info) << "FitEvent: fitting track " << i << " with " << tracks[i].GetHitClusterArray()->size() << " clusters";
-      std::unique_ptr<AtFittedTrack> fittedTrack(GetFittedTrack(&tracks[i], fitMetadata, rawEvent, event));
-      if (fittedTrack) {
-         LOG(info) << "FitEvent: track " << i << " fitted successfully";
+   for (auto track : tracks) {
+      std::unique_ptr<AtFittedTrack> fittedTrack(GetFittedTrack(&track, fitMetadata, rawEvent, event));
+      if (fittedTrack)
          trackingEvent->AddFittedTrack(std::move(fittedTrack));
-      } else {
-         LOG(info) << "FitEvent: track " << i << " returned null";
-      }
    }
 }

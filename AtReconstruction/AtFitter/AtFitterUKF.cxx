@@ -176,10 +176,9 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
       initialMom = p_MeV * dir.Unit();
    }
 
-   LOG(info) << "AtFitterUKF: seed p=" << p_MeV << " MeV/c, pos=(" << initialPos.X() << "," << initialPos.Y() << ","
-             << initialPos.Z() << "), mom=(" << initialMom.X() << "," << initialMom.Y() << "," << initialMom.Z()
-             << "), theta=" << initialMom.Theta() * 180.0 / M_PI << " deg, phi=" << initialMom.Phi() * 180.0 / M_PI
-             << " deg";
+   LOG(debug) << "AtFitterUKF: seed p=" << p_MeV << " MeV/c, pos=(" << initialPos.X() << "," << initialPos.Y() << ","
+              << initialPos.Z() << "), mom=(" << initialMom.X() << "," << initialMom.Y() << "," << initialMom.Z()
+              << ")";
 
    // --- 3. Set initial state (also calls Reset internally) ---
    fUKF->SetInitialState(initialPos, initialMom, GetInitialCovariance(p_MeV));
