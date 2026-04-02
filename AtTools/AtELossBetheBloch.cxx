@@ -78,6 +78,24 @@ void AtELossBetheBloch::BuildSpline(double E_min_MeV, double E_max_MeV, int nPoi
       dXdE[i] = (dedxValues[i] > 0) ? 1.0 / dedxValues[i] : 1e10;
 
    fdXdE = tk::spline(energies, dXdE);
+
+   // Build Ω²(E) spline: Bohr range variance accumulated from 0 to E.
+   // ω²_unit [MeV²/mm] = K · z² · (Z/A) · ρ[g/mm³] · mₑc²
+   //   (kK is in MeV cm²/mol; ×100 → MeV mm²/mol; density g/cm³ → g/mm³ = /1000; combined: /10)
+   double z = IsElectron() ? 1.0 : fPart_q;
+   double omega2_unit = kK * z * z * (static_cast<double>(fMat_Z) / fMat_A) * (fDensity / 10.0) * kM_e;
+
+   // Build spline of the integrand dΩ²/dE = 1/|dEdx|³, then integrate segment-by-segment using
+   // Simpson's rule (exact for cubics, O(h⁴)) rather than the O(h²) trapezoidal rule.
+   std::vector<double> integrandValues(nPoints);
+   for (int i = 0; i < nPoints; ++i)
+      integrandValues[i] = (dedxValues[i] > 0) ? 1.0 / (dedxValues[i] * dedxValues[i] * dedxValues[i]) : 0.0;
+   tk::spline integrand(energies, integrandValues);
+
+   std::vector<double> rangeVar(nPoints, 0.0);
+   for (int i = 1; i < nPoints; ++i)
+      rangeVar[i] = rangeVar[i - 1] + omega2_unit * integrand.integrate(energies[i - 1], energies[i]);
+   fRangeVariance = tk::spline(energies, rangeVar);
 }
 
 double AtELossBetheBloch::GetdEdx_formula(double energy) const
@@ -199,15 +217,12 @@ double AtELossBetheBloch::GetEnergy(double energyIni, double distance) const
 
 double AtELossBetheBloch::GetElossStraggling(double energyIni, double energyFin) const
 {
-   double dx_mm = GetRange(energyIni, energyFin);
-   if (dx_mm <= 0)
+   if (energyIni <= energyFin)
       return 0;
-
-   // Bohr approximation: σ² = K·z²·(Z/A)·ρ·Δx[cm]·mₑc²
-   double z = IsElectron() ? 1.0 : fPart_q;
-   double dx_cm = dx_mm * 0.1;
-   double sigma2 = kK * z * z * (static_cast<double>(fMat_Z) / fMat_A) * fDensity * dx_cm * kM_e;
-   return std::sqrt(sigma2);
+   double omega2 = GetRangeVariance(energyIni) - GetRangeVariance(energyFin);
+   if (omega2 <= 0)
+      return 0;
+   return std::abs(GetdEdx(energyFin)) * std::sqrt(omega2);
 }
 
 double AtELossBetheBloch::GetdEdxStraggling(double energyIni, double energyFin) const
@@ -215,7 +230,19 @@ double AtELossBetheBloch::GetdEdxStraggling(double energyIni, double energyFin) 
    double dx_mm = GetRange(energyIni, energyFin);
    if (dx_mm <= 0)
       return 0;
-   return GetElossStraggling(energyIni, energyFin) / dx_mm;
+   double omega2 = GetRangeVariance(energyIni) - GetRangeVariance(energyFin);
+   if (omega2 <= 0)
+      return 0;
+   return std::abs(GetdEdx(energyFin)) * std::sqrt(omega2) / dx_mm;
+}
+
+double AtELossBetheBloch::GetRangeVariance(double energy) const
+{
+   if (energy <= fRangeVariance.get_x_min())
+      return 0;
+   if (energy >= fRangeVariance.get_x_max())
+      return fRangeVariance(fRangeVariance.get_x_max());
+   return fRangeVariance(energy);
 }
 
 } // namespace AtTools
