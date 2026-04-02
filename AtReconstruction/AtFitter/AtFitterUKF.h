@@ -60,6 +60,8 @@ public:
    void SetMomentumSigmaFrac(double frac) { fMomSigmaFrac = frac; }
    /// Minimum number of clusters required to attempt a fit (default 3).
    void SetMinClusters(int n) { fMinClusters = n; }
+   /// Override the momentum seed (MeV/c). If > 0, this value is used instead of Brho.
+   void SetMomentumSeed(double p_MeV) { fMomentumSeed = p_MeV; }
    /// Use per-cluster covariance matrix from AtHitCluster::GetCovMatrix() instead of fixed sigma.
    void SetUsePerClusterCov(bool use) { fUsePerClusterCov = use; }
    /// Set the pad plane Z position (mm) for converting digi→lab coordinates.
@@ -104,8 +106,9 @@ private:
    int fMinClusters{3};
    bool fEnableEnStraggling{true};
    bool fUsePerClusterCov{false};
-   double fZPadPlane{-1};     // If >0, convert digi→lab: Z_lab = fZPadPlane - Z_digi
-   int fMaxFitTime_ms{2000};  // Maximum time per track fit in milliseconds
+   double fZPadPlane{-1};      // If >0, convert digi→lab: Z_lab = fZPadPlane - Z_digi
+   int fMaxFitTime_ms{2000};   // Maximum time per track fit in milliseconds
+   double fMomentumSeed{-1};   // If >0, override Brho seed with this value (MeV/c)
 
    // Lazily initialised on first GetFittedTrack() call
    std::unique_ptr<kf::TrackFitterUKF> fUKF;

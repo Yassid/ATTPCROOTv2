@@ -239,6 +239,13 @@ void AtUKFDisplay::MakeControlPanel(TGMainFrame *mf)
    zpFrame->AddFrame(fZPadPlaneEntry, new TGLayoutHints(kLHintsRight, 2, 2, 2, 2));
    vf->AddFrame(zpFrame, new TGLayoutHints(kLHintsExpandX, 2, 2, 1, 1));
 
+   // Momentum seed override (0 = use Brho)
+   auto *momFrame = new TGHorizontalFrame(vf);
+   momFrame->AddFrame(new TGLabel(momFrame, "p seed [MeV/c]:"), new TGLayoutHints(kLHintsLeft, 2, 2, 3, 2));
+   fMomSeedEntry = new TGNumberEntry(momFrame, 0, 6, -1, TGNumberFormat::kNESRealOne);
+   momFrame->AddFrame(fMomSeedEntry, new TGLayoutHints(kLHintsRight, 2, 2, 2, 2));
+   vf->AddFrame(momFrame, new TGLayoutHints(kLHintsExpandX, 2, 2, 1, 1));
+
    // Checkboxes
    fStragglingBtn = new TGCheckButton(vf, "Energy straggling");
    vf->AddFrame(fStragglingBtn, new TGLayoutHints(kLHintsLeft, 5, 2, 3, 1));
@@ -579,6 +586,11 @@ void AtUKFDisplay::CreateFitter()
    fFitter->SetUsePerClusterCov(perClusterCov);
    fFitter->SetZPadPlane(zPadPlane);
    fFitter->SetMomentumSigmaFrac(0.3);
+
+   // Momentum seed override (0 = use Brho from pattern recognition)
+   double momSeed = fMomSeedEntry ? fMomSeedEntry->GetNumber() : 0;
+   if (momSeed > 0)
+      fFitter->SetMomentumSeed(momSeed);
 
    fZPadPlane = zPadPlane;
 }

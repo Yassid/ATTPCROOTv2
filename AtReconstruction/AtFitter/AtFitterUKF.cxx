@@ -169,6 +169,10 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
    ROOT::Math::XYZVector initialMom = GetInitialMomentum(track);
    double p_MeV = initialMom.R();
 
+   // Override momentum magnitude if seed is set
+   if (fMomentumSeed > 0)
+      p_MeV = fMomentumSeed;
+
    // If we converted to lab frame, the GeoTheta/Phi from pattern recognition
    // are in the digi frame and no longer match the cluster positions.
    // Re-derive the momentum direction from the first two clusters instead.

@@ -46,6 +46,7 @@ void run_ukf_only(int nEvents = 10000)
    ukfFitter->SetEnableEnergyStraggling(false);
    ukfFitter->SetMinClusters(10);
    ukfFitter->SetZPadPlane(1000.0);
+   // ukfFitter->SetMomentumSeed(47.0); // Uncomment to override Brho seed
 
    AtFitterTask *fitterTask = new AtFitterTask(std::move(ukfFitter));
    fitterTask->SetInputBranch("AtPatternEvent");
