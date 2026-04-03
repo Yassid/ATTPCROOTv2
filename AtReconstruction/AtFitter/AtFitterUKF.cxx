@@ -143,61 +143,29 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
    if (!fUKF)
       InitUKF();
 
-   // --- 1. Get clusters and order along the track arc ---
+   // --- 1. Get clusters (already ordered by PRA::OrderClustersAlongTrack) ---
    auto *clusters = track->GetHitClusterArray();
 
-   // Convert digi→lab coordinates if ZPadPlane is set
+   // Convert digi→lab coordinates if ZPadPlane is set.
+   // PRA orders clusters along the arc starting from the vertex (highest Z_digi).
+   // After Z flip the arc order is preserved but we reverse so that vertex
+   // (now lowest Z_lab) comes first — matching the UKF propagation direction.
    if (fZPadPlane > 0) {
       for (auto &cl : *clusters)
          cl.SetPosition({cl.GetPosition().X(), cl.GetPosition().Y(), fZPadPlane - cl.GetPosition().Z()});
    }
 
-   // Order clusters along the track using nearest-neighbor walk.
-   // Start from the cluster with the highest Z_lab (closest to the vertex/beam entrance).
+   // Filter: minimum spacing + trim Bragg peak end
    {
-      int nCl = clusters->size();
-      if (nCl < 2) {
-         return nullptr;
-      }
-
-      // Find seed: the LAST cluster in original PRA order has the highest Z_digi
-      // (closest to window/vertex). After Z flip, this is the cluster with the
-      // LOWEST Z_lab. So we start the walk from the last cluster.
-      int seedIdx = nCl - 1;
-
-      // Nearest-neighbor walk from seed
-      std::vector<int> order;
-      std::vector<bool> used(nCl, false);
-      order.push_back(seedIdx);
-      used[seedIdx] = true;
-      for (int step = 1; step < nCl; step++) {
-         auto current = clusters->at(order.back()).GetPosition();
-         double bestDist = 1e9;
-         int bestIdx = -1;
-         for (int j = 0; j < nCl; j++) {
-            if (used[j])
-               continue;
-            double d = (clusters->at(j).GetPosition() - current).R();
-            if (d < bestDist) {
-               bestDist = d;
-               bestIdx = j;
-            }
-         }
-         if (bestIdx < 0)
-            break;
-         order.push_back(bestIdx);
-         used[bestIdx] = true;
-      }
-
-      // Build filtered list: ordered + minimum spacing + trim Bragg peak
       std::vector<AtHitCluster> filtered;
-      filtered.push_back(clusters->at(order[0]));
-      for (size_t i = 1; i < order.size(); i++) {
-         double dist = (clusters->at(order[i]).GetPosition() - filtered.back().GetPosition()).R();
+      if (!clusters->empty())
+         filtered.push_back(clusters->front());
+      for (size_t i = 1; i < clusters->size(); i++) {
+         double dist = (clusters->at(i).GetPosition() - filtered.back().GetPosition()).R();
          if (dist >= fMinClusterSpacing)
-            filtered.push_back(clusters->at(order[i]));
+            filtered.push_back(clusters->at(i));
       }
-      // Trim last 10% (near Bragg peak)
+      // Trim last 10% (near Bragg peak where proton stops)
       int nKeep = std::max(fMinClusters, static_cast<int>(filtered.size() * 0.9));
       if (static_cast<int>(filtered.size()) > nKeep)
          filtered.resize(nKeep);

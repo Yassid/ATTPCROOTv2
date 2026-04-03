@@ -60,7 +60,7 @@ private:
 
    // Clustering parameters
    Double_t fClusterRadius{10.0};
-   Double_t fClusterDistance{5.5};
+   Double_t fClusterDistance{20.0}; // Optimized for UKF (was 5.5)
 
 public:
    AtPRAtask();

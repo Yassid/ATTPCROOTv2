@@ -262,6 +262,7 @@ void AtPATTERN::AtPRA::OrderClustersAlongTrack(AtTrack &track)
    ordered.reserve(order.size());
    for (int idx : order)
       ordered.push_back(clusters->at(idx));
+
    *clusters = std::move(ordered);
 }
 
