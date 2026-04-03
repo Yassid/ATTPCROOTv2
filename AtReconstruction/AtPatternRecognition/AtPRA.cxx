@@ -43,24 +43,35 @@ std::cout << " Processing track with " << track.GetHitArray().size() << " points
    std::cout << std::endl;
    */
 
+   // Select which hits to use for the circle fit
+   auto &allHits = track.GetHitArray();
+   int nHitsForFit = std::max(3, static_cast<int>(allHits.size() * fRadiusFitFraction));
+
+   // Build the subset of hits for the radius fit (from the vertex end).
+   // Hits are ordered by Z — the vertex end has the highest Z (latest in time).
+   // Take the last nHitsForFit hits.
+   std::vector<const AtHit *> hitsForFit;
+   int startIdx = std::max(0, static_cast<int>(allHits.size()) - nHitsForFit);
+   for (int i = startIdx; i < static_cast<int>(allHits.size()); i++)
+      hitsForFit.push_back(allHits[i].get());
+
+   LOG(info) << "AtPRA: circle fit using " << hitsForFit.size() << "/" << allHits.size()
+             << " hits (fraction=" << fRadiusFitFraction << ")";
+
    SampleConsensus::AtSampleConsensus RansacSmoothRadius;
    RansacSmoothRadius.SetPatternType(AtPatterns::PatternType::kCircle2D);
-   RansacSmoothRadius.SetMinHitsPattern(0.1 * track.GetHitArray().size());
+   RansacSmoothRadius.SetMinHitsPattern(0.1 * hitsForFit.size());
    RansacSmoothRadius.SetDistanceThreshold(6.0);
    RansacSmoothRadius.SetNumIterations(1000);
-   auto circularTracks = RansacSmoothRadius.Solve(ContainerManip::GetConstPointerVector(track.GetHitArray()))
-                            .GetTrackCand(); // Only part of the spiral is used
-                                             // This function also sets the coefficients
-                                             // i.e. radius of curvature and center
+   auto circularTracks = RansacSmoothRadius.Solve(hitsForFit).GetTrackCand();
 
    if (!circularTracks.empty()) {
 
       auto &hits = circularTracks.at(0).GetHitArray();
 
-      // auto circle = dynamic_cast<const AtPatterns::AtPatternCircle2D *>(circularTracks.at(0).GetPattern());
-
+      // Fit circle on the selected subset
       auto circle = std::make_unique<AtPatterns::AtPatternCircle2D>();
-      circle->AtPattern::FitPattern(ContainerManip::GetConstPointerVector(track.GetHitArray()));
+      circle->AtPattern::FitPattern(hitsForFit);
 
       auto center = circle->GetCenter();
       auto radius = circle->GetRadius();

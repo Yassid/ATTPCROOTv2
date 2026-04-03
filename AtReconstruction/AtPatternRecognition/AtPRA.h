@@ -45,8 +45,10 @@ protected:
    Bool_t kSetPrunning{false}; //<<! Enable prunning of tracks
 
    std::unique_ptr<AtTools::AtTrackTransformer> fTrackTransformer{std::make_unique<AtTools::AtTrackTransformer>()};
-   Double_t fClusterRadius{0};   //<! Radius of hit clusters
-   Double_t fClusterDistance{0}; //<! Distance between hit clusters
+   Double_t fClusterRadius{0};      //<! Radius of hit clusters
+   Double_t fClusterDistance{0};    //<! Distance between hit clusters
+   Double_t fRadiusFitFraction{0.5}; //<! Fraction of hits for radius fit (1.0=all, 0.5=first half)
+   Bool_t fUseHitsForRadius{false};  //<! Use raw hits instead of clusters for radius
 
 public:
    virtual ~AtPRA() = default;
@@ -64,6 +66,10 @@ public:
    void SetPrunning() { kSetPrunning = kTRUE; }
    void SetClusterRadius(Double_t clusterRadius) { fClusterRadius = clusterRadius; }
    void SetClusterDistance(Double_t clusterDistance) { fClusterDistance = clusterDistance; }
+   /// Fraction of hits (from vertex end) used for circle radius fit (0-1, default 1.0 = all)
+   void SetRadiusFitFraction(Double_t frac) { fRadiusFitFraction = frac; }
+   /// Use raw hits instead of clusters for circle fit (default: false)
+   void SetUseHitsForRadius(Bool_t use) { fUseHitsForRadius = use; }
    /// Set diffusion parameters for cluster covariance calculation.
    void SetDiffusionParams(double coefT, double coefL, double driftVel, double tbTime, double padResXY = -1)
    {
