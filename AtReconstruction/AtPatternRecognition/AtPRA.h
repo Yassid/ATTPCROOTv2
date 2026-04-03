@@ -51,6 +51,7 @@ protected:
    Int_t fMinHitsRadius{3};         //<! Minimum hits for radius fit (robust circle)
    Int_t fMaxHitsRadius{1000};         //<! Maximum hits for radius fit (avoid spiral)
    Bool_t fUseHitsForRadius{false};  //<! Use raw hits instead of clusters for radius
+   Double_t fMergeAngleThreshold{45.0}; //<! Max angle difference (degrees) for merging fragments
 
 public:
    virtual ~AtPRA() = default;
@@ -89,6 +90,12 @@ public:
    /// Reorder clusters along the track arc using nearest-neighbor walk
    /// from the vertex end (highest Z).
    void OrderClustersAlongTrack(AtTrack &track);
+
+   /// Merge track fragments that are close together into single tracks.
+   /// Uses cluster endpoint distance to decide which fragments to merge.
+   /// @param tracks Vector of track candidates (modified in place)
+   /// @param maxDist Maximum distance between endpoints to merge (mm)
+   void MergeTrackFragments(std::vector<AtTrack> &tracks, double maxDist = 30.0);
 
 protected:
    // Functions that need to be moved to another class. They assume a curved track

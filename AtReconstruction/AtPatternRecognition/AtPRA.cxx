@@ -266,6 +266,85 @@ void AtPATTERN::AtPRA::OrderClustersAlongTrack(AtTrack &track)
    *clusters = std::move(ordered);
 }
 
+void AtPATTERN::AtPRA::MergeTrackFragments(std::vector<AtTrack> &tracks, double maxDist)
+{
+   if (tracks.size() <= 1)
+      return;
+
+   // For each pair of tracks, check if the endpoint of one is close to
+   // the endpoint of another. If so, merge the smaller into the larger.
+   bool merged = true;
+   while (merged) {
+      merged = false;
+      for (size_t i = 0; i < tracks.size() && !merged; i++) {
+         auto *clI = tracks[i].GetHitClusterArray();
+         if (clI->empty())
+            continue;
+         auto posI_front = clI->front().GetPosition();
+         auto posI_back = clI->back().GetPosition();
+
+         for (size_t j = i + 1; j < tracks.size() && !merged; j++) {
+            auto *clJ = tracks[j].GetHitClusterArray();
+            if (clJ->empty())
+               continue;
+            auto posJ_front = clJ->front().GetPosition();
+            auto posJ_back = clJ->back().GetPosition();
+
+            // Check all 4 endpoint combinations
+            double d1 = (posI_back - posJ_front).R();
+            double d2 = (posI_front - posJ_back).R();
+            double d3 = (posI_back - posJ_back).R();
+            double d4 = (posI_front - posJ_front).R();
+            double dMin = std::min({d1, d2, d3, d4});
+
+            // Check circle consistency: fragments on the same physical track
+            // should have similar center, radius, and theta from RANSAC.
+            double radiusI = tracks[i].GetGeoRadius();
+            double radiusJ = tracks[j].GetGeoRadius();
+            auto centerI = tracks[i].GetGeoCenter();
+            auto centerJ = tracks[j].GetGeoCenter();
+            double thetaI = tracks[i].GetGeoTheta() * 180.0 / TMath::Pi();
+            double thetaJ = tracks[j].GetGeoTheta() * 180.0 / TMath::Pi();
+
+            // Relative radius difference
+            double radiusDiff = (radiusI > 0 && radiusJ > 0)
+                                   ? std::abs(radiusI - radiusJ) / std::max(radiusI, radiusJ) * 100.0
+                                   : 999;
+            // Center distance
+            double centerDist = std::sqrt((centerI.first - centerJ.first) * (centerI.first - centerJ.first) +
+                                          (centerI.second - centerJ.second) * (centerI.second - centerJ.second));
+            // Theta difference
+            double thetaDiff = std::abs(thetaI - thetaJ);
+
+            // Merge if: endpoints close AND (similar circle OR similar theta)
+            bool circleMatch = (radiusDiff < 30.0 && centerDist < 20.0); // within 30% radius, 20mm center
+            bool thetaMatch = (thetaDiff < fMergeAngleThreshold);
+            bool shouldMerge = (dMin < maxDist) && (circleMatch || thetaMatch);
+
+            if (shouldMerge) {
+               // Merge j into i: move all hits from j to i
+               for (auto &hit : tracks[j].GetHitArray())
+                  tracks[i].AddHit(hit->Clone());
+
+               // Remove track j
+               tracks.erase(tracks.begin() + j);
+
+               // Re-cluster and re-order the merged track
+               tracks[i].ResetHitClusterArray();
+               fTrackTransformer->ClusterizeSmooth3D(tracks[i], fClusterRadius > 0 ? fClusterRadius : 10.0,
+                                                     fClusterDistance > 0 ? fClusterDistance : 20.0);
+               OrderClustersAlongTrack(tracks[i]);
+
+               merged = true;
+               LOG(info) << "Merged fragments: " << tracks[i].GetHitArray().size() << " hits"
+                         << " (d=" << dMin << "mm, dR=" << radiusDiff << "%, dCenter=" << centerDist
+                         << "mm, dTheta=" << thetaDiff << "deg)";
+            }
+         }
+      }
+   }
+}
+
 void AtPATTERN::AtPRA::PruneTrack(AtTrack &track)
 {
    auto &hitArray = track.GetHitArray();

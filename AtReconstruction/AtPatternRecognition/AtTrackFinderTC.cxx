@@ -156,16 +156,30 @@ AtPATTERN::AtTrackFinderTC::clustersToTrack(PointCloud &cloud, const std::vector
 
    std::cout << cRED << " Tracks found " << tracks.size() << cNORMAL << std::endl;
 
+   // Compute initial parameters (center, radius, theta) on each fragment
+   // BEFORE merging, so the merge can use circle geometry to decide
+   for (auto &track : tracks) {
+      if (track.GetHitArray().size() > 0)
+         SetTrackInitialParameters(track);
+   }
+
+   // Merge track fragments that share the same circle (same center+radius)
+   MergeTrackFragments(tracks);
+   std::cout << cGREEN << " After merging: " << tracks.size() << " tracks" << cNORMAL << std::endl;
+
+   // Recompute initial parameters on merged tracks
+   for (auto &track : tracks) {
+      if (track.GetHitArray().size() > 0)
+         SetTrackInitialParameters(track);
+   }
+
    // Dump noise into pattern event
    auto retEvent = std::make_unique<AtPatternEvent>();
    for (const auto &point : points)
       retEvent->AddNoise(event.GetHit(point.GetID()));
 
-   for (auto &track : tracks) {
-      if (track.GetHitArray().size() > 0)
-         SetTrackInitialParameters(track);
+   for (auto &track : tracks)
       retEvent->AddTrack(std::move(track));
-   }
 
    return retEvent;
 }
