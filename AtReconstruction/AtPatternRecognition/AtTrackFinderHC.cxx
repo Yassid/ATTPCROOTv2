@@ -155,7 +155,7 @@ std::unique_ptr<AtPatternEvent> AtPATTERN::AtTrackFinderHC::clustersToTrack(pcl:
 
       track.SetTrackID(clusterIndex);
       ClusterizeSmooth3D(track, 10.0, 20.0); // Optimized: 98% UKF convergence (was 15.0, 30.5 → 78%)
-      // Clusterize3D(track, 15.0, 30.5); //10.5,20.0
+      OrderClustersAlongTrack(track);         // Nearest-neighbor ordering from vertex end
 
       if (kSetPrunning)
          PruneTrack(track);

@@ -219,6 +219,52 @@ Double_t fitf(Double_t *x, Double_t *par)
    return par[0] + par[1] * x[0];
 }
 
+void AtPATTERN::AtPRA::OrderClustersAlongTrack(AtTrack &track)
+{
+   auto *clusters = track.GetHitClusterArray();
+   int nCl = clusters->size();
+   if (nCl < 3)
+      return;
+
+   // Find seed: cluster with highest Z (vertex end, closest to beam entrance)
+   int seedIdx = 0;
+   for (int i = 1; i < nCl; i++) {
+      if (clusters->at(i).GetPosition().Z() > clusters->at(seedIdx).GetPosition().Z())
+         seedIdx = i;
+   }
+
+   // Nearest-neighbor walk from seed
+   std::vector<int> order;
+   std::vector<bool> used(nCl, false);
+   order.push_back(seedIdx);
+   used[seedIdx] = true;
+   for (int step = 1; step < nCl; step++) {
+      auto current = clusters->at(order.back()).GetPosition();
+      double bestDist = 1e9;
+      int bestIdx = -1;
+      for (int j = 0; j < nCl; j++) {
+         if (used[j])
+            continue;
+         double d = (clusters->at(j).GetPosition() - current).R();
+         if (d < bestDist) {
+            bestDist = d;
+            bestIdx = j;
+         }
+      }
+      if (bestIdx < 0)
+         break;
+      order.push_back(bestIdx);
+      used[bestIdx] = true;
+   }
+
+   // Rebuild cluster array in the new order
+   std::vector<AtHitCluster> ordered;
+   ordered.reserve(order.size());
+   for (int idx : order)
+      ordered.push_back(clusters->at(idx));
+   *clusters = std::move(ordered);
+}
+
 void AtPATTERN::AtPRA::PruneTrack(AtTrack &track)
 {
    auto &hitArray = track.GetHitArray();

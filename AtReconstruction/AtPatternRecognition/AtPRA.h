@@ -86,6 +86,10 @@ public:
    void PruneTrack(AtTrack &track);
    bool kNN(const std::vector<std::unique_ptr<AtHit>> &hits, AtHit &hit, int k);
 
+   /// Reorder clusters along the track arc using nearest-neighbor walk
+   /// from the vertex end (highest Z).
+   void OrderClustersAlongTrack(AtTrack &track);
+
 protected:
    // Functions that need to be moved to another class. They assume a curved track
    /*
