@@ -43,20 +43,23 @@ std::cout << " Processing track with " << track.GetHitArray().size() << " points
    std::cout << std::endl;
    */
 
-   // Select which hits to use for the circle fit
+   // Select hits for the circle fit from the vertex end.
+   // Use fRadiusFitFraction of hits from the vertex end (highest Z_digi)
+   // where momentum is highest and the track is most circular.
+   // Capped by fMinHitsRadius (floor) and fMaxHitsRadius (ceiling).
    auto &allHits = track.GetHitArray();
-   int nHitsForFit = std::max(3, static_cast<int>(allHits.size() * fRadiusFitFraction));
+   int nTotal = allHits.size();
+   int nFromFraction = std::max(3, static_cast<int>(nTotal * fRadiusFitFraction));
+   int nHitsForFit = std::max(std::min(fMinHitsRadius, nTotal),
+                              std::min(nFromFraction, std::min(fMaxHitsRadius, nTotal)));
 
-   // Build the subset of hits for the radius fit (from the vertex end).
-   // Hits are ordered by Z — the vertex end has the highest Z (latest in time).
-   // Take the last nHitsForFit hits.
+   // Build the subset from the vertex end (highest Z_digi = last in array)
    std::vector<const AtHit *> hitsForFit;
-   int startIdx = std::max(0, static_cast<int>(allHits.size()) - nHitsForFit);
-   for (int i = startIdx; i < static_cast<int>(allHits.size()); i++)
+   int startIdx = std::max(0, nTotal - nHitsForFit);
+   for (int i = startIdx; i < nTotal; i++)
       hitsForFit.push_back(allHits[i].get());
 
-   LOG(info) << "AtPRA: circle fit using " << hitsForFit.size() << "/" << allHits.size()
-             << " hits (fraction=" << fRadiusFitFraction << ")";
+   LOG(debug) << "AtPRA: circle fit using " << hitsForFit.size() << "/" << nTotal << " hits";
 
    SampleConsensus::AtSampleConsensus RansacSmoothRadius;
    RansacSmoothRadius.SetPatternType(AtPatterns::PatternType::kCircle2D);
