@@ -49,7 +49,7 @@ protected:
       bool good; // KE in range AND theta in range
    };
 
-   std::unique_ptr<EventFit::AtFitterUKF> CreateFitter()
+   std::unique_ptr<EventFit::AtFitterUKF> CreateFitter(bool enableStraggling = false)
    {
       auto eloss = std::make_unique<AtTools::AtELossCATIMA>(kGasDensity);
       eloss->SetProjectile(1, 1, 1);
@@ -62,14 +62,13 @@ protected:
       fitter->SetUKFParameters(1e-3, 2.0, 0.0);
       fitter->SetMeasurementSigma(2.0);
       fitter->SetMomentumSigmaFrac(0.3);
-      fitter->SetEnableEnergyStraggling(false);
+      fitter->SetEnableEnergyStraggling(enableStraggling);
       fitter->SetMinClusters(5);
       fitter->SetZPadPlane(1000.0);
       return fitter;
    }
 
-   /// Fit a track that already has clusters
-   FitResult FitTrack(AtTrack &track, int eventId)
+   FitResult FitTrack(AtTrack &track, int eventId, bool straggling = false)
    {
       FitResult result{eventId, 0, 0, 0, -1, -1, false, false};
 
@@ -77,7 +76,7 @@ protected:
       if (result.nClusters < 5)
          return result;
 
-      auto fitter = CreateFitter();
+      auto fitter = CreateFitter(straggling);
       fitter->Init();
 
       AtTrackingEvent trackingEvent;
@@ -118,27 +117,25 @@ TEST_F(ClusteringDigiScanTest, ScanDigitizedData)
    int nEvents = tree->GetEntries();
 
    struct Config {
-      int method;       // 0=Smooth3D, 1=GroupByN
-      double radius;    // Smooth3D
-      double distance;  // Smooth3D
-      int hitsPerClust; // GroupByN
+      int method;       // 0=Smooth3D
+      double radius;
+      double distance;
+      int straggling;   // 0=off, 1=on
       std::string label;
    };
    std::vector<Config> configs = {
-      // Smooth3D configs
-      {0, 5.0, 10.0, 0, "S3D r5 d10"},
-      {0, 5.0, 15.0, 0, "S3D r5 d15"},
-      {0, 10.0, 15.0, 0, "S3D r10 d15"},
-      {0, 10.0, 20.0, 0, "S3D r10 d20"},
-      {0, 15.0, 20.0, 0, "S3D r15 d20"},
-      {0, 15.0, 30.5, 0, "S3D r15 d30 (def)"},
-      {0, 20.0, 30.0, 0, "S3D r20 d30"},
-      // GroupByN configs
-      {1, 0, 0, 5, "GrpN 5"},
-      {1, 0, 0, 10, "GrpN 10"},
-      {1, 0, 0, 15, "GrpN 15"},
-      {1, 0, 0, 20, "GrpN 20"},
-      {1, 0, 0, 30, "GrpN 30"},
+      // Straggling OFF
+      {0, 5.0, 15.0, 0, "r5d15 noStr"},
+      {0, 10.0, 20.0, 0, "r10d20 noStr"},
+      {0, 15.0, 20.0, 0, "r15d20 noStr"},
+      {0, 15.0, 30.5, 0, "r15d30 noStr (def)"},
+      {0, 20.0, 30.0, 0, "r20d30 noStr"},
+      // Straggling ON (same configs)
+      {0, 5.0, 15.0, 1, "r5d15 STR"},
+      {0, 10.0, 20.0, 1, "r10d20 STR"},
+      {0, 15.0, 20.0, 1, "r15d20 STR"},
+      {0, 15.0, 30.5, 1, "r15d30 STR (def)"},
+      {0, 20.0, 30.0, 1, "r20d30 STR"},
    };
 
    // Accumulate results per config
@@ -178,12 +175,8 @@ TEST_F(ClusteringDigiScanTest, ScanDigitizedData)
          AtTrack trackCopy = tracks[bestTrack];
          trackCopy.ResetHitClusterArray();
          AtTools::AtTrackTransformer transformer;
-         if (configs[c].method == 0) {
-            transformer.ClusterizeSmooth3D(trackCopy, configs[c].radius, configs[c].distance);
-         } else {
-            transformer.ClusterizeByGroup(trackCopy, configs[c].hitsPerClust);
-         }
-         auto result = FitTrack(trackCopy, iEvt);
+         transformer.ClusterizeSmooth3D(trackCopy, configs[c].radius, configs[c].distance);
+         auto result = FitTrack(trackCopy, iEvt, configs[c].straggling != 0);
 
          stats[c].nTried++;
          if (result.converged) {
