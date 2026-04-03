@@ -36,9 +36,9 @@ void analyze_kinematics()
    int nEvents = std::min({(int)tMC->GetEntries(), (int)tDigi->GetEntries(), (int)tFit->GetEntries()});
 
    // Histograms
-   TH2F *hTruth = new TH2F("hTruth", "MC Truth;#theta_{lab} [deg];KE [MeV]", 180, 0, 180, 100, 0, 5);
-   TH2F *hReco = new TH2F("hReco", "Reconstructed (UKF);#theta_{lab} [deg];KE [MeV]", 180, 0, 180, 100, 0, 5);
-   TH2F *hBrho = new TH2F("hBrho", "Brho seed;#theta_{lab} [deg];KE [MeV]", 180, 0, 180, 100, 0, 5);
+   TH2F *hTruth = new TH2F("hTruth", "MC Truth;#theta_{lab} [deg];KE [MeV]", 180, 0, 180, 100, 0, 50);
+   TH2F *hReco = new TH2F("hReco", "Reconstructed (UKF);#theta_{lab} [deg];KE [MeV]", 180, 0, 180, 100, 0, 50);
+   TH2F *hBrho = new TH2F("hBrho", "Brho seed;#theta_{lab} [deg];KE [MeV]", 180, 0, 180, 100, 0, 50);
 
    // Graphs for scatter plot
    std::vector<double> truthTheta, truthKE;
@@ -106,7 +106,7 @@ void analyze_kinematics()
             double thetaReco = kin.theta * 180.0 / M_PI;
 
             // Check if reasonable
-            if (keReco > 0.05 && keReco < 10.0 && thetaReco > 10 && thetaReco < 170) {
+            if (keReco > 0.05 && keReco < 50.0 && thetaReco > 10 && thetaReco < 170) {
                nGood++;
                hReco->Fill(thetaReco, keReco);
                recoTheta.push_back(thetaReco);

@@ -1,6 +1,6 @@
 bool reduceFunc(AtRawEvent *evt);
 
-void run_digi_attpc()
+void run_digi_attpc(int nEvents = 10000, float tCluster = 8.0)
 {
    TString inOutDir = "./data/";
    TString outputFile = inOutDir + "output_digi.root";
@@ -53,6 +53,7 @@ void run_digi_attpc()
    psaTask->SetPersistence(kTRUE);
 
    AtPRAtask *praTask = new AtPRAtask();
+   praTask->SetTcluster(tCluster);
    praTask->SetPersistence(kTRUE);
 
    fRun->AddTask(clusterizer);
@@ -64,7 +65,7 @@ void run_digi_attpc()
    fRun->Init();
 
    timer.Start();
-   fRun->Run(0, 10000);
+   fRun->Run(0, nEvents);
    timer.Stop();
 
    std::cout << std::endl << std::endl;
