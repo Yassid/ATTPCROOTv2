@@ -42,9 +42,10 @@ void run_ukf_only(int nEvents = 10000)
    ukfFitter->SetBField(ROOT::Math::XYZVector(0, 0, 2.85));
    ukfFitter->SetUKFParameters(1e-3, 2.0, 0.0);
    ukfFitter->SetMeasurementSigma(2.0);
-   ukfFitter->SetMomentumSigmaFrac(0.3);
+   ukfFitter->SetMomentumSigmaFrac(0.5);
    ukfFitter->SetEnableEnergyStraggling(false);
    ukfFitter->SetMinClusters(10);
+   ukfFitter->SetNIterations(1);
    ukfFitter->SetZPadPlane(1000.0);
    // ukfFitter->SetMomentumSeed(47.0); // Uncomment to override Brho seed
 

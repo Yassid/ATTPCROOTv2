@@ -228,16 +228,45 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
       initialMom = p_MeV * dir.Unit();
    }
 
-   LOG(debug) << "AtFitterUKF: seed p=" << p_MeV << " MeV/c, pos=(" << initialPos.X() << "," << initialPos.Y() << ","
-              << initialPos.Z() << "), mom=(" << initialMom.X() << "," << initialMom.Y() << "," << initialMom.Z()
-              << ")";
+   // --- Iterative fitting ---
+   // On iteration 0: use Brho seed with fMomSigmaFrac covariance
+   // On subsequent iterations: use previous result as seed with tighter covariance
+   double momSigmaFrac = fMomSigmaFrac;
+   bool fitConverged = true;
+   for (int iter = 0; iter < fNIterations; iter++) {
+      fitConverged = true;
+      if (iter > 0) {
+         // Use the smoothed vertex state from the previous iteration as seed
+         auto &smoothedStates = fUKF->GetSmoothedStates();
+         if (!smoothedStates.empty()) {
+            auto &s0 = smoothedStates[0];
+            double pPrev = s0[3];
+            double thPrev = s0[4];
+            double phPrev = s0[5];
+            if (pPrev > 0 && !std::isnan(pPrev)) {
+               ROOT::Math::Polar3DVector momPrev(pPrev, thPrev, phPrev);
+               initialMom = ROOT::Math::XYZVector(momPrev);
+               initialPos = clusters->front().GetPosition();
+               p_MeV = pPrev;
+               momSigmaFrac = fMomSigmaFrac; // Same sigma on subsequent iterations
+               LOG(debug) << "AtFitterUKF: iter " << iter << " seed p=" << pPrev << " MeV/c";
+            }
+         }
+      }
+
+   LOG(debug) << "AtFitterUKF: iter " << iter << "/" << fNIterations << " seed p=" << p_MeV << " MeV/c";
 
    // --- 3. Set initial state (also calls Reset internally) ---
-   fUKF->SetInitialState(initialPos, initialMom, GetInitialCovariance(p_MeV));
+   {
+      // Use current momSigmaFrac for this iteration's covariance
+      double savedFrac = fMomSigmaFrac;
+      fMomSigmaFrac = (iter == 0) ? fMomSigmaFrac : momSigmaFrac;
+      fUKF->SetInitialState(initialPos, initialMom, GetInitialCovariance(p_MeV));
+      fMomSigmaFrac = savedFrac;
+   }
    fUKF->SetMeasCov(GetMeasCovariance());
 
    // --- 4. Forward filter pass ---
-   bool fitConverged = true;
    auto fitStart = std::chrono::steady_clock::now();
 
    // Install signal handler to catch segfaults from bad sigma points
@@ -326,6 +355,11 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
          fitConverged = false;
       }
    }
+
+   if (!fitConverged)
+      break; // Don't iterate if this pass failed
+
+   } // End of iteration loop
 
    // --- 6. Extract results ---
    const auto &smoothedStates = fUKF->GetSmoothedStates();

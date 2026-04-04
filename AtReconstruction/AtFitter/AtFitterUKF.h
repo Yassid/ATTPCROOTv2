@@ -62,6 +62,9 @@ public:
    void SetMinClusters(int n) { fMinClusters = n; }
    /// Override the momentum seed (MeV/c). If > 0, this value is used instead of Brho.
    void SetMomentumSeed(double p_MeV) { fMomentumSeed = p_MeV; }
+   /// Number of fit iterations (default 1). With >1, the first pass uses wide covariance
+   /// and subsequent passes use the previous result as seed with tighter covariance.
+   void SetNIterations(int n) { fNIterations = n; }
    /// Use per-cluster covariance matrix from AtHitCluster::GetCovMatrix() instead of fixed sigma.
    void SetUsePerClusterCov(bool use) { fUsePerClusterCov = use; }
    /// Set the pad plane Z position (mm) for converting digi→lab coordinates.
@@ -111,6 +114,7 @@ private:
    double fMomentumSeed{-1};       // If >0, override Brho seed with this value (MeV/c)
    double fMinClusterSpacing{3.0}; // Minimum distance between clusters (mm)
    double fMinLabTheta{10.0};      // Minimum lab angle (degrees) — skip beam-like tracks
+   int fNIterations{1};            // Number of fit iterations (1=single pass)
 
    // Lazily initialised on first GetFittedTrack() call
    std::unique_ptr<kf::TrackFitterUKF> fUKF;
