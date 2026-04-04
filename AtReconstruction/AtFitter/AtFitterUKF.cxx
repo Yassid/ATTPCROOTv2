@@ -7,6 +7,7 @@
 #include "AtKinematics.h"
 #include "AtPropagator.h"
 #include "AtTrack.h"
+#include "AtTrackTransformer.h"
 
 #include <FairLogger.h>
 
@@ -211,6 +212,79 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
       return nullptr;
    }
 
+   // --- 1b. Adaptive re-clustering based on Brho momentum estimate ---
+   // Low-energy tracks benefit from larger cluster radius (more averaging).
+   // Re-cluster BEFORE Z conversion (needs digi-frame coordinates).
+   if (fAdaptiveClustering) {
+      double pEst = GetInitialMomentum(track).R(); // Brho estimate
+      if (fMomentumSeed > 0)
+         pEst = fMomentumSeed;
+      double keEst = std::sqrt(pEst * pEst + fMass_MeV * fMass_MeV) - fMass_MeV;
+
+      // Choose radius/distance based on estimated KE
+      double radius, distance;
+      if (keEst < 3.0) {
+         radius = 25.0;
+         distance = 15.0; // Large radius for low-energy (short) tracks
+      } else if (keEst < 8.0) {
+         radius = 20.0;
+         distance = 15.0; // Standard overlapping
+      } else {
+         radius = 20.0;
+         distance = 15.0; // Same for high energy — already good
+      }
+
+      // Re-cluster with adapted parameters (works in digi frame)
+      // Need to undo Z conversion if already applied — but we haven't yet
+      track->ResetHitClusterArray();
+      AtTools::AtTrackTransformer transformer;
+      transformer.ClusterizeSmooth3D(*track, radius, distance);
+
+      // Re-order clusters along the track
+      // (simplified: just use the existing cluster order from ClusterizeSmooth3D)
+      // The PRA's OrderClustersAlongTrack would need the track to be in the PRA context
+      // so we do a simple highest-Z-first ordering here
+      auto *newCl = track->GetHitClusterArray();
+      if (newCl->size() >= 2) {
+         int seedIdx = 0;
+         for (int ci = 1; ci < (int)newCl->size(); ci++) {
+            if (newCl->at(ci).GetPosition().Z() > newCl->at(seedIdx).GetPosition().Z())
+               seedIdx = ci;
+         }
+         // NN walk from seed
+         std::vector<int> order;
+         std::vector<bool> used(newCl->size(), false);
+         order.push_back(seedIdx);
+         used[seedIdx] = true;
+         for (int step = 1; step < (int)newCl->size(); step++) {
+            auto cur = newCl->at(order.back()).GetPosition();
+            double bestD = 1e9;
+            int bestI = -1;
+            for (int ci = 0; ci < (int)newCl->size(); ci++) {
+               if (used[ci])
+                  continue;
+               double dd = (newCl->at(ci).GetPosition() - cur).R();
+               if (dd < bestD) {
+                  bestD = dd;
+                  bestI = ci;
+               }
+            }
+            if (bestI < 0)
+               break;
+            order.push_back(bestI);
+            used[bestI] = true;
+         }
+         std::vector<AtHitCluster> ordered;
+         for (int idx : order)
+            ordered.push_back(newCl->at(idx));
+         *newCl = std::move(ordered);
+      }
+
+      clusters = track->GetHitClusterArray(); // refresh pointer
+      LOG(debug) << "Adaptive clustering: KE_est=" << keEst << " MeV, r=" << radius << " d=" << distance
+                 << " → " << clusters->size() << " clusters";
+   }
+
    // --- 2. Momentum seed ---
    ROOT::Math::XYZPoint initialPos = GetInitialPosition(track);
    ROOT::Math::XYZVector initialMom = GetInitialMomentum(track);
@@ -378,8 +452,10 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
 
       // --- Back-extrapolation to beam axis ---
       // The first cluster is some distance from the true vertex at (0,0).
-      // Estimate the distance and add back the energy lost along the way.
-      double rXY = std::sqrt(vx * vx + vy * vy); // XY distance from beam axis
+      // Use the actual first cluster position (not the smoothed state which
+      // may have been pulled by the smoother).
+      auto firstClPos = clusters->front().GetPosition();
+      double rXY = std::sqrt(firstClPos.X() * firstClPos.X() + firstClPos.Y() * firstClPos.Y());
       if (rXY > 1.0 && p_s > 0) { // Only extrapolate if meaningfully off-axis
          // Approximate path length from vertex to first cluster:
          // The track curves, so the path is longer than the straight-line distance.

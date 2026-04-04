@@ -115,6 +115,7 @@ private:
    double fMinClusterSpacing{3.0}; // Minimum distance between clusters (mm)
    double fMinLabTheta{10.0};      // Minimum lab angle (degrees) — skip beam-like tracks
    int fNIterations{1};            // Number of fit iterations (1=single pass)
+   bool fAdaptiveClustering{true}; // Re-cluster based on Brho momentum estimate
 
    // Lazily initialised on first GetFittedTrack() call
    std::unique_ptr<kf::TrackFitterUKF> fUKF;
