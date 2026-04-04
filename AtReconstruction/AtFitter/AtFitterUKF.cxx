@@ -192,8 +192,7 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
    }
 
    if (static_cast<int>(clusters->size()) < fMinClusters) {
-      LOG(debug) << "AtFitterUKF: track " << track->GetTrackID() << " has " << clusters->size()
-                 << " clusters after filtering. Skipping.";
+      LOG(debug) << "AtFitterUKF: " << clusters->size() << " clusters < " << fMinClusters << ". Skipping.";
       return nullptr;
    }
 
