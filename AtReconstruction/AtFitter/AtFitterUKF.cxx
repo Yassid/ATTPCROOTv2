@@ -196,6 +196,12 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
       return nullptr;
    }
 
+   // Skip tracks with invalid geometry (NaN from failed RANSAC fit)
+   if (std::isnan(track->GetGeoTheta()) || std::isnan(track->GetGeoRadius()) || track->GetGeoRadius() <= 0) {
+      LOG(debug) << "AtFitterUKF: track has invalid geometry (NaN theta or radius). Skipping.";
+      return nullptr;
+   }
+
    // Skip beam-like tracks (lab theta < fMinLabTheta)
    // GeoTheta is in digi frame: theta_lab = 180 - theta_digi
    double thetaLab = 180.0 - track->GetGeoTheta() * 180.0 / M_PI;

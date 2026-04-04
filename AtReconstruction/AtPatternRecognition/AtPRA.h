@@ -47,7 +47,7 @@ protected:
    std::unique_ptr<AtTools::AtTrackTransformer> fTrackTransformer{std::make_unique<AtTools::AtTrackTransformer>()};
    Double_t fClusterRadius{0};      //<! Radius of hit clusters
    Double_t fClusterDistance{0};    //<! Distance between hit clusters
-   Double_t fRadiusFitFraction{0.5}; //<! Max fraction of hits for radius fit
+   Double_t fRadiusFitFraction{1.0}; //<! Max fraction of hits for radius fit (0.5 reduces bias but may cause hangs)
    Int_t fMinHitsRadius{3};         //<! Minimum hits for radius fit (robust circle)
    Int_t fMaxHitsRadius{1000};         //<! Maximum hits for radius fit (avoid spiral)
    Bool_t fUseHitsForRadius{false};  //<! Use raw hits instead of clusters for radius
