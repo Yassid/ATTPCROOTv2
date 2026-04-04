@@ -589,6 +589,7 @@ public:
    std::array<double, DIM_A> GetAugStateVector() const;
    const VectorEigenVecDimX &GetSmoothedStates() const { return m_vecXSmooth; };
    const VectorEigenMatDimX &GetSmoothedCovariances() const { return m_matPSmooth; };
+   AtTools::AtPropagator &GetPropagator() { return fPropagator; }
 
    void predictUKF(const ROOT::Math::XYZPoint &z);
    void correctUKF(const ROOT::Math::XYZPoint &z);

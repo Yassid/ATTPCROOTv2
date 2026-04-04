@@ -365,8 +365,7 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
    const auto &smoothedStates = fUKF->GetSmoothedStates();
 
    // Build vertex kinematics from the first smoothed state.
-   // smoothedStates[0] is the vertex: SetInitialState seeds index 0, and the RTS smoother
-   // back-propagates all the way to index 0, so this is the best-estimate vertex state.
+   // smoothedStates[0] is at the first cluster, not the true vertex.
    double vx = 0, vy = 0, vz = 0, p_s = p_MeV, theta_s = 0, phi_s = 0;
    if (fitConverged && !smoothedStates.empty()) {
       const auto &s0 = smoothedStates[0];
@@ -376,6 +375,44 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
       p_s = s0[3];
       theta_s = s0[4];
       phi_s = s0[5];
+
+      // --- Back-extrapolation to beam axis ---
+      // The first cluster is some distance from the true vertex at (0,0).
+      // Estimate the distance and add back the energy lost along the way.
+      double rXY = std::sqrt(vx * vx + vy * vy); // XY distance from beam axis
+      if (rXY > 1.0 && p_s > 0) { // Only extrapolate if meaningfully off-axis
+         // Approximate path length from vertex to first cluster:
+         // The track curves, so the path is longer than the straight-line distance.
+         // Use rXY / sin(theta) as an estimate of the arc length.
+         double sinTheta = std::sin(theta_s);
+         double pathLength = (sinTheta > 0.1) ? rXY / sinTheta : rXY;
+
+         // Get energy loss per mm at the current momentum
+         double KE_at_cluster = std::sqrt(p_s * p_s + fMass_MeV * fMass_MeV) - fMass_MeV;
+         if (auto *elossModel = fUKF->GetPropagator().GetELossModel()) {
+            double dEdx = elossModel->GetdEdx(KE_at_cluster); // MeV/mm
+            double eLost = dEdx * pathLength;                  // Energy lost between vertex and first cluster
+
+            // The proton had MORE energy at the vertex
+            double KE_at_vertex = KE_at_cluster + eLost;
+            double p_at_vertex = std::sqrt(KE_at_vertex * KE_at_vertex + 2 * KE_at_vertex * fMass_MeV);
+
+            LOG(debug) << "Back-extrapolation: rXY=" << rXY << "mm, path=" << pathLength
+                       << "mm, dEdx=" << dEdx << ", eLost=" << eLost
+                       << "MeV, p: " << p_s << "→" << p_at_vertex << " MeV/c";
+
+            p_s = p_at_vertex;
+         }
+
+         // Extrapolate position back to beam axis along the momentum direction
+         ROOT::Math::Polar3DVector momDir(1.0, theta_s, phi_s);
+         ROOT::Math::XYZVector dir(momDir);
+         // Project back: how far along -dir to reach x²+y²≈0
+         // Approximate: move along -dir by pathLength
+         vx -= dir.X() * pathLength;
+         vy -= dir.Y() * pathLength;
+         vz -= dir.Z() * pathLength;
+      }
    }
 
    double KE = std::sqrt(p_s * p_s + fMass_MeV * fMass_MeV) - fMass_MeV;
