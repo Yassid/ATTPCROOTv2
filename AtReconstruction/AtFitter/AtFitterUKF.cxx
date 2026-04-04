@@ -458,40 +458,29 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
       }
 
       // --- Back-extrapolation to beam axis ---
-      // The first cluster is some distance from the true vertex at (0,0).
-      // Use the actual first cluster position (not the smoothed state which
-      // may have been pulled by the smoother).
+      // Linear approximation: add back energy lost between vertex and first cluster.
+      // Cap the correction for large vtxR where the linear approximation breaks down.
       auto firstClPos = clusters->front().GetPosition();
       double rXY = std::sqrt(firstClPos.X() * firstClPos.X() + firstClPos.Y() * firstClPos.Y());
-      if (rXY > 1.0 && p_s > 0) { // Only extrapolate if meaningfully off-axis
-         // Approximate path length from vertex to first cluster:
-         // The track curves, so the path is longer than the straight-line distance.
-         // Use rXY / sin(theta) as an estimate of the arc length.
+      if (rXY > 1.0 && p_s > 0) {
          double sinTheta = std::sin(theta_s);
          double pathLength = (sinTheta > 0.1) ? rXY / sinTheta : rXY;
 
-         // Get energy loss per mm at the current momentum
+         // Cap path length to avoid over-correction for large vtxR
+         pathLength = std::min(pathLength, 50.0); // max 50mm extrapolation
+
          double KE_at_cluster = std::sqrt(p_s * p_s + fMass_MeV * fMass_MeV) - fMass_MeV;
          if (auto *elossModel = fUKF->GetPropagator().GetELossModel()) {
-            double dEdx = elossModel->GetdEdx(KE_at_cluster); // MeV/mm
-            double eLost = dEdx * pathLength;                  // Energy lost between vertex and first cluster
-
-            // The proton had MORE energy at the vertex
+            double dEdx = elossModel->GetdEdx(KE_at_cluster);
+            double eLost = dEdx * pathLength;
             double KE_at_vertex = KE_at_cluster + eLost;
             double p_at_vertex = std::sqrt(KE_at_vertex * KE_at_vertex + 2 * KE_at_vertex * fMass_MeV);
-
-            LOG(debug) << "Back-extrapolation: rXY=" << rXY << "mm, path=" << pathLength
-                       << "mm, dEdx=" << dEdx << ", eLost=" << eLost
-                       << "MeV, p: " << p_s << "→" << p_at_vertex << " MeV/c";
-
             p_s = p_at_vertex;
          }
 
-         // Extrapolate position back to beam axis along the momentum direction
+         // Extrapolate position along -momentum direction
          ROOT::Math::Polar3DVector momDir(1.0, theta_s, phi_s);
          ROOT::Math::XYZVector dir(momDir);
-         // Project back: how far along -dir to reach x²+y²≈0
-         // Approximate: move along -dir by pathLength
          vx -= dir.X() * pathLength;
          vy -= dir.Y() * pathLength;
          vz -= dir.Z() * pathLength;
