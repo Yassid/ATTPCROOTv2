@@ -59,8 +59,8 @@ private:
    Double_t fkNNDist;      //<! Distance threshold for outlier rejection in kNN
 
    // Clustering parameters
-   Double_t fClusterRadius{10.0};
-   Double_t fClusterDistance{20.0}; // Optimized for UKF (was 5.5)
+   Double_t fClusterRadius{20.0};  // Overlapping clusters: radius > distance
+   Double_t fClusterDistance{15.0}; // Gives 2.2% RMS (was r10 d20 → 3.8%)
 
 public:
    AtPRAtask();
