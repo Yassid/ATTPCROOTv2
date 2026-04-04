@@ -22,6 +22,7 @@ void show_kinematics()
    std::vector<double> truthTheta, truthKE;
    std::vector<double> recoTheta, recoKE;
    std::vector<double> keErr, thErr;
+   std::vector<double> vtxX, vtxY; // reconstructed vertex XY
 
    for (int i = 0; i < nEvents; i++) {
       tm->GetEntry(i);
@@ -55,6 +56,10 @@ void show_kinematics()
       recoKE.push_back(keR);
       keErr.push_back((keR - keT) / keT * 100);
       thErr.push_back(thR - thT);
+
+      auto vtx = ft[0]->GetVertex();
+      vtxX.push_back(vtx.X());
+      vtxY.push_back(vtx.Y());
    }
 
    // Canvas 1: Overlay
@@ -94,6 +99,20 @@ void show_kinematics()
    hTh->Fit("gaus", "Q");
    hTh->Draw("hist");
    if (hTh->GetFunction("gaus")) hTh->GetFunction("gaus")->Draw("same");
+
+   // Canvas 3: Vertex XY
+   TCanvas *c3 = new TCanvas("c3", "Vertex Position", 600, 600);
+   TGraph *gVtx = new TGraph(vtxX.size(), vtxX.data(), vtxY.data());
+   gVtx->SetTitle("Reconstructed Vertex;X [mm];Y [mm]");
+   gVtx->SetMarkerStyle(20);
+   gVtx->SetMarkerSize(0.4);
+   gVtx->SetMarkerColor(kBlue);
+   gVtx->Draw("AP");
+   // Draw beam axis marker
+   TMarker *beamMark = new TMarker(0, 0, 29);
+   beamMark->SetMarkerSize(2);
+   beamMark->SetMarkerColor(kRed);
+   beamMark->Draw();
 
    std::cout << "Proton events: " << truthTheta.size() << ", Reconstructed: " << recoTheta.size() << std::endl;
 }
