@@ -22,7 +22,8 @@ void show_kinematics()
    std::vector<double> truthTheta, truthKE;
    std::vector<double> recoTheta, recoKE;
    std::vector<double> keErr, thErr;
-   std::vector<double> vtxX, vtxY; // reconstructed vertex XY
+   std::vector<double> vtxX, vtxY;       // reconstructed vertex XY
+   std::vector<int> recoEventId;         // event number for each reco point
 
    for (int i = 0; i < nEvents; i++) {
       tm->GetEntry(i);
@@ -60,6 +61,7 @@ void show_kinematics()
       auto vtx = ft[0]->GetVertex();
       vtxX.push_back(vtx.X());
       vtxY.push_back(vtx.Y());
+      recoEventId.push_back(i);
    }
 
    // Canvas 1: Overlay
@@ -100,8 +102,91 @@ void show_kinematics()
    hTh->Draw("hist");
    if (hTh->GetFunction("gaus")) hTh->GetFunction("gaus")->Draw("same");
 
-   // Canvas 3: Vertex XY
-   TCanvas *c3 = new TCanvas("c3", "Vertex Position", 600, 600);
+   // Canvas 3: Low energy zoom with event labels
+   TCanvas *c3 = new TCanvas("c3", "Low Energy Detail", 800, 600);
+   // Plot only events with KE_true < 5 MeV
+   std::vector<double> lowThT, lowKET, lowThR, lowKER;
+   std::vector<int> lowEvId;
+   for (size_t k = 0; k < recoTheta.size(); k++) {
+      // Find the matching truth for this reco event
+      int evId = recoEventId[k];
+      // Find truth index
+      double thT = -1, keT = -1;
+      for (size_t m = 0; m < truthTheta.size(); m++) {
+         // truthTheta has all proton events, recoEventId maps to absolute event number
+         // We need to find the truth that corresponds to this event
+         // Since truth is filled for all proton events in order, and reco is a subset,
+         // we need the actual truth values at this event
+         break;
+      }
+   }
+   // Simpler: just re-read for low energy events
+   {
+      tm->SetBranchAddress("MCTrack", &ma);
+      tf->SetBranchAddress("AtTrackingEvent", &fa);
+      for (size_t k = 0; k < recoEventId.size(); k++) {
+         int evId = recoEventId[k];
+         tm->GetEntry(evId);
+         tf->GetEntry(evId);
+         double pT = -1, thT = -1, keT = -1;
+         for (int j = 0; j < ma->GetEntries(); j++) {
+            AtMCTrack *m = (AtMCTrack *)ma->At(j);
+            if (m->GetPdgCode() == 2212) {
+               ROOT::Math::XYZVector mom(m->GetPx(), m->GetPy(), m->GetPz());
+               pT = mom.R() * 1e3;
+               thT = mom.Theta() * 180.0 / M_PI;
+               keT = std::sqrt(pT * pT + 938.272 * 938.272) - 938.272;
+               break;
+            }
+         }
+         if (keT < 5.0 && keT > 0) {
+            lowThT.push_back(thT);
+            lowKET.push_back(keT);
+            lowThR.push_back(recoTheta[k]);
+            lowKER.push_back(recoKE[k]);
+            lowEvId.push_back(evId);
+         }
+      }
+   }
+   TGraph *gLowT = new TGraph(lowThT.size(), lowThT.data(), lowKET.data());
+   gLowT->SetTitle("Low Energy (<5 MeV): Truth (black) vs Reco (red);#theta_{lab} [deg];KE [MeV]");
+   gLowT->SetMarkerStyle(20);
+   gLowT->SetMarkerSize(0.6);
+   gLowT->SetMarkerColor(kBlack);
+   gLowT->Draw("AP");
+   TGraph *gLowR = new TGraph(lowThR.size(), lowThR.data(), lowKER.data());
+   gLowR->SetMarkerStyle(20);
+   gLowR->SetMarkerSize(0.6);
+   gLowR->SetMarkerColor(kRed);
+   gLowR->Draw("P SAME");
+   // Draw lines connecting truth to reco for deviating events
+   for (size_t k = 0; k < lowEvId.size(); k++) {
+      double err = (lowKER[k] - lowKET[k]) / lowKET[k] * 100;
+      if (std::abs(err) > 15) {
+         TLine *line = new TLine(lowThT[k], lowKET[k], lowThR[k], lowKER[k]);
+         line->SetLineColor(kMagenta);
+         line->Draw();
+         TLatex *label = new TLatex(lowThR[k] + 0.5, lowKER[k], Form("%d", lowEvId[k]));
+         label->SetTextSize(0.025);
+         label->SetTextColor(kMagenta);
+         label->Draw();
+      }
+   }
+
+   // Print deviating low-energy events to terminal
+   std::cout << "\n=== Deviating low-energy events (KE<5 MeV, |err|>15%) ===" << std::endl;
+   std::cout << "Event  KE_true  KE_reco  err%     theta_true  theta_reco  vtxR" << std::endl;
+   for (size_t k = 0; k < lowEvId.size(); k++) {
+      double err = (lowKER[k] - lowKET[k]) / lowKET[k] * 100;
+      if (std::abs(err) > 15) {
+         double vR = std::sqrt(vtxX[k] * vtxX[k] + vtxY[k] * vtxY[k]);
+         std::cout << lowEvId[k] << "    " << lowKET[k] << "    " << lowKER[k] << "    " << err << "    "
+                   << lowThT[k] << "    " << lowThR[k] << "    " << vR << std::endl;
+      }
+   }
+
+   // Canvas 4: Vertex XY
+   TCanvas *c4 = new TCanvas("c4", "Vertex XY", 600, 600);
    TGraph *gVtx = new TGraph(vtxX.size(), vtxX.data(), vtxY.data());
    gVtx->SetTitle("Reconstructed Vertex;X [mm];Y [mm]");
    gVtx->SetMarkerStyle(20);
