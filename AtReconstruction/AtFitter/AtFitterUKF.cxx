@@ -449,6 +449,14 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
       theta_s = s0[4];
       phi_s = s0[5];
 
+      // Convert angles from Z-flipped frame back to lab frame
+      if (fZPadPlane > 0) {
+         theta_s = M_PI - theta_s; // Z flip reverses theta
+         phi_s = phi_s + M_PI;     // Flip phi by 180°
+         if (phi_s > M_PI)
+            phi_s -= 2 * M_PI; // Keep in [-π, π]
+      }
+
       // --- Back-extrapolation to beam axis ---
       // The first cluster is some distance from the true vertex at (0,0).
       // Use the actual first cluster position (not the smoothed state which
