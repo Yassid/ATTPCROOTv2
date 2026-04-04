@@ -161,25 +161,44 @@ Vector<TrackFitterUKF::TF_DIM_X> TrackFitterUKF::funcF(const Vector<TrackFitterU
 {
    // Set the state of the propagator to the current state vector
    using namespace ROOT::Math;
-   XYZPoint fPos(x[0], x[1], x[2]);      // Position from state vector
-   Polar3DVector fMom(x[3], x[4], x[5]); // Momentum from state vector
+
+   // Validate sigma point state: momentum must be positive and angles finite
+   double pMag = x[3];
+   double theta = x[4];
+   double phi = x[5];
+   if (pMag <= 0 || std::isnan(pMag) || std::isinf(pMag) || std::isnan(theta) || std::isnan(phi)) {
+      // Return the input unchanged — this sigma point is invalid
+      Vector<TF_DIM_X> vecX;
+      for (int d = 0; d < TF_DIM_X; d++)
+         vecX[d] = x[d];
+      return vecX;
+   }
+
+   XYZPoint fPos(x[0], x[1], x[2]);
+   Polar3DVector fMom(pMag, theta, phi);
 
    fPropagator.SetState(fPos, XYZVector(fMom));
 
-   fPropagator.fScalingFactor = v[0] * fELossScaleFactor; // Augmented noise × baseline calibration
+   fPropagator.fScalingFactor = v[0] * fELossScaleFactor;
    fPropagator.PropagateToMeasurementSurface(AtTools::AtMeasurementPlane(fMeasurementPlane), *fStepper);
-   fPropagator.fScalingFactor = fELossScaleFactor; // Reset to baseline after propagation
+   fPropagator.fScalingFactor = fELossScaleFactor;
 
-   auto fState = fPropagator.GetState(); // Get the propagated state
+   auto fState = fPropagator.GetState();
    Vector<TF_DIM_X> vecX{Vector<TF_DIM_X>::Zero()};
-   vecX[0] = fState.fPos.X();     // X position
-   vecX[1] = fState.fPos.Y();     // Y position
-   vecX[2] = fState.fPos.Z();     // Z position
-   vecX[3] = fState.fMom.R();     // Momentum magnitude
-   vecX[4] = fState.fMom.Theta(); // Polar angle
-   vecX[5] = fState.fMom.Phi();   // Azimuthal
+   vecX[0] = fState.fPos.X();
+   vecX[1] = fState.fPos.Y();
+   vecX[2] = fState.fPos.Z();
+   vecX[3] = fState.fMom.R();
+   vecX[4] = fState.fMom.Theta();
+   vecX[5] = fState.fMom.Phi();
 
-   return vecX; // Return the propagated state vector
+   // Validate output
+   for (int d = 0; d < TF_DIM_X; d++) {
+      if (std::isnan(vecX[d]) || std::isinf(vecX[d]))
+         vecX[d] = x[d]; // Fall back to input
+   }
+
+   return vecX;
 }
 
 Vector<TrackFitterUKF::TF_DIM_Z> TrackFitterUKF::funcH(const Vector<TrackFitterUKF::TF_DIM_X> &x)

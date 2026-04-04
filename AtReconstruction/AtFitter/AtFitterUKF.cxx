@@ -18,7 +18,25 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <csignal>
+#include <csetjmp>
 #include <memory>
+
+// Signal handler for catching segfaults during UKF fitting
+namespace {
+static jmp_buf sJmpBuf;
+static bool sHandlerActive = false;
+static struct sigaction sOldHandler;
+
+void ukfSegvHandler(int sig)
+{
+   if (sHandlerActive)
+      longjmp(sJmpBuf, 1);
+   // If handler not active, call the previous handler
+   if (sOldHandler.sa_handler)
+      sOldHandler.sa_handler(sig);
+}
+} // namespace
 #include <stdexcept>
 #include <utility>
 #include <vector>
@@ -206,6 +224,23 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
    // --- 4. Forward filter pass ---
    bool fitConverged = true;
    auto fitStart = std::chrono::steady_clock::now();
+
+   // Install signal handler to catch segfaults from bad sigma points
+   struct sigaction sa;
+   sa.sa_handler = ukfSegvHandler;
+   sigemptyset(&sa.sa_mask);
+   sa.sa_flags = 0;
+   sigaction(SIGSEGV, &sa, &sOldHandler);
+
+   if (setjmp(sJmpBuf) != 0) {
+      // We get here if a segfault was caught
+      LOG(warn) << "AtFitterUKF: segfault caught during fit of track " << track->GetTrackID() << ", skipping";
+      sHandlerActive = false;
+      sigaction(SIGSEGV, &sOldHandler, nullptr); // Restore original handler
+      return nullptr;
+   }
+   sHandlerActive = true;
+
    try {
       for (size_t i = 1; i < clusters->size(); ++i) {
          // Timeout: abort if fit takes too long (default 2 seconds per track)
@@ -234,12 +269,38 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
          }
 
          fUKF->predictUKF(meas);
+
+         // Validate predicted state: check for NaN, Inf, and extreme values
+         auto &state = fUKF->vecX();
+         auto &cov = fUKF->matP();
+         bool stateValid = true;
+         for (int d = 0; d < 6; d++) {
+            if (std::isnan(state[d]) || std::isinf(state[d]) || std::abs(state[d]) > 1e6) {
+               stateValid = false;
+               break;
+            }
+         }
+         for (int d = 0; d < 6 && stateValid; d++) {
+            if (std::isnan(cov(d, d)) || std::isinf(cov(d, d)) || cov(d, d) < 0 || cov(d, d) > 1e10) {
+               stateValid = false;
+            }
+         }
+         if (!stateValid) {
+            LOG(debug) << "AtFitterUKF: invalid state/covariance at cluster " << i << ", aborting fit";
+            fitConverged = false;
+            break;
+         }
+
          fUKF->correctUKF(meas);
       }
    } catch (const std::exception &e) {
       LOG(warn) << "AtFitterUKF: forward pass failed for track " << track->GetTrackID() << ": " << e.what();
       fitConverged = false;
    }
+
+   // Disable signal handler
+   sHandlerActive = false;
+   sigaction(SIGSEGV, &sOldHandler, nullptr);
 
    // --- 5. RTS smoother ---
    if (fitConverged) {
