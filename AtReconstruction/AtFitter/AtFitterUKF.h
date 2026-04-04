@@ -110,6 +110,7 @@ private:
    int fMaxFitTime_ms{2000};   // Maximum time per track fit in milliseconds
    double fMomentumSeed{-1};       // If >0, override Brho seed with this value (MeV/c)
    double fMinClusterSpacing{3.0}; // Minimum distance between clusters (mm)
+   double fMinLabTheta{10.0};      // Minimum lab angle (degrees) — skip beam-like tracks
 
    // Lazily initialised on first GetFittedTrack() call
    std::unique_ptr<kf::TrackFitterUKF> fUKF;

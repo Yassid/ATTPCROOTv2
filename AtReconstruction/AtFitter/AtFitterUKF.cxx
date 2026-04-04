@@ -196,6 +196,15 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
       return nullptr;
    }
 
+   // Skip beam-like tracks (lab theta < fMinLabTheta)
+   // GeoTheta is in digi frame: theta_lab = 180 - theta_digi
+   double thetaLab = 180.0 - track->GetGeoTheta() * 180.0 / M_PI;
+   if (thetaLab < fMinLabTheta || thetaLab > (180.0 - fMinLabTheta)) {
+      LOG(debug) << "AtFitterUKF: track theta_lab=" << thetaLab << " deg, below threshold " << fMinLabTheta
+                 << ". Skipping (beam-like).";
+      return nullptr;
+   }
+
    // --- 2. Momentum seed ---
    ROOT::Math::XYZPoint initialPos = GetInitialPosition(track);
    ROOT::Math::XYZVector initialMom = GetInitialMomentum(track);
