@@ -266,68 +266,109 @@ void AtPATTERN::AtPRA::OrderClustersAlongTrack(AtTrack &track)
    *clusters = std::move(ordered);
 }
 
-void AtPATTERN::AtPRA::MergeTrackFragments(std::vector<AtTrack> &tracks, double maxDist)
+void AtPATTERN::AtPRA::SelectAndMergeTracks(std::vector<AtTrack> &tracks, double vertexRadiusXY, double mergeDist,
+                                            double minLabTheta)
 {
-   if (tracks.size() <= 1)
+   if (tracks.empty())
       return;
 
-   // For each pair of tracks, check if the endpoint of one is close to
-   // the endpoint of another. If so, merge the smaller into the larger.
-   bool merged = true;
-   while (merged) {
-      merged = false;
-      for (size_t i = 0; i < tracks.size() && !merged; i++) {
-         auto *clI = tracks[i].GetHitClusterArray();
-         if (clI->empty())
-            continue;
-         auto posI_front = clI->front().GetPosition();
-         auto posI_back = clI->back().GetPosition();
+   // Helper: get the endpoint of a track closest to beam axis at highest Z_digi (vertex end)
+   auto getVertexEnd = [](AtTrack &tr) -> XYZPoint {
+      auto *cl = tr.GetHitClusterArray();
+      if (cl->empty())
+         return XYZPoint(0, 0, 0);
+      return cl->front().GetPosition();
+   };
 
-         for (size_t j = i + 1; j < tracks.size() && !merged; j++) {
+   // Helper: get the far end of a track (Bragg peak end)
+   auto getFarEnd = [](AtTrack &tr) -> XYZPoint {
+      auto *cl = tr.GetHitClusterArray();
+      if (cl->empty())
+         return XYZPoint(0, 0, 0);
+      return cl->back().GetPosition();
+   };
+
+   // Helper: XY distance to beam axis
+   auto xyDist = [](const XYZPoint &p) { return std::sqrt(p.X() * p.X() + p.Y() * p.Y()); };
+
+   // --- Step 1: Reject beam-like tracks ---
+   // Reject beam-like tracks using cluster direction (no RANSAC needed)
+   tracks.erase(std::remove_if(tracks.begin(), tracks.end(),
+                                [minLabTheta, &getVertexEnd, &getFarEnd](AtTrack &tr) {
+                                   auto vtx = getVertexEnd(tr);
+                                   auto far = getFarEnd(tr);
+                                   auto dir = far - vtx;
+                                   if (dir.R() < 1e-3)
+                                      return true; // degenerate track
+                                   // In digi frame, beam goes along -Z (from high Z to low Z)
+                                   // theta_digi = angle w.r.t. -Z axis
+                                   double cosThDigi = -dir.Z() / dir.R(); // cos(angle to -Z)
+                                   double thDigi = std::acos(std::min(1.0, std::max(-1.0, cosThDigi))) * 180.0 / M_PI;
+                                   double thLab = 180.0 - thDigi;
+                                   return (thLab < minLabTheta || thLab > (180.0 - minLabTheta));
+                                }),
+                tracks.end());
+
+   if (tracks.empty())
+      return;
+
+   // --- Step 2: Identify primary tracks (vertex-end near beam axis at high Z) ---
+   // Find the highest Z among all vertex-ends
+   double maxZ = -1e9;
+   for (auto &tr : tracks) {
+      auto vtxEnd = getVertexEnd(tr);
+      if (vtxEnd.Z() > maxZ)
+         maxZ = vtxEnd.Z();
+   }
+
+   std::vector<bool> isPrimary(tracks.size(), false);
+   for (size_t i = 0; i < tracks.size(); i++) {
+      auto vtxEnd = getVertexEnd(tracks[i]);
+      double rXY = xyDist(vtxEnd);
+      double dZ = std::abs(vtxEnd.Z() - maxZ);
+      // Primary: close to beam axis in XY AND near the highest Z (within 50mm Z tolerance)
+      if (rXY < vertexRadiusXY && dZ < 50.0)
+         isPrimary[i] = true;
+   }
+
+   int nPrimary = std::count(isPrimary.begin(), isPrimary.end(), true);
+   LOG(info) << "SelectAndMerge: " << tracks.size() << " tracks, " << nPrimary << " primary (vertexR<" << vertexRadiusXY
+             << "mm)";
+
+   // --- Step 3: Merge fragments into primary tracks ---
+   // For each non-primary track, check if it extends a primary track's far-end
+   bool mergedAny = true;
+   while (mergedAny) {
+      mergedAny = false;
+      for (size_t i = 0; i < tracks.size() && !mergedAny; i++) {
+         if (!isPrimary[i])
+            continue;
+
+         auto farEnd = getFarEnd(tracks[i]);
+
+         for (size_t j = 0; j < tracks.size() && !mergedAny; j++) {
+            if (i == j || isPrimary[j])
+               continue; // Don't merge two primaries
+
             auto *clJ = tracks[j].GetHitClusterArray();
             if (clJ->empty())
                continue;
+
+            // Check if either endpoint of fragment j is close to the far-end of primary i
             auto posJ_front = clJ->front().GetPosition();
             auto posJ_back = clJ->back().GetPosition();
+            double d1 = (farEnd - posJ_front).R();
+            double d2 = (farEnd - posJ_back).R();
+            double dMin = std::min(d1, d2);
 
-            // Check all 4 endpoint combinations
-            double d1 = (posI_back - posJ_front).R();
-            double d2 = (posI_front - posJ_back).R();
-            double d3 = (posI_back - posJ_back).R();
-            double d4 = (posI_front - posJ_front).R();
-            double dMin = std::min({d1, d2, d3, d4});
-
-            // Check circle consistency: fragments on the same physical track
-            // should have similar center, radius, and theta from RANSAC.
-            double radiusI = tracks[i].GetGeoRadius();
-            double radiusJ = tracks[j].GetGeoRadius();
-            auto centerI = tracks[i].GetGeoCenter();
-            auto centerJ = tracks[j].GetGeoCenter();
-            double thetaI = tracks[i].GetGeoTheta() * 180.0 / TMath::Pi();
-            double thetaJ = tracks[j].GetGeoTheta() * 180.0 / TMath::Pi();
-
-            // Relative radius difference
-            double radiusDiff = (radiusI > 0 && radiusJ > 0)
-                                   ? std::abs(radiusI - radiusJ) / std::max(radiusI, radiusJ) * 100.0
-                                   : 999;
-            // Center distance
-            double centerDist = std::sqrt((centerI.first - centerJ.first) * (centerI.first - centerJ.first) +
-                                          (centerI.second - centerJ.second) * (centerI.second - centerJ.second));
-            // Theta difference
-            double thetaDiff = std::abs(thetaI - thetaJ);
-
-            // Merge if: endpoints close AND (similar circle OR similar theta)
-            bool circleMatch = (radiusDiff < 30.0 && centerDist < 20.0); // within 30% radius, 20mm center
-            bool thetaMatch = (thetaDiff < fMergeAngleThreshold);
-            bool shouldMerge = (dMin < maxDist) && (circleMatch || thetaMatch);
-
-            if (shouldMerge) {
-               // Merge j into i: move all hits from j to i
+            if (dMin < mergeDist) {
+               // Merge j into i
                for (auto &hit : tracks[j].GetHitArray())
                   tracks[i].AddHit(hit->Clone());
 
-               // Remove track j
+               // Remove track j and update isPrimary
                tracks.erase(tracks.begin() + j);
+               isPrimary.erase(isPrimary.begin() + j);
 
                // Re-cluster and re-order the merged track
                tracks[i].ResetHitClusterArray();
@@ -335,14 +376,24 @@ void AtPATTERN::AtPRA::MergeTrackFragments(std::vector<AtTrack> &tracks, double 
                                                      fClusterDistance > 0 ? fClusterDistance : 20.0);
                OrderClustersAlongTrack(tracks[i]);
 
-               merged = true;
-               LOG(info) << "Merged fragments: " << tracks[i].GetHitArray().size() << " hits"
-                         << " (d=" << dMin << "mm, dR=" << radiusDiff << "%, dCenter=" << centerDist
-                         << "mm, dTheta=" << thetaDiff << "deg)";
+               mergedAny = true;
+               LOG(info) << "Merged fragment into primary: " << tracks[i].GetHitArray().size() << " hits (d=" << dMin
+                         << "mm)";
             }
          }
       }
    }
+
+   // --- Step 4: Remove non-primary tracks (isolated fragments) ---
+   for (int i = tracks.size() - 1; i >= 0; i--) {
+      if (!isPrimary[i]) {
+         LOG(debug) << "Rejected isolated track: " << tracks[i].GetHitArray().size() << " hits";
+         tracks.erase(tracks.begin() + i);
+         isPrimary.erase(isPrimary.begin() + i);
+      }
+   }
+
+   LOG(info) << "SelectAndMerge: " << tracks.size() << " tracks after selection";
 }
 
 void AtPATTERN::AtPRA::PruneTrack(AtTrack &track)

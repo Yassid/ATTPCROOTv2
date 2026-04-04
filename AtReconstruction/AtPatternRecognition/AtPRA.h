@@ -91,11 +91,17 @@ public:
    /// from the vertex end (highest Z).
    void OrderClustersAlongTrack(AtTrack &track);
 
-   /// Merge track fragments that are close together into single tracks.
-   /// Uses cluster endpoint distance to decide which fragments to merge.
-   /// @param tracks Vector of track candidates (modified in place)
-   /// @param maxDist Maximum distance between endpoints to merge (mm)
-   void MergeTrackFragments(std::vector<AtTrack> &tracks, double maxDist = 30.0);
+   /// Vertex-based track selection and fragment merging.
+   /// 1. Finds the vertex at highest Z_digi near beam axis (0,0)
+   /// 2. Selects primary tracks with an endpoint near the vertex
+   /// 3. Merges fragments extending from primary track far-ends
+   /// 4. Rejects isolated tracks and beam-like tracks
+   /// @param tracks Vector of track candidates (modified in place — non-primary tracks removed)
+   /// @param vertexRadiusXY Max XY distance from beam axis for vertex endpoint (mm)
+   /// @param mergeDist Max distance between endpoints to merge a fragment (mm)
+   /// @param minLabTheta Min lab angle (degrees) to reject beam tracks
+   void SelectAndMergeTracks(std::vector<AtTrack> &tracks, double vertexRadiusXY = 80.0, double mergeDist = 30.0,
+                             double minLabTheta = 10.0);
 
 protected:
    // Functions that need to be moved to another class. They assume a curved track
