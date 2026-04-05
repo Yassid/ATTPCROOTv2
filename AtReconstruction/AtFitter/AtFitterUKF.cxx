@@ -165,37 +165,6 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
    // --- 1. Get clusters (already ordered by PRA::OrderClustersAlongTrack) ---
    auto *clusters = track->GetHitClusterArray();
 
-   // Convert digi→lab coordinates if ZPadPlane is set.
-   // PRA orders clusters along the arc starting from the vertex (highest Z_digi).
-   // After Z flip the arc order is preserved but we reverse so that vertex
-   // (now lowest Z_lab) comes first — matching the UKF propagation direction.
-   if (fZPadPlane > 0) {
-      for (auto &cl : *clusters)
-         cl.SetPosition({cl.GetPosition().X(), cl.GetPosition().Y(), fZPadPlane - cl.GetPosition().Z()});
-   }
-
-   // Filter: minimum spacing + trim Bragg peak end
-   {
-      std::vector<AtHitCluster> filtered;
-      if (!clusters->empty())
-         filtered.push_back(clusters->front());
-      for (size_t i = 1; i < clusters->size(); i++) {
-         double dist = (clusters->at(i).GetPosition() - filtered.back().GetPosition()).R();
-         if (dist >= fMinClusterSpacing)
-            filtered.push_back(clusters->at(i));
-      }
-      // Trim last 10% (near Bragg peak where proton stops)
-      int nKeep = std::max(fMinClusters, static_cast<int>(filtered.size() * 0.9));
-      if (static_cast<int>(filtered.size()) > nKeep)
-         filtered.resize(nKeep);
-      *clusters = std::move(filtered);
-   }
-
-   if (static_cast<int>(clusters->size()) < fMinClusters) {
-      LOG(debug) << "AtFitterUKF: " << clusters->size() << " clusters < " << fMinClusters << ". Skipping.";
-      return nullptr;
-   }
-
    // Skip tracks with invalid geometry (NaN from failed RANSAC fit)
    if (std::isnan(track->GetGeoTheta()) || std::isnan(track->GetGeoRadius()) || track->GetGeoRadius() <= 0) {
       LOG(debug) << "AtFitterUKF: track has invalid geometry (NaN theta or radius). Skipping.";
@@ -213,7 +182,7 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
 
    // --- 1b. Adaptive re-clustering based on Brho momentum estimate ---
    // Low-energy tracks benefit from larger cluster radius (more averaging).
-   // Re-cluster BEFORE Z conversion (needs digi-frame coordinates).
+   // Re-clustering works in digi frame (hits are never Z-flipped).
    if (fAdaptiveClustering) {
       double pEst = GetInitialMomentum(track).R(); // Brho estimate
       if (fMomentumSeed > 0)
@@ -233,8 +202,8 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
          distance = 15.0; // Same for high energy — already good
       }
 
-      // Re-cluster with adapted parameters (works in digi frame)
-      // Need to undo Z conversion if already applied — but we haven't yet
+      // Re-cluster with adapted parameters (works in digi frame — hits are never Z-flipped).
+      // The digi→lab Z conversion is applied after this block.
       track->ResetHitClusterArray();
       AtTools::AtTrackTransformer transformer;
       transformer.ClusterizeSmooth3D(*track, radius, distance);
@@ -282,6 +251,38 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
       clusters = track->GetHitClusterArray(); // refresh pointer
       LOG(debug) << "Adaptive clustering: KE_est=" << keEst << " MeV, r=" << radius << " d=" << distance
                  << " → " << clusters->size() << " clusters";
+   }
+
+   // Filter: minimum spacing + trim Bragg peak end.
+   // Applied after adaptive re-clustering so it operates on the final cluster set.
+   {
+      std::vector<AtHitCluster> filtered;
+      if (!clusters->empty())
+         filtered.push_back(clusters->front());
+      for (size_t i = 1; i < clusters->size(); i++) {
+         double dist = (clusters->at(i).GetPosition() - filtered.back().GetPosition()).R();
+         if (dist >= fMinClusterSpacing)
+            filtered.push_back(clusters->at(i));
+      }
+      // Trim last 10% (near Bragg peak where proton stops)
+      int nKeep = std::max(fMinClusters, static_cast<int>(filtered.size() * 0.9));
+      if (static_cast<int>(filtered.size()) > nKeep)
+         filtered.resize(nKeep);
+      *clusters = std::move(filtered);
+   }
+
+   if (static_cast<int>(clusters->size()) < fMinClusters) {
+      LOG(debug) << "AtFitterUKF: " << clusters->size() << " clusters < " << fMinClusters << ". Skipping.";
+      return nullptr;
+   }
+
+   // Convert digi→lab coordinates if ZPadPlane is set.
+   // This must happen AFTER adaptive re-clustering (which produces digi-frame clusters).
+   // PRA orders clusters along the arc starting from the vertex (highest Z_digi).
+   // After Z flip the arc order is preserved; vertex (now lowest Z_lab) comes first.
+   if (fZPadPlane > 0) {
+      for (auto &cl : *clusters)
+         cl.SetPosition({cl.GetPosition().X(), cl.GetPosition().Y(), fZPadPlane - cl.GetPosition().Z()});
    }
 
    // --- 2. Momentum seed ---
@@ -449,13 +450,9 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
       theta_s = s0[4];
       phi_s = s0[5];
 
-      // Convert angles from Z-flipped frame back to lab frame
-      if (fZPadPlane > 0) {
-         theta_s = M_PI - theta_s; // Z flip reverses theta
-         phi_s = phi_s + M_PI;     // Flip phi by 180°
-         if (phi_s > M_PI)
-            phi_s -= 2 * M_PI; // Keep in [-π, π]
-      }
+      // The UKF now operates in lab frame (Z_lab = fZPadPlane - Z_digi), so theta/phi
+      // from the smoothed state are already in the correct physics frame.
+      // No angle conversion needed.
 
       // --- Back-extrapolation to beam axis ---
       // Linear approximation: add back energy lost between vertex and first cluster.

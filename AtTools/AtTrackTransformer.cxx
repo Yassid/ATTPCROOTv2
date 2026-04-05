@@ -39,16 +39,6 @@ void AtTools::AtTrackTransformer::ClusterizeSmooth3D(AtTrack &track, Float_t rad
    std::vector<AtHit> hitTBArray;
    int clusterID = 0;
 
-   // std::cout<<" ================================================================= "<<"\n";
-   // std::cout<<" Clusterizing track : "<<track.GetTrackID()<<"\n";
-
-   /*for(auto iHits=0;iHits<hitArray->size();++iHits)
-     {
-       TVector3 pos    = hitArray->at(iHits).GetPosition();
-       double Q = hitArray->at(iHits).GetCharge();
-       int TB          = hitArray->at(iHits).GetTimeStamp();
-       //std::cout<<" Pos : "<<pos.X()<<" - "<<pos.Y()<<" - "<<pos.Z()<<" - TB : "<<TB<<" - Charge : "<<Q<<"\n";
-       }*/
 
    // Diffusion and resolution parameters.
    // The transverse/longitudinal diffusion sigmas (in mm) at drift distance z_mm are:
