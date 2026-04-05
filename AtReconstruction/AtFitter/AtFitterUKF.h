@@ -71,6 +71,9 @@ public:
    /// When set (>0), clusters are transformed to lab frame: Z_lab = ZPadPlane - Z_digi
    /// and sorted from vertex (high Z_lab) toward Bragg peak (low Z_lab).
    void SetZPadPlane(double z) { fZPadPlane = z; }
+   /// Enable/disable adaptive re-clustering based on Brho momentum estimate.
+   /// Disable when using pre-computed clusters (e.g. GNN arc-walk).
+   void SetAdaptiveClustering(bool enable) { fAdaptiveClustering = enable; }
 
    /// AtFitter interface — no-op; UKF is created lazily on first GetFittedTrack() call.
    void Init() override {}
