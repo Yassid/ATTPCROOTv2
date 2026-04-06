@@ -2,6 +2,8 @@
 #define AtPRA_H
 
 #include "AtTrack.h" // for AtTrack
+#include "AtTrackRefiner.h"
+#include "AtTrackSeeder.h"
 #include "AtTrackTransformer.h"
 
 #include <Rtypes.h>  // for Double_t, Float_t, Int_t, THashConsistencyHolder
@@ -45,6 +47,8 @@ protected:
    Bool_t kSetPrunning{false}; //<<! Enable prunning of tracks
 
    std::unique_ptr<AtTools::AtTrackTransformer> fTrackTransformer{std::make_unique<AtTools::AtTrackTransformer>()};
+   std::unique_ptr<AtTrackRefiner> fTrackRefiner{std::make_unique<AtTrackRefiner>()};
+   std::unique_ptr<AtTrackSeeder> fTrackSeeder{std::make_unique<AtTrackSeeder>()};
    Double_t fClusterRadius{0};      //<! Radius of hit clusters
    Double_t fClusterDistance{0};    //<! Distance between hit clusters
    Double_t fRadiusFitFraction{1.0}; //<! Max fraction of hits for radius fit (0.5 reduces bias but may cause hangs)
@@ -113,7 +117,7 @@ protected:
     * Takes track and sets fGeo... parameters using SampleConsensus. I think these are then used
     * as initial guesses for GenFit. Probably, this should be moved into the fitting classes instead of
     * here. At the very least, it needs to be in a subclass that only deals with curved tracks, it
-    * would make no sense to apply this function to straight tracks.
+   * would make no sense to apply this function to straight tracks.
     */
    void SetTrackInitialParameters(AtTrack &track);
 
