@@ -372,8 +372,11 @@ void AtPATTERN::AtPRA::SelectAndMergeTracks(std::vector<AtTrack> &tracks, double
 
                // Re-cluster and re-order the merged track
                tracks[i].ResetHitClusterArray();
-               fTrackTransformer->ClusterizeSmooth3D(tracks[i], fClusterRadius > 0 ? fClusterRadius : 10.0,
-                                                     fClusterDistance > 0 ? fClusterDistance : 20.0);
+               if (fUseArcWalk)
+                  fTrackTransformer->ClusterizeArcWalk(tracks[i], fTargetClusters, fMinHitsPerCluster, fArcWalkKNN);
+               else
+                  fTrackTransformer->ClusterizeSmooth3D(tracks[i], fClusterRadius > 0 ? fClusterRadius : 10.0,
+                                                        fClusterDistance > 0 ? fClusterDistance : 20.0);
                OrderClustersAlongTrack(tracks[i]);
 
                mergedAny = true;

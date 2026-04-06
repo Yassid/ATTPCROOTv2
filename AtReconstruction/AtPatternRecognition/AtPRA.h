@@ -53,6 +53,11 @@ protected:
    Bool_t fUseHitsForRadius{false};  //<! Use raw hits instead of clusters for radius
    Double_t fMergeAngleThreshold{45.0}; //<! Max angle difference (degrees) for merging fragments
 
+   bool fUseArcWalk{false};        //<! Use arc-walk clustering instead of ClusterizeSmooth3D
+   int fTargetClusters{25};        //<! Target number of clusters per track (adaptive)
+   int fMinHitsPerCluster{3};      //<! Minimum hits per cluster floor
+   int fArcWalkKNN{10};            //<! Number of nearest neighbors for arc-walk kNN graph
+
 public:
    virtual ~AtPRA() = default;
 
@@ -76,6 +81,15 @@ public:
    void SetMaxHitsRadius(Int_t n) { fMaxHitsRadius = n; }
    /// Use raw hits instead of clusters for circle fit (default: false)
    void SetUseHitsForRadius(Bool_t use) { fUseHitsForRadius = use; }
+   /// Use arc-walk clustering instead of ClusterizeSmooth3D (gap-immune)
+   void SetUseArcWalk(bool use = true) { fUseArcWalk = use; }
+   /// Target number of clusters per track (hits/cluster = nHits / targetClusters)
+   void SetTargetClusters(int n) { fTargetClusters = n; }
+   /// Minimum hits per cluster (floor for adaptive sizing)
+   void SetMinHitsPerCluster(int n) { fMinHitsPerCluster = n; }
+   /// Number of nearest neighbors for arc-walk kNN graph
+   void SetArcWalkKNN(int k) { fArcWalkKNN = k; }
+
    /// Set diffusion parameters for cluster covariance calculation.
    void SetDiffusionParams(double coefT, double coefL, double driftVel, double tbTime, double padResXY = -1)
    {

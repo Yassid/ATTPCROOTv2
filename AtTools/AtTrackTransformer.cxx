@@ -16,10 +16,77 @@
 #include <algorithm> // for max, for_each, copy_if
 #include <iterator>  // for back_insert_iterator
 #include <memory>    // for shared_ptr, __shared_p...
+#include <queue>     // for priority_queue
+#include <utility>   // for pair
 #include <vector>    // for vector
 
 AtTools::AtTrackTransformer::AtTrackTransformer() = default;
 AtTools::AtTrackTransformer::~AtTrackTransformer() = default;
+
+namespace {
+/// Build a cluster from a group of hits: charge-weighted centroid + diffusion covariance.
+std::shared_ptr<AtHitCluster>
+BuildClusterFromHits(const std::vector<const AtHit *> &hits, int clusterID, double fCoefT, double fCoefL,
+                     double driftVel, double samplingRate, double padResXY)
+{
+   double padResZ = padResXY * 1.5;
+   double x = 0, y = 0, z = 0;
+   double var_x = 0, var_y = 0, var_z = 0;
+   double totalQ = 0;
+   int timeStamp = 0;
+   int nHits = hits.size();
+
+   for (auto *hit : hits) {
+      auto pos = hit->GetPosition();
+      double q = hit->GetCharge();
+
+      x += pos.X() * q;
+      y += pos.Y() * q;
+      z += pos.Z();
+      totalQ += q;
+      timeStamp += hit->GetTimeStamp();
+
+      double driftTime = pos.Z() / (10.0 * driftVel);
+      double varT = 100.0 * fCoefT * 2.0 * driftTime;
+      double varL = 100.0 * fCoefL * 2.0 * driftTime;
+      double tbRes_mm = driftVel * samplingRate * 10.0;
+      double varTB = tbRes_mm * tbRes_mm / 12.0;
+
+      var_x += q * q * (padResXY * padResXY + varT);
+      var_y += q * q * (padResXY * padResXY + varT);
+      var_z += q * q * (padResZ * padResZ + varTB + varL);
+   }
+
+   if (totalQ <= 0)
+      return nullptr;
+
+   x /= totalQ;
+   y /= totalQ;
+   z /= nHits;
+   timeStamp /= nHits;
+
+   double sigma_x = TMath::Sqrt(var_x) / totalQ;
+   double sigma_y = TMath::Sqrt(var_y) / totalQ;
+   double sigma_z = TMath::Sqrt(var_z) / totalQ;
+
+   auto cluster = std::make_shared<AtHitCluster>();
+   cluster->SetClusterID(clusterID);
+   cluster->SetCharge(totalQ);
+   cluster->SetPosition({x, y, z});
+   cluster->SetTimeStamp(timeStamp);
+
+   TMatrixDSym cov(3);
+   cov(0, 0) = sigma_x * sigma_x;
+   cov(1, 1) = sigma_y * sigma_y;
+   cov(2, 2) = sigma_z * sigma_z;
+   cov(0, 1) = cov(1, 0) = 0;
+   cov(0, 2) = cov(2, 0) = 0;
+   cov(1, 2) = cov(2, 1) = 0;
+   cluster->SetCovMatrix(cov);
+
+   return cluster;
+}
+} // anonymous namespace
 
 void AtTools::AtTrackTransformer::SetDiffusionParams(double coefT, double coefL, double driftVel, double tbTime,
                                                      double padResXY)
@@ -371,6 +438,133 @@ void AtTools::AtTrackTransformer::ClusterizeByGroup(AtTrack &track, int hitsPerC
       hitCluster->SetCovMatrix(cov);
 
       track.AddClusterHit(hitCluster);
+   }
+}
+
+void AtTools::AtTrackTransformer::ClusterizeArcWalk(AtTrack &track, int targetClusters, int minHitsPerCluster, int kNN)
+{
+   auto hitArray = track.GetHitArrayObject();
+   int n = hitArray.size();
+   if (n < 3)
+      return;
+
+   // Adaptive hits-per-cluster: nHits / targetClusters, floored by minHitsPerCluster
+   int hitsPerCluster = std::max(minHitsPerCluster, n / std::max(1, targetClusters));
+
+   // Clamp kNN to available hits
+   if (kNN >= n)
+      kNN = n - 1;
+
+   // --- Step 1: Build kNN adjacency graph (weighted by inverse distance) ---
+   // For each hit, compute distances to all others and keep k nearest
+   using Edge = std::pair<int, double>; // (neighbor, weight)
+   std::vector<std::vector<Edge>> adj(n);
+
+   for (int i = 0; i < n; i++) {
+      auto posI = hitArray[i].GetPosition();
+
+      // Compute all distances
+      std::vector<std::pair<double, int>> dists; // (distance, index)
+      dists.reserve(n - 1);
+      for (int j = 0; j < n; j++) {
+         if (i == j)
+            continue;
+         double d = TMath::Sqrt((hitArray[j].GetPosition() - posI).Mag2());
+         dists.push_back({d, j});
+      }
+
+      // Partial sort to get k nearest
+      int k = std::min(kNN, static_cast<int>(dists.size()));
+      std::partial_sort(dists.begin(), dists.begin() + k, dists.end());
+
+      for (int m = 0; m < k; m++) {
+         double w = (dists[m].first > 1e-6) ? 1.0 / dists[m].first : 1e6;
+         adj[i].push_back({dists[m].second, w});
+         adj[dists[m].second].push_back({i, w}); // symmetric
+      }
+   }
+
+   // --- Step 2: Maximum spanning tree via Prim's from highest-Z hit ---
+   int startIdx = 0;
+   for (int i = 1; i < n; i++) {
+      if (hitArray[i].GetPosition().Z() > hitArray[startIdx].GetPosition().Z())
+         startIdx = i;
+   }
+
+   std::vector<std::vector<int>> tree(n);
+   std::vector<bool> inTree(n, false);
+   // Max-heap: (weight, from, to)
+   using PQEntry = std::tuple<double, int, int>;
+   std::priority_queue<PQEntry> pq;
+
+   inTree[startIdx] = true;
+   for (auto &[nb, w] : adj[startIdx])
+      pq.push({w, startIdx, nb});
+
+   while (!pq.empty()) {
+      auto [w, u, v] = pq.top();
+      pq.pop();
+      if (inTree[v])
+         continue;
+      inTree[v] = true;
+      tree[u].push_back(v);
+      tree[v].push_back(u);
+      for (auto &[nb, nw] : adj[v]) {
+         if (!inTree[nb])
+            pq.push({nw, v, nb});
+      }
+   }
+
+   // --- Step 3: Find arc ordering via double-DFS ---
+   // DFS helper: returns traversal order and distance array
+   auto bfs = [&](int root) -> std::pair<int, std::vector<int>> {
+      std::vector<int> dist(n, -1);
+      std::vector<int> order;
+      order.reserve(n);
+      std::vector<int> stack;
+      stack.push_back(root);
+      dist[root] = 0;
+      while (!stack.empty()) {
+         int node = stack.back();
+         stack.pop_back();
+         order.push_back(node);
+         for (int nb : tree[node]) {
+            if (dist[nb] == -1) {
+               dist[nb] = dist[node] + 1;
+               stack.push_back(nb);
+            }
+         }
+      }
+      int farthest = root;
+      for (int i = 0; i < n; i++) {
+         if (dist[i] > dist[farthest])
+            farthest = i;
+      }
+      return {farthest, order};
+   };
+
+   // First DFS from start → find one endpoint
+   auto [endA, order1] = bfs(startIdx);
+   // Second DFS from endpoint → arc ordering
+   auto [endB, arcOrder] = bfs(endA);
+
+   // --- Step 4: Group consecutive hits into clusters ---
+   int clusterID = 0;
+   for (int start = 0; start < static_cast<int>(arcOrder.size()); start += hitsPerCluster) {
+      int end = std::min(start + hitsPerCluster, static_cast<int>(arcOrder.size()));
+      if (end - start < 2 && clusterID > 0)
+         continue; // skip tiny trailing group
+
+      std::vector<const AtHit *> groupHits;
+      groupHits.reserve(end - start);
+      for (int i = start; i < end; i++)
+         groupHits.push_back(&hitArray[arcOrder[i]]);
+
+      auto cluster = BuildClusterFromHits(groupHits, clusterID, fCoefT, fCoefL, fDriftVel, fTBTime, fPadResXY);
+      if (cluster) {
+         track.AddClusterHit(cluster);
+         clusterID++;
+      }
    }
 }
 

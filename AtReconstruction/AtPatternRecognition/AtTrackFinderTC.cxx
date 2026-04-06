@@ -144,7 +144,10 @@ AtPATTERN::AtTrackFinderTC::clustersToTrack(PointCloud &cloud, const std::vector
 
       track.SetTrackID(cluster_index);
 
-      fTrackTransformer->ClusterizeSmooth3D(track, fClusterRadius, fClusterDistance);
+      if (fUseArcWalk)
+         fTrackTransformer->ClusterizeArcWalk(track, fTargetClusters, fMinHitsPerCluster, fArcWalkKNN);
+      else
+         fTrackTransformer->ClusterizeSmooth3D(track, fClusterRadius, fClusterDistance);
       OrderClustersAlongTrack(track);
 
       if (kSetPrunning)

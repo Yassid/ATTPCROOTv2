@@ -62,6 +62,12 @@ private:
    Double_t fClusterRadius{20.0};  // Overlapping clusters: radius > distance
    Double_t fClusterDistance{15.0}; // Gives 2.2% RMS (was r10 d20 → 3.8%)
 
+   // Arc-walk clustering parameters
+   bool fUseArcWalk{false};
+   int fTargetClusters{25};
+   int fMinHitsPerCluster{3};
+   int fArcWalkKNN{10};
+
 public:
    AtPRAtask();
    ~AtPRAtask();
@@ -96,6 +102,15 @@ public:
 
    void SetClusterRadius(Double_t clusterRadius) { fClusterRadius = clusterRadius; }
    void SetClusterDistance(Double_t clusterDistance) { fClusterDistance = clusterDistance; }
+
+   /// Use arc-walk clustering instead of ClusterizeSmooth3D (gap-immune)
+   void SetUseArcWalk(bool use = true) { fUseArcWalk = use; }
+   /// Target number of clusters per track (hits/cluster adapts automatically)
+   void SetTargetClusters(int n) { fTargetClusters = n; }
+   /// Minimum hits per cluster (floor for adaptive sizing)
+   void SetMinHitsPerCluster(int n) { fMinHitsPerCluster = n; }
+   /// Number of nearest neighbors for arc-walk kNN graph
+   void SetArcWalkKNN(int k) { fArcWalkKNN = k; }
 
    ClassDef(AtPRAtask, 1);
 };

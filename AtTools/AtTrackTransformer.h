@@ -32,6 +32,22 @@ public:
    /// @param track Track with raw hits
    /// @param hitsPerCluster Number of hits per cluster (default 15 → ~18 clusters for 280 hits)
    void ClusterizeByGroup(AtTrack &track, int hitsPerCluster = 15);
+
+   /// @brief Arc-walk clustering: orders hits along a spanning tree arc, then groups
+   /// consecutive hits into clusters. Gap-immune alternative to ClusterizeSmooth3D.
+   ///
+   /// Algorithm: build kNN graph from raw hits, find maximum spanning tree (Prim's),
+   /// extract arc ordering via double-DFS, group hits into clusters with charge-weighted
+   /// centroids and diffusion-based covariances.
+   ///
+   /// The number of hits per cluster is adaptive: nHits / targetClusters, with a
+   /// minimum of minHitsPerCluster to ensure meaningful covariance estimation.
+   /// @param track Track with raw hits (clusters written to track's cluster array)
+   /// @param targetClusters Desired number of clusters per track (default 25)
+   /// @param minHitsPerCluster Minimum hits per cluster floor (default 3)
+   /// @param kNN Number of nearest neighbors for adjacency graph (default 10)
+   void ClusterizeArcWalk(AtTrack &track, int targetClusters = 25, int minHitsPerCluster = 3, int kNN = 10);
+
    const std::tuple<Double_t, Double_t> GetPIDFromHits(AtTrack &track, Double_t theta);
 
    Bool_t FindVertexTrack(AtTrack *trA, AtTrack *trB);

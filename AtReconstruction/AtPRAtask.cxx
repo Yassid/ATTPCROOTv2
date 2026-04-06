@@ -120,6 +120,16 @@ InitStatus AtPRAtask::Init()
       // fPSA = new AtPSAProto();
    }
 
+   // Arc-walk clustering options
+   if (fUseArcWalk && fPRA) {
+      fPRA->SetUseArcWalk(true);
+      fPRA->SetTargetClusters(fTargetClusters);
+      fPRA->SetMinHitsPerCluster(fMinHitsPerCluster);
+      fPRA->SetArcWalkKNN(fArcWalkKNN);
+      std::cout << " Arc-walk clustering enabled: target " << fTargetClusters << " clusters/track, min "
+                << fMinHitsPerCluster << " hits/cluster, kNN=" << fArcWalkKNN << "\n";
+   }
+
    // Prunning options
    std::cout << " Track prunning : " << kSetPrunning << "\n";
    if (kSetPrunning) {
