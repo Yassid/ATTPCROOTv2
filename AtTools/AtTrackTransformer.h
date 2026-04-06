@@ -10,7 +10,7 @@ namespace AtTools {
 class AtTrackTransformer {
 
 public:
-   enum class CovarianceMode { TransformerDirect, HitClusterOnline };
+   enum class CovarianceMode { TransformerDirect, HitClusterOnline, HitClusterOnlineDiagOnly, HitClusterOnlineConsistent };
 
    AtTrackTransformer();
    ~AtTrackTransformer();

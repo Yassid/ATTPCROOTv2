@@ -119,7 +119,7 @@ TMatrixDSym BuildLegacyCovariance(const LegacyClusterStats &stats)
    return cov;
 }
 
-TMatrixDSym BuildHitClusterOnlineCovariance(const std::vector<AtHit> &hits, const ClusterCovarianceParams &params)
+AtHitCluster BuildHitClusterOnlineCluster(const std::vector<AtHit> &hits, const ClusterCovarianceParams &params)
 {
    AtHitCluster cluster;
    for (const auto &hit : hits) {
@@ -127,7 +127,19 @@ TMatrixDSym BuildHitClusterOnlineCovariance(const std::vector<AtHit> &hits, cons
       hitWithVar.SetPositionVariance(GetPerHitVariance(hitWithVar, params));
       cluster.AddHit(hitWithVar);
    }
-   return cluster.GetCovMatrix();
+   return cluster;
+}
+
+TMatrixDSym BuildDiagonalOnlyCovariance(const TMatrixDSym &src)
+{
+   TMatrixDSym diag(src);
+   for (int row = 0; row < 3; ++row) {
+      for (int col = 0; col < 3; ++col) {
+         if (row != col)
+            diag(row, col) = 0.0;
+      }
+   }
+   return diag;
 }
 
 std::shared_ptr<AtHitCluster>
@@ -145,8 +157,27 @@ BuildCluster(const std::vector<AtHit> &hits, const ClusterCovarianceParams &para
    cluster->SetTimeStamp(stats.timeStamp);
    cluster->SetCovMatrix(BuildLegacyCovariance(stats));
 
-   if (mode == AtTools::AtTrackTransformer::CovarianceMode::HitClusterOnline)
-      cluster->SetCovMatrix(BuildHitClusterOnlineCovariance(hits, params));
+   if (mode == AtTools::AtTrackTransformer::CovarianceMode::TransformerDirect)
+      return cluster;
+
+   auto onlineCluster = BuildHitClusterOnlineCluster(hits, params);
+
+   if (mode == AtTools::AtTrackTransformer::CovarianceMode::HitClusterOnline) {
+      cluster->SetCovMatrix(onlineCluster.GetCovMatrix());
+      return cluster;
+   }
+
+   if (mode == AtTools::AtTrackTransformer::CovarianceMode::HitClusterOnlineDiagOnly) {
+      cluster->SetCovMatrix(BuildDiagonalOnlyCovariance(onlineCluster.GetCovMatrix()));
+      return cluster;
+   }
+
+   if (mode == AtTools::AtTrackTransformer::CovarianceMode::HitClusterOnlineConsistent) {
+      auto consistentCluster = std::make_shared<AtHitCluster>(onlineCluster);
+      consistentCluster->SetClusterID(clusterID);
+      consistentCluster->SetTimeStamp(stats.timeStamp);
+      return consistentCluster;
+   }
 
    return cluster;
 }
