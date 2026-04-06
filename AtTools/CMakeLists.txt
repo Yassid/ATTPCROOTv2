@@ -39,6 +39,8 @@ set(SRCS
 
   DataCleaning/AtDataCleaner.cxx
   DataCleaning/AtkNN.cxx
+
+  AtELossBetheBloch.cxx
   )
 
 Set(DEPENDENCIES
@@ -80,6 +82,7 @@ set(TEST_SRCS
   AtELossTableTest.cxx
   AtPropagatorTest.cxx
   AtTrackTransformerCovarianceTest.cxx
+  AtELossBetheBlochTest.cxx
 )
 if(CATIMA_FOUND)
   set(TEST_SRCS ${TEST_SRCS}
