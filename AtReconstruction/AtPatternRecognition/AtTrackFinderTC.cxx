@@ -112,10 +112,16 @@ void AtPATTERN::AtTrackFinderTC::eventToClusters(AtEvent &event, PointCloud &clo
 std::unique_ptr<AtPatternEvent>
 AtPATTERN::AtTrackFinderTC::clustersToTrack(PointCloud &cloud, const std::vector<cluster_t> &clusters, AtEvent &event)
 {
-
    std::vector<AtTrack> tracks;
-   // std::vector<Point> points = cloud;
-   auto points = cloud;
+   auto noisePoints = cloud;
+   BuildRawTracksFromClusters(cloud, clusters, event, tracks, noisePoints);
+   return FinalizeTracks(std::move(tracks), noisePoints, event);
+}
+
+void AtPATTERN::AtTrackFinderTC::BuildRawTracksFromClusters(PointCloud &cloud, const std::vector<cluster_t> &clusters,
+                                                            AtEvent &event, std::vector<AtTrack> &tracks,
+                                                            PointCloud &noisePoints)
+{
 
    for (size_t cluster_index = 0; cluster_index < clusters.size(); ++cluster_index) {
 
@@ -132,10 +138,10 @@ AtPATTERN::AtTrackFinderTC::clustersToTrack(PointCloud &cloud, const std::vector
 
          track.AddHit(event.GetHit(point.GetID()));
 
-         // remove current point from vector points
-         for (auto p = points.begin(); p != points.end(); p++) {
+         // remove current point from vector of unused points
+         for (auto p = noisePoints.begin(); p != noisePoints.end(); p++) {
             if (*p == point) {
-               points.erase(p);
+               noisePoints.erase(p);
                break;
             }
          }
@@ -145,7 +151,6 @@ AtPATTERN::AtTrackFinderTC::clustersToTrack(PointCloud &cloud, const std::vector
       track.SetTrackID(cluster_index);
 
       fTrackTransformer->ClusterizeSmooth3D(track, fClusterRadius, fClusterDistance);
-      OrderClustersAlongTrack(track);
 
       if (kSetPrunning)
          PruneTrack(track);
@@ -153,6 +158,13 @@ AtPATTERN::AtTrackFinderTC::clustersToTrack(PointCloud &cloud, const std::vector
       tracks.push_back(track);
 
    } // Clusters loop
+}
+
+std::unique_ptr<AtPatternEvent> AtPATTERN::AtTrackFinderTC::FinalizeTracks(std::vector<AtTrack> tracks,
+                                                                           PointCloud &noisePoints, AtEvent &event)
+{
+   for (auto &track : tracks)
+      OrderClustersAlongTrack(track);
 
    std::cout << cRED << " Tracks found " << tracks.size() << cNORMAL << std::endl;
 
@@ -169,7 +181,7 @@ AtPATTERN::AtTrackFinderTC::clustersToTrack(PointCloud &cloud, const std::vector
 
    // Dump noise into pattern event
    auto retEvent = std::make_unique<AtPatternEvent>();
-   for (const auto &point : points)
+   for (const auto &point : noisePoints)
       retEvent->AddNoise(event.GetHit(point.GetID()));
 
    for (auto &track : tracks)

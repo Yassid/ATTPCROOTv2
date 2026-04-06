@@ -237,6 +237,7 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
       // Need to undo Z conversion if already applied — but we haven't yet
       track->ResetHitClusterArray();
       AtTools::AtTrackTransformer transformer;
+      transformer.SetCovarianceMode(fClusterCovarianceMode);
       transformer.ClusterizeSmooth3D(*track, radius, distance);
 
       // Re-order clusters along the track

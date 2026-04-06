@@ -30,6 +30,8 @@
 
 #pragma link C++ class AtPATTERN::AtTrackFinderTC + ;
 #pragma link C++ class AtPATTERN::AtPRA + ;
+#pragma link C++ class AtPATTERN::AtTrackRefiner - !;
+#pragma link C++ class AtPATTERN::AtTrackSeeder - !;
 #pragma link C++ namespace AtPATTERN;
 
 #pragma link C++ namespace SampleConsensus;

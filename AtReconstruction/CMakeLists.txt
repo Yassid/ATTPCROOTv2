@@ -41,6 +41,16 @@ Set(DEPENDENCIES
   hdf5::hdf5-shared
   )
 
+set(TEST_SRCS_RECO
+  AtPRABehaviorTest.cxx
+  AtTrackComponentsTest.cxx
+  )
+
+attpcroot_generate_tests(${LIBRARY_NAME}Tests
+  SRCS ${TEST_SRCS_RECO}
+  DEPS ${LIBRARY_NAME}
+  )
+
 set(SRCS
   # Add all the source files below this line. Those must have cxx for their extension.
 
@@ -80,6 +90,8 @@ set(SRCS
   AtCopyAuxTreeTask.cxx
 
   AtPatternRecognition/AtPRA.cxx
+  AtPatternRecognition/AtTrackRefiner.cxx
+  AtPatternRecognition/AtTrackSeeder.cxx
   AtPatternRecognition/AtSampleConsensus.cxx
   AtPatternRecognition/AtSampleEstimator.cxx
   AtPatternRecognition/AtEstimatorMethods.cxx

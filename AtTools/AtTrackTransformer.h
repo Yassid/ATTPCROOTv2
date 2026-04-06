@@ -10,6 +10,8 @@ namespace AtTools {
 class AtTrackTransformer {
 
 public:
+   enum class CovarianceMode { TransformerDirect, HitClusterOnline, HitClusterOnlineDiagOnly, HitClusterOnlineConsistent };
+
    AtTrackTransformer();
    ~AtTrackTransformer();
 
@@ -21,6 +23,8 @@ public:
    /// @param tbTime Time bucket duration [us]
    /// @param padResXY Pad position resolution in X/Y [mm] (default: padSize/sqrt(12))
    void SetDiffusionParams(double coefT, double coefL, double driftVel, double tbTime, double padResXY = -1);
+   void SetCovarianceMode(CovarianceMode mode) { fCovarianceMode = mode; }
+   CovarianceMode GetCovarianceMode() const { return fCovarianceMode; }
 
    void ClusterizeSmooth3D(AtTrack &track, Float_t radius, Float_t distance);
 
@@ -45,6 +49,7 @@ private:
    double fDriftVel{1.0};       ///< Electron drift velocity [cm/us]
    double fTBTime{0.320};       ///< Time bucket duration [us]
    double fPadResXY{2.3};       ///< Pad position resolution in X/Y [mm] (default: 8mm/sqrt(12))
+   CovarianceMode fCovarianceMode{CovarianceMode::TransformerDirect};
 };
 
 } // namespace AtTools

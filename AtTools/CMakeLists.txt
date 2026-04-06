@@ -5,6 +5,7 @@ set(SRCS
   AtParsers.cxx
   AtELossManager.cxx
   AtTrackTransformer.cxx
+  AtTrackClusterBuilder.cxx
   AtDataManip.cxx
   AtStringManip.cxx
   AtELossModel.cxx
@@ -39,6 +40,8 @@ set(SRCS
 
   DataCleaning/AtDataCleaner.cxx
   DataCleaning/AtkNN.cxx
+
+  AtELossBetheBloch.cxx
   )
 
 Set(DEPENDENCIES
@@ -79,6 +82,9 @@ set(TEST_SRCS
   DataCleaning/AtkNNTest.cxx
   AtELossTableTest.cxx
   AtPropagatorTest.cxx
+  AtTrackTransformerCovarianceTest.cxx
+  AtTrackClusterBuilderTest.cxx
+  AtELossBetheBlochTest.cxx
 )
 if(CATIMA_FOUND)
   set(TEST_SRCS ${TEST_SRCS}

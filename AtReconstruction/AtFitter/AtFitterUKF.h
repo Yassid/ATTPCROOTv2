@@ -2,6 +2,7 @@
 #define ATFITTERUKF_H
 
 #include "AtFitter.h"
+#include "AtTrackTransformer.h"
 
 #include <Math/Point3D.h>
 #include <Math/Point3Dfwd.h>
@@ -71,6 +72,8 @@ public:
    /// When set (>0), clusters are transformed to lab frame: Z_lab = ZPadPlane - Z_digi
    /// and sorted from vertex (high Z_lab) toward Bragg peak (low Z_lab).
    void SetZPadPlane(double z) { fZPadPlane = z; }
+   void SetClusterCovarianceMode(AtTools::AtTrackTransformer::CovarianceMode mode) { fClusterCovarianceMode = mode; }
+   void SetAdaptiveClustering(bool enabled) { fAdaptiveClustering = enabled; }
 
    /// AtFitter interface — no-op; UKF is created lazily on first GetFittedTrack() call.
    void Init() override {}
@@ -116,6 +119,8 @@ private:
    double fMinLabTheta{10.0};      // Minimum lab angle (degrees) — skip beam-like tracks
    int fNIterations{1};            // Number of fit iterations (1=single pass)
    bool fAdaptiveClustering{true}; // Re-cluster based on Brho momentum estimate
+   AtTools::AtTrackTransformer::CovarianceMode fClusterCovarianceMode{
+      AtTools::AtTrackTransformer::CovarianceMode::TransformerDirect};
 
    // Lazily initialised on first GetFittedTrack() call
    std::unique_ptr<kf::TrackFitterUKF> fUKF;
