@@ -43,6 +43,7 @@ Set(DEPENDENCIES
 
 set(TEST_SRCS_RECO
   AtPRABehaviorTest.cxx
+  AtTrackComponentsTest.cxx
   )
 
 attpcroot_generate_tests(${LIBRARY_NAME}Tests

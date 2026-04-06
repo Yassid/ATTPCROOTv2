@@ -58,8 +58,11 @@ public:
    void SetTcluster(float t) { inputParams.t = t; }
    void SetPadding(size_t padding) { inputParams._padding = padding; }
 
-private:
+protected:
    void eventToClusters(AtEvent &event, PointCloud &cloud);
+   void BuildRawTracksFromClusters(PointCloud &cloud, const std::vector<cluster_t> &clusters, AtEvent &event,
+                                   std::vector<AtTrack> &tracks, PointCloud &noisePoints);
+   std::unique_ptr<AtPatternEvent> FinalizeTracks(std::vector<AtTrack> tracks, PointCloud &noisePoints, AtEvent &event);
    std::unique_ptr<AtPatternEvent>
    clustersToTrack(PointCloud &cloud, const std::vector<cluster_t> &clusters, AtEvent &event);
 

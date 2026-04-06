@@ -1,6 +1,7 @@
 #include "AtTrackTransformer.h"
 // IWYU pragma: no_include <ext/alloc_traits.h>
 
+#include "AtTrackClusterBuilder.h"
 #include "AtHit.h"        // for AtHit, AtHit::XYZPoint
 #include "AtHitCluster.h" // for AtHitCluster
 #include "AtTrack.h"      // for XYZPoint, AtTrack
@@ -9,8 +10,6 @@
 #include <Math/Point3Dfwd.h>
 #include <Math/Vector3D.h>  // for DisplacementVector3D
 #include <TMath.h>          // for Power, Sqrt, ATan2, Pi
-#include <TMatrixDSymfwd.h> // for TMatrixDSym
-#include <TMatrixTSym.h>    // for TMatrixTSym
 #include <TVector3.h>       // for TVector3
 
 #include <algorithm> // for max, for_each, copy_if
@@ -33,157 +32,6 @@ void AtTools::AtTrackTransformer::SetDiffusionParams(double coefT, double coefL,
 }
 using XYZPoint = ROOT::Math::XYZPoint;
 
-namespace {
-
-struct ClusterCovarianceParams {
-   double coefT;
-   double coefL;
-   double driftVel;
-   double samplingRate;
-   double padResXY;
-   double padResZ;
-};
-
-struct LegacyClusterStats {
-   double x{0};
-   double y{0};
-   double z{0};
-   double sigmaX2{0};
-   double sigmaY2{0};
-   double sigmaZ2{0};
-   double totalCharge{0};
-   int timeStamp{0};
-   int nHits{0};
-   bool valid{false};
-};
-
-AtHit::XYZVector GetPerHitVariance(const AtHit &hit, const ClusterCovarianceParams &params)
-{
-   auto pos = hit.GetPosition();
-   double driftTime = pos.Z() / (10.0 * params.driftVel);
-   double varT = 100.0 * params.coefT * 2.0 * driftTime;
-   double varL = 100.0 * params.coefL * 2.0 * driftTime;
-   double tbRes_mm = params.driftVel * params.samplingRate * 10.0;
-   double varTB = tbRes_mm * tbRes_mm / 12.0;
-   return {params.padResXY * params.padResXY + varT, params.padResXY * params.padResXY + varT,
-           params.padResZ * params.padResZ + varTB + varL};
-}
-
-LegacyClusterStats BuildLegacyClusterStats(const std::vector<AtHit> &hits, const ClusterCovarianceParams &params)
-{
-   LegacyClusterStats stats;
-   double var_x = 0;
-   double var_y = 0;
-   double var_z = 0;
-
-   for (const auto &hit : hits) {
-      auto pos = hit.GetPosition();
-      double q = hit.GetCharge();
-      auto hitVar = GetPerHitVariance(hit, params);
-
-      stats.x += pos.X() * q;
-      stats.y += pos.Y() * q;
-      stats.z += pos.Z();
-      stats.totalCharge += q;
-      stats.timeStamp += hit.GetTimeStamp();
-      stats.nHits++;
-
-      var_x += q * q * hitVar.X();
-      var_y += q * q * hitVar.Y();
-      var_z += q * q * hitVar.Z();
-   }
-
-   if (stats.nHits == 0 || stats.totalCharge <= 0)
-      return stats;
-
-   stats.x /= stats.totalCharge;
-   stats.y /= stats.totalCharge;
-   stats.z /= stats.nHits;
-   stats.timeStamp /= stats.nHits;
-   stats.sigmaX2 = var_x / (stats.totalCharge * stats.totalCharge);
-   stats.sigmaY2 = var_y / (stats.totalCharge * stats.totalCharge);
-   stats.sigmaZ2 = var_z / (stats.totalCharge * stats.totalCharge);
-   stats.valid = true;
-   return stats;
-}
-
-TMatrixDSym BuildLegacyCovariance(const LegacyClusterStats &stats)
-{
-   TMatrixDSym cov(3);
-   cov(0, 1) = 0;
-   cov(1, 2) = 0;
-   cov(2, 0) = 0;
-   cov(0, 0) = stats.sigmaX2;
-   cov(1, 1) = stats.sigmaY2;
-   cov(2, 2) = stats.sigmaZ2;
-   return cov;
-}
-
-AtHitCluster BuildHitClusterOnlineCluster(const std::vector<AtHit> &hits, const ClusterCovarianceParams &params)
-{
-   AtHitCluster cluster;
-   for (const auto &hit : hits) {
-      AtHit hitWithVar(hit);
-      hitWithVar.SetPositionVariance(GetPerHitVariance(hitWithVar, params));
-      cluster.AddHit(hitWithVar);
-   }
-   return cluster;
-}
-
-TMatrixDSym BuildDiagonalOnlyCovariance(const TMatrixDSym &src)
-{
-   TMatrixDSym diag(src);
-   for (int row = 0; row < 3; ++row) {
-      for (int col = 0; col < 3; ++col) {
-         if (row != col)
-            diag(row, col) = 0.0;
-      }
-   }
-   return diag;
-}
-
-std::shared_ptr<AtHitCluster>
-BuildCluster(const std::vector<AtHit> &hits, const ClusterCovarianceParams &params, int clusterID,
-             AtTools::AtTrackTransformer::CovarianceMode mode)
-{
-   auto stats = BuildLegacyClusterStats(hits, params);
-   if (!stats.valid)
-      return nullptr;
-
-   auto cluster = std::make_shared<AtHitCluster>();
-   cluster->SetClusterID(clusterID);
-   cluster->SetCharge(stats.totalCharge);
-   cluster->SetPosition({stats.x, stats.y, stats.z});
-   cluster->SetTimeStamp(stats.timeStamp);
-   cluster->SetCovMatrix(BuildLegacyCovariance(stats));
-
-   if (mode == AtTools::AtTrackTransformer::CovarianceMode::TransformerDirect)
-      return cluster;
-
-   auto onlineCluster = BuildHitClusterOnlineCluster(hits, params);
-
-   if (mode == AtTools::AtTrackTransformer::CovarianceMode::HitClusterOnline) {
-      cluster->SetCovMatrix(onlineCluster.GetCovMatrix());
-      return cluster;
-   }
-
-   if (mode == AtTools::AtTrackTransformer::CovarianceMode::HitClusterOnlineDiagOnly) {
-      cluster->SetCovMatrix(BuildDiagonalOnlyCovariance(onlineCluster.GetCovMatrix()));
-      return cluster;
-   }
-
-   if (mode == AtTools::AtTrackTransformer::CovarianceMode::HitClusterOnlineConsistent) {
-      auto consistentCluster = std::make_shared<AtHitCluster>(onlineCluster);
-      consistentCluster->SetClusterID(clusterID);
-      consistentCluster->SetTimeStamp(stats.timeStamp);
-      return consistentCluster;
-   }
-
-   return cluster;
-}
-
-} // namespace
-
 void AtTools::AtTrackTransformer::ClusterizeSmooth3D(AtTrack &track, Float_t radius, Float_t distance)
 {
    std::vector<AtHit> hitArray = track.GetHitArrayObject();
@@ -201,17 +49,15 @@ void AtTools::AtTrackTransformer::ClusterizeSmooth3D(AtTrack &track, Float_t rad
        //std::cout<<" Pos : "<<pos.X()<<" - "<<pos.Y()<<" - "<<pos.Z()<<" - TB : "<<TB<<" - Charge : "<<Q<<"\n";
        }*/
 
-   // Diffusion and resolution parameters.
-   // The transverse/longitudinal diffusion sigmas (in mm) at drift distance z_mm are:
-   //   σ_T(z) = 10 * sqrt(CoefT * 2 * z_mm / (10 * vDrift))   [mm]
-   //   σ_L(z) = 10 * sqrt(CoefL * 2 * z_mm / (10 * vDrift))   [mm]
-   // where CoefT/L are in cm²/µs, vDrift in cm/µs, and z_mm is the drift distance in mm.
-   // This matches the digitization in AtClusterize::getTransverseDiffusion/getLongitudinalDiffusion.
-   Double_t driftVel = fDriftVel;       // cm/us
-   Double_t samplingRate = fTBTime;     // us
-   Double_t padResXY = fPadResXY;       // mm (transverse pad resolution)
-   Double_t padResZ = fPadResXY * 1.5;  // mm (longitudinal — pads are typically longer in Z)
-   ClusterCovarianceParams params{fCoefT, fCoefL, driftVel, samplingRate, padResXY, padResZ};
+   AtTrackClusterBuilderConfig builderConfig;
+   builderConfig.coefT = fCoefT;
+   builderConfig.coefL = fCoefL;
+   builderConfig.driftVel = fDriftVel;
+   builderConfig.samplingRate = fTBTime;
+   builderConfig.padResXY = fPadResXY;
+   builderConfig.padResZ = fPadResXY * 1.5;
+   builderConfig.covarianceMode = fCovarianceMode;
+   AtTrackClusterBuilder clusterBuilder(builderConfig);
 
    if (hitArray.size() > 0) {
 
@@ -244,7 +90,7 @@ void AtTools::AtTrackTransformer::ClusterizeSmooth3D(AtTrack &track, Float_t rad
             // std::cout<<" Clustered "<<hitTBArray.size()<<" Hits "<<"\n";
 
             if (hitTBArray.size() > 0) {
-               auto hitCluster = BuildCluster(hitTBArray, params, clusterID, fCovarianceMode);
+               auto hitCluster = clusterBuilder.BuildCluster(hitTBArray, clusterID);
                if (!hitCluster)
                   continue;
 
@@ -316,7 +162,7 @@ void AtTools::AtTrackTransformer::ClusterizeSmooth3D(AtTrack &track, Float_t rad
                             });
 
                if (hitTBArray.size() > 0) {
-                  auto hitCluster = BuildCluster(hitTBArray, params, clusterID, fCovarianceMode);
+                  auto hitCluster = clusterBuilder.BuildCluster(hitTBArray, clusterID);
                   if (!hitCluster)
                      continue;
                   ++clusterID;
@@ -348,12 +194,15 @@ void AtTools::AtTrackTransformer::ClusterizeByGroup(AtTrack &track, int hitsPerC
    if (hitArray.empty())
       return;
 
-   // Diffusion/resolution params for covariance
-   Double_t driftVel = fDriftVel;
-   Double_t samplingRate = fTBTime;
-   Double_t padResXY = fPadResXY;
-   Double_t padResZ = fPadResXY * 1.5;
-   ClusterCovarianceParams params{fCoefT, fCoefL, driftVel, samplingRate, padResXY, padResZ};
+   AtTrackClusterBuilderConfig builderConfig;
+   builderConfig.coefT = fCoefT;
+   builderConfig.coefL = fCoefL;
+   builderConfig.driftVel = fDriftVel;
+   builderConfig.samplingRate = fTBTime;
+   builderConfig.padResXY = fPadResXY;
+   builderConfig.padResZ = fPadResXY * 1.5;
+   builderConfig.covarianceMode = fCovarianceMode;
+   AtTrackClusterBuilder clusterBuilder(builderConfig);
 
    int nHits = hitArray.size();
    int clusterID = 0;
@@ -371,7 +220,7 @@ void AtTools::AtTrackTransformer::ClusterizeByGroup(AtTrack &track, int hitsPerC
          clusterHits.push_back(hitArray[i]);
       }
 
-      auto hitCluster = BuildCluster(clusterHits, params, clusterID, fCovarianceMode);
+      auto hitCluster = clusterBuilder.BuildCluster(clusterHits, clusterID);
       if (!hitCluster)
          continue;
 

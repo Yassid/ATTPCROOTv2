@@ -1,3 +1,4 @@
+#include "AtEvent.h"
 #include "AtPRA.h"
 
 #include "AtHit.h"
@@ -5,6 +6,10 @@
 #include "AtPatternCircle2D.h"
 #include "AtPatternEvent.h"
 #include "AtTrack.h"
+#include "AtTrackFinderTC.h"
+
+#include "cluster.h"
+#include "pointcloud.h"
 
 #include <gtest/gtest.h>
 
@@ -22,6 +27,12 @@ class TestPRA : public AtPATTERN::AtPRA {
 public:
    std::unique_ptr<AtPatternEvent> FindTracks(AtEvent &) override { return nullptr; }
    void RunSetTrackInitialParameters(AtTrack &track) { SetTrackInitialParameters(track); }
+};
+
+class TestTrackFinderTC : public AtPATTERN::AtTrackFinderTC {
+public:
+   using AtPATTERN::AtTrackFinderTC::BuildRawTracksFromClusters;
+   using AtPATTERN::AtTrackFinderTC::FinalizeTracks;
 };
 
 std::shared_ptr<AtHitCluster> MakeCluster(double x, double y, double z, double charge = 1.0, int timeStamp = 0)
@@ -56,6 +67,21 @@ AtTrack BuildTrack(std::initializer_list<std::tuple<double, double, double>> hit
    }
 
    return track;
+}
+
+AtEvent BuildFinderEvent(std::initializer_list<std::tuple<double, double, double>> hits)
+{
+   AtEvent event;
+   int hitId = 0;
+   for (const auto &[x, y, z] : hits) {
+      auto hit = std::make_unique<AtHit>();
+      hit->SetHitID(hitId++);
+      hit->SetPosition({x, y, z});
+      hit->SetCharge(1.0);
+      hit->SetTimeStamp(hitId);
+      event.AddHit(std::move(hit));
+   }
+   return event;
 }
 
 std::vector<XYZPoint> GetClusterPositions(AtTrack &track)
@@ -93,6 +119,9 @@ void ExpectPointNear(const XYZPoint &lhs, const XYZPoint &rhs, double tol = 1e-9
 
 TEST(AtPRABehaviorTest, OrderClustersAlongTrackStartsAtHighestZAndGreedilyWalksNearestNeighbor)
 {
+   // Minimal single-track geometry used to characterize the current ordering rule.
+   // Physically this stands in for one already-found outgoing trajectory with no
+   // branching or detector complications.
    TestPRA pra;
    auto track = BuildTrack(
       {{0.0, 0.0, 100.0}, {0.5, 0.0, 95.0}, {1.0, 0.0, 90.0}, {2.0, 0.0, 80.0}},
@@ -110,6 +139,9 @@ TEST(AtPRABehaviorTest, OrderClustersAlongTrackStartsAtHighestZAndGreedilyWalksN
 
 TEST(AtPRABehaviorTest, SelectAndMergeTracksRejectsBeamLikeTracksMergesFragmentsAndDropsIsolatedTracks)
 {
+   // Synthetic topology fixture matching the current refinement policy:
+   // a primary near the beam axis, a mergeable downstream fragment, an isolated
+   // off-axis fragment, and a beam-like straight-through candidate.
    TestPRA pra;
    pra.SetClusterRadius(5.0);
    pra.SetClusterDistance(8.0);
@@ -154,6 +186,9 @@ TEST(AtPRABehaviorTest, SelectAndMergeTracksRejectsBeamLikeTracksMergesFragments
 
 TEST(AtPRABehaviorTest, SetTrackInitialParametersCharacterizesCurrentCurvedTrackSeeding)
 {
+   // Clean curved-track arc representing an idealized charged-particle trajectory
+   // in field. This is intended to lock down geometric seeding behavior rather
+   // than to emulate full detector response.
    TestPRA pra;
    auto track = BuildArcTrack(100.0, {0.0, 0.0, 0.0}, {2.30, 2.10, 1.90, 1.70, 1.50, 1.30, 1.10, 0.90}, 20.0, 8.0);
 
@@ -171,4 +206,61 @@ TEST(AtPRABehaviorTest, SetTrackInitialParametersCharacterizesCurrentCurvedTrack
    EXPECT_NEAR(pattern->GetCenter().X(), 0.0, 1.0);
    EXPECT_NEAR(pattern->GetCenter().Y(), 0.0, 1.0);
    EXPECT_NEAR(pattern->GetRadius(), 100.0, 1.0);
+}
+
+TEST(AtPRABehaviorTest, TrackFinderTCRawCandidateBuildingIsSeparatedFromRefinementAndSeeding)
+{
+   // Hand-built clustered candidate layout used to mark the software seam between
+   // raw TC candidate construction and the later refinement/seeding pass. This is
+   // intentionally synthetic and should be read as ownership characterization, not
+   // as a realistic PRA efficiency benchmark.
+   TestTrackFinderTC finder;
+   finder.SetClusterRadius(5.0);
+   finder.SetClusterDistance(8.0);
+
+   auto event = BuildFinderEvent({{0.0, 0.0, 102.0},
+                                  {3.0, 0.0, 98.0},
+                                  {6.0, 0.0, 94.0},
+                                  {10.0, 0.0, 88.0},
+                                  {12.0, 0.0, 84.0},
+                                  {18.0, 0.0, 82.0},
+                                  {24.0, 0.0, 80.0},
+                                  {30.0, 0.0, 78.0},
+                                  {120.0, 0.0, 100.0},
+                                  {124.0, 0.0, 96.0},
+                                  {128.0, 0.0, 92.0},
+                                  {132.0, 0.0, 88.0},
+                                  {0.0, 0.0, 112.0},
+                                  {0.0, 0.0, 102.0},
+                                  {0.0, 0.0, 92.0},
+                                  {0.0, 0.0, 82.0}});
+
+   PointCloud cloud;
+   for (int i = 0; i < event.GetNumHits(); ++i) {
+      Point point;
+      auto position = event.GetHit(i).GetPosition();
+      point.x = position.X();
+      point.y = position.Y();
+      point.z = position.Z();
+      point.SetID(i);
+      cloud.push_back(point);
+   }
+
+   std::vector<cluster_t> clusters = {{0, 1, 2, 3}, {4, 5, 6, 7}, {8, 9, 10, 11}, {12, 13, 14, 15}};
+   auto noisePoints = cloud;
+   std::vector<AtTrack> rawTracks;
+
+   finder.BuildRawTracksFromClusters(cloud, clusters, event, rawTracks, noisePoints);
+
+   ASSERT_EQ(rawTracks.size(), 4u);
+   EXPECT_TRUE(noisePoints.empty());
+   for (auto &track : rawTracks) {
+      EXPECT_FALSE(track.GetHitClusterArray()->empty());
+      EXPECT_EQ(track.GetPattern(), nullptr);
+   }
+
+   auto patternEvent = finder.FinalizeTracks(std::move(rawTracks), noisePoints, event);
+
+   ASSERT_NE(patternEvent, nullptr);
+   EXPECT_TRUE(patternEvent->GetTrackCand().empty());
 }
