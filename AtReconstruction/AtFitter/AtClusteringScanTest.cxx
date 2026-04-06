@@ -17,6 +17,7 @@
 #include <iomanip>
 #include <iostream>
 #include <memory>
+#include <string>
 #include <tuple>
 #include <vector>
 
@@ -127,7 +128,7 @@ protected:
       bool converged;
    };
 
-   FitResult RunUKF(kf::TrackFitterUKF &ukf, const std::vector<AtHitCluster> &clusters)
+   FitResult RunUKF(kf::TrackFitterUKF &ukf, const std::vector<AtHitCluster> &clusters, bool usePerClusterCov)
    {
       FitResult result{0, 0, static_cast<int>(clusters.size()), false};
       if (clusters.size() < 5)
@@ -171,6 +172,18 @@ protected:
 
       try {
          for (size_t i = 1; i < filtered.size(); i++) {
+            if (usePerClusterCov) {
+               TMatrixD clusterCov(3, 3);
+               clusterCov.Zero();
+               const auto &srcCov = clusters[i].GetCovMatrix();
+               for (int r = 0; r < 3; ++r) {
+                  for (int c = 0; c < 3; ++c)
+                     clusterCov(r, c) = srcCov(r, c);
+                  if (clusterCov(r, r) < 0.01)
+                     clusterCov(r, r) = 0.01;
+               }
+               ukf.SetMeasCov(clusterCov);
+            }
             ukf.predictUKF(filtered[i]);
             ukf.correctUKF(filtered[i]);
          }
@@ -193,6 +206,16 @@ protected:
       result.meanResid = n > 0 ? sumResid / n : 0;
 
       return result;
+   }
+
+   std::vector<AtHitCluster> ClusterizeTrack(const std::vector<XYZPoint> &hits, double radius, double distance,
+                                             AtTools::AtTrackTransformer::CovarianceMode covarianceMode)
+   {
+      AtTrack track = BuildTrack(hits);
+      AtTools::AtTrackTransformer transformer;
+      transformer.SetCovarianceMode(covarianceMode);
+      transformer.ClusterizeSmooth3D(track, radius, distance);
+      return *track.GetHitClusterArray();
    }
 };
 
@@ -230,7 +253,7 @@ TEST_F(ClusteringScanTest, RadiusDistanceScan)
       transformer.ClusterizeSmooth3D(track, cfg.radius, cfg.distance);
 
       auto *clusters = track.GetHitClusterArray();
-      auto result = RunUKF(*ukf, *clusters);
+      auto result = RunUKF(*ukf, *clusters, false);
 
       std::string status = result.converged ? "OK" : "FAIL";
       if (result.converged && std::abs(result.momErr) > 5.0)
@@ -248,6 +271,68 @@ TEST_F(ClusteringScanTest, RadiusDistanceScan)
    // At least half should converge
    EXPECT_GT(nConverged, static_cast<int>(configs.size()) / 2)
       << "Too many clustering configurations failed to converge";
+}
+
+TEST_F(ClusteringScanTest, CovarianceMethodComparison)
+{
+   gRandom->SetSeed(12345);
+
+   struct Scenario {
+      const char *label;
+      AtTools::AtTrackTransformer::CovarianceMode covMode;
+      bool usePerClusterCov;
+      int nTried{0};
+      int nConverged{0};
+      double sumMomErr{0};
+      double sumResid{0};
+      double sumClusters{0};
+   };
+
+   std::vector<Scenario> scenarios = {
+      {"fixed_sigma", AtTools::AtTrackTransformer::CovarianceMode::TransformerDirect, false},
+      {"transformer_direct", AtTools::AtTrackTransformer::CovarianceMode::TransformerDirect, true},
+      {"hit_cluster_online", AtTools::AtTrackTransformer::CovarianceMode::HitClusterOnline, true},
+   };
+
+   constexpr double kRadius = 20.0;
+   constexpr double kDistance = 15.0;
+   constexpr int kTrials = 20;
+
+   for (int trial = 0; trial < kTrials; ++trial) {
+      auto hits = GenerateHits(1.5, 1.0);
+      ASSERT_GT(hits.size(), 50u);
+
+      for (auto &scenario : scenarios) {
+         auto clusters = ClusterizeTrack(hits, kRadius, kDistance, scenario.covMode);
+         auto ukf = CreateUKF();
+         auto result = RunUKF(*ukf, clusters, scenario.usePerClusterCov);
+         scenario.nTried++;
+         scenario.sumClusters += result.nClusters;
+         if (!result.converged)
+            continue;
+         scenario.nConverged++;
+         scenario.sumMomErr += result.momErr;
+         scenario.sumResid += result.meanResid;
+      }
+   }
+
+   std::cout << "\nCovariance comparison on synthetic tracks\n"
+             << std::setw(20) << "mode" << std::setw(8) << "tried" << std::setw(8) << "conv" << std::setw(12)
+             << "avgMomErr" << std::setw(12) << "avgResid" << std::setw(10) << "avgCl" << std::endl;
+   std::cout << std::string(70, '-') << std::endl;
+
+   for (const auto &scenario : scenarios) {
+      double avgMomErr = scenario.nConverged > 0 ? scenario.sumMomErr / scenario.nConverged : 0.0;
+      double avgResid = scenario.nConverged > 0 ? scenario.sumResid / scenario.nConverged : 0.0;
+      double avgClusters = scenario.nTried > 0 ? scenario.sumClusters / scenario.nTried : 0.0;
+      std::cout << std::setw(20) << scenario.label << std::setw(8) << scenario.nTried << std::setw(8)
+                << scenario.nConverged << std::setw(12) << std::fixed << std::setprecision(3) << avgMomErr
+                << std::setw(12) << avgResid << std::setw(10) << std::setprecision(1) << avgClusters << std::endl;
+   }
+
+   EXPECT_GE(scenarios[0].nConverged, kTrials / 2);
+   EXPECT_GE(scenarios[1].nConverged, kTrials / 2);
+   EXPECT_GE(scenarios[2].nConverged, kTrials / 2);
 }
 
 // ===========================================================================
@@ -287,7 +372,7 @@ TEST_F(ClusteringScanTest, StatisticalScan)
          AtTools::AtTrackTransformer transformer;
          transformer.ClusterizeSmooth3D(track, cfg.radius, cfg.distance);
 
-         auto result = RunUKF(*ukf, *track.GetHitClusterArray());
+         auto result = RunUKF(*ukf, *track.GetHitClusterArray(), false);
          if (result.converged && std::abs(result.momErr) < 50) {
             errs.push_back(result.momErr);
             resids.push_back(result.meanResid);

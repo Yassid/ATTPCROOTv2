@@ -81,6 +81,10 @@ public:
    {
       fTrackTransformer->SetDiffusionParams(coefT, coefL, driftVel, tbTime, padResXY);
    }
+   void SetClusterCovarianceMode(AtTools::AtTrackTransformer::CovarianceMode mode)
+   {
+      fTrackTransformer->SetCovarianceMode(mode);
+   }
 
    virtual std::unique_ptr<AtPatternEvent> FindTracks(AtEvent &event) = 0;
 

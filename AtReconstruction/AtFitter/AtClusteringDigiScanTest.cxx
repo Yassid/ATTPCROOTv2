@@ -68,7 +68,9 @@ protected:
       return fitter;
    }
 
-   FitResult FitTrack(AtTrack &track, int eventId, bool straggling = false)
+   FitResult FitTrack(AtTrack &track, int eventId, bool straggling = false, bool usePerClusterCov = false,
+                      AtTools::AtTrackTransformer::CovarianceMode covarianceMode =
+                         AtTools::AtTrackTransformer::CovarianceMode::TransformerDirect)
    {
       FitResult result{eventId, 0, 0, 0, -1, -1, false, false};
 
@@ -77,6 +79,8 @@ protected:
          return result;
 
       auto fitter = CreateFitter(straggling);
+      fitter->SetUsePerClusterCov(usePerClusterCov);
+      fitter->SetClusterCovarianceMode(covarianceMode);
       fitter->Init();
 
       AtTrackingEvent trackingEvent;
@@ -215,4 +219,100 @@ TEST_F(ClusteringDigiScanTest, ScanDigitizedData)
    for (auto &s : stats)
       bestGood = std::max(bestGood, s.nGood);
    EXPECT_GT(bestGood, 0) << "No clustering config produced any good fits";
+}
+
+TEST_F(ClusteringDigiScanTest, CompareCovarianceModes)
+{
+   FairLogger::GetLogger()->SetLogScreenLevel("FATAL");
+
+   auto *file = TFile::Open("../macro/Simulation/ATTPC/16C_pp/data/output_digi.root");
+   if (!file || file->IsZombie()) {
+      std::cout << "SKIPPED: output_digi.root not found. Run C16_pp_sim.C + run_digi_attpc.C first." << std::endl;
+      GTEST_SKIP();
+   }
+
+   auto *tree = (TTree *)file->Get("cbmsim");
+   TClonesArray *patEvtArr = nullptr;
+   tree->SetBranchAddress("AtPatternEvent", &patEvtArr);
+
+   struct Scenario {
+      const char *label;
+      AtTools::AtTrackTransformer::CovarianceMode covarianceMode;
+      bool usePerClusterCov;
+      int nTried{0};
+      int nConverged{0};
+      int nGood{0};
+      double sumKE{0};
+      double sumClusters{0};
+   };
+
+   std::vector<Scenario> scenarios = {
+      {"fixed_sigma", AtTools::AtTrackTransformer::CovarianceMode::TransformerDirect, false},
+      {"transformer_direct", AtTools::AtTrackTransformer::CovarianceMode::TransformerDirect, true},
+      {"hit_cluster_online", AtTools::AtTrackTransformer::CovarianceMode::HitClusterOnline, true},
+   };
+
+   constexpr double kRadius = 20.0;
+   constexpr double kDistance = 15.0;
+
+   int nEvents = tree->GetEntries();
+   for (int iEvt = 0; iEvt < nEvents; iEvt++) {
+      tree->GetEntry(iEvt);
+      if (!patEvtArr || patEvtArr->GetEntries() == 0)
+         continue;
+
+      auto *patEvt = (AtPatternEvent *)patEvtArr->At(0);
+      auto &tracks = patEvt->GetTrackCand();
+      if (tracks.empty())
+         continue;
+
+      int bestTrack = 0;
+      for (size_t t = 1; t < tracks.size(); t++) {
+         if (tracks[t].GetHitArray().size() > tracks[bestTrack].GetHitArray().size())
+            bestTrack = t;
+      }
+      if (tracks[bestTrack].GetHitArray().size() < 50)
+         continue;
+
+      for (auto &scenario : scenarios) {
+         AtTrack trackCopy = tracks[bestTrack];
+         trackCopy.ResetHitClusterArray();
+         AtTools::AtTrackTransformer transformer;
+         transformer.SetCovarianceMode(scenario.covarianceMode);
+         transformer.ClusterizeSmooth3D(trackCopy, kRadius, kDistance);
+
+         auto result = FitTrack(trackCopy, iEvt, false, scenario.usePerClusterCov, scenario.covarianceMode);
+         scenario.nTried++;
+         if (!result.converged)
+            continue;
+         scenario.nConverged++;
+         scenario.sumClusters += result.nClusters;
+         if (!result.good)
+            continue;
+         scenario.nGood++;
+         scenario.sumKE += result.kineticEnergy;
+      }
+   }
+
+   std::cout << "\n=============================================================" << std::endl;
+   std::cout << " Covariance Mode Comparison on Digitized 16C(p,p) Data" << std::endl;
+   std::cout << "=============================================================" << std::endl;
+   std::cout << std::setw(20) << "mode" << std::setw(8) << "tried" << std::setw(8) << "conv" << std::setw(8) << "good"
+             << std::setw(10) << "good(%)" << std::setw(10) << "avgCl" << std::setw(10) << "avgKE" << std::endl;
+   std::cout << std::string(74, '-') << std::endl;
+
+   for (const auto &scenario : scenarios) {
+      double goodPct = scenario.nTried > 0 ? 100.0 * scenario.nGood / scenario.nTried : 0.0;
+      double avgCl = scenario.nConverged > 0 ? scenario.sumClusters / scenario.nConverged : 0.0;
+      double avgKE = scenario.nGood > 0 ? scenario.sumKE / scenario.nGood : 0.0;
+      std::cout << std::setw(20) << scenario.label << std::setw(8) << scenario.nTried << std::setw(8)
+                << scenario.nConverged << std::setw(8) << scenario.nGood << std::setw(10) << std::fixed
+                << std::setprecision(1) << goodPct << std::setw(10) << std::setprecision(0) << avgCl
+                << std::setw(10) << std::setprecision(2) << avgKE << std::endl;
+   }
+   std::cout << "=============================================================" << std::endl;
+
+   EXPECT_GT(scenarios[0].nConverged, 0);
+   EXPECT_GT(scenarios[1].nConverged, 0);
+   EXPECT_GT(scenarios[2].nConverged, 0);
 }
