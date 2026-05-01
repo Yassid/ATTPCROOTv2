@@ -166,17 +166,47 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
    auto *clusters = track->GetHitClusterArray();
 
    // Skip tracks with invalid geometry (NaN from failed RANSAC fit)
-   if (std::isnan(track->GetGeoTheta()) || std::isnan(track->GetGeoRadius()) || track->GetGeoRadius() <= 0) {
-      LOG(debug) << "AtFitterUKF: track has invalid geometry (NaN theta or radius). Skipping.";
-      return nullptr;
+   {
+      const bool badRadius = std::isnan(track->GetGeoRadius()) || track->GetGeoRadius() <= 0;
+      const bool nanTheta = std::isnan(track->GetGeoTheta());
+      if (badRadius) {
+         LOG(info) << "AtFitterUKF DROP[bad-geom]: NaN/<=0 radius. Skipping.";
+         return nullptr;
+      }
+      // PRA sometimes returns NaN GeoTheta with a valid radius (degenerate
+      // (arc, z) regression). Recover theta from the cluster sequence so the
+      // track isn't discarded.
+      if (nanTheta) {
+         auto *cls0 = track->GetHitClusterArray();
+         if (cls0 == nullptr || cls0->size() < 2) {
+            LOG(info) << "AtFitterUKF DROP[bad-geom]: NaN theta and <2 clusters for fallback. Skipping.";
+            return nullptr;
+         }
+         const auto &p0 = cls0->front().GetPosition();
+         const auto &pN = cls0->back().GetPosition();
+         const double dx = pN.X() - p0.X();
+         const double dy = pN.Y() - p0.Y();
+         const double dz = pN.Z() - p0.Z();
+         const double r3 = std::sqrt(dx * dx + dy * dy + dz * dz);
+         if (r3 < 1e-3) {
+            LOG(info) << "AtFitterUKF DROP[bad-geom]: NaN theta + first/last cluster coincide. Skipping.";
+            return nullptr;
+         }
+         const double thetaFallback = std::acos(dz / r3);
+         track->SetGeoTheta(thetaFallback);
+         if (std::isnan(track->GetGeoPhi()))
+            track->SetGeoPhi(std::atan2(dy, dx));
+         LOG(info) << "AtFitterUKF: PRA theta NaN, recovered from clusters: "
+                   << thetaFallback * 180. / M_PI << " deg";
+      }
    }
 
    // Skip beam-like tracks (lab theta < fMinLabTheta)
    // GeoTheta is in digi frame: theta_lab = 180 - theta_digi
    double thetaLab = 180.0 - track->GetGeoTheta() * 180.0 / M_PI;
    if (thetaLab < fMinLabTheta || thetaLab > (180.0 - fMinLabTheta)) {
-      LOG(debug) << "AtFitterUKF: track theta_lab=" << thetaLab << " deg, below threshold " << fMinLabTheta
-                 << ". Skipping (beam-like).";
+      LOG(info) << "AtFitterUKF DROP[beam-like]: theta_lab=" << thetaLab << " deg, threshold " << fMinLabTheta
+                << ". Skipping.";
       return nullptr;
    }
 
@@ -272,7 +302,7 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
    }
 
    if (static_cast<int>(clusters->size()) < fMinClusters) {
-      LOG(debug) << "AtFitterUKF: " << clusters->size() << " clusters < " << fMinClusters << ". Skipping.";
+      LOG(info) << "AtFitterUKF DROP[few-clusters]: " << clusters->size() << " < " << fMinClusters << ". Skipping.";
       return nullptr;
    }
 
@@ -352,7 +382,7 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
 
    if (setjmp(sJmpBuf) != 0) {
       // We get here if a segfault was caught
-      LOG(warn) << "AtFitterUKF: segfault caught during fit of track " << track->GetTrackID() << ", skipping";
+      LOG(warn) << "AtFitterUKF DROP[segfault]: caught during fit of track " << track->GetTrackID() << ", skipping";
       sHandlerActive = false;
       sigaction(SIGSEGV, &sOldHandler, nullptr); // Restore original handler
       return nullptr;
@@ -459,12 +489,12 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
       // Cap the correction for large vtxR where the linear approximation breaks down.
       auto firstClPos = clusters->front().GetPosition();
       double rXY = std::sqrt(firstClPos.X() * firstClPos.X() + firstClPos.Y() * firstClPos.Y());
-      if (rXY > 1.0 && p_s > 0) {
+      if (rXY > 1.0 && p_s > 0 && fBackExtrapMaxPath > 0.) {
          double sinTheta = std::sin(theta_s);
          double pathLength = (sinTheta > 0.1) ? rXY / sinTheta : rXY;
 
          // Cap path length to avoid over-correction for large vtxR
-         pathLength = std::min(pathLength, 50.0); // max 50mm extrapolation
+         pathLength = std::min(pathLength, fBackExtrapMaxPath);
 
          double KE_at_cluster = std::sqrt(p_s * p_s + fMass_MeV * fMass_MeV) - fMass_MeV;
          if (auto *elossModel = fUKF->GetPropagator().GetELossModel()) {

@@ -62,6 +62,14 @@ public:
    void SetMinClusters(int n) { fMinClusters = n; }
    /// Override the momentum seed (MeV/c). If > 0, this value is used instead of Brho.
    void SetMomentumSeed(double p_MeV) { fMomentumSeed = p_MeV; }
+
+   /// Maximum back-extrapolation path length (mm) from the first smoothed
+   /// cluster to the inferred vertex. The default (50 mm) is appropriate for
+   /// beam+reaction runs where the vertex is close to the first cluster. For
+   /// HELIOS-style runs with vertices deep inside the TPC, increase this
+   /// (e.g. 200 mm) to let the linear extrapolation reach the true vertex.
+   /// Set <= 0 to disable back-extrapolation entirely (vertex = first cluster).
+   void SetBackExtrapMaxPath(double mm) { fBackExtrapMaxPath = mm; }
    /// Number of fit iterations (default 1). With >1, the first pass uses wide covariance
    /// and subsequent passes use the previous result as seed with tighter covariance.
    void SetNIterations(int n) { fNIterations = n; }
@@ -78,11 +86,13 @@ public:
    /// AtFitter interface — no-op; UKF is created lazily on first GetFittedTrack() call.
    void Init() override {}
 
-protected:
    /// Fit a single AtTrack and return a heap-allocated AtFittedTrack, or nullptr if
    /// the track has fewer than fMinClusters clusters or the UKF fails catastrophically.
+   /// Public so multi-hypothesis wrappers (AtFitterUKFMulti) can call it directly.
    AtFittedTrack *GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata = nullptr, AtRawEvent *rawEvent = nullptr,
                                  AtEvent *event = nullptr) override;
+
+protected:
 
 private:
    /// Create and configure the kf::TrackFitterUKF.  Moves fELossModel to the propagator.
@@ -115,6 +125,7 @@ private:
    double fZPadPlane{-1};      // If >0, convert digi→lab: Z_lab = fZPadPlane - Z_digi
    int fMaxFitTime_ms{2000};   // Maximum time per track fit in milliseconds
    double fMomentumSeed{-1};       // If >0, override Brho seed with this value (MeV/c)
+   double fBackExtrapMaxPath{50.}; // mm; cap on back-extrapolation path. <=0 disables.
    double fMinClusterSpacing{3.0}; // Minimum distance between clusters (mm)
    double fMinLabTheta{10.0};      // Minimum lab angle (degrees) — skip beam-like tracks
    int fNIterations{1};            // Number of fit iterations (1=single pass)

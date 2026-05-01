@@ -75,6 +75,12 @@ public:
    /// C=clusters, S=smoothed, F=filtered, R=residuals, E=errors
    void SetOptions(const char *opts) { fDrawOptions = opts; }
 
+   /// Pre-set GUI defaults for the per-setup parameters. Call after LoadFiles().
+   /// 0=Proton, 1=Deuteron, 2=Alpha, 3=Pi+, 4=Pi-.
+   void SetParticle(int kind);
+   void SetBField(double bz_T);
+   void SetGasDensity(double rho_gcc);
+
 private:
    AtUKFDisplay();
    ~AtUKFDisplay();
@@ -142,6 +148,8 @@ private:
    TGComboBox *fParticleBox{nullptr};
    TGNumberEntry *fMomSeedEntry{nullptr};
    TGNumberEntry *fMomSigmaEntry{nullptr};
+   TGNumberEntry *fBFieldEntry{nullptr};      // Bz in Tesla
+   TGNumberEntry *fGasDensityEntry{nullptr};  // gas density in g/cm^3
    TGCheckButton *fUseMCTruthBtn{nullptr};
    TGCheckButton *fShowRawHitsBtn{nullptr};
    TGNumberEntry *fClusterRadiusEntry{nullptr};

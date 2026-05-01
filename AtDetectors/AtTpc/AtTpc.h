@@ -59,6 +59,10 @@ private:
 
    TClonesArray *fAtTpcPointCollection; //!
 
+   /** Optional override: max Geant4 step length [cm] inside drift_volume.
+    *  <= 0 (default) leaves the gMC step length untouched. */
+   Double_t fDriftMaxStep{-1.}; //!
+
 public:
    /**      Name :  Detector Name
     *       Active: kTRUE for active detectors (ProcessHits() will be called)
@@ -86,6 +90,11 @@ public:
 
    AtMCPoint *AddHit(Int_t trackID, Int_t detID, TString VolName, Int_t detCopyID, TVector3 pos, TVector3 mom,
                      Double_t time, Double_t length, Double_t eLoss, Double_t EIni, Double_t AIni, Int_t A, Int_t Z);
+
+   /// Force a per-step ceiling on the drift_volume gas medium. Pass cm.
+   /// Useful for MIP particles (e.g. pions) where the default Geant4 step
+   /// length leaves only entry/exit MC points along the track.
+   void SetDriftMaxStep(Double_t maxStep_cm) { fDriftMaxStep = maxStep_cm; }
 
 private:
    std::pair<Int_t, Int_t> DecodePdG(Int_t PdG_Code);

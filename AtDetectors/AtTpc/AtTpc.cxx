@@ -22,6 +22,7 @@
 #include <TClonesArray.h>
 #include <TGeoManager.h>
 #include <TLorentzVector.h>
+#include <TMethodCall.h>
 #include <TVector3.h>
 #include <TVirtualMC.h>
 #include <TVirtualMCStack.h>
@@ -58,6 +59,50 @@ void AtTpc::Initialize()
    FairDetector::Initialize();
    FairRuntimeDb *rtdb = FairRun::Instance()->GetRuntimeDb();
    rtdb->getContainer("AtTpcGeoPar");
+
+   // Opt-in: tighten per-step length on the gas. Useful for MIP particles
+   // (pions etc.) where Geant4's default stepping leaves only entry/exit MC
+   // points along the track. Two paths are attempted; both are best-effort.
+   //
+   // 1) gMC->Gstpar(STEMAX): the GEANT3 idiom. Honored by TGeant3, ignored by
+   //    TGeant4 (prints "STEMAX parameter is not yet implemented").
+   // 2) TGeant4 UI command "/mcDet/setMaxStepInLowDensityMaterials": the
+   //    Geant4-VMC equivalent. Currently rejected as "Illegal application
+   //    state" if invoked from Initialize() — Geant4 only accepts it during
+   //    PreInit, which fires before this hook runs. Left in for the day a
+   //    pre-init injection point is added; harmless until then.
+   //
+   // Default behavior unchanged: nothing fires unless the user opts in via
+   // AtTpc::SetDriftMaxStep().
+   if (fDriftMaxStep > 0. && gMC != nullptr) {
+      Int_t medId = -1;
+      if (gGeoManager != nullptr) {
+         auto *vol = gGeoManager->GetVolume("drift_volume");
+         if (vol != nullptr && vol->GetMedium() != nullptr)
+            medId = vol->GetMedium()->GetId();
+      }
+      if (medId >= 0)
+         gMC->Gstpar(medId, "STEMAX", fDriftMaxStep);
+
+      TString classname = gMC->ClassName();
+      if (classname == "TGeant4") {
+         TMethodCall call;
+         call.InitWithPrototype(gMC->IsA(), "ProcessGeantCommand", "const char*");
+         if (call.IsValid()) {
+            const char *enableCmd = "/mcDet/setIsMaxStepInLowDensityMaterials true";
+            call.ResetParam();
+            call.SetParam((Long_t)enableCmd);
+            call.Execute(gMC);
+
+            TString stepCmd = TString::Format("/mcDet/setMaxStepInLowDensityMaterials %g cm", fDriftMaxStep);
+            call.ResetParam();
+            call.SetParam((Long_t)stepCmd.Data());
+            call.Execute(gMC);
+         }
+      }
+      LOG(info) << "AtTpc::SetDriftMaxStep(" << fDriftMaxStep << " cm): attempted on medium id "
+                << medId << " (engine=" << classname << ").";
+   }
 }
 
 void AtTpc::trackEnteringVolume()

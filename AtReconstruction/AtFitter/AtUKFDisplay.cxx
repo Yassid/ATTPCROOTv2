@@ -212,6 +212,8 @@ void AtUKFDisplay::MakeControlPanel(TGMainFrame *mf)
    fParticleBox->AddEntry("Proton", 0);
    fParticleBox->AddEntry("Deuteron", 1);
    fParticleBox->AddEntry("Alpha", 2);
+   fParticleBox->AddEntry("Pi+", 3);
+   fParticleBox->AddEntry("Pi-", 4);
    fParticleBox->Select(0);
    fParticleBox->Resize(100, 20);
    partFrame->AddFrame(fParticleBox, new TGLayoutHints(kLHintsRight | kLHintsExpandX, 2, 2, 2, 2));
@@ -265,6 +267,20 @@ void AtUKFDisplay::MakeControlPanel(TGMainFrame *mf)
    fMomSigmaEntry = new TGNumberEntry(sigFracFrame, 0.3, 6, -1, TGNumberFormat::kNESRealTwo);
    sigFracFrame->AddFrame(fMomSigmaEntry, new TGLayoutHints(kLHintsRight, 2, 2, 2, 2));
    vf->AddFrame(sigFracFrame, new TGLayoutHints(kLHintsExpandX, 2, 2, 1, 1));
+
+   // B-field Bz [T]
+   auto *bFrame = new TGHorizontalFrame(vf);
+   bFrame->AddFrame(new TGLabel(bFrame, "Bz [T]:"), new TGLayoutHints(kLHintsLeft, 2, 2, 3, 2));
+   fBFieldEntry = new TGNumberEntry(bFrame, 2.85, 6, -1, TGNumberFormat::kNESRealTwo);
+   bFrame->AddFrame(fBFieldEntry, new TGLayoutHints(kLHintsRight, 2, 2, 2, 2));
+   vf->AddFrame(bFrame, new TGLayoutHints(kLHintsExpandX, 2, 2, 1, 1));
+
+   // Gas density [g/cm^3] (CATIMA)
+   auto *rhoFrame = new TGHorizontalFrame(vf);
+   rhoFrame->AddFrame(new TGLabel(rhoFrame, "Gas rho [g/cm3]:"), new TGLayoutHints(kLHintsLeft, 2, 2, 3, 2));
+   fGasDensityEntry = new TGNumberEntry(rhoFrame, 3.553e-5, 10, -1, TGNumberFormat::kNESRealFour);
+   rhoFrame->AddFrame(fGasDensityEntry, new TGLayoutHints(kLHintsRight, 2, 2, 2, 2));
+   vf->AddFrame(rhoFrame, new TGLayoutHints(kLHintsExpandX, 2, 2, 1, 1));
 
    // === Clustering controls ===
    vf->AddFrame(new TGHorizontalFrame(vf, 1, 2), new TGLayoutHints(kLHintsExpandX, 2, 2, 5, 5));
@@ -617,6 +633,19 @@ void AtUKFDisplay::UpdateDiagnostics(AtTrack &track, const AtFittedTrack *fitted
 // ===========================================================================
 // Fitting
 // ===========================================================================
+void AtUKFDisplay::SetParticle(int kind)
+{
+   if (fParticleBox) fParticleBox->Select(kind);
+}
+void AtUKFDisplay::SetBField(double bz_T)
+{
+   if (fBFieldEntry) fBFieldEntry->SetNumber(bz_T);
+}
+void AtUKFDisplay::SetGasDensity(double rho_gcc)
+{
+   if (fGasDensityEntry) fGasDensityEntry->SetNumber(rho_gcc);
+}
+
 void AtUKFDisplay::CreateFitter()
 {
    double charge = 1.602176634e-19;
@@ -630,17 +659,25 @@ void AtUKFDisplay::CreateFitter()
       } else if (sel == 2) { // Alpha
          charge *= 2;
          mass = 3727.379;
+      } else if (sel == 3) { // Pi+
+         mass = 139.57039;
+      } else if (sel == 4) { // Pi-
+         mass = 139.57039;
+         charge = -charge;
       }
    }
 
-   auto eloss = std::make_unique<AtTools::AtELossCATIMA>(3.553e-5);
-   eloss->SetProjectile(1, 1, 1); // TODO: adjust for particle type
+   const double rho = fGasDensityEntry ? fGasDensityEntry->GetNumber() : 3.553e-5;
+   auto eloss = std::make_unique<AtTools::AtELossCATIMA>(rho);
+   const double mass_amu = mass / 931.49401;
+   eloss->SetProjectile(1, 1, mass_amu);
    std::vector<std::tuple<int, int, int>> mat;
    mat.push_back({1, 1, 1});
    eloss->SetMaterial(mat);
 
    fFitter = std::make_unique<EventFit::AtFitterUKF>(charge, mass, std::move(eloss));
-   fFitter->SetBField({0, 0, 2.85});
+   const double bz = fBFieldEntry ? fBFieldEntry->GetNumber() : 2.85;
+   fFitter->SetBField({0, 0, bz});
 
    // Read parameters from GUI
    double alpha = fAlphaEntry ? fAlphaEntry->GetNumber() : 1e-3;
