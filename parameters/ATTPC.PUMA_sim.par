@@ -1,0 +1,45 @@
+################################################################################
+# AtDigiPar parameters for the PUMA-style annular TPC sandbox.
+# Geometry: ATTPC_PUMA.root  (drift_volume from R=58.5 to 125.1 mm,
+# full length 300 mm centered at z=0). Pad plane assumed at z = +150 mm.
+# Gas: P10 (Ar90/CH4 10) at 1 bar, 273 K, density 1.654 mg/cm^3.
+# Field: 4 T solenoid along z (matches PUMA_sim.C SetField(0,0,40 kG)).
+################################################################################
+[AtDigiPar]
+PadPlaneX:Int_t                200   # mm  (square map, 100x100 pads of 2 mm)
+PadPlaneZ:Int_t                200   # mm
+PadSizeX:Int_t                   2   # mm
+PadSizeZ:Int_t                   2   # mm
+PadRows:Int_t                  100   #
+PadLayers:Int_t                100   #
+AnodeWirePlaneY:Double_t     -4.05   # mm
+GroundWirePlaneY:Double_t     -8.1   # mm
+GatingWirePlaneY:Double_t      -14   # mm
+EField:Double_t              10000   # V/m  (assumed; tweak per PUMA E-field)
+NumTbs:Int_t                   512
+SamplingRate:Int_t             3.0   #
+DriftVelocity:Double_t         1.5   # cm/us  (PUMA InputAll.txt value)
+DriftLength:Double_t           300   # mm     (PUMA TPC full drift length)
+YDivider:Int_t                 300   #
+GasFile:Int_t                    2
+PadPlaneFile:Int_t               3
+PadShapeFile:Int_t               4
+BField:Double_t                4.0   # Tesla  (PUMA solenoid)
+TiltAng:Double_t               0.0   # Degrees
+TB0:Int_t                       98   # (deprecated)
+LorentzAngle:Double_t          0.0   # rad
+TBEntrance:Int_t                 0   # vertices are inside the volume — no beam entrance
+ZPadPlane:Double_t             0.0   # mm  (pad plane at z=0; drift_volume spans z=[0,+300])
+Density:Double_t             1.654   # mg/cm^3  (P10 @ 1 bar, 273 K)
+ThetaPad:Double_t              0.0   # no rotation (square pad map is axis-aligned)
+ThetaRot:Double_t              0.0   #
+GasPressure:Double_t           750   # torr  (1 bar)
+EIonize:Double_t             26.64   # eV  (PUMA InputAll.txt for P10)
+Fano:Double_t                 0.24   # PDG Ar typical
+CoefL:Double_t            0.000300   # cm^2/us  (P10 @ 1 bar, longitudinal — unaffected by B||E)
+CoefT:Double_t            0.000010   # cm^2/us  (P10 @ 1 bar, transverse — suppressed ~50x at B=4T solenoidal)
+Gain:Double_t               300000   # 10x PUMA InputAll.txt for tighter Smooth3D clusters
+GETGain:Double_t              1000   # fC
+PeakingTime:Int_t              500   # ns  (PUMA ShapingTime)
+MaxRange:Double_t            300.0   # mm
+################################################################################

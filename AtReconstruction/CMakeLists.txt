@@ -134,6 +134,8 @@ if(TARGET Eigen3::Eigen)
   AtFitter/AtOpenKFTest.cxx
   AtFitter/OpenKF/kalman_filter/TrackFitterUKF.cxx
   AtFitter/AtFitterUKF.cxx
+  AtFitter/AtFitterUKFMulti.cxx
+  AtPatternBridgeTask.cxx
   AtFitter/AtUKFDisplay.cxx
 
   )
