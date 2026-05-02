@@ -159,10 +159,12 @@ AtPATTERN::AtTrackFinderTC::clustersToTrack(PointCloud &cloud, const std::vector
 
    std::cout << cRED << " Tracks found " << tracks.size() << cNORMAL << std::endl;
 
-   // Vertex-based track selection: reject beam, find primaries near vertex,
-   // merge fragments extending from primaries, reject isolated fragments
-   SelectAndMergeTracks(tracks);
-   std::cout << cGREEN << " After selection: " << tracks.size() << " tracks" << cNORMAL << std::endl;
+   if (fUseSelectAndMerge) {
+      // Vertex-based track selection: reject beam, find primaries near vertex,
+      // merge fragments extending from primaries, reject isolated fragments
+      SelectAndMergeTracks(tracks);
+      std::cout << cGREEN << " After selection: " << tracks.size() << " tracks" << cNORMAL << std::endl;
+   }
 
    // Compute initial parameters on selected/merged tracks
    for (auto &track : tracks) {

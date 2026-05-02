@@ -4,7 +4,8 @@
 #include "AtEvent.h"         // for AtEvent
 #include "AtPRA.h"           // for AtPRA
 #include "AtPatternEvent.h"  // for AtPatternEvent
-#include "AtTrackFinderTC.h" // for AtTrackFinderHC
+#include "AtTrackFinderRiemann.h" // for AtTrackFinderRiemann
+#include "AtTrackFinderTC.h"      // for AtTrackFinderHC
 
 #include <FairLogger.h>      // for LOG, FairLogger
 #include <FairRootManager.h> // for FairRootManager
@@ -106,6 +107,7 @@ InitStatus AtPRAtask::Init()
 
       dynamic_cast<AtPATTERN::AtTrackFinderTC *>(fPRA)->SetClusterRadius(fClusterRadius);
       dynamic_cast<AtPATTERN::AtTrackFinderTC *>(fPRA)->SetClusterDistance(fClusterDistance);
+      dynamic_cast<AtPATTERN::AtTrackFinderTC *>(fPRA)->SetUseSelectAndMerge(fTCUseSelectAndMerge);
 
       std::cout << " Track finder - Parameters for clusterization "
                 << "\n";
@@ -118,6 +120,25 @@ InitStatus AtPRAtask::Init()
    } else if (fPRAlgorithm == 2) {
       LOG(info) << "Using Hough transform algorithm";
       // fPSA = new AtPSAProto();
+   } else if (fPRAlgorithm == 3) {
+      LOG(info) << "Using Riemann-paraboloid track finder";
+
+      auto *riemann = new AtPATTERN::AtTrackFinderRiemann();
+      riemann->SetInlierDist(fRiemannInlierDist);
+      riemann->SetMinHitsPerTrack(fRiemannMinHits);
+      riemann->SetMaxTracks(fRiemannMaxTracks);
+      riemann->SetMaxIterations(fRiemannMaxIter);
+      riemann->SetClusterRadius(fClusterRadius);
+      riemann->SetClusterDistance(fClusterDistance);
+      riemann->SetUseSelectAndMerge(fRiemannUseSelectAndMerge);
+      fPRA = riemann;
+
+      std::cout << " Riemann track finder parameters\n";
+      std::cout << "   Inlier distance : " << fRiemannInlierDist << " mm\n";
+      std::cout << "   Min hits/track  : " << fRiemannMinHits << "\n";
+      std::cout << "   Max tracks      : " << fRiemannMaxTracks << "\n";
+      std::cout << "   RANSAC iters    : " << fRiemannMaxIter << "\n";
+      std::cout << "   SelectAndMerge  : " << (fRiemannUseSelectAndMerge ? "on" : "off") << "\n";
    }
 
    // Arc-walk clustering options

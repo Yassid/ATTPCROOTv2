@@ -42,6 +42,7 @@ struct hc_params {
 class AtTrackFinderTC : public AtPRA {
 private:
    hc_params inputParams{.s = 0.3, .k = 19, .n = 2, .m = 15, .r = 2, .a = 0.03, .t = 4.0};
+   bool fUseSelectAndMerge{true}; ///< AT-TPC primary/fragment heuristic; disable for annular geometries (PUMA)
 
 public:
    AtTrackFinderTC();
@@ -57,6 +58,7 @@ public:
    void SetAtriplet(float a) { inputParams.a = a; }
    void SetTcluster(float t) { inputParams.t = t; }
    void SetPadding(size_t padding) { inputParams._padding = padding; }
+   void SetUseSelectAndMerge(bool use) { fUseSelectAndMerge = use; }
 
 private:
    void eventToClusters(AtEvent &event, PointCloud &cloud);

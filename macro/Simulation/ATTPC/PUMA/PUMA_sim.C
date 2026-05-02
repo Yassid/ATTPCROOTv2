@@ -46,9 +46,14 @@ void PUMA_sim(Int_t nEvents = 1000, TString mcEngine = "TGeant4")
    //   sigma_xy = 4 mm, deltaZ = 22.5 mm, p-bar at rest, He-3 target.
    // Vertex z is shifted to the centre of the relocated drift volume (z=150 mm).
    auto *puma = new AtPUMAGenerator();
-   puma->SetVertexXY(0., 4., 0., 4.);
-   puma->SetVertexZHalfRange(22.5);
-   puma->SetVertexZOffset(150.); // centre of the relocated drift volume
+   // Fixed vertex at the middle of the *readable* drift range (~75 mm above
+   // the pad plane), not the geometric middle of the declared 300 mm gas.
+   // At 50 MHz / NumTbs=512 / v_drift=1.5 cm/us the readout window covers
+   // only ~153 mm of drift; placing the vertex at z=150 mm pushed every pulse
+   // past the [20, 499] PSA search window and all hits collapsed to TB=20.
+   puma->SetVertexXY(0., 0., 0., 0.);
+   puma->SetVertexZHalfRange(0.);
+   puma->SetVertexZOffset(75.);
    puma->SetTrapRadius(10.);
    puma->SetPbarMomentum(0., 0.);
    primGen->AddGenerator(puma);
@@ -60,6 +65,25 @@ void PUMA_sim(Int_t nEvents = 1000, TString mcEngine = "TGeant4")
 
    run->SetStoreTraj(kFALSE);
    run->Init();
+
+   // Memory control: p-bar annihilation + stopping K+ spawn thousands of
+   // δ-rays per event. Without these cuts, fParticles + AtMCTrack TClonesArrays
+   // grow into the millions across 1000 events and exhaust WSL memory.
+   // The AtStack is created by gconfig/g4Config.C; tune it after Init().
+   if (auto *stack = dynamic_cast<AtStack *>(gMC->GetStack())) {
+      stack->StoreSecondaries(kFALSE); // don't persist secondaries in AtMCTrack
+      stack->SetEnergyCut(1e-3);       // GeV — drop sub-MeV tracks at PushTrack
+      std::cout << "[PUMA_sim] AtStack tuned: StoreSecondaries=false, EnergyCut=1 MeV\n";
+   } else {
+      std::cout << "[PUMA_sim] WARNING: could not access AtStack to tune cuts.\n";
+   }
+   // Geant4 production cuts: don't even create δ-rays/brems below 1 MeV.
+   if (gMC) {
+      gMC->SetCut("CUTELE", 1e-3); // electrons
+      gMC->SetCut("CUTGAM", 1e-3); // gammas
+      gMC->SetCut("BCUTE", 1e-3);  // electron bremsstrahlung
+      gMC->SetCut("DCUTE", 1e-3);  // δ-rays from electrons
+   }
 
    Bool_t kParameterMerged = kTRUE;
    FairParRootFileIo *parOut = new FairParRootFileIo(kParameterMerged);

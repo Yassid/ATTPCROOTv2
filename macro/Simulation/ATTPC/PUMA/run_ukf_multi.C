@@ -5,13 +5,13 @@
 ///
 /// Run: root -b -q 'run_ukf_multi.C(50)'
 
-void run_ukf_multi(int nEvents = 50)
+void run_ukf_multi(int nEvents = 50, TString tag = "")
 {
    FairLogger::GetLogger()->SetLogScreenLevel("INFO");
 
    TString inOutDir = "./data/";
-   TString inputFile = inOutDir + "output_digi.root";
-   TString outputFile = inOutDir + "output_ukf_multi.root";
+   TString inputFile = inOutDir + "output_digi" + tag + ".root";
+   TString outputFile = inOutDir + "output_ukf_multi" + tag + ".root";
    TString paramFile = "ATTPC.PUMA_sim.par";
 
    TString dir = getenv("VMCWORKDIR");

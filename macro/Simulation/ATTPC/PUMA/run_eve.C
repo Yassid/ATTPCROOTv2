@@ -27,9 +27,9 @@ void run_eve(TString InputDataFile = "./data/output_digi.root",
    FairParRootFileIo *parIo1 = new FairParRootFileIo();
    rtdb->setFirstInput(parIo1);
 
-   // Same square pad map used in run_digi_attpc.C — must match for the
+   // Same PUMA pad map used in run_digi_attpc.C — must match for the
    // event display to translate pad numbers back to (x,y) correctly.
-   auto fMap = std::make_shared<AtTpcSquareMap>(2.0, 100, 100);
+   auto fMap = std::make_shared<AtTpcPUMAMap>(62.9, 121.1, 16, 256);
    fMap->GeneratePadPlane();
 
    AtViewerManager *eveMan = new AtViewerManager(fMap);

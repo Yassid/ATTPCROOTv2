@@ -17,5 +17,6 @@
 #pragma link C++ class AtTpcProtoMap + ;
 #pragma link C++ class AtSpecMATMap + ;
 #pragma link C++ class AtTpcSquareMap + ;
+#pragma link C++ class AtTpcPUMAMap + ;
 
 #endif

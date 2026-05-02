@@ -68,6 +68,16 @@ private:
    int fMinHitsPerCluster{3};
    int fArcWalkKNN{10};
 
+   // TC (fPRAlgorithm == 0) — primary/fragment heuristic switch (disable for annular geometries)
+   bool fTCUseSelectAndMerge{true};
+
+   // Riemann parameters (fPRAlgorithm == 3)
+   double fRiemannInlierDist{15.0};
+   int fRiemannMinHits{10};
+   int fRiemannMaxTracks{6};
+   int fRiemannMaxIter{400};
+   bool fRiemannUseSelectAndMerge{true};
+
 public:
    AtPRAtask();
    ~AtPRAtask();
@@ -111,6 +121,18 @@ public:
    void SetMinHitsPerCluster(int n) { fMinHitsPerCluster = n; }
    /// Number of nearest neighbors for arc-walk kNN graph
    void SetArcWalkKNN(int k) { fArcWalkKNN = k; }
+
+   /// TC (PRAlgorithm == 0): apply the AT-TPC primary/fragment heuristic. Disable for PUMA / annular geometries.
+   void SetTCUseSelectAndMerge(bool use) { fTCUseSelectAndMerge = use; }
+
+   /// Riemann (PRAlgorithm == 3): RANSAC inlier distance to plane in (x,y,x^2+y^2) space (mm)
+   void SetRiemannInlierDist(double d) { fRiemannInlierDist = d; }
+   void SetRiemannMinHits(int n) { fRiemannMinHits = n; }
+   void SetRiemannMaxTracks(int n) { fRiemannMaxTracks = n; }
+   void SetRiemannMaxIter(int n) { fRiemannMaxIter = n; }
+   /// Apply the AT-TPC primary/fragment heuristic after Riemann finding.
+   /// Disable for annular geometries (PUMA) where the beam-axis vertex assumption is invalid.
+   void SetRiemannUseSelectAndMerge(bool use) { fRiemannUseSelectAndMerge = use; }
 
    ClassDef(AtPRAtask, 1);
 };

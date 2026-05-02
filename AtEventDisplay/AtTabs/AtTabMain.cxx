@@ -171,7 +171,7 @@ void AtTabMain::DrawPadPlane()
    fPadPlane->SetBit(TH1::kNoTitle);
    fCvsPadPlane->cd();
    fPadPlane->Draw("COL L0");
-   fPadPlane->SetMinimum(1.0);
+   fPadPlane->SetMinimum(0.0);
    gStyle->SetOptStat(0);
    gStyle->SetPalette(103);
    gPad->Update();
@@ -209,7 +209,7 @@ void AtTabMain::DumpEvent(std::string fileName)
 void AtTabMain::UpdateRenderState()
 {
    fEveEvent->SetRnrState(true);
-   fEvePatternEvent->SetRnrState(false);
+   fEvePatternEvent->SetRnrState(true);
 }
 
 void AtTabMain::UpdatePatternEventElements()
@@ -231,15 +231,16 @@ void AtTabMain::UpdatePatternEventElements()
    fEvePatternEvent->RemoveElements();
    fPatternLines.clear();
    for (int i = 0; i < tracks.size(); ++i) {
-      if (tracks[i].GetPattern() == nullptr)
-         continue;
-
-      // Update the hit points and re-add them to the event
+      // Always show the per-track hit cluster, even if no AtPattern was attached
+      // (e.g. Riemann/RANSAC finders that produce hit groupings without a fitted shape).
       auto hitSet = fPatternHitSets.at(i).get();
       fHitAttr.Copy(*hitSet);
       hitSet->SetMarkerColor(GetTrackColor(i));
       SetPointsFromTrack(*hitSet, tracks[i]);
       fEvePatternEvent->AddElement(hitSet);
+
+      if (tracks[i].GetPattern() == nullptr)
+         continue;
 
       // Get the pattern and add it to the event
       auto pattern = tracks[i].GetPattern()->GetEveElement();

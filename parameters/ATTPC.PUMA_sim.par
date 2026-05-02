@@ -6,18 +6,18 @@
 # Field: 4 T solenoid along z (matches PUMA_sim.C SetField(0,0,40 kG)).
 ################################################################################
 [AtDigiPar]
-PadPlaneX:Int_t                200   # mm  (square map, 100x100 pads of 2 mm)
-PadPlaneZ:Int_t                200   # mm
-PadSizeX:Int_t                   2   # mm
+PadPlaneX:Int_t                250   # mm  (annular PUMA pad plane diameter)
+PadPlaneZ:Int_t                250   # mm
+PadSizeX:Int_t                   2   # mm  (approx; PUMA pads are trapezoidal annular)
 PadSizeZ:Int_t                   2   # mm
-PadRows:Int_t                  100   #
-PadLayers:Int_t                100   #
+PadRows:Int_t                   16   # rings
+PadLayers:Int_t                256   # pads per ring
 AnodeWirePlaneY:Double_t     -4.05   # mm
 GroundWirePlaneY:Double_t     -8.1   # mm
 GatingWirePlaneY:Double_t      -14   # mm
 EField:Double_t              10000   # V/m  (assumed; tweak per PUMA E-field)
 NumTbs:Int_t                   512
-SamplingRate:Int_t             3.0   #
+SamplingRate:Int_t              50   # 50 MHz -> 20 ns/TB (PUMA InputAll.txt recommended; 0.3 mm/TB at v_drift=1.5 cm/us)
 DriftVelocity:Double_t         1.5   # cm/us  (PUMA InputAll.txt value)
 DriftLength:Double_t           300   # mm     (PUMA TPC full drift length)
 YDivider:Int_t                 300   #
@@ -38,7 +38,7 @@ EIonize:Double_t             26.64   # eV  (PUMA InputAll.txt for P10)
 Fano:Double_t                 0.24   # PDG Ar typical
 CoefL:Double_t            0.000300   # cm^2/us  (P10 @ 1 bar, longitudinal — unaffected by B||E)
 CoefT:Double_t            0.000010   # cm^2/us  (P10 @ 1 bar, transverse — suppressed ~50x at B=4T solenoidal)
-Gain:Double_t               300000   # 10x PUMA InputAll.txt for tighter Smooth3D clusters
+Gain:Double_t              5000000   # 50 MHz spreads pulse over ~25 TBs (vs ~1.5 at 3 MHz), so per-TB amplitude scales ~16x lower; bump gain to keep PSA peaks well above noise
 GETGain:Double_t              1000   # fC
 PeakingTime:Int_t              500   # ns  (PUMA ShapingTime)
 MaxRange:Double_t            300.0   # mm
