@@ -116,7 +116,11 @@ uint64_t AtClusterize::getNumberOfElectronsGenerated(const AtMCPoint &mcPoint)
    auto energyLoss = mcPoint.GetEnergyLoss() * 1000.;
    auto meanElec = energyLoss / fEIonize;
    auto sigElec = TMath::Sqrt(fFano * meanElec);
-   return gRandom->Gaus(meanElec, sigElec);
+   // Clamp at zero: an unguarded Gaus(small_mean, sigma) can sample negative,
+   // and an implicit cast to uint64_t wraps to ~1.8e19 — the for-loop in
+   // processPoint then allocates AtSimulatedPoints until OOM.
+   double n = gRandom->Gaus(meanElec, sigElec);
+   return n > 0 ? static_cast<uint64_t>(n) : 0;
 }
 
 AtClusterize::XYZPoint AtClusterize::getCurrentPointLocation(const AtMCPoint &mcPoint)
