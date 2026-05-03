@@ -33,10 +33,14 @@ public:
    ~AtFitterUKFMulti() override = default;
 
    /// Append a fully-configured fitter as one hypothesis. Name appears in logs
-   /// and is stored in the resulting AtFittedTrack particle info.
-   void AddHypothesis(std::unique_ptr<AtFitterUKF> fitter, std::string name)
+   /// and is stored in the resulting AtFittedTrack particle info. Optional
+   /// chargeSign (+1, -1) lets the multi-fitter skip this hypothesis whenever
+   /// the input track has a definite charge sign (AtTrack::GetChargeSign() set
+   /// by the PRA's curvature) and the two disagree. Pass 0 to always evaluate
+   /// the hypothesis (default — preserves the legacy 4-hypothesis behaviour).
+   void AddHypothesis(std::unique_ptr<AtFitterUKF> fitter, std::string name, int chargeSign = 0)
    {
-      fHypotheses.push_back({std::move(fitter), std::move(name)});
+      fHypotheses.push_back({std::move(fitter), std::move(name), chargeSign});
    }
 
    void Init() override;
@@ -57,6 +61,7 @@ private:
    struct Hypo {
       std::unique_ptr<AtFitterUKF> fitter;
       std::string name;
+      int chargeSign{0};
    };
    std::vector<Hypo> fHypotheses; //! transient, not persisted by ROOT
    double fChi2Cap{1e30};

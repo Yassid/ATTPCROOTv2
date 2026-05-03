@@ -34,9 +34,17 @@ AtFittedTrack *AtFitterUKFMulti::GetFittedTrack(AtTrack *track, AtFitMetadata *f
    double bestChi = std::numeric_limits<double>::infinity();
    std::string bestName;
 
+   // PRA-curvature-determined sign on the input track (0 if PRA didn't set
+   // one, e.g., legacy data). When it disagrees with a hypothesis's charge
+   // sign, skip — geometric sign is far more reliable than chi² between ±
+   // helices, which are nearly degenerate.
+   const int trackSign = track->GetChargeSign();
+
    // Each hypothesis sees a fresh copy of the track so per-fitter mutations
    // (adaptive re-clustering, geo overrides) don't leak between hypotheses.
    for (auto &h : fHypotheses) {
+      if (trackSign != 0 && h.chargeSign != 0 && h.chargeSign != trackSign)
+         continue;
       AtTrack copy(*track);
       AtFittedTrack *cand = h.fitter->GetFittedTrack(&copy, fitMetadata, rawEvent, event);
       if (cand == nullptr)

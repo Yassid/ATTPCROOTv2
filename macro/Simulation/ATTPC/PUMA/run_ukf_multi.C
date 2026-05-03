@@ -58,7 +58,12 @@ void run_ukf_multi(int nEvents = 50, TString tag = "")
       ukf->SetNIterations(3);
       ukf->SetZPadPlane(0.0);
       ukf->SetBackExtrapMaxPath(250.0);
-      multi->AddHypothesis(std::move(ukf), names[i]);
+      // Helix-circle POCA back-extrapolation: required for PUMA's 4 T tracks
+      // that curve significantly in (x,y). Linear tangent approx (the default
+      // path tuned for 16C+p) puts xy POCA on a ring near the first-cluster
+      // pad-plane radius.
+      ukf->SetUseHelixBackExtrap(true);
+      multi->AddHypothesis(std::move(ukf), names[i], signs[i]);
    }
 
    AtFitterTask *fitterTask = new AtFitterTask(std::move(multi));

@@ -52,6 +52,7 @@ protected:
    Double_t fGeoPhiAngle{};                  //<  " azimuthal "
    Double_t fGeoRadius{};                    //< Initial radius of curvature
    std::pair<Double_t, Double_t> fGeoCenter; //< Center of the spiral track
+   Int_t fChargeSign{0};                     //< +1 / -1 from PRA curvature; 0 = unknown
    std::vector<AtHitCluster> fHitClusterArray; //< Clusterized hits container. Can also be stored in fHitArray
 
    // Obtained in AtPatternModification
@@ -88,6 +89,7 @@ public:
       swap(a.fGeoPhiAngle, b.fGeoPhiAngle);
       swap(a.fGeoRadius, b.fGeoRadius);
       swap(a.fGeoCenter, b.fGeoCenter);
+      swap(a.fChargeSign, b.fChargeSign);
 
       swap(a.fBraggCurveValues, b.fBraggCurveValues);
       swap(a.fBraggCurve, b.fBraggCurve);
@@ -106,6 +108,7 @@ public:
    Double_t GetGeoPhi() const { return fGeoPhiAngle; }
    Double_t GetGeoRadius() const { return fGeoRadius; }
    std::pair<Double_t, Double_t> GetGeoCenter() const { return fGeoCenter; }
+   Int_t GetChargeSign() const { return fChargeSign; }
    std::vector<AtHitCluster> *GetHitClusterArray() { return &fHitClusterArray; }
 
    std::vector<std::pair<Double_t, Double_t>> GetBraggCurveValues() const { return fBraggCurveValues; }
@@ -124,6 +127,7 @@ public:
    void SetGeoPhi(Double_t angle) { fGeoPhiAngle = angle; }
    void SetGeoRadius(Double_t radius) { fGeoRadius = radius; }
    void SetGeoCenter(std::pair<Double_t, Double_t> center) { fGeoCenter = center; }
+   void SetChargeSign(Int_t sign) { fChargeSign = sign; }
    void AddClusterHit(std::shared_ptr<AtHitCluster> hitCluster);
 
    void AddBraggCurvePair(Double_t range, Double_t eLoss) { fBraggCurveValues.push_back(std::make_pair(range, eLoss)); }
@@ -164,7 +168,7 @@ protected:
       return o;
    }
 
-   ClassDef(AtTrack, 4);
+   ClassDef(AtTrack, 5);
 };
 
 #endif

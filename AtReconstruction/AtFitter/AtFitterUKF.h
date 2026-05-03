@@ -70,6 +70,16 @@ public:
    /// (e.g. 200 mm) to let the linear extrapolation reach the true vertex.
    /// Set <= 0 to disable back-extrapolation entirely (vertex = first cluster).
    void SetBackExtrapMaxPath(double mm) { fBackExtrapMaxPath = mm; }
+   /// Use the PRA circle (track->GetGeoCenter / GetGeoRadius) to compute the
+   /// (x,y) POCA to the beam axis instead of the linear tangent step. Helix
+   /// pitch carries the z; energy loss is integrated along the arc length.
+   /// Required for setups with significant track curvature (e.g. PUMA at
+   /// 4 T where K+ tracks make near-half loops). Default false preserves the
+   /// 16C+p calibration where tracks are nearly straight and the propagator
+   /// approach was reverted (commit aaabc31) due to Bragg-peak dE/dx
+   /// instability in reverse — a problem that does NOT apply to PUMA's
+   /// well-above-Bragg K+ and π−.
+   void SetUseHelixBackExtrap(bool use) { fUseHelixBackExtrap = use; }
    /// Number of fit iterations (default 1). With >1, the first pass uses wide covariance
    /// and subsequent passes use the previous result as seed with tighter covariance.
    void SetNIterations(int n) { fNIterations = n; }
@@ -126,6 +136,7 @@ private:
    int fMaxFitTime_ms{2000};   // Maximum time per track fit in milliseconds
    double fMomentumSeed{-1};       // If >0, override Brho seed with this value (MeV/c)
    double fBackExtrapMaxPath{50.}; // mm; cap on back-extrapolation path. <=0 disables.
+   bool fUseHelixBackExtrap{false}; // Circle-POCA xy + helix-pitch z (PUMA-style)
    double fMinClusterSpacing{3.0}; // Minimum distance between clusters (mm)
    double fMinLabTheta{10.0};      // Minimum lab angle (degrees) — skip beam-like tracks
    int fNIterations{1};            // Number of fit iterations (1=single pass)

@@ -83,6 +83,28 @@ std::cout << " Processing track with " << track.GetHitArray().size() << " points
       track.SetGeoRadius(radius);
       track.SetPattern(circle->Clone());
 
+      // Charge sign from rotation sense in (x,y). Order all hits by distance
+      // from origin (proxy for time, since particles fan out from the
+      // reaction vertex), then sign of (p_mid - p_first) × (p_last - p_first)·ẑ
+      // encodes q·B. Truth-calibrated against PUMA MC PDGs:
+      // crossZ < 0 ⇒ q > 0, crossZ > 0 ⇒ q < 0 (B = +Bẑ in z_recon = -z_lab).
+      if (allHits.size() >= 3) {
+         std::vector<std::pair<double, std::pair<double, double>>> byR;
+         byR.reserve(allHits.size());
+         for (const auto &h : allHits) {
+            const auto &p = h->GetPosition();
+            byR.emplace_back(p.X() * p.X() + p.Y() * p.Y(),
+                             std::make_pair(p.X(), p.Y()));
+         }
+         std::sort(byR.begin(), byR.end());
+         const auto &p0 = byR.front().second;
+         const auto &pm = byR[byR.size() / 2].second;
+         const auto &pN = byR.back().second;
+         double crossZ = (pm.first - p0.first) * (pN.second - p0.second)
+                        - (pm.second - p0.second) * (pN.first - p0.first);
+         track.SetChargeSign(crossZ > 0 ? -1 : +1);
+      }
+
       circularTracks.at(0).SetPattern(std::move(circle));
 
       // std::vector<double> wpca;

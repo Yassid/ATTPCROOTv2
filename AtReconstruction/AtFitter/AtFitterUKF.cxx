@@ -485,17 +485,70 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
       // No angle conversion needed.
 
       // --- Back-extrapolation to beam axis ---
-      // Linear approximation: add back energy lost between vertex and first cluster.
-      // Cap the correction for large vtxR where the linear approximation breaks down.
+      // Two paths:
+      //   (a) fUseHelixBackExtrap = true: closed-form POCA on the PRA circle
+      //       (x,y) + helix-pitch z. Use this when tracks curve significantly
+      //       in (x,y) so the linear tangent approximation fails (e.g. PUMA
+      //       at 4 T).
+      //   (b) default: linear step along the initial momentum direction by
+      //       pathLength = rXY/sinθ, capped at fBackExtrapMaxPath. Stable for
+      //       small-arc tracks (e.g. 16C+p protons) and avoids the Bragg-peak
+      //       dE/dx instability that killed the older propagator approach.
       auto firstClPos = clusters->front().GetPosition();
       double rXY = std::sqrt(firstClPos.X() * firstClPos.X() + firstClPos.Y() * firstClPos.Y());
       if (rXY > 1.0 && p_s > 0 && fBackExtrapMaxPath > 0.) {
-         double sinTheta = std::sin(theta_s);
-         double pathLength = (sinTheta > 0.1) ? rXY / sinTheta : rXY;
+         double pathLength = 0.;
 
-         // Cap path length to avoid over-correction for large vtxR
-         pathLength = std::min(pathLength, fBackExtrapMaxPath);
+         // PRA circle parameters (for the helix path)
+         auto geoCenter = track->GetGeoCenter();
+         double cx = geoCenter.first;
+         double cy = geoCenter.second;
+         double R = track->GetGeoRadius();
+         double dCenter = std::sqrt(cx * cx + cy * cy);
+         bool circleValid = fUseHelixBackExtrap && (R > 1.0) && (dCenter > 1.0);
 
+         if (circleValid) {
+            // POCA on the PRA circle to (0,0). The two extrema on the circle
+            // along the line from origin through center are at
+            // (cx,cy)·(1 ± R/d). |d - R| < |d + R|, so the closer one is
+            // (cx,cy)·(1 - R/d) for any d > 0.
+            double f = 1.0 - R / dCenter;
+            double pocaX = cx * f;
+            double pocaY = cy * f;
+
+            // Arc length from first smoothed cluster (vx, vy) to POCA along
+            // the circle — pick the shorter wrap.
+            double phi1 = std::atan2(vy - cy, vx - cx);
+            double phi0 = std::atan2(pocaY - cy, pocaX - cx);
+            double dPhi = std::abs(phi1 - phi0);
+            if (dPhi > M_PI) dPhi = 2 * M_PI - dPhi;
+            double arc = R * dPhi;
+            arc = std::min(arc, fBackExtrapMaxPath);
+
+            // z propagation: helix pitch dz/d(arc_xy) = cot(θ); back-extrap
+            // along the helix reverses the sign.
+            double sinTheta = std::max(std::sin(theta_s), 0.1);
+            double cotTheta = std::cos(theta_s) / sinTheta;
+
+            vx = pocaX;
+            vy = pocaY;
+            vz = vz - arc * cotTheta;
+            pathLength = arc;
+         } else {
+            // Legacy linear extrapolation
+            double sinTheta = std::sin(theta_s);
+            pathLength = (sinTheta > 0.1) ? rXY / sinTheta : rXY;
+            pathLength = std::min(pathLength, fBackExtrapMaxPath);
+
+            ROOT::Math::Polar3DVector momDir(1.0, theta_s, phi_s);
+            ROOT::Math::XYZVector dir(momDir);
+            vx -= dir.X() * pathLength;
+            vy -= dir.Y() * pathLength;
+            vz -= dir.Z() * pathLength;
+         }
+
+         // Energy correction along the back-extrapolated path. Same in both
+         // branches — uses the integrated arc/path length.
          double KE_at_cluster = std::sqrt(p_s * p_s + fMass_MeV * fMass_MeV) - fMass_MeV;
          if (auto *elossModel = fUKF->GetPropagator().GetELossModel()) {
             double dEdx = elossModel->GetdEdx(KE_at_cluster);
@@ -504,13 +557,6 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
             double p_at_vertex = std::sqrt(KE_at_vertex * KE_at_vertex + 2 * KE_at_vertex * fMass_MeV);
             p_s = p_at_vertex;
          }
-
-         // Extrapolate position along -momentum direction
-         ROOT::Math::Polar3DVector momDir(1.0, theta_s, phi_s);
-         ROOT::Math::XYZVector dir(momDir);
-         vx -= dir.X() * pathLength;
-         vy -= dir.Y() * pathLength;
-         vz -= dir.Z() * pathLength;
       }
    }
 
