@@ -63,6 +63,16 @@ void run_ukf_multi(int nEvents = 50, TString tag = "")
       // path tuned for 16C+p) puts xy POCA on a ring near the first-cluster
       // pad-plane radius.
       ukf->SetUseHelixBackExtrap(true);
+      // PUMA inner-ring pad pitch is ~2 mm; the default 3 mm cluster spacing
+      // kills short, dense K+ tracks via DROP[few-clusters]. Drop to 1 mm.
+      ukf->SetMinClusterSpacing(1.0);
+      // Arc-length-aware adaptive clustering: target 6 clusters per track,
+      // distance bounded to [4, 18] mm. Short K+ (~30-50 mm) get tight 5-8 mm
+      // spacing so they don't collapse into 1 cluster; long π- (~120 mm) keep
+      // 18 mm spacing close to the legacy default — both regimes get the same
+      // ~6-cluster fit budget.
+      ukf->SetTargetClusters(5);
+      ukf->SetAdaptiveDistBounds(6.0, 18.0);
       multi->AddHypothesis(std::move(ukf), names[i], signs[i]);
    }
 

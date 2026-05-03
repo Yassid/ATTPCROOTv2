@@ -170,34 +170,58 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
       const bool badRadius = std::isnan(track->GetGeoRadius()) || track->GetGeoRadius() <= 0;
       const bool nanTheta = std::isnan(track->GetGeoTheta());
       if (badRadius) {
-         LOG(info) << "AtFitterUKF DROP[bad-geom]: NaN/<=0 radius. Skipping.";
+         LOG(info) << "AtFitterUKF DROP[bad-geom-radius]: R=" << track->GetGeoRadius() << ". Skipping.";
          return nullptr;
       }
       // PRA sometimes returns NaN GeoTheta with a valid radius (degenerate
       // (arc, z) regression). Recover theta from the cluster sequence so the
       // track isn't discarded.
       if (nanTheta) {
+         // PRA sometimes returns NaN GeoTheta when the (arc, z) line fit is
+         // degenerate. Recover θ from the track's endpoint geometry. Prefer
+         // the cluster array if populated; otherwise fall back to the raw
+         // hit array (always present after PRA). This avoids dropping tracks
+         // before adaptive re-clustering has had a chance to populate the
+         // cluster array further down the flow.
          auto *cls0 = track->GetHitClusterArray();
-         if (cls0 == nullptr || cls0->size() < 2) {
-            LOG(info) << "AtFitterUKF DROP[bad-geom]: NaN theta and <2 clusters for fallback. Skipping.";
+         double x0 = 0, y0 = 0, z0 = 0, xN = 0, yN = 0, zN = 0;
+         bool haveEndpoints = false;
+         if (cls0 != nullptr && cls0->size() >= 2) {
+            const auto &p0 = cls0->front().GetPosition();
+            const auto &pN = cls0->back().GetPosition();
+            x0 = p0.X(); y0 = p0.Y(); z0 = p0.Z();
+            xN = pN.X(); yN = pN.Y(); zN = pN.Z();
+            haveEndpoints = true;
+         } else {
+            const auto &hits = track->GetHitArray();
+            if (hits.size() >= 2) {
+               const auto &p0 = hits.front()->GetPosition();
+               const auto &pN = hits.back()->GetPosition();
+               x0 = p0.X(); y0 = p0.Y(); z0 = p0.Z();
+               xN = pN.X(); yN = pN.Y(); zN = pN.Z();
+               haveEndpoints = true;
+            }
+         }
+         if (!haveEndpoints) {
+            LOG(info) << "AtFitterUKF DROP[bad-geom-noendpoints]: NaN theta and "
+                         "<2 clusters/hits. Skipping.";
             return nullptr;
          }
-         const auto &p0 = cls0->front().GetPosition();
-         const auto &pN = cls0->back().GetPosition();
-         const double dx = pN.X() - p0.X();
-         const double dy = pN.Y() - p0.Y();
-         const double dz = pN.Z() - p0.Z();
+         const double dx = xN - x0;
+         const double dy = yN - y0;
+         const double dz = zN - z0;
          const double r3 = std::sqrt(dx * dx + dy * dy + dz * dz);
          if (r3 < 1e-3) {
-            LOG(info) << "AtFitterUKF DROP[bad-geom]: NaN theta + first/last cluster coincide. Skipping.";
+            LOG(info) << "AtFitterUKF DROP[bad-geom-coincide]: NaN theta + endpoints coincide. Skipping.";
             return nullptr;
          }
          const double thetaFallback = std::acos(dz / r3);
          track->SetGeoTheta(thetaFallback);
          if (std::isnan(track->GetGeoPhi()))
             track->SetGeoPhi(std::atan2(dy, dx));
-         LOG(info) << "AtFitterUKF: PRA theta NaN, recovered from clusters: "
-                   << thetaFallback * 180. / M_PI << " deg";
+         LOG(info) << "AtFitterUKF: PRA theta NaN, recovered: "
+                   << thetaFallback * 180. / M_PI << " deg (from "
+                   << (cls0 && cls0->size() >= 2 ? "clusters" : "hits") << ")";
       }
    }
 
@@ -219,9 +243,58 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
          pEst = fMomentumSeed;
       double keEst = std::sqrt(pEst * pEst + fMass_MeV * fMass_MeV) - fMass_MeV;
 
-      // Choose radius/distance based on estimated KE
+      // Choose radius/distance:
+      //   1. Hard override via SetClusteringParams (highest priority)
+      //   2. Arc-length-aware mode via SetTargetClusters (PUMA-style)
+      //   3. Legacy KE-keyed defaults
       double radius, distance;
-      if (keEst < 3.0) {
+      if (fClusterRadiusOverride > 0 && fClusterDistanceOverride > 0) {
+         radius = fClusterRadiusOverride;
+         distance = fClusterDistanceOverride;
+      } else if (fTargetClusters > 0) {
+         // Compute arc length from the PRA circle: R · |Δφ| spanned by hits
+         // around GeoCenter. Falls back to 3D extent of the hit array if the
+         // circle parameters look bad.
+         const auto &hits = track->GetHitArray();
+         double arc = 0;
+         auto cen = track->GetGeoCenter();
+         double cx = cen.first;
+         double cy = cen.second;
+         double R = track->GetGeoRadius();
+         bool circleValid = (hits.size() >= 2) && (R > 1.0) && std::isfinite(R);
+         if (circleValid) {
+            double phiMin = std::numeric_limits<double>::infinity();
+            double phiMax = -std::numeric_limits<double>::infinity();
+            for (const auto &h : hits) {
+               const auto &p = h->GetPosition();
+               double phi = std::atan2(p.Y() - cy, p.X() - cx);
+               if (phi < phiMin) phiMin = phi;
+               if (phi > phiMax) phiMax = phi;
+            }
+            // Span doesn't handle wrap-around but the PRA circle for PUMA
+            // arcs that don't loop is reliable here.
+            double dphi = phiMax - phiMin;
+            arc = R * dphi;
+         }
+         if (!(arc > 1.0)) {
+            // Fall back to first-last 3D distance — not ideal for curved
+            // tracks but better than nothing.
+            if (hits.size() >= 2) {
+               const auto &p0 = hits.front()->GetPosition();
+               const auto &pN = hits.back()->GetPosition();
+               double dx = pN.X() - p0.X();
+               double dy = pN.Y() - p0.Y();
+               double dz = pN.Z() - p0.Z();
+               arc = std::sqrt(dx * dx + dy * dy + dz * dz);
+            }
+         }
+         distance = std::max(fAdaptiveDistMin,
+                             std::min(fAdaptiveDistMax, arc / fTargetClusters));
+         radius = 1.5 * distance;
+         LOG(debug) << "Arc-length adaptive clustering: arc=" << arc
+                    << " mm, target=" << fTargetClusters
+                    << " → radius=" << radius << " distance=" << distance << " mm";
+      } else if (keEst < 3.0) {
          radius = 25.0;
          distance = 15.0; // Large radius for low-energy (short) tracks
       } else if (keEst < 8.0) {

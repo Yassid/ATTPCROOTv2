@@ -177,8 +177,21 @@ AtPATTERN::AtTrackFinderTC::clustersToTrack(PointCloud &cloud, const std::vector
    for (const auto &point : points)
       retEvent->AddNoise(event.GetHit(point.GetID()));
 
-   for (auto &track : tracks)
+   // Filter tracks whose RANSAC circle fit failed (NaN/≤0 radius). Without
+   // this they propagate to the fitter only to be dropped there with
+   // DROP[bad-geom]; better to skip at the PRA stage.
+   int nDroppedBadGeom = 0;
+   for (auto &track : tracks) {
+      const double R = track.GetGeoRadius();
+      if (std::isnan(R) || R <= 0) {
+         nDroppedBadGeom++;
+         continue;
+      }
       retEvent->AddTrack(std::move(track));
+   }
+   if (nDroppedBadGeom > 0)
+      std::cout << cYELLOW << " AtPRA filter: " << nDroppedBadGeom
+                << " tracks dropped (NaN/≤0 GeoRadius)" << cNORMAL << std::endl;
 
    return retEvent;
 }

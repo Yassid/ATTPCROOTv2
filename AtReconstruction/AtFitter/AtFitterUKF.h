@@ -80,6 +80,38 @@ public:
    /// instability in reverse — a problem that does NOT apply to PUMA's
    /// well-above-Bragg K+ and π−.
    void SetUseHelixBackExtrap(bool use) { fUseHelixBackExtrap = use; }
+   /// Minimum spacing (mm) between adaptive clusters. Hits closer than this are
+   /// merged. Default 3.0 mm matches AT-TPC pad pitch; lower for finer pad
+   /// planes (e.g. PUMA's annular ~2 mm inner ring) where the default kills
+   /// too many short, dense tracks via DROP[few-clusters].
+   void SetMinClusterSpacing(double mm) { fMinClusterSpacing = mm; }
+   /// Override the default adaptive-clustering parameters (radius/distance, mm)
+   /// passed to ClusterizeSmooth3D. Negative values keep the built-in
+   /// energy-dependent defaults (25/15 below 3 MeV, 20/15 above), which were
+   /// tuned for AT-TPC proton tracks. PUMA's short K+/π- tracks (~50-100 mm
+   /// total) need tighter spacing (~5-7 mm) or all hits collapse into one
+   /// cluster and hit DROP[few-clusters].
+   void SetClusteringParams(double radius_mm, double distance_mm)
+   {
+      fClusterRadiusOverride = radius_mm;
+      fClusterDistanceOverride = distance_mm;
+   }
+   /// Arc-length-aware adaptive clustering: target this many clusters per
+   /// track regardless of length. Computes arc length from the PRA circle
+   /// (R·|Δφ| spanned by hits around the GeoCenter), sets
+   /// distance = clamp(arc/N, fAdaptiveDistMin, fAdaptiveDistMax) and
+   /// radius = 1.5·distance. Set 0 to disable (use legacy KE-keyed defaults
+   /// or the hard SetClusteringParams override). Tuned for PUMA where K+ and
+   /// π- have wildly different track lengths (30-150 mm) but the legacy
+   /// always-15 mm spacing collapses short tracks. Default 0.
+   void SetTargetClusters(int n) { fTargetClusters = n; }
+   /// Bounds on the per-track adaptive distance (mm). Defaults 4 mm / 20 mm
+   /// keep clusters above sub-pad noise but below the AT-TPC default.
+   void SetAdaptiveDistBounds(double minMm, double maxMm)
+   {
+      fAdaptiveDistMin = minMm;
+      fAdaptiveDistMax = maxMm;
+   }
    /// Number of fit iterations (default 1). With >1, the first pass uses wide covariance
    /// and subsequent passes use the previous result as seed with tighter covariance.
    void SetNIterations(int n) { fNIterations = n; }
@@ -137,6 +169,11 @@ private:
    double fMomentumSeed{-1};       // If >0, override Brho seed with this value (MeV/c)
    double fBackExtrapMaxPath{50.}; // mm; cap on back-extrapolation path. <=0 disables.
    bool fUseHelixBackExtrap{false}; // Circle-POCA xy + helix-pitch z (PUMA-style)
+   double fClusterRadiusOverride{-1.0};   // mm; <=0 → use built-in defaults
+   double fClusterDistanceOverride{-1.0}; // mm; <=0 → use built-in defaults
+   int fTargetClusters{0};                // 0 → off; >0 enables arc-length-aware mode
+   double fAdaptiveDistMin{4.0};
+   double fAdaptiveDistMax{20.0};
    double fMinClusterSpacing{3.0}; // Minimum distance between clusters (mm)
    double fMinLabTheta{10.0};      // Minimum lab angle (degrees) — skip beam-like tracks
    int fNIterations{1};            // Number of fit iterations (1=single pass)
