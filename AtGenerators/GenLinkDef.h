@@ -35,5 +35,6 @@
 #pragma link C++ class AtTPC20MgDecay + ;
 #pragma link C++ class AtTPC20MgDecay_pag + ;
 #pragma link C++ class AtPUMAGenerator + ;
+#pragma link C++ class AtPiGunGenerator + ;
 
 #endif

@@ -309,7 +309,14 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
       // The digi→lab Z conversion is applied after this block.
       track->ResetHitClusterArray();
       AtTools::AtTrackTransformer transformer;
-      transformer.ClusterizeSmooth3D(*track, radius, distance);
+      if (fUseArcWalk) {
+         // Geometry-based arc ordering, gap-immune. Target = fTargetClusters
+         // when set (PUMA path); otherwise fall back to the ArcWalk default.
+         const int target = (fTargetClusters > 0) ? fTargetClusters : 25;
+         transformer.ClusterizeArcWalk(*track, target, fArcWalkMinHits, fArcWalkKNN);
+      } else {
+         transformer.ClusterizeSmooth3D(*track, radius, distance);
+      }
 
       // Re-order clusters along the track
       // (simplified: just use the existing cluster order from ClusterizeSmooth3D)
@@ -397,12 +404,85 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
    if (fMomentumSeed > 0)
       p_MeV = fMomentumSeed;
 
-   // If we converted to lab frame, the GeoTheta/Phi from pattern recognition
-   // are in the digi frame and no longer match the cluster positions.
-   // Re-derive the momentum direction from the first two clusters instead.
-   if (fZPadPlane > 0 && clusters->size() >= 2) {
-      auto dir = clusters->at(1).GetPosition() - clusters->at(0).GetPosition();
-      initialMom = p_MeV * dir.Unit();
+   // Override the GeoTheta/GeoPhi-derived direction when:
+   //   * fZPadPlane > 0 — lab-frame conversion makes the digi-frame Geo
+   //     angles inconsistent with the cluster positions (legacy 16C+p path),
+   //   * fUseClusterDirSeed — PRA's (arclength,z) line fit gives an
+   //     ambiguous-half-sphere theta (e.g. PUMA upward tracks see
+   //     GeoTheta=115° instead of 65°).
+   //
+   // Two-step seed for fUseClusterDirSeed (works for both PUMA's centred
+   // vertex and 16C+p's high-Z vertex):
+   //   1. Re-sort clusters by xy-distance from the beam axis (closest first)
+   //      so cluster[0] always sits at the vertex end of the track.
+   //   2. Initial direction = tangent to the PRA circle at cluster[0],
+   //      i.e. perpendicular to (cluster[0] − GeoCenter) in (x,y); the
+   //      tangent's sign is disambiguated by aligning with the cluster
+   //      chord (no reliance on PRA chargeSign whose B-frame convention
+   //      can be wrong). The z-slope of the chord sets the helix pitch.
+   //   This avoids the chord-vs-tangent bias on weakly-curved tracks
+   //   (e.g. high-momentum PUMA K+) that flipped K-vs-π mass ID.
+   if ((fZPadPlane > 0 || fUseClusterDirSeed) && clusters->size() >= 2) {
+      if (fUseClusterDirSeed) {
+         std::sort(clusters->begin(), clusters->end(),
+                   [](const AtHitCluster &a, const AtHitCluster &b) {
+                      const auto &pa = a.GetPosition();
+                      const auto &pb = b.GetPosition();
+                      return (pa.X() * pa.X() + pa.Y() * pa.Y())
+                           < (pb.X() * pb.X() + pb.Y() * pb.Y());
+                   });
+         initialPos = clusters->front().GetPosition();
+
+         const auto &p0 = clusters->at(0).GetPosition();
+         const auto &p1 = clusters->at(1).GetPosition();
+         const auto cen = track->GetGeoCenter();
+         const double R = track->GetGeoRadius();
+
+         double ux = p1.X() - p0.X();
+         double uy = p1.Y() - p0.Y();
+         double uz = p1.Z() - p0.Z();
+
+         // Use circle tangent for (x,y) direction when PRA gave a sane
+         // circle; fall back to the raw chord otherwise.
+         if (std::isfinite(R) && R > 0.5) {
+            const double rx = p0.X() - cen.first;
+            const double ry = p0.Y() - cen.second;
+            // Tangent candidate at p0: 90° CCW rotation of the radial.
+            double tx = -ry;
+            double ty = rx;
+            const double tn = std::sqrt(tx * tx + ty * ty);
+            if (tn > 0) {
+               tx /= tn;
+               ty /= tn;
+               // Disambiguate sign by aligning with chord direction.
+               const double chord_xy_along_t = (p1.X() - p0.X()) * tx
+                                             + (p1.Y() - p0.Y()) * ty;
+               if (chord_xy_along_t < 0) {
+                  tx = -tx;
+                  ty = -ty;
+               }
+               // 3D direction: tangent in xy, chord-derived slope in z.
+               const double a = std::abs(chord_xy_along_t);
+               const double b = uz;
+               const double norm3 = std::sqrt(a * a + b * b);
+               if (norm3 > 0) {
+                  ux = (a / norm3) * tx;
+                  uy = (a / norm3) * ty;
+                  uz = b / norm3;
+               }
+            }
+         }
+
+         const double mag = std::sqrt(ux * ux + uy * uy + uz * uz);
+         if (mag > 0)
+            initialMom = ROOT::Math::XYZVector(p_MeV * ux / mag,
+                                               p_MeV * uy / mag,
+                                               p_MeV * uz / mag);
+      } else {
+         // Legacy 16C+p path: raw chord direction.
+         auto dir = clusters->at(1).GetPosition() - clusters->at(0).GetPosition();
+         initialMom = p_MeV * dir.Unit();
+      }
    }
 
    // --- Iterative fitting ---
@@ -589,23 +669,64 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
             double pocaX = cx * f;
             double pocaY = cy * f;
 
-            // Arc length from first smoothed cluster (vx, vy) to POCA along
-            // the circle — pick the shorter wrap.
-            double phi1 = std::atan2(vy - cy, vx - cx);
+            // Use the raw hit closest to the beam axis as the back-extrap
+            // starting point, not the smoothed-state cluster centroid. The
+            // centroid sits ~half-cluster-spacing inside the track from the
+            // actual first physical hit; on upward-going tracks
+            // (vz_first_hit < vz_centroid) this introduces a positive Δz
+            // bias of size ~half_cluster · cot(θ). The first raw hit lies
+            // on the helix at its true xy/z position, so back-extrap from
+            // there along the same arc removes the bias.
+            double rxFirst = vx;
+            double ryFirst = vy;
+            double rzFirst = vz;
+            {
+               const auto &hits = track->GetHitArray();
+               double bestR2 = rxFirst * rxFirst + ryFirst * ryFirst;
+               for (const auto &hp : hits) {
+                  const auto &p = hp->GetPosition();
+                  double r2 = p.X() * p.X() + p.Y() * p.Y();
+                  if (r2 < bestR2) {
+                     bestR2 = r2;
+                     rxFirst = p.X();
+                     ryFirst = p.Y();
+                     rzFirst = p.Z();
+                  }
+               }
+            }
+
+            // Arc length from raw first hit to POCA along the PRA circle —
+            // pick the shorter wrap.
+            double phi1 = std::atan2(ryFirst - cy, rxFirst - cx);
             double phi0 = std::atan2(pocaY - cy, pocaX - cx);
             double dPhi = std::abs(phi1 - phi0);
             if (dPhi > M_PI) dPhi = 2 * M_PI - dPhi;
             double arc = R * dPhi;
+
+            // Optional: PRA circle is fit through hits only and typically
+            // does NOT pass through the actual beam-axis vertex (offset of
+            // a few mm in xy); the POCA-on-circle differs from origin by
+            // |dCenter − R|. Extending the arc by the chord from POCA to
+            // origin compensates for the corresponding cot(θ) z-bias.
+            double endX = pocaX;
+            double endY = pocaY;
+            if (fForceVertexOnBeamAxis) {
+               double chord = std::sqrt(pocaX * pocaX + pocaY * pocaY);
+               arc += chord;
+               endX = 0;
+               endY = 0;
+            }
             arc = std::min(arc, fBackExtrapMaxPath);
 
             // z propagation: helix pitch dz/d(arc_xy) = cot(θ); back-extrap
-            // along the helix reverses the sign.
+            // along the helix reverses the sign. θ is constant along the
+            // helix so the smoothed-state θ at first cluster is valid here.
             double sinTheta = std::max(std::sin(theta_s), 0.1);
             double cotTheta = std::cos(theta_s) / sinTheta;
 
-            vx = pocaX;
-            vy = pocaY;
-            vz = vz - arc * cotTheta;
+            vx = endX;
+            vy = endY;
+            vz = rzFirst - arc * cotTheta;
             pathLength = arc;
          } else {
             // Legacy linear extrapolation
@@ -619,6 +740,16 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
             vy -= dir.Y() * pathLength;
             vz -= dir.Z() * pathLength;
          }
+
+         // Subtract a hardwired digi-z offset if requested. The PSA z formula
+         // uses the pulse-peak time bucket without subtracting the
+         // peakingTime·vDrift delay that AtPulse added — for PUMA this is a
+         // constant +7.5 mm (~+8.6 mm with shape asymmetry) bias on every
+         // hit, which propagates straight through the back-extrap to the
+         // vertex. Default fVertexZBias_mm = 0 keeps existing experiments
+         // unaffected.
+         if (fVertexZBias_mm != 0.0)
+            vz -= fVertexZBias_mm;
 
          // Energy correction along the back-extrapolated path. Same in both
          // branches — uses the integrated arc/path length.

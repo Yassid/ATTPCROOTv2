@@ -28,7 +28,7 @@ BField:Double_t                4.0   # Tesla  (PUMA solenoid)
 TiltAng:Double_t               0.0   # Degrees
 TB0:Int_t                       98   # (deprecated)
 LorentzAngle:Double_t          0.0   # rad
-TBEntrance:Int_t                 0   # vertices are inside the volume — no beam entrance
+TBEntrance:Int_t                 0   # vertices are inside the volume — no beam entrance. Note: changing this is a no-op because AtPulse and AtPSA both use it and cancel; the +8.6 mm digi-z bias must be corrected post-fit via AtFitterUKF::SetVertexZBias().
 ZPadPlane:Double_t             0.0   # mm  (pad plane at z=0; drift_volume spans z=[0,+300])
 Density:Double_t             1.654   # mg/cm^3  (P10 @ 1 bar, 273 K)
 ThetaPad:Double_t              0.0   # no rotation (square pad map is axis-aligned)

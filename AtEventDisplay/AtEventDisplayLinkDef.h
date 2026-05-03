@@ -21,6 +21,7 @@
 #pragma link C++ class AtTabEnergyLoss + ;
 #pragma link C++ class AtTabFF + ;
 #pragma link C++ class AtTabBraggCurve + ;
+#pragma link C++ class AtTabFitted + ;
 
 #pragma link C++ class AtTabInfoBase - !;
 #pragma link C++ class AtTabInfo - !;

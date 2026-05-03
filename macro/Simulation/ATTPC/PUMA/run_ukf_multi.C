@@ -73,6 +73,14 @@ void run_ukf_multi(int nEvents = 50, TString tag = "")
       // ~6-cluster fit budget.
       ukf->SetTargetClusters(5);
       ukf->SetAdaptiveDistBounds(6.0, 18.0);
+      // PUMA's PRA acos(sign·|Y|) collapses upward- vs downward-going tracks
+      // into the same theta half-sphere — produces GeoTheta ≈ supplementary
+      // of the truth angle for ~half the tracks. Use the cluster-sequence
+      // derivative for direction seed instead (cluster ordering already
+      // encodes the forward direction unambiguously).
+      ukf->SetUseClusterDirSeed(true);
+      ukf->SetUseArcWalk(true);
+      ukf->SetVertexZBias(8.6);
       multi->AddHypothesis(std::move(ukf), names[i], signs[i]);
    }
 

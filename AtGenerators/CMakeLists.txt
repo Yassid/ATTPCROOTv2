@@ -29,6 +29,7 @@ AtTPCGammaDummyGenerator.cxx
 AtTPC20MgDecay.cxx
 AtTPC20MgDecay_pag.cxx
 AtPUMAGenerator.cxx
+AtPiGunGenerator.cxx
 
 )
 

@@ -85,6 +85,49 @@ public:
    /// planes (e.g. PUMA's annular ~2 mm inner ring) where the default kills
    /// too many short, dense tracks via DROP[few-clusters].
    void SetMinClusterSpacing(double mm) { fMinClusterSpacing = mm; }
+   /// Use the cluster-sequence derivative `clusters[1] - clusters[0]` as the
+   /// direction seed for the UKF state, instead of PRA's GeoTheta/GeoPhi.
+   /// Necessary for setups where PRA's (arclength,z) line fit ambiguates the
+   /// forward direction (e.g. PUMA where `acos(sign·|Y|)` returns the
+   /// supplementary angle for upward-going tracks). Default false preserves
+   /// the legacy 16C+p path. Independent from `fZPadPlane`, which has its
+   /// own cluster-derivative override active when set > 0.
+   void SetUseClusterDirSeed(bool use) { fUseClusterDirSeed = use; }
+   /// Switch the in-fitter re-clustering from `ClusterizeSmooth3D`
+   /// (Z-seeded, gap-sensitive) to `ClusterizeArcWalk` (kNN spanning-tree
+   /// arc ordering, geometry-based, gap-immune). Better for setups with
+   /// centered vertices and arbitrary track directions (e.g. PUMA), where
+   /// the highest-Z seed of Smooth3D lands at the wrong end of half the
+   /// tracks. The target cluster count is taken from `fTargetClusters` (or
+   /// the legacy 25 default if not set), `fArcWalkMinHits` is the floor on
+   /// hits-per-cluster, and `fArcWalkKNN` controls graph adjacency.
+   void SetUseArcWalk(bool use) { fUseArcWalk = use; }
+   /// Force the back-extrapolated vertex to land at xy = (0, 0) instead of
+   /// the POCA on the PRA circle. The PRA circle is fit through the hits
+   /// only and typically does NOT pass through the actual beam-axis
+   /// vertex (offset by a few mm), so the POCA-on-circle is a few mm off
+   /// from the true vertex xy and the corresponding arc-length shortfall
+   /// times cot(θ) shows up as a constant Δz bias (~+8 mm in PUMA).
+   /// Enable for setups where the vertex is known to lie on the beam axis
+   /// (e.g. PUMA's centered point source). 16C+p has vertex at high Z but
+   /// also xy ≈ (0,0), so this is in principle safe there too — but it's
+   /// kept as opt-in to avoid altering the calibrated 16C+p back-extrap
+   /// behaviour. Default false.
+   void SetForceVertexOnBeamAxis(bool force) { fForceVertexOnBeamAxis = force; }
+   /// Subtract a constant offset (mm) from the back-extrapolated vertex z.
+   /// Compensates a hardwired +peakingTime·vDrift bias in `AtPSA::CalculateZGeo`
+   /// (the formula uses the pulse-peak time bucket but doesn't subtract the
+   /// shaping-time delay that AtPulse added — these only cancel through
+   /// `TBEntrance` in setups where the par file is calibrated for it).
+   /// For PUMA: peakingTime=500 ns, vDrift=1.5 cm/μs ⇒ ~7.5 mm; an extra
+   /// ~1 mm comes from pulse-shape asymmetry (measured constant +8.6 mm
+   /// digi-vs-MC z offset across the full drift volume). Default 0.
+   void SetVertexZBias(double mm) { fVertexZBias_mm = mm; }
+   void SetArcWalkParams(int minHitsPerCluster, int kNN)
+   {
+      fArcWalkMinHits = minHitsPerCluster;
+      fArcWalkKNN = kNN;
+   }
    /// Override the default adaptive-clustering parameters (radius/distance, mm)
    /// passed to ClusterizeSmooth3D. Negative values keep the built-in
    /// energy-dependent defaults (25/15 below 3 MeV, 20/15 above), which were
@@ -175,6 +218,12 @@ private:
    double fAdaptiveDistMin{4.0};
    double fAdaptiveDistMax{20.0};
    double fMinClusterSpacing{3.0}; // Minimum distance between clusters (mm)
+   bool fUseClusterDirSeed{false}; // Override PRA Geo direction with cluster derivative
+   bool fUseArcWalk{false};        // Use ClusterizeArcWalk instead of ClusterizeSmooth3D
+   bool fForceVertexOnBeamAxis{false}; // Extrapolate to xy=(0,0), not POCA on PRA circle
+   double fVertexZBias_mm{0.0};        // Subtract from final initialPositionXtr.Z()
+   int fArcWalkMinHits{3};
+   int fArcWalkKNN{10};
    double fMinLabTheta{10.0};      // Minimum lab angle (degrees) — skip beam-like tracks
    int fNIterations{1};            // Number of fit iterations (1=single pass)
    bool fAdaptiveClustering{true}; // Re-cluster based on Brho momentum estimate
