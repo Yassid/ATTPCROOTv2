@@ -202,15 +202,29 @@ private:
       }
 
       pt->AddText(" ");
-      pt->AddText("--- UKF fits ---");
+      pt->AddText("--- UKF fits  (KE,p before / after back-extrap) ---");
       if (te) {
          const auto &fits = te->GetFittedTracks();
+         const double m_per_amu = 0.9314940954 * 1000.0; // MeV/c²
          for (size_t i = 0; i < fits.size() && i < 6; ++i) {
             const auto &ft = *fits[i];
-            const auto &kin = ft.GetKinematics();
+            const auto &kin = ft.GetKinematics();          // at vertex (post-extrap)
             const auto &pi = ft.GetParticleInfo();
-            pt->AddText(Form("  pdg=%-4s  KE=%.1f MeV  theta=%.1f  phi=%.1f",
-                             pi.idPDG.Data(), kin.kineticEnergy,
+            double m_MeV = pi.mass * m_per_amu;
+            // KE/p before back-extrap (at first cluster) come from KinematicsXtr;
+            // after back-extrap (at vertex) come from Kinematics.
+            double KE_post = kin.kineticEnergy;
+            double KE_pre  = KE_post;
+            try {
+               const auto &kinXtr = ft.GetKinematicsXtr();
+               KE_pre = kinXtr.kineticEnergy;
+            } catch (...) { /* old file w/o KinematicsXtr — leave KE_pre = KE_post */ }
+            double p_pre  = std::sqrt(KE_pre  * (KE_pre  + 2 * m_MeV));
+            double p_post = std::sqrt(KE_post * (KE_post + 2 * m_MeV));
+            pt->AddText(Form("  pdg=%-4s  KE %.1f -> %.1f MeV  p %.1f -> %.1f MeV/c  th=%.1f  ph=%.1f",
+                             pi.idPDG.Data(),
+                             KE_pre, KE_post,
+                             p_pre, p_post,
                              kin.theta * 180.0 / TMath::Pi(),
                              kin.phi * 180.0 / TMath::Pi()));
          }
@@ -219,7 +233,12 @@ private:
       gPad->Modified();
       gPad->Update();
 
+      // ROOT canvas needs Modified() *before* Update() to register that
+      // children pads were redrawn — otherwise Eve/X11 can drop the second
+      // navigation in a row and leave the previous event's image on screen.
+      fCanvas->Modified();
       fCanvas->Update();
+      gSystem->ProcessEvents();
    }
 
    void DrawProjection(int padNum, int proj, int event,

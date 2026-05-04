@@ -624,6 +624,7 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
    // Build vertex kinematics from the first smoothed state.
    // smoothedStates[0] is at the first cluster, not the true vertex.
    double vx = 0, vy = 0, vz = 0, p_s = p_MeV, theta_s = 0, phi_s = 0;
+   double p_first_cluster_MeV = p_MeV; // pre-back-extrap (smoothed state at first cluster)
    if (fitConverged && !smoothedStates.empty()) {
       const auto &s0 = smoothedStates[0];
       vx = s0[0];
@@ -632,6 +633,7 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
       p_s = s0[3];
       theta_s = s0[4];
       phi_s = s0[5];
+      p_first_cluster_MeV = p_s; // capture before back-extrap mutates p_s
 
       // The UKF now operates in lab frame (Z_lab = fZPadPlane - Z_digi), so theta/phi
       // from the smoothed state are already in the correct physics frame.
@@ -765,13 +767,22 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
    }
 
    double KE = std::sqrt(p_s * p_s + fMass_MeV * fMass_MeV) - fMass_MeV;
+   double KE_first_cluster = std::sqrt(p_first_cluster_MeV * p_first_cluster_MeV
+                                       + fMass_MeV * fMass_MeV) - fMass_MeV;
 
    // --- 7. Build AtFittedTrack ---
    // Use a unique_ptr internally so that any exception thrown by the setters below does not leak.
    auto fittedTrackOwner = std::make_unique<AtFittedTrack>();
    auto *fittedTrack = fittedTrackOwner.get();
    fittedTrack->SetTrackID(track->GetTrackID());
+   // Convention here: Kinematics holds the AT-VERTEX (post back-extrapolation)
+   // KE — backward-compatible with all existing analysis macros that read
+   // `kin.kineticEnergy`. KinematicsXtr holds the AT-FIRST-CLUSTER (pre
+   // back-extrap) KE so consumers (e.g. pi_inspect) can show both side by
+   // side. θ/φ are the same in both since the smoothed state's angles are
+   // at the first cluster and we don't update them during back-extrap.
    fittedTrack->SetKinematics(KE, theta_s, phi_s);
+   fittedTrack->SetKinematicsXtr(KE_first_cluster, theta_s, phi_s);
    fittedTrack->SetVertex(ROOT::Math::XYZVector(vx, vy, vz));
 
    int Z = static_cast<int>(std::round(fCharge / kElectronCharge));
