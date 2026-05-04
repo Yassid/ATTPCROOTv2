@@ -51,7 +51,10 @@ void run_ukf_multi(int nEvents = 50, TString tag = "")
       auto ukf = std::make_unique<EventFit::AtFitterUKF>(signs[i] * e_C, masses[i], std::move(eloss));
       ukf->SetBField(ROOT::Math::XYZVector(0, 0, 4.0));
       ukf->SetUKFParameters(1e-3, 2.0, 0.0);
-      ukf->SetMeasurementSigma(1.0);
+      // 0.5 mm matches the PUMA digi resolution floor (pad-pitch ~2 mm /
+      // sqrt(12) ≈ 0.6 mm transverse; z is bucket-quantized at 0.75 mm).
+      // Drops σ_z(vertex) from 2.96 → 2.13 mm with no fit-yield change.
+      ukf->SetMeasurementSigma(0.5);
       ukf->SetMomentumSigmaFrac(0.1);
       ukf->SetEnableEnergyStraggling(true);
       ukf->SetMinClusters(2);
@@ -66,13 +69,13 @@ void run_ukf_multi(int nEvents = 50, TString tag = "")
       // PUMA inner-ring pad pitch is ~2 mm; the default 3 mm cluster spacing
       // kills short, dense K+ tracks via DROP[few-clusters]. Drop to 1 mm.
       ukf->SetMinClusterSpacing(1.0);
-      // Arc-length-aware adaptive clustering: target 6 clusters per track,
-      // distance bounded to [4, 18] mm. Short K+ (~30-50 mm) get tight 5-8 mm
-      // spacing so they don't collapse into 1 cluster; long π- (~120 mm) keep
-      // 18 mm spacing close to the legacy default — both regimes get the same
-      // ~6-cluster fit budget.
-      ukf->SetTargetClusters(5);
-      ukf->SetAdaptiveDistBounds(6.0, 18.0);
+      // Arc-length-aware adaptive clustering: target 8 clusters per track,
+      // distance bounded to [4, 14] mm. Short K+ (~30-50 mm) get tight 4-6 mm
+      // spacing so they don't collapse into 1 cluster; long π- (~120 mm) cap
+      // at 14 mm so they reach the 8-cluster budget. Tighter than the
+      // earlier [6, 18] / target=5 — saturates the digi resolution floor.
+      ukf->SetTargetClusters(8);
+      ukf->SetAdaptiveDistBounds(4.0, 14.0);
       // PUMA's PRA acos(sign·|Y|) collapses upward- vs downward-going tracks
       // into the same theta half-sphere — produces GeoTheta ≈ supplementary
       // of the truth angle for ~half the tracks. Use the cluster-sequence

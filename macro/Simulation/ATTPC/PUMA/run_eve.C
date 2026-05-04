@@ -1,7 +1,6 @@
 /// @file run_eve.C
-/// @brief Visualize the digitized PUMA events with the AtViewerManager event
-/// display. Reads ./data/output_digi.root and the PUMA geometry. Hits and
-/// PRA tracks are shown by AtTabMain.
+/// @brief Visualize the digitized PUMA events with the AtViewerManager / AtTabMain
+/// event display. Reads ./data/output_digi.root and the PUMA geometry.
 ///
 /// Run interactively (needs X / OpenGL):
 ///   root -l run_eve.C
