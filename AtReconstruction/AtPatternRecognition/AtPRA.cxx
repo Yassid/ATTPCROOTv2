@@ -294,20 +294,48 @@ void AtPATTERN::AtPRA::SelectAndMergeTracks(std::vector<AtTrack> &tracks, double
    if (tracks.empty())
       return;
 
-   // Helper: get the endpoint of a track closest to beam axis at highest Z_digi (vertex end)
+   // Helper: get the vertex end of a track (cluster closest to beam axis in xy).
+   // Direction-agnostic: works for tracks moving toward the pad plane (forward,
+   // theta_lab<90°, where vertex side has highest Z_digi) AND tracks moving
+   // away from it (backward, theta_lab>90°, where vertex side has lowest Z_digi).
+   // The vertex is by construction near the beam axis, so xy-distance is the
+   // robust geometric anchor; relying on Z order silently mislabels backward
+   // tracks because OrderClustersAlongTrack uses highest-Z_digi as seed.
    auto getVertexEnd = [](AtTrack &tr) -> XYZPoint {
       auto *cl = tr.GetHitClusterArray();
       if (cl->empty())
          return XYZPoint(0, 0, 0);
-      return cl->front().GetPosition();
+      int bestIdx = 0;
+      double bestR2 = 1e30;
+      for (size_t i = 0; i < cl->size(); ++i) {
+         const auto &p = cl->at(i).GetPosition();
+         double r2 = p.X() * p.X() + p.Y() * p.Y();
+         if (r2 < bestR2) {
+            bestR2 = r2;
+            bestIdx = i;
+         }
+      }
+      return cl->at(bestIdx).GetPosition();
    };
 
-   // Helper: get the far end of a track (Bragg peak end)
+   // Helper: get the far end of a track (Bragg peak / track end). Use the
+   // cluster farthest from the beam axis in xy — the geometric counterpart to
+   // getVertexEnd above, again direction-agnostic.
    auto getFarEnd = [](AtTrack &tr) -> XYZPoint {
       auto *cl = tr.GetHitClusterArray();
       if (cl->empty())
          return XYZPoint(0, 0, 0);
-      return cl->back().GetPosition();
+      int bestIdx = 0;
+      double bestR2 = -1.0;
+      for (size_t i = 0; i < cl->size(); ++i) {
+         const auto &p = cl->at(i).GetPosition();
+         double r2 = p.X() * p.X() + p.Y() * p.Y();
+         if (r2 > bestR2) {
+            bestR2 = r2;
+            bestIdx = i;
+         }
+      }
+      return cl->at(bestIdx).GetPosition();
    };
 
    // Helper: XY distance to beam axis
