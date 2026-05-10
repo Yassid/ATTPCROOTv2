@@ -74,12 +74,26 @@ void run_ukf_only(int nEvents = 10000, int pionSign = +1)
    ukfFitter->SetMeasurementSigma(1.0);
    ukfFitter->SetMomentumSigmaFrac(0.1);
    ukfFitter->SetEnableEnergyStraggling(true);
+   ukfFitter->SetEnableEnergyStraggling(true);
    ukfFitter->SetMinClusters(5);
    ukfFitter->SetNIterations(3);
    ukfFitter->SetZPadPlane(1000.0);
    // HELIOS-style: vertex deep inside the TPC, first cluster can be ~80-150 mm
    // away — open up the back-extrapolation cap (default 50 mm).
    ukfFitter->SetBackExtrapMaxPath(250.0);
+   // Circle-tangent seed (vs legacy chord seed). The chord seed is wrong for
+   // backward (theta_lab>90°) tracks because seed=highest-Z_digi cluster is
+   // the track *end*, so the chord points opposite to motion. The tangent
+   // logic sorts clusters by xy-distance from the beam axis and uses the
+   // PRA circle tangent — direction-agnostic and works isotropically.
+   ukfFitter->SetUseClusterDirSeed(true);
+   // Arc-walk re-clustering: geometry-based, gap-immune, targets a fixed
+   // number of well-placed clusters along the helix arc. Better than
+   // Smooth3D's distance-based clustering for long MIP tracks where pad
+   // gaps and diffusion can leave Smooth3D with under/oversized clusters.
+   ukfFitter->SetUseArcWalk(true);
+   ukfFitter->SetTargetClusters(15);
+   ukfFitter->SetAdaptiveDistBounds(4.0, 14.0);
 
    AtFitterTask *fitterTask = new AtFitterTask(std::move(ukfFitter));
    fitterTask->SetInputBranch("AtPatternEvent");

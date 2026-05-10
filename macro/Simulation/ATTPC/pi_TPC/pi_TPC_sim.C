@@ -53,7 +53,8 @@ void pi_TPC_sim(Int_t nEvents = 1000, Int_t pionSign = +1, Double_t keMin_MeV = 
    // (R=25 cm tube, length 100 cm along Z -> centre at z=50 cm).
    boxGen->SetXYZ(0., 0., 50.);
 
-   boxGen->SetThetaRange(45., 45.);  // fixed polar angle, deg
+   boxGen->SetThetaRange(5., 175.);   // isotropic (avoid pathological axial tracks)
+   boxGen->SetCosTheta();             // sample uniformly in cos(theta)
    boxGen->SetPhiRange(0., 360.);
 
    // FairBoxGenerator::SetEkinRange takes GeV
