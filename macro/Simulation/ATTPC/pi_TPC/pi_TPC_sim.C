@@ -11,12 +11,12 @@
 ///      root -b -q 'pi_TPC_sim.C(1000, -1)'   for pi-
 
 void pi_TPC_sim(Int_t nEvents = 1000, Int_t pionSign = +1, Double_t keMin_MeV = 5.0, Double_t keMax_MeV = 50.0,
-                TString mcEngine = "TGeant4")
+                TString mcEngine = "TGeant4", Double_t Bz_T = 2.0, const char *outSuffix = "")
 {
    TString dir = getenv("VMCWORKDIR");
 
-   TString outFile = "./data/attpcsim.root";
-   TString parFile = "./data/attpcpar.root";
+   TString outFile = TString("./data/attpcsim") + outSuffix + ".root";
+   TString parFile = TString("./data/attpcpar") + outSuffix + ".root";
 
    TStopwatch timer;
    timer.Start();
@@ -37,7 +37,7 @@ void pi_TPC_sim(Int_t nEvents = 1000, Int_t pionSign = +1, Double_t keMin_MeV = 
    run->AddModule(ATTPC);
 
    AtConstField *fMagField = new AtConstField();
-   fMagField->SetField(0., 0., 5.0);                      // kG  (0.5 T)
+   fMagField->SetField(0., 0., Bz_T * 10.);               // kG (AtConstField wants kG)
    fMagField->SetFieldRegion(-50, 50, -50, 50, -10, 230); // cm
    run->SetField(fMagField);
 

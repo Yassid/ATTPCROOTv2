@@ -13,7 +13,8 @@
 
 void run_ukf_truthpra(int nEvents = 2000, int pionSign = +1,
                       double momSigmaFrac = 0.1, int nIterations = 3,
-                      const char *outSuffix = "", double eLossScale = 1.0)
+                      const char *outSuffix = "", double eLossScale = 1.0,
+                      double Bz_T = 2.0, const char *inSuffix = "")
 {
    FairLogger::GetLogger()->SetLogScreenLevel("WARNING");
 
@@ -23,7 +24,6 @@ void run_ukf_truthpra(int nEvents = 2000, int pionSign = +1,
    const double u_MeV = 931.49410372;
    const double mass_pi_amu = mass_pi_MeV / u_MeV;
    const double charge = (pionSign >= 0) ? +e_C : -e_C;
-   const double Bz_T = 0.5;
    const double zPadPlane_mm = 1000.0;
 
    // ---- UKF setup (mirror run_ukf_only.C) -----------------------------
@@ -53,8 +53,10 @@ void run_ukf_truthpra(int nEvents = 2000, int pionSign = +1,
    ukf.SetUseClusterDirSeed(true);
 
    // ---- I/O -----------------------------------------------------------
-   TFile fSim("data/attpcsim.root");
-   TFile fDigi("data/output_digi.root");
+   TString simName = TString("data/attpcsim") + inSuffix + ".root";
+   TString digiName = TString("data/output_digi") + inSuffix + ".root";
+   TFile fSim(simName);
+   TFile fDigi(digiName);
    auto *tSim = (TTree *)fSim.Get("cbmsim");
    auto *tDigi = (TTree *)fDigi.Get("cbmsim");
 

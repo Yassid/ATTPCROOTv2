@@ -25,7 +25,7 @@ void run_ukf_display(int startEvent = 1)
    display->LoadFiles("data/output_digi.root", "data/output_ukf_only.root", "data/attpcsim.root");
    // Per-setup defaults so the "Fit" button uses sensible values out of the box.
    display->SetParticle(3);          // 3 = Pi+
-   display->SetBField(0.5);          // T  (matches pi_TPC_sim.C: 5 kG)
+   display->SetBField(2.0);          // T  (matches pi_TPC_sim.C default)
    display->SetGasDensity(1.654e-3); // g/cm^3  (P10 at 1 bar, 273 K)
    display->GotoEvent(startEvent);
 }

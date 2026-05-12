@@ -15,14 +15,15 @@ void run_digi_attpc(int nEvents = 10000, float tCluster = 8.0,
                     bool useDriftAwareWeights = false,
                     const char *outSuffix = "",
                     bool preclusterRadiusFit = true,
-                    double preclusterBin_mm = 6.0)
+                    double preclusterBin_mm = 6.0,
+                    const char *inSuffix = "")
 {
    TString inOutDir = "./data/";
    TString outputFile = inOutDir + "output_digi" + outSuffix + ".root";
    TString paramFile = "ATTPC.e20009_sim.par";
 
    TString dir = getenv("VMCWORKDIR");
-   TString mcFile = inOutDir + "attpcsim.root";
+   TString mcFile = inOutDir + "attpcsim" + inSuffix + ".root";
 
    TString digiParFile = dir + "/parameters/" + paramFile;
 

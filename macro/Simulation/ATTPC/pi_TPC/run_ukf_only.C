@@ -20,7 +20,7 @@
 void run_ukf_only(int nEvents = 10000, int pionSign = +1,
                   double momSigmaFrac = 0.1, int nIterations = 3,
                   const char *outSuffix = "", double eLossScale = 1.0,
-                  const char *inSuffix = "")
+                  const char *inSuffix = "", double Bz_T = 2.0)
 {
    // INFO captures the per-track UKF rejection reasons (the four
    // "AtFitterUKF: ... Skipping." messages, see below).
@@ -73,7 +73,7 @@ void run_ukf_only(int nEvents = 10000, int pionSign = +1,
    eloss->SetMaterial(mat);
 
    auto ukfFitter = std::make_unique<EventFit::AtFitterUKF>(charge, mass_pi_MeV, std::move(eloss));
-   ukfFitter->SetBField(ROOT::Math::XYZVector(0, 0, 0.5)); // match pi_TPC_sim.C (5 kG)
+   ukfFitter->SetBField(ROOT::Math::XYZVector(0, 0, Bz_T)); // match pi_TPC_sim.C
    ukfFitter->SetUKFParameters(1e-3, 2.0, 0.0);
    ukfFitter->SetMeasurementSigma(1.0);
    ukfFitter->SetMomentumSigmaFrac(momSigmaFrac);
