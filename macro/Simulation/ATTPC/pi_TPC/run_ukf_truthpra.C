@@ -11,7 +11,9 @@
 ///
 /// Run: root -b -q 'run_ukf_truthpra.C(2000, +1)'
 
-void run_ukf_truthpra(int nEvents = 2000, int pionSign = +1)
+void run_ukf_truthpra(int nEvents = 2000, int pionSign = +1,
+                      double momSigmaFrac = 0.1, int nIterations = 3,
+                      const char *outSuffix = "", double eLossScale = 1.0)
 {
    FairLogger::GetLogger()->SetLogScreenLevel("WARNING");
 
@@ -37,10 +39,11 @@ void run_ukf_truthpra(int nEvents = 2000, int pionSign = +1)
    ukf.SetBField(ROOT::Math::XYZVector(0, 0, Bz_T));
    ukf.SetUKFParameters(1e-3, 2.0, 0.0);
    ukf.SetMeasurementSigma(1.0);
-   ukf.SetMomentumSigmaFrac(0.1);
+   ukf.SetMomentumSigmaFrac(momSigmaFrac);
    ukf.SetEnableEnergyStraggling(true);
+   ukf.SetELossScaleFactor(eLossScale);
    ukf.SetMinClusters(5);
-   ukf.SetNIterations(3);
+   ukf.SetNIterations(nIterations);
    ukf.SetZPadPlane(zPadPlane_mm);
    ukf.SetBackExtrapMaxPath(250.0);
    // Use circle-tangent seed (sort clusters by xy distance from beam axis)
@@ -62,7 +65,8 @@ void run_ukf_truthpra(int nEvents = 2000, int pionSign = +1)
    tSim->SetBranchAddress("AtTpcPoint", &pts);
    tDigi->SetBranchAddress("AtEventH", &evArr);
 
-   TFile fOut("data/output_ukf_truthpra.root", "RECREATE");
+   TString outName = TString("data/output_ukf_truthpra") + outSuffix + ".root";
+   TFile fOut(outName, "RECREATE");
    TTree tOut("cbmsim", "truth-PRA UKF output");
    TClonesArray teOutArr("AtTrackingEvent", 1);
    TClonesArray fmOutArr("AtFitMetadata", 1);
@@ -177,5 +181,5 @@ void run_ukf_truthpra(int nEvents = 2000, int pionSign = +1)
    std::cout << "Skipped (no hits): " << nSkipNoHits << "\n";
    std::cout << "Tracks built:      " << nBuilt << "\n";
    std::cout << "Tracks fitted:     " << nFit << "\n";
-   std::cout << "Wrote: data/output_ukf_truthpra.root\n";
+   std::cout << "Wrote: " << outName << "\n";
 }

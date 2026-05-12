@@ -97,6 +97,7 @@ void AtFitterUKF::InitUKF()
    fUKF = std::make_unique<kf::TrackFitterUKF>(std::move(propagator), std::move(stepper));
    fUKF->setParameters(static_cast<float>(fAlpha), static_cast<float>(fBeta), static_cast<float>(fKappa));
    fUKF->fEnableEnStraggling = fEnableEnStraggling;
+   fUKF->fELossScaleFactor = fELossScaleFactor;
 }
 
 double AtFitterUKF::GetBrho(AtTrack *track) const

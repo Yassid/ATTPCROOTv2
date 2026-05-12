@@ -56,6 +56,10 @@ public:
    /// Enable energy straggling in the propagator (default false).
    /// Only enable if the ELoss model supports GetRangeVariance() over the full energy range.
    void SetEnableEnergyStraggling(bool enable) { fEnableEnStraggling = enable; }
+   /// Scale the forward-pass dE/dx in the propagator's process model
+   /// (default 1.0 = no scaling). Diagnostic knob to test whether energy-loss
+   /// model bias is responsible for residual KE bias; values <1 reduce dE/dx.
+   void SetELossScaleFactor(double f) { fELossScaleFactor = f; }
    /// Set fractional momentum uncertainty for the initial covariance (default 0.1).
    void SetMomentumSigmaFrac(double frac) { fMomSigmaFrac = frac; }
    /// Minimum number of clusters required to attempt a fit (default 3).
@@ -206,6 +210,7 @@ private:
    double fMomSigmaFrac{0.1};
    int fMinClusters{3};
    bool fEnableEnStraggling{true};
+   double fELossScaleFactor{1.0};
    bool fUsePerClusterCov{false};
    double fZPadPlane{-1};      // If >0, convert digi→lab: Z_lab = fZPadPlane - Z_digi
    int fMaxFitTime_ms{2000};   // Maximum time per track fit in milliseconds

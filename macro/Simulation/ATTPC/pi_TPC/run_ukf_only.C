@@ -15,16 +15,20 @@
 ///
 /// Run: root -b -q 'run_ukf_only.C(10000, +1)'   for pi+
 ///      root -b -q 'run_ukf_only.C(10000, -1)'   for pi-
+///      root -b -q 'run_ukf_only.C(2000, +1, 0.3, 3, "_mom03")'  override
 
-void run_ukf_only(int nEvents = 10000, int pionSign = +1)
+void run_ukf_only(int nEvents = 10000, int pionSign = +1,
+                  double momSigmaFrac = 0.1, int nIterations = 3,
+                  const char *outSuffix = "", double eLossScale = 1.0,
+                  const char *inSuffix = "")
 {
    // INFO captures the per-track UKF rejection reasons (the four
    // "AtFitterUKF: ... Skipping." messages, see below).
    FairLogger::GetLogger()->SetLogScreenLevel("INFO");
 
    TString inOutDir = "./data/";
-   TString inputFile = inOutDir + "output_digi.root";
-   TString outputFile = inOutDir + "output_ukf_only.root";
+   TString inputFile = inOutDir + "output_digi" + inSuffix + ".root";
+   TString outputFile = inOutDir + "output_ukf_only" + outSuffix + ".root";
    TString paramFile = "ATTPC.e20009_sim.par";
 
    TString dir = getenv("VMCWORKDIR");
@@ -72,11 +76,11 @@ void run_ukf_only(int nEvents = 10000, int pionSign = +1)
    ukfFitter->SetBField(ROOT::Math::XYZVector(0, 0, 0.5)); // match pi_TPC_sim.C (5 kG)
    ukfFitter->SetUKFParameters(1e-3, 2.0, 0.0);
    ukfFitter->SetMeasurementSigma(1.0);
-   ukfFitter->SetMomentumSigmaFrac(0.1);
+   ukfFitter->SetMomentumSigmaFrac(momSigmaFrac);
    ukfFitter->SetEnableEnergyStraggling(true);
-   ukfFitter->SetEnableEnergyStraggling(true);
+   ukfFitter->SetELossScaleFactor(eLossScale);
    ukfFitter->SetMinClusters(5);
-   ukfFitter->SetNIterations(3);
+   ukfFitter->SetNIterations(nIterations);
    ukfFitter->SetZPadPlane(1000.0);
    // HELIOS-style: vertex deep inside the TPC, first cluster can be ~80-150 mm
    // away — open up the back-extrapolation cap (default 50 mm).
