@@ -24,6 +24,7 @@
 #include <cstddef>   // for size_t
 #include <exception> // for exception
 #include <iostream>  // for operator<<, basic_ostream
+#include <map>       // for std::map (pre-cluster grid)
 #include <memory>    // for shared_ptr, __shared_p...
 ClassImp(AtPATTERN::AtPRA);
 
@@ -72,9 +73,102 @@ std::cout << " Processing track with " << track.GetHitArray().size() << " points
 
       auto &hits = circularTracks.at(0).GetHitArray();
 
-      // Fit circle on the selected subset
+      // Fit circle on the selected subset.
+      //
+      // Two passes when fPreclusterRadiusFit is on:
+      //   (1) First-pass circle fit on raw hits to define an arc.
+      //   (2) Sort hits by their polar angle around the fitted center,
+      //       group sequential hits into arc-bins of width fPreclusterBin_mm
+      //       (interpreted as arc length R·Δφ), take charge-weighted
+      //       centroid per bin → re-fit on centroids.
+      //
+      // The arc-aligned binning follows the track shape so it has no
+      // grid-edge bias (unlike fixed spatial-grid binning). It averages
+      // out the per-pad ±pad-pitch jitter from AtPSAMax (each fired pad →
+      // hit at pad center, so a track crossing 2-3 adjacent pads produces
+      // 2-3 hits jittered by ~pad_pitch even when the underlying segment
+      // is a single point).
       auto circle = std::make_unique<AtPatterns::AtPatternCircle2D>();
+
+      // --- First-pass fit (always on raw hits; cheap and gives the arc). ---
       circle->AtPattern::FitPattern(hitsForFit);
+
+      // --- Optional second pass: arc-aligned centroid refit. ---
+      if (fPreclusterRadiusFit && fPreclusterBin_mm > 0 && hitsForFit.size() >= 6) {
+         double cx0 = circle->GetCenter().X();
+         double cy0 = circle->GetCenter().Y();
+         double R0 = circle->GetRadius();
+         if (R0 > 1.0 && std::isfinite(cx0) && std::isfinite(cy0)) {
+            // Per-hit polar angle around the fitted center.
+            struct HP { double phi; double x; double y; double z; double q; };
+            std::vector<HP> hp;
+            hp.reserve(hitsForFit.size());
+            for (const auto *h : hitsForFit) {
+               const auto &p = h->GetPosition();
+               double phi = std::atan2(p.Y() - cy0, p.X() - cx0);
+               hp.push_back({phi, p.X(), p.Y(), p.Z(), std::max(1.0, h->GetCharge())});
+            }
+            std::sort(hp.begin(), hp.end(),
+                      [](const HP &a, const HP &b) { return a.phi < b.phi; });
+
+            // Arc-bin width in φ. For pi-TPC at R≈330 mm, 6 mm arc → ~0.018 rad.
+            const double dphi_bin = fPreclusterBin_mm / R0;
+            std::vector<AtPatterns::AtPattern::XYZPoint> pts;
+            std::vector<double> weights;
+            pts.reserve(hp.size());
+            weights.reserve(hp.size());
+
+            double sx = 0, sy = 0, sz = 0, sw = 0;
+            double phi_anchor = hp.front().phi;
+            int nInBin = 0;
+            auto flush = [&]() {
+               if (sw <= 0 || nInBin == 0) return;
+               double cx = sx / sw, cy = sy / sw, cz = sz / sw;
+               pts.emplace_back(cx, cy, cz);
+               if (fUseDriftAwareWeights) {
+                  const double s2 = fTrackTransformer->GetSigmaXY2(cz);
+                  // 1/N reduction in variance from averaging (assuming Gaussian).
+                  weights.push_back(s2 > 0 ? nInBin / s2 : nInBin);
+               } else {
+                  weights.push_back(nInBin); // bin count = effective weight
+               }
+               sx = sy = sz = sw = 0;
+               nInBin = 0;
+            };
+            for (const auto &h : hp) {
+               if (h.phi - phi_anchor > dphi_bin) {
+                  flush();
+                  phi_anchor = h.phi;
+               }
+               sx += h.x * h.q;
+               sy += h.y * h.q;
+               sz += h.z * h.q;
+               sw += h.q;
+               ++nInBin;
+            }
+            flush();
+
+            if (pts.size() >= 3) {
+               // Re-fit on arc-bin centroids.
+               circle->FitPatternWeighted(pts, weights);
+            }
+         }
+      } else if (fUseDriftAwareWeights) {
+         // No pre-clustering, but per-raw-hit drift-aware weighting requested.
+         std::vector<AtPatterns::AtPattern::XYZPoint> pts;
+         std::vector<double> weights;
+         pts.reserve(hitsForFit.size());
+         weights.reserve(hitsForFit.size());
+         for (const auto *h : hitsForFit) {
+            const auto &pos = h->GetPosition();
+            const double s2 = fTrackTransformer->GetSigmaXY2(pos.Z());
+            if (s2 <= 0) continue;
+            pts.push_back(pos);
+            weights.push_back(1.0 / s2);
+         }
+         if (pts.size() >= 3)
+            circle->FitPatternWeighted(pts, weights);
+      }
 
       auto center = circle->GetCenter();
       auto radius = circle->GetRadius();

@@ -68,6 +68,12 @@ private:
    int fMinHitsPerCluster{3};
    int fArcWalkKNN{10};
 
+   // Drift-aware weighting for the circle radius fit (SetTrackInitialParameters)
+   bool fUseDriftAwareWeights{false};
+   double fPadResXYOverride{-1}; // mm, <0 keeps the auto-default
+   bool fPreclusterRadiusFit{false};
+   double fPreclusterBin_mm{3.0};
+
    // TC (fPRAlgorithm == 0) — primary/fragment heuristic switch (disable for annular geometries)
    bool fTCUseSelectAndMerge{true};
 
@@ -121,6 +127,21 @@ public:
    void SetMinHitsPerCluster(int n) { fMinHitsPerCluster = n; }
    /// Number of nearest neighbors for arc-walk kNN graph
    void SetArcWalkKNN(int k) { fArcWalkKNN = k; }
+
+   /// Weight the circle radius fit by 1/σ²_xy(z) using diffusion params
+   /// from AtDigiPar (padResXY² + 20·coefT·z/vDrift). Default false.
+   void SetUseDriftAwareWeights(bool use = true) { fUseDriftAwareWeights = use; }
+   /// Override the transverse pad position resolution (mm). Needed when the
+   /// pad geometry differs from the AT-TPC default (e.g. pi-TPC's 2 mm
+   /// square pads → padResXY = 2/√12 ≈ 0.58 mm; PUMA's annular ring varies).
+   /// Negative value (default) keeps the built-in AtTrackTransformer default
+   /// of 2.3 mm.
+   void SetPadResXY(double mm) { fPadResXYOverride = mm; }
+   /// Pre-cluster hits into a coarse 3D grid (charge-weighted centroids)
+   /// before the PRA circle fit. Mitigates per-pad ±pad-pitch jitter from
+   /// AtPSAMax in geometries with closely-spaced firing pads. Default false.
+   void SetPreclusterRadiusFit(bool use = true) { fPreclusterRadiusFit = use; }
+   void SetPreclusterBin(double mm) { fPreclusterBin_mm = mm; }
 
    /// TC (PRAlgorithm == 0): apply the AT-TPC primary/fragment heuristic. Disable for PUMA / annular geometries.
    void SetTCUseSelectAndMerge(bool use) { fTCUseSelectAndMerge = use; }

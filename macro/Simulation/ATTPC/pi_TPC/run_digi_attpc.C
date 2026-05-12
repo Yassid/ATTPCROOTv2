@@ -11,10 +11,14 @@
 
 bool reduceFunc(AtRawEvent *evt);
 
-void run_digi_attpc(int nEvents = 10000, float tCluster = 8.0)
+void run_digi_attpc(int nEvents = 10000, float tCluster = 8.0,
+                    bool useDriftAwareWeights = false,
+                    const char *outSuffix = "",
+                    bool preclusterRadiusFit = true,
+                    double preclusterBin_mm = 6.0)
 {
    TString inOutDir = "./data/";
-   TString outputFile = inOutDir + "output_digi.root";
+   TString outputFile = inOutDir + "output_digi" + outSuffix + ".root";
    TString paramFile = "ATTPC.e20009_sim.par";
 
    TString dir = getenv("VMCWORKDIR");
@@ -54,6 +58,13 @@ void run_digi_attpc(int nEvents = 10000, float tCluster = 8.0)
    AtPRAtask *praTask = new AtPRAtask();
    praTask->SetTcluster(tCluster);
    praTask->SetPersistence(kTRUE);
+   praTask->SetUseDriftAwareWeights(useDriftAwareWeights);
+   praTask->SetPreclusterRadiusFit(preclusterRadiusFit);
+   praTask->SetPreclusterBin(preclusterBin_mm);
+   // pi-TPC: 2 mm square pads ⇒ intrinsic xy resolution = 2/√12 ≈ 0.577 mm,
+   // much smaller than the AT-TPC default 2.3 mm; matters once the diffusion
+   // contribution becomes comparable.
+   praTask->SetPadResXY(2.0 / std::sqrt(12.0));
 
    fRun->AddTask(clusterizer);
    fRun->AddTask(pulse);

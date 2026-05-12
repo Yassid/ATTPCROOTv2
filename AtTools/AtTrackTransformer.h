@@ -22,6 +22,15 @@ public:
    /// @param padResXY Pad position resolution in X/Y [mm] (default: padSize/sqrt(12))
    void SetDiffusionParams(double coefT, double coefL, double driftVel, double tbTime, double padResXY = -1);
 
+   /// Per-hit transverse (xy) variance σ_xy²(z) in mm² for a hit at drift
+   /// distance z_mm: padResXY² + 20·coefT·z_mm/vDrift. Matches the model
+   /// used in BuildClusterFromHits and AtClusterize::getTransverseDiffusion.
+   double GetSigmaXY2(double z_mm) const
+   {
+      double varT = (z_mm > 0) ? 20.0 * fCoefT * z_mm / fDriftVel : 0.0;
+      return fPadResXY * fPadResXY + varT;
+   }
+
    void ClusterizeSmooth3D(AtTrack &track, Float_t radius, Float_t distance);
 
    /// @brief Group consecutive hits into clusters of fixed size along the track.

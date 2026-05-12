@@ -58,6 +58,11 @@ protected:
    int fMinHitsPerCluster{3};      //<! Minimum hits per cluster floor
    int fArcWalkKNN{10};            //<! Number of nearest neighbors for arc-walk kNN graph
 
+   bool fUseDriftAwareWeights{false}; //<! Weight circle fit by 1/σ²_xy(z) using SetDiffusionParams
+
+   bool fPreclusterRadiusFit{false}; //<! Pre-cluster hits into a coarse 3D grid before circle fit
+   double fPreclusterBin_mm{3.0};    //<! Bin size for pre-clustering (mm)
+
 public:
    virtual ~AtPRA() = default;
 
@@ -95,6 +100,20 @@ public:
    {
       fTrackTransformer->SetDiffusionParams(coefT, coefL, driftVel, tbTime, padResXY);
    }
+   /// Weight the circle fit (SetTrackInitialParameters) by 1/σ²_xy(z) using
+   /// the diffusion model set via SetDiffusionParams (padResXY² +
+   /// 20·coefT·z/vDrift). For pi-TPC MIPs at long drift (z>500 mm) transverse
+   /// diffusion is comparable to pad resolution, so uniformly-weighted Taubin
+   /// over-weights the noisy far-from-pad-plane hits. Default false preserves
+   /// legacy behaviour.
+   void SetUseDriftAwareWeights(bool use = true) { fUseDriftAwareWeights = use; }
+   /// Pre-cluster hits into a coarse 3D grid (charge-weighted centroids)
+   /// before the circle fit. Averages out the per-pad ±pad-pitch jitter from
+   /// AtPSAMax (which puts each hit at a pad center, so adjacent fired pads
+   /// produce hits that are ~pad_pitch apart even when the track segment
+   /// passes between them). Default false.
+   void SetPreclusterRadiusFit(bool use = true) { fPreclusterRadiusFit = use; }
+   void SetPreclusterBin(double mm) { fPreclusterBin_mm = mm; }
 
    virtual std::unique_ptr<AtPatternEvent> FindTracks(AtEvent &event) = 0;
 

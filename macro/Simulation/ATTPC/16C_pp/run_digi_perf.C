@@ -2,10 +2,13 @@
 /// the legacy 5 GB output_digi.root). Used to produce fresh PRA-fixed
 /// digi data for the make_performance.C summary.
 
-void run_digi_perf(int nEvents = 500, float tCluster = 8.0)
+void run_digi_perf(int nEvents = 500, float tCluster = 8.0,
+                   bool preclusterRadiusFit = false,
+                   double preclusterBin_mm = 6.0,
+                   const char *outSuffix = "")
 {
    TString inOutDir = "./data/";
-   TString outputFile = inOutDir + "output_digi_perf.root";
+   TString outputFile = inOutDir + "output_digi_perf" + outSuffix + ".root";
    TString scriptfile = "Lookup20150611.xml";
    TString paramFile = "ATTPC.e20009_sim.par";
 
@@ -46,6 +49,8 @@ void run_digi_perf(int nEvents = 500, float tCluster = 8.0)
    AtPRAtask *praTask = new AtPRAtask();
    praTask->SetTcluster(tCluster);
    praTask->SetPersistence(kTRUE);
+   praTask->SetPreclusterRadiusFit(preclusterRadiusFit);
+   praTask->SetPreclusterBin(preclusterBin_mm);
 
    fRun->AddTask(clusterizer);
    fRun->AddTask(pulse);

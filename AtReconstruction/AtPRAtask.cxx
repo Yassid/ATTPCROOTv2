@@ -167,10 +167,20 @@ InitStatus AtPRAtask::Init()
    if (fPar && fPRA) {
       double tbTime = fPar->GetTBTime() * 1e-3; // ns → us
       fPRA->SetDiffusionParams(fPar->GetCoefDiffusionTrans(), fPar->GetCoefDiffusionLong(),
-                               fPar->GetDriftVelocity(), tbTime);
+                               fPar->GetDriftVelocity(), tbTime, fPadResXYOverride);
       LOG(info) << "AtPRAtask: diffusion params from AtDigiPar — CoefT=" << fPar->GetCoefDiffusionTrans()
                 << " CoefL=" << fPar->GetCoefDiffusionLong() << " DriftVel=" << fPar->GetDriftVelocity()
-                << " TBTime=" << tbTime << " us";
+                << " TBTime=" << tbTime << " us"
+                << (fPadResXYOverride > 0 ? Form(" PadResXY=%.3g mm (override)", fPadResXYOverride) : "");
+   }
+   if (fUseDriftAwareWeights && fPRA) {
+      fPRA->SetUseDriftAwareWeights(true);
+      LOG(info) << "AtPRAtask: drift-aware σ_xy² weighting enabled for circle radius fit";
+   }
+   if (fPreclusterRadiusFit && fPRA) {
+      fPRA->SetPreclusterRadiusFit(true);
+      fPRA->SetPreclusterBin(fPreclusterBin_mm);
+      LOG(info) << "AtPRAtask: PRA radius-fit pre-clustering on, bin = " << fPreclusterBin_mm << " mm";
    }
 
    // Get a handle from the IO manager

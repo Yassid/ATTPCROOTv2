@@ -38,6 +38,15 @@ public:
    virtual std::unique_ptr<AtPattern> Clone() const override { return std::make_unique<AtPatternCircle2D>(*this); }
    virtual std::unique_ptr<AtPadPlaneElement> GetPadPlaneProjection() const override;
 
+   /// Public weighted-fit entry point. `weights[i]` is used as the per-point
+   /// weight in the Taubin + GN refit (replaces the legacy charge weighting).
+   /// Use when the natural per-hit uncertainty is known (e.g. drift-aware
+   /// σ_xy²) and a 1/σ² weight is desired instead of charge.
+   void FitPatternWeighted(const std::vector<XYZPoint> &points, const std::vector<double> &weights)
+   {
+      FitPattern(points, weights);
+   }
+
 protected:
    virtual void FitPattern(const std::vector<XYZPoint> &points, const std::vector<double> &charge) override;
 

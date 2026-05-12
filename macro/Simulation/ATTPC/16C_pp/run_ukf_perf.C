@@ -4,13 +4,13 @@
 /// stopping protons but matches the post-fix pi_TPC convention so the
 /// performance plots are apples-to-apples.
 
-void run_ukf_perf(int nEvents = 500)
+void run_ukf_perf(int nEvents = 500, const char *suffix = "")
 {
    FairLogger::GetLogger()->SetLogScreenLevel("ERROR");
 
    TString inOutDir = "./data/";
-   TString inputFile = inOutDir + "output_digi_perf.root";
-   TString outputFile = inOutDir + "output_ukf_perf.root";
+   TString inputFile = inOutDir + "output_digi_perf" + suffix + ".root";
+   TString outputFile = inOutDir + "output_ukf_perf" + suffix + ".root";
    TString paramFile = "ATTPC.e20009_sim.par";
 
    TString dir = getenv("VMCWORKDIR");
