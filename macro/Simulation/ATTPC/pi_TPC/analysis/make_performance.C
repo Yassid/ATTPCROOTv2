@@ -39,7 +39,10 @@ BinResult fitBin(TH1F *hKE, TH1F *hTh, double meanKE, int nThrown)
 }
 } // namespace pi_perf
 
-void make_performance()
+void make_performance(const char *ukfFile = "data/output_ukf_only.root",
+                      const char *idealFile = "data/output_ukf_truthpra.root",
+                      const char *outPrefix = "data/performance",
+                      const char *titleTag = "")
 {
    gStyle->SetOptStat(0);
    gStyle->SetOptFit(0);
@@ -50,8 +53,8 @@ void make_performance()
    gStyle->SetPadBottomMargin(0.13);
 
    TFile fSim("data/attpcsim.root");
-   TFile fPRA("data/output_ukf_only.root");
-   TFile fIDL("data/output_ukf_truthpra.root", "READ");
+   TFile fPRA(ukfFile);
+   TFile fIDL(idealFile, "READ");
    bool haveIdeal = !fIDL.IsZombie() && fIDL.Get("cbmsim") != nullptr;
 
    auto *tSim = (TTree *)fSim.Get("cbmsim");
@@ -283,9 +286,13 @@ void make_performance()
       txt->DrawLatex(0.18, 0.78, Form("#sigma = %.2f MeV", f->GetParameter(2)));
    }
 
-   c->SaveAs("data/performance.png");
-   c->SaveAs("data/performance.pdf");
-   std::cout << "Wrote data/performance.{png,pdf}\n";
+   TString png = TString(outPrefix) + ".png";
+   TString pdf = TString(outPrefix) + ".pdf";
+   c->SaveAs(png);
+   c->SaveAs(pdf);
+   if (std::strlen(titleTag) > 0)
+      c->SetTitle(titleTag);
+   std::cout << "Wrote " << outPrefix << ".{png,pdf}\n";
 
    // Print summary table
    std::cout << "\n=== pi-TPC performance summary ===\n";
