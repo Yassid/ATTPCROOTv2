@@ -83,6 +83,9 @@ private:
    int fRiemannMaxTracks{6};
    int fRiemannMaxIter{400};
    bool fRiemannUseSelectAndMerge{true};
+   bool fRiemannUseArcWalkExtend{false};
+   int fRiemannArcWalkWindow{10};
+   int fRiemannArcWalkMaxMiss{5};
 
 public:
    AtPRAtask();
@@ -154,6 +157,9 @@ public:
    /// Apply the AT-TPC primary/fragment heuristic after Riemann finding.
    /// Disable for annular geometries (PUMA) where the beam-axis vertex assumption is invalid.
    void SetRiemannUseSelectAndMerge(bool use) { fRiemannUseSelectAndMerge = use; }
+   void SetRiemannUseArcWalkExtend(bool use) { fRiemannUseArcWalkExtend = use; }
+   void SetRiemannArcWalkWindow(int n) { fRiemannArcWalkWindow = n; }
+   void SetRiemannArcWalkMaxMiss(int n) { fRiemannArcWalkMaxMiss = n; }
 
    ClassDef(AtPRAtask, 1);
 };

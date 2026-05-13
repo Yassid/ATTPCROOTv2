@@ -131,6 +131,9 @@ InitStatus AtPRAtask::Init()
       riemann->SetClusterRadius(fClusterRadius);
       riemann->SetClusterDistance(fClusterDistance);
       riemann->SetUseSelectAndMerge(fRiemannUseSelectAndMerge);
+      riemann->SetUseArcWalkExtend(fRiemannUseArcWalkExtend);
+      riemann->SetArcWalkWindow(fRiemannArcWalkWindow);
+      riemann->SetArcWalkMaxMiss(fRiemannArcWalkMaxMiss);
       fPRA = riemann;
 
       std::cout << " Riemann track finder parameters\n";
@@ -139,6 +142,9 @@ InitStatus AtPRAtask::Init()
       std::cout << "   Max tracks      : " << fRiemannMaxTracks << "\n";
       std::cout << "   RANSAC iters    : " << fRiemannMaxIter << "\n";
       std::cout << "   SelectAndMerge  : " << (fRiemannUseSelectAndMerge ? "on" : "off") << "\n";
+      std::cout << "   ArcWalk extend  : " << (fRiemannUseArcWalkExtend ? "on" : "off")
+                << "  win=" << fRiemannArcWalkWindow
+                << "  maxMiss=" << fRiemannArcWalkMaxMiss << "\n";
    }
 
    // Arc-walk clustering options

@@ -50,6 +50,9 @@ private:
    int fK_NN{10};                 ///< Number of nearest neighbors used as seed candidates
    double fMaxPhiGap{60.0};       ///< Max consecutive phi gap (deg) around fitted circle center before splitting an arc
    bool fUseSelectAndMerge{true}; ///< Apply AT-TPC primary/fragment heuristic (false for annular geometries like PUMA)
+   bool fUseArcWalkExtend{false}; ///< Post-RANSAC arc walk: re-fit locally to recover track tails
+   int fArcWalkWindow{10};        ///< Sliding-window size for local Kasa refit during arc walk
+   int fArcWalkMaxMiss{5};        ///< Consecutive non-inlier candidates tolerated before stopping a walk direction
 
 public:
    AtTrackFinderRiemann();
@@ -66,6 +69,9 @@ public:
    void SetKNN(int k) { fK_NN = k; }
    void SetMaxPhiGap(double deg) { fMaxPhiGap = deg; }
    void SetUseSelectAndMerge(bool use) { fUseSelectAndMerge = use; }
+   void SetUseArcWalkExtend(bool use) { fUseArcWalkExtend = use; }
+   void SetArcWalkWindow(int n) { fArcWalkWindow = n; }
+   void SetArcWalkMaxMiss(int n) { fArcWalkMaxMiss = n; }
 
    ClassDefOverride(AtTrackFinderRiemann, 1);
 };

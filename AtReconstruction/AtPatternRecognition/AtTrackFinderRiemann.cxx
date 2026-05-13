@@ -14,6 +14,7 @@
 #include <cmath>
 #include <iostream>
 #include <random>
+#include <set>
 #include <utility>
 #include <vector>
 
@@ -137,6 +138,106 @@ Circle kasaRefit(const std::vector<std::array<double, 2>> &xy, const std::vector
    if (!(r2 > 0))
       return {};
    return {cx, cy, std::sqrt(r2), true};
+}
+
+/// Arc-walk extension: starting from the RANSAC inlier set, walk outward in phi
+/// (around the global refined-circle center) from both ends, using a sliding-window
+/// LOCAL Kasa refit. Accepts a candidate hit if its perpendicular distance to the
+/// local circle is below xyTol AND |z - (a + b*phi_local)| is below zTol. Allows up
+/// to maxMiss consecutive failures before stopping a walk direction — bridges small
+/// gaps (e.g. dead pads) without latching onto another track.
+std::vector<size_t> arcWalkExtend(const std::vector<std::array<double, 2>> &xy,
+                                   const std::vector<double> &zVals,
+                                   const std::vector<size_t> &inliers,
+                                   const std::vector<size_t> &liveAll,
+                                   const Circle &globalCircle,
+                                   double xyTol, double zTol,
+                                   int windowSize = 10, int maxMiss = 5)
+{
+   if (inliers.size() < (size_t)std::max(3, windowSize / 2))
+      return inliers;
+
+   auto phiOf = [&](size_t i) {
+      return std::atan2(xy[i][1] - globalCircle.cy, xy[i][0] - globalCircle.cx);
+   };
+
+   std::set<size_t> inlierSet(inliers.begin(), inliers.end());
+   std::vector<std::pair<double, size_t>> phiInl;
+   phiInl.reserve(inliers.size());
+   for (size_t i : inliers) phiInl.emplace_back(phiOf(i), i);
+   std::sort(phiInl.begin(), phiInl.end());
+
+   std::vector<std::pair<double, size_t>> phiCand;
+   phiCand.reserve(liveAll.size());
+   for (size_t i : liveAll) {
+      if (inlierSet.count(i)) continue;
+      phiCand.emplace_back(phiOf(i), i);
+   }
+   std::sort(phiCand.begin(), phiCand.end());
+
+   auto checkAccept = [&](const std::vector<size_t> &win, size_t cand) -> bool {
+      const Circle lc = kasaRefit(xy, win);
+      if (!lc.valid) return false;
+      if (pointCircleDist(lc, xy[cand][0], xy[cand][1]) >= xyTol) return false;
+      const ZLine zl = zLineLSQ(xy, zVals, win, lc);
+      if (zl.valid) {
+         const double phi = std::atan2(xy[cand][1] - lc.cy, xy[cand][0] - lc.cx);
+         if (std::abs(zVals[cand] - (zl.a + zl.b * phi)) >= zTol) return false;
+      }
+      return true;
+   };
+
+   // Forward walk (+phi direction).
+   {
+      auto it = std::upper_bound(phiCand.begin(), phiCand.end(), phiInl.back(),
+                                  [](const std::pair<double, size_t> &a,
+                                     const std::pair<double, size_t> &b) {
+                                     return a.first < b.first;
+                                  });
+      int miss = 0;
+      for (; it != phiCand.end() && miss <= maxMiss; ++it) {
+         const size_t k = std::min((size_t)windowSize, phiInl.size());
+         std::vector<size_t> win;
+         win.reserve(k);
+         for (auto rit = phiInl.end() - k; rit != phiInl.end(); ++rit) win.push_back(rit->second);
+         if (checkAccept(win, it->second)) {
+            phiInl.emplace_back(it->first, it->second);
+            inlierSet.insert(it->second);
+            miss = 0;
+         } else {
+            ++miss;
+         }
+      }
+   }
+
+   // Backward walk (-phi direction).
+   {
+      auto it = std::lower_bound(phiCand.begin(), phiCand.end(), phiInl.front(),
+                                  [](const std::pair<double, size_t> &a,
+                                     const std::pair<double, size_t> &b) {
+                                     return a.first < b.first;
+                                  });
+      int miss = 0;
+      while (it != phiCand.begin() && miss <= maxMiss) {
+         --it;
+         const size_t k = std::min((size_t)windowSize, phiInl.size());
+         std::vector<size_t> win;
+         win.reserve(k);
+         for (auto fit = phiInl.begin(); fit != phiInl.begin() + k; ++fit) win.push_back(fit->second);
+         if (checkAccept(win, it->second)) {
+            phiInl.insert(phiInl.begin(), {it->first, it->second});
+            inlierSet.insert(it->second);
+            miss = 0;
+         } else {
+            ++miss;
+         }
+      }
+   }
+
+   std::vector<size_t> out;
+   out.reserve(phiInl.size());
+   for (auto &p : phiInl) out.push_back(p.second);
+   return out;
 }
 
 /// Largest contiguous arc around (cx, cy): consecutive sorted phi gaps must stay below maxGap.
@@ -359,6 +460,19 @@ std::unique_ptr<AtPatternEvent> AtTrackFinderRiemann::FindTracks(AtEvent &event)
       if (static_cast<int>(bestInliers.size()) < fMinHitsPerTrack) {
          rejectAndContinue();
          continue;
+      }
+
+      // Arc-walk tail recovery: re-fit locally on a sliding window and walk
+      // outward in phi from both ends. Picks up hits where the real trajectory
+      // diverges from the global circle (MS, dE/dx, gentle drift) — but stays
+      // anchored to the local fit so it doesn't latch onto another track.
+      if (fUseArcWalkExtend) {
+         std::vector<size_t> liveAll;
+         liveAll.reserve(live.size());
+         for (size_t i : live) liveAll.push_back(i);
+         bestInliers = arcWalkExtend(xy, zVals, bestInliers, liveAll, bestCircle,
+                                      fInlierDist, fZInlierDist,
+                                      fArcWalkWindow, fArcWalkMaxMiss);
       }
 
       AtTrack track;
