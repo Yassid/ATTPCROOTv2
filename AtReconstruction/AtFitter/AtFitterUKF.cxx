@@ -731,6 +731,21 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
             vy = endY;
             vz = rzFirst - arc * cotTheta;
             pathLength = arc;
+
+            // Optionally rotate φ_s by the back-extrap arc length / radius so
+            // the stored Kinematics.phi is at the vertex, not at the first
+            // cluster. Sign: pi- in +Bz curls counterclockwise (dφ/ds > 0),
+            // so going BACKWARD in time subtracts |arc/R|; pi+ adds it. θ is
+            // unchanged (motion in cyclotron plane is xy, z-component is
+            // preserved for uniform Bz).
+            if (fUpdateAnglesOnBackExtrap && R > 1.0) {
+               const double dphi_mag = arc / R;
+               const double signFactor = (fCharge < 0) ? -1.0 : +1.0;
+               phi_s += signFactor * dphi_mag;
+               // Wrap to (-π, π] to keep downstream consumers happy.
+               while (phi_s > M_PI) phi_s -= 2 * M_PI;
+               while (phi_s <= -M_PI) phi_s += 2 * M_PI;
+            }
          } else {
             // Legacy linear extrapolation
             double sinTheta = std::sin(theta_s);

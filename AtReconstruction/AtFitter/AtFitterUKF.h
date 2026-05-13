@@ -118,6 +118,16 @@ public:
    /// kept as opt-in to avoid altering the calibrated 16C+p back-extrap
    /// behaviour. Default false.
    void SetForceVertexOnBeamAxis(bool force) { fForceVertexOnBeamAxis = force; }
+   /// Rotate the smoothed φ by the back-extrapolation arc length divided by
+   /// the PRA radius so AtFittedTrack::Kinematics.phi reports the angle AT
+   /// THE VERTEX, consistent with KE at the vertex. By default the UKF
+   /// stores the angle from the smoothed state at the FIRST CLUSTER, which
+   /// inflates apparent σ_φ and bias_φ by the helix rotation between vertex
+   /// and first cluster (event-by-event variable due to clustering wobble).
+   /// θ is unchanged by Bz: motion in the cyclotron plane preserves the
+   /// z-component, so only φ rotates. Sign uses fCharge: pi+/pi- handled
+   /// automatically. Default false preserves all existing analyses.
+   void SetUpdateAnglesOnBackExtrap(bool b) { fUpdateAnglesOnBackExtrap = b; }
    /// Subtract a constant offset (mm) from the back-extrapolated vertex z.
    /// Compensates a hardwired +peakingTime·vDrift bias in `AtPSA::CalculateZGeo`
    /// (the formula uses the pulse-peak time bucket but doesn't subtract the
@@ -226,6 +236,7 @@ private:
    bool fUseClusterDirSeed{false}; // Override PRA Geo direction with cluster derivative
    bool fUseArcWalk{false};        // Use ClusterizeArcWalk instead of ClusterizeSmooth3D
    bool fForceVertexOnBeamAxis{false}; // Extrapolate to xy=(0,0), not POCA on PRA circle
+   bool fUpdateAnglesOnBackExtrap{false}; // Rotate φ_s by arc/R so Kinematics.phi is at the vertex
    double fVertexZBias_mm{0.0};        // Subtract from final initialPositionXtr.Z()
    int fArcWalkMinHits{3};
    int fArcWalkKNN{10};
