@@ -10,13 +10,20 @@
 #include <Math/Point2Dfwd.h>
 #include <Rtypes.h>
 
+#include <limits>
+
 class AtTpcSquareMap : public AtMap {
 public:
    /// @param padSize_mm  Side length of each square pad.
    /// @param nPadsX      Number of pads along x.
    /// @param nPadsY      Number of pads along y.
-   /// Active area is (nPadsX * padSize) x (nPadsY * padSize), centered at (0,0).
-   AtTpcSquareMap(double padSize_mm = 2.0, int nPadsX = 100, int nPadsY = 100);
+   /// @param originX_mm  World x of the lower-left corner of the active area.
+   /// @param originY_mm  World y of the lower-left corner of the active area.
+   /// Defaults to centered (origin = -extent/2). Pass (0, 0) to anchor the
+   /// lower-left vertex at the world origin.
+   AtTpcSquareMap(double padSize_mm = 2.0, int nPadsX = 100, int nPadsY = 100,
+                  double originX_mm = std::numeric_limits<double>::quiet_NaN(),
+                  double originY_mm = std::numeric_limits<double>::quiet_NaN());
    ~AtTpcSquareMap() override = default;
 
    void Dump() override;
@@ -34,6 +41,8 @@ private:
    int fNPadsY;
    double fHalfX; // half active extent in x (mm)
    double fHalfY; // half active extent in y (mm)
+   double fOriginX; // world x of lower-left corner (mm)
+   double fOriginY; // world y of lower-left corner (mm)
 
    ClassDefOverride(AtTpcSquareMap, 1);
 };
