@@ -1,0 +1,47 @@
+################################################################################
+# ATTPCROOT digi parameters for the HYDRA Prototype (GLAD-TPC) detector.
+#
+# Diffusion, drift velocity, drift field, gain and shaping are ported from
+# R3BRootGroup/glad-tpc params/HYDRAprototype_FileSetup_v2_02082022.par.
+# Geometry fields match ATTPC_HYDRA_Prototype_P10_1bar.C with 2 mm pads.
+# Axis mapping: HYDRA-x→ATTPCROOT-x, HYDRA-z(beam)→ATTPCROOT-y,
+# HYDRA-y(drift)→ATTPCROOT-z.
+################################################################################
+[AtDigiPar]
+PadPlaneX:Int_t                256   # mm — 25.6 cm along beam (long axis)
+PadPlaneZ:Int_t                 88   # mm — 8.8 cm transverse
+PadSizeX:Int_t                   2   # mm
+PadSizeZ:Int_t                   2   # mm
+PadRows:Int_t                  128   # 256 / 2
+PadLayers:Int_t                 44   # 88 / 2
+AnodeWirePlaneY:Double_t     -4.05   # mm   (unused in this config — kept for FairRoot)
+GroundWirePlaneY:Double_t     -8.1   # mm
+GatingWirePlaneY:Double_t      -14   # mm
+EField:Double_t              25000   # V/m  — R3B GTPCDriftEField 250 V/cm
+NumTbs:Int_t                   512
+SamplingRate:Int_t              50   # 50 MHz → 20 ns TB (R3B GTPCTimeBinSize)
+DriftVelocity:Double_t         7.0   # cm/us — R3B GTPCDriftVelocity 7e-3 cm/ns
+DriftLength:Double_t           294   # mm — HYDRA Prototype drift 29.4 cm
+YDivider:Int_t                1000
+GasFile:Int_t                    2
+PadPlaneFile:Int_t               3
+PadShapeFile:Int_t               4
+BField:Double_t                2.0   # T — HYDRA-y drift, B along ATTPCROOT-z
+TiltAng:Double_t               0.0   # Degrees
+TB0:Int_t                       98
+LorentzAngle:Double_t          0.0
+TBEntrance:Int_t                 0   # Beam at pad-plane (z=0 TB)
+ZPadPlane:Double_t           294.0   # mm — drift length; pad plane at z=0
+Density:Double_t           0.001654  # g/cm3 — P10 at 1 bar
+ThetaPad:Double_t              0.0
+ThetaRot:Double_t              0.0
+GasPressure:Double_t           750   # Torr — ~1 bar
+EIonize:Double_t              15.0   # eV — R3B GTPCEIonization 15e-9 GeV
+Fano:Double_t                 0.24   # ATTPC value; R3B's 2.0 is non-standard
+CoefL:Double_t           1.623e-6   # cm^2/us — R3B GTPCLongDiff 0.1623e-5
+CoefT:Double_t           4.522e-6   # cm^2/us — R3B GTPCTransDiff 0.4522e-5
+Gain:Double_t                 4000   # — R3B GTPCGain
+GETGain:Double_t              1000
+PeakingTime:Int_t              300   # ns — R3B GTPCShapingTime
+MaxRange:Double_t            500.0
+################################################################################
