@@ -1,14 +1,15 @@
 /// @file run_ukf_HYDRA.C
-/// @brief Run the UKF fitter on digitized HYDRA pion events.
+/// @brief Run the UKF fitter on digitized HYDRA Prototype pion events.
 ///
 /// Reads ./data/output_digi<inSuffix>.root and writes
 /// ./data/output_ukf_HYDRA<outSuffix>.root. Mirrors pi_TPC's run_ukf_only.C
-/// with the HYDRA geometry (drift length 150 mm along z, beam axis along
-/// ATTPCROOT-y so the back-extrapolation surface is y=-50 cm).
+/// with the HYDRA Prototype geometry (drift length 294 mm along +z;
+/// beam axis is ATTPCROOT-x = HYDRA-z; lower-left of active region at
+/// world (0, 0, 0)).
 ///
-/// Run: root -b -q 'run_ukf_HYDRA.C(1000, +1)'
+/// Run: root -b -q 'run_ukf_HYDRA.C(1000, -1)'
 
-void run_ukf_HYDRA(int nEvents = 10000, int pionSign = +1,
+void run_ukf_HYDRA(int nEvents = 10000, int pionSign = -1,
                    double momSigmaFrac = 0.1, int nIterations = 3,
                    const char *outSuffix = "", double eLossScale = 1.0,
                    const char *inSuffix = "", double Bz_T = 2.0)
@@ -18,7 +19,7 @@ void run_ukf_HYDRA(int nEvents = 10000, int pionSign = +1,
    TString inOutDir = "./data/";
    TString inputFile = inOutDir + "output_digi" + inSuffix + ".root";
    TString outputFile = inOutDir + "output_ukf_HYDRA" + outSuffix + ".root";
-   TString paramFile = "ATTPC.e20009_sim.par";
+   TString paramFile = "ATTPC.HYDRA_sim.par";
 
    TString dir = getenv("VMCWORKDIR");
    TString digiParFile = dir + "/parameters/" + paramFile;
@@ -59,12 +60,13 @@ void run_ukf_HYDRA(int nEvents = 10000, int pionSign = +1,
    ukfFitter->SetELossScaleFactor(eLossScale);
    ukfFitter->SetMinClusters(5);
    ukfFitter->SetNIterations(nIterations);
-   // HYDRA active z (drift) spans 0–150 mm in ATTPCROOT-z. Pad plane is at
-   // z=0 in lab; the digi convention puts it at SetZPadPlane (set so
-   // z_lab = ZPadPlane − Z_digi). Use the drift length (150 mm) for the
-   // back-extrap cap since the vertex is at z_lab ≈ 75 mm (mid-drift).
-   ukfFitter->SetZPadPlane(150.0);
-   ukfFitter->SetBackExtrapMaxPath(250.0);
+   // HYDRA Prototype active z (drift) spans 0–294 mm in ATTPCROOT-z. Pad
+   // plane is at z=0 in lab; the digi convention puts it at SetZPadPlane
+   // (z_lab = ZPadPlane − Z_digi). Vertex at (-40, 4.4, 14.7) cm =
+   // z_lab ≈ 147 mm (mid-drift). Back-extrap cap covers vertex → entrance
+   // (~28 cm in beam direction) plus margin.
+   ukfFitter->SetZPadPlane(294.0);
+   ukfFitter->SetBackExtrapMaxPath(450.0);
    ukfFitter->SetUseClusterDirSeed(true);
    ukfFitter->SetUseArcWalk(true);
    ukfFitter->SetTargetClusters(15);

@@ -78,6 +78,13 @@ void run_digi_HYDRA(int nEvents = 10000, float tCluster = 8.0,
    praTask->SetRiemannUseArcWalkExtend(true);
    praTask->SetRiemannArcWalkWindow(30); // larger window stabilises Kasa for near-straight tracks
    praTask->SetRiemannArcWalkMaxMiss(10);
+   // Replace ClusterizeSmooth3D with the arc-walk clusterizer — Smooth3D
+   // produces zero clusters on these near-straight HYDRA tracks because
+   // the centroid-and-step walk fails on quasi-collinear hit sets.
+   praTask->SetUseArcWalk(true);
+   praTask->SetTargetClusters(25);
+   praTask->SetMinHitsPerCluster(3);
+   praTask->SetArcWalkKNN(10);
    praTask->SetPersistence(kTRUE);
    praTask->SetUseDriftAwareWeights(useDriftAwareWeights);
    praTask->SetPreclusterRadiusFit(preclusterRadiusFit);
