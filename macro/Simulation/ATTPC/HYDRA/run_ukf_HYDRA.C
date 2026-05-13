@@ -69,6 +69,16 @@ void run_ukf_HYDRA(int nEvents = 10000, int pionSign = -1,
    ukfFitter->SetBackExtrapMaxPath(450.0);
    ukfFitter->SetUseClusterDirSeed(true);
    ukfFitter->SetUseArcWalk(true);
+   // Use the helix-POCA back-extrap (closed-form circle + helix-pitch z)
+   // instead of the linear-tangent default. Required for HYDRA's visibly
+   // curved low-p tracks (sagitta ~25 mm at 200 MeV/c over 256 mm chord
+   // is too large for the straight-line approximation) AND so the
+   // φ-rotation step below can actually fire.
+   ukfFitter->SetUseHelixBackExtrap(true);
+   // Make Kinematics.phi the angle at the back-extrapolated vertex, not
+   // at the first cluster. Removes the first-cluster anchor wobble that
+   // inflates σ_φ at low p (38 mrad → ~13 mrad at 200 MeV/c).
+   ukfFitter->SetUpdateAnglesOnBackExtrap(true);
    ukfFitter->SetTargetClusters(15);
    ukfFitter->SetAdaptiveDistBounds(4.0, 14.0);
 

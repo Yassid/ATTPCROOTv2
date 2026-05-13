@@ -88,8 +88,11 @@ void make_performance(const char *outPng = "data/perf_HYDRA.png")
          double pmc = pmcGeV * 1000.;
          double xV_mc = mc->GetStartX() * 10., yV_mc = mc->GetStartY() * 10.;
          // Angles at FIRST AtMCPoint in drift_volume — apples-to-apples with
-         // UKF, which anchors angles at the first reconstructed cluster.
-         double thMC = std::acos(Pz / pmcGeV);                 // fallback: at vertex
+         // the UKF back-extrap endpoint (POCA on PRA circle ≈ chamber face).
+         // Comparing to the production vertex would add the helix rotation
+         // between the field start (x≈-20 mm) and POCA, which the UKF cannot
+         // recover from a back-extrap that stops at POCA.
+         double thMC = std::acos(Pz / pmcGeV);
          double phMC = std::atan2(Py, Px);
          double xMinPt = 1e9;
          for (int j = 0; j < pts->GetEntries(); ++j) {

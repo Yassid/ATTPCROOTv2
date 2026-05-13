@@ -66,7 +66,7 @@ void make_distributions(const char *outPng = "data/dist_HYDRA.png")
          double pmcGeV = std::sqrt(Px * Px + Py * Py + Pz * Pz);
          double pmc = pmcGeV * 1000.;
          double yV_mc = mc->GetStartY() * 10.;
-         // Angles at the first AtMCPoint in drift_volume
+         // Angles at the first AtMCPoint in drift_volume (≈ POCA endpoint).
          double thMC = std::acos(Pz / pmcGeV);
          double phMC = std::atan2(Py, Px);
          double xMinPt = 1e9;
