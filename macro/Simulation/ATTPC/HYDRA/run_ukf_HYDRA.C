@@ -79,11 +79,12 @@ void run_ukf_HYDRA(int nEvents = 10000, int pionSign = -1,
    // at the first cluster. Removes the first-cluster anchor wobble that
    // inflates σ_φ at low p (38 mrad → ~13 mrad at 200 MeV/c).
    ukfFitter->SetUpdateAnglesOnBackExtrap(true);
-   // Extend the back-extrap with a straight tail to the production-vertex
-   // x-plane (vertex at x = -40 cm = -400 mm in lab). Field-free between
-   // POCA (~x = -10 mm) and target, so angle stays constant and only
-   // position is updated.
-   ukfFitter->SetBackExtrapTargetX(-400.0);
+   // Straight-line tail disabled: the widened field region in HYDRA_sim
+   // now covers the target plane upstream, so the pion curves along a
+   // helix from production vertex all the way to the chamber — there's
+   // no field-free region to straight-extrap through. The helix POCA
+   // endpoint of the UKF (~chamber face) is the right place to stop.
+   // ukfFitter->SetBackExtrapTargetX(-400.0);
    ukfFitter->SetTargetClusters(15);
    ukfFitter->SetAdaptiveDistBounds(4.0, 14.0);
 

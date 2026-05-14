@@ -18,7 +18,8 @@
 void HYDRA_sim(Int_t nEvents = 1000, Int_t pionSign = +1, Double_t keMin_MeV = 600.0,
                Double_t keMax_MeV = 750.0, TString mcEngine = "TGeant4",
                Double_t Bz_T = 2.0, const char *outSuffix = "",
-               Int_t multiplicity = 1)
+               Int_t multiplicity = 1, Double_t phiHalfDeg = 3.0,
+               Double_t phiCenterDeg = 0.0)
 {
    TString outFile = TString("./data/HYDRAsim") + outSuffix + ".root";
    TString parFile = TString("./data/HYDRApar") + outSuffix + ".root";
@@ -41,12 +42,16 @@ void HYDRA_sim(Int_t nEvents = 1000, Int_t pionSign = +1, Double_t keMin_MeV = 6
    ATTPC->SetGeometryFileName("ATTPC_HYDRA_Prototype_P10_1bar.root");
    run->AddModule(ATTPC);
 
-   // Magnetic field along z (= HYDRA-y drift axis). Active region with
-   // lower-left at (0, 0, 0) spans x ∈ [0, 25.6] (beam), y ∈ [0, 8.8]
-   // (transverse), z ∈ [0, 29.4] (drift). Region encloses active + margin.
+   // Magnetic field along z (= HYDRA-y drift axis). The GLAD dipole bore
+   // covers BOTH the target plane and the TPC, so the field extends well
+   // beyond the chamber. The pion curves the whole way from production
+   // vertex to the active region — caller must aim the pion at an off-axis
+   // angle via phiCenterDeg so the curved trajectory lands inside the
+   // chamber. For p = p_MeV at B = Bz_T, aim angle (HYDRA pi-, target at
+   // x=-40 cm, y=4.4 cm) is φ_0 ≈ -arcsin(200/R) where R = p/(0.3·B) mm.
    AtConstField *fMagField = new AtConstField();
    fMagField->SetField(0., 0., Bz_T * 10.); // kG
-   fMagField->SetFieldRegion(-2, 30, -2, 12, -2, 32); // cm
+   fMagField->SetFieldRegion(-50, 30, -15, 25, -2, 32); // cm
    run->SetField(fMagField);
 
    FairPrimaryGenerator *primGen = new FairPrimaryGenerator();
@@ -63,11 +68,15 @@ void HYDRA_sim(Int_t nEvents = 1000, Int_t pionSign = +1, Double_t keMin_MeV = 6
    boxGen->SetXYZ(-40.0, 4.4, 14.7);
 
    // Track direction: pions emerge going downstream (+x) at θ ≈ 90°
-   // (momentum in the pad plane) with a tight ±3° spread in φ around
-   // +x. At 256 mm length, ±3° gives lateral excursion ≤ 13 mm — well
-   // within the ±44 mm transverse half-width.
+   // (momentum in the pad plane). The φ range is ±phiHalfDeg around +x;
+   // pass phiHalfDeg = 0 for a delta-function-like fixed-angle beam (the
+   // generator clamps to a tiny window 0 ± 0.001° to avoid degenerate
+   // sampling).
    boxGen->SetThetaRange(89.5, 90.5);
-   boxGen->SetPhiRange(-3., 3.); // ±3° around +x
+   const Double_t phiHalfEff = (phiHalfDeg > 0) ? phiHalfDeg : 0.001;
+   const Double_t phiLo = phiCenterDeg - phiHalfEff;
+   const Double_t phiHi = phiCenterDeg + phiHalfEff;
+   boxGen->SetPhiRange(phiLo, phiHi);
    boxGen->SetEkinRange(keMin_MeV * 1e-3, keMax_MeV * 1e-3); // GeV
 
    primGen->AddGenerator(boxGen);
@@ -119,6 +128,6 @@ void HYDRA_sim(Int_t nEvents = 1000, Int_t pionSign = +1, Double_t keMin_MeV = 6
    std::cout << "B field:        " << Bz_T << " T along z\n";
    std::cout << "Vertex:         (-40, 4.4, 14.7) cm — ~28 cm upstream of TPC face\n";
    std::cout << "Multiplicity:   " << multiplicity << " pions per event\n";
-   std::cout << "Momentum in:    (x,y) pad plane, φ ∈ [-3°, 3°] (±3° around +x)\n";
+   std::cout << "Momentum in:    (x,y) pad plane, φ ∈ [" << phiLo << "°, " << phiHi << "°]\n";
    std::cout << "Real " << timer.RealTime() << " s, CPU " << timer.CpuTime() << " s\n\n";
 }

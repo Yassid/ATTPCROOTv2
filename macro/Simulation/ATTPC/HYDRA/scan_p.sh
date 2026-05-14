@@ -17,6 +17,8 @@ fi
 # Pion mass [MeV/c²]
 MASS=139.57039
 NEVT=2000
+# Half-width of the φ window for the pion gun (deg). Pass via PHI_HALF=…
+PHI_HALF=${PHI_HALF:-3.0}
 
 # Momentum points [MeV/c]
 PLIST=(200 400 600 800 1000 1200)
@@ -29,14 +31,18 @@ for P in "${PLIST[@]}"; do
    KE=$(python3 -c "import math; m=$MASS; p=$P; print(f'{math.sqrt(p*p + m*m) - m:.2f}')")
    KEMIN=$(python3 -c "print(f'{$KE - 5:.2f}')")
    KEMAX=$(python3 -c "print(f'{$KE + 5:.2f}')")
+   # Aim angle (deg) so the helix from the production vertex (-400, 44) mm
+   # lands at chamber-center face (0, 44). Pi-, B=+2T → φ_0 = -arcsin(200/R)
+   # with R [mm] = p [MeV/c] / (0.3 · B [T]).
+   PHI_AIM=$(python3 -c "import math; p=$P; B=2.0; R=p/(0.3*B); print(f'{-math.degrees(math.asin(min(200.0/R, 1.0))):.3f}')")
    SUF="_p${P}"
 
-   echo "===== p=$P MeV/c, KE=$KE MeV (window $KEMIN-$KEMAX) ====="
+   echo "===== p=$P MeV/c, KE=$KE MeV (window $KEMIN-$KEMAX), aim φ_0=${PHI_AIM}° ====="
 
    rm -f data/HYDRAsim${SUF}.root data/HYDRApar${SUF}.root data/output_digi${SUF}.root data/output_ukf_HYDRA${SUF}.root
 
    echo "[sim]"
-   root -b -q "HYDRA_sim.C($NEVT, -1, $KEMIN, $KEMAX, \"TGeant4\", 2.0, \"$SUF\", 1)" > /tmp/scan_sim${SUF}.log 2>&1
+   root -b -q "HYDRA_sim.C($NEVT, -1, $KEMIN, $KEMAX, \"TGeant4\", 2.0, \"$SUF\", 1, $PHI_HALF, $PHI_AIM)" > /tmp/scan_sim${SUF}.log 2>&1
    echo "[digi]"
    root -b -q "run_digi_HYDRA.C($NEVT, 8.0, false, \"$SUF\", true, 6.0, \"$SUF\")" > /tmp/scan_digi${SUF}.log 2>&1
    echo "[ukf]"
