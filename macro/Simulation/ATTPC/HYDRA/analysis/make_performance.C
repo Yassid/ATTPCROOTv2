@@ -87,29 +87,12 @@ void make_performance(const char *outPng = "data/perf_HYDRA.png")
          double pmcGeV = std::sqrt(Px * Px + Py * Py + Pz * Pz);
          double pmc = pmcGeV * 1000.;
          double xV_mc = mc->GetStartX() * 10., yV_mc = mc->GetStartY() * 10.;
-         // Angles at FIRST AtMCPoint in drift_volume — apples-to-apples with
-         // the UKF back-extrap endpoint (POCA on PRA circle ≈ chamber face).
-         // Comparing to the production vertex would add the helix rotation
-         // between the field start (x≈-20 mm) and POCA, which the UKF cannot
-         // recover from a back-extrap that stops at POCA.
+         // Angles at the production vertex. UKF now back-rotates φ through
+         // the helix AND straight-tails to fBackExtrapTargetX in field-free
+         // region, so this is the apples-to-apples reference.
          double thMC = std::acos(Pz / pmcGeV);
          double phMC = std::atan2(Py, Px);
-         double xMinPt = 1e9;
-         for (int j = 0; j < pts->GetEntries(); ++j) {
-            auto *p = (AtMCPoint *)pts->At(j);
-            if (p->GetVolName() != TString("drift_volume")) continue;
-            if (p->GetTrackID() != 0) continue;
-            double x_mm = p->GetX() * 10.;
-            if (x_mm < xMinPt) {
-               xMinPt = x_mm;
-               double pxp = p->GetPx(), pyp = p->GetPy(), pzp = p->GetPz();
-               double pp = std::sqrt(pxp * pxp + pyp * pyp + pzp * pzp);
-               if (pp > 0) {
-                  thMC = std::acos(pzp / pp);
-                  phMC = std::atan2(pyp, pxp);
-               }
-            }
-         }
+         (void)pts;
          ++nThr;
          if (te->GetEntries() == 0) continue;
          auto *trkEvt = (AtTrackingEvent *)te->At(0);
