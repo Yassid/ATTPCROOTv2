@@ -47,9 +47,9 @@ AtPSAMax::HitVector AtPSAMax::AnalyzePad(AtPad *pad)
    Double_t QHitTot = std::accumulate(floatADC.begin(), floatADC.end(), 0);
 
    if (fIsTimeCorr)
-      pos.SetZ(CalculateZGeo(TBCorr));
+      pos.SetZ(CalculateZGeo(TBCorr - fPeakingShiftTBs));
    else
-      pos.SetZ(CalculateZGeo(maxAdcIdx));
+      pos.SetZ(CalculateZGeo(maxAdcIdx - fPeakingShiftTBs));
 
    auto hit = std::make_unique<AtHit>(pad->GetPadNum(), pos, *maxAdcIt);
 

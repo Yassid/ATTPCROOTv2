@@ -53,6 +53,11 @@ void run_digi_HYDRA(int nEvents = 10000, float tCluster = 8.0,
 
    auto psa = std::make_unique<AtPSAMax>();
    psa->SetThreshold(0);
+   // AGET nominal response R(t)=exp(-3u)·sin(u)·u^3 (u=t/τ_peak) peaks at
+   // u_peak ≈ 1.167, so the response maximum lags the electron impulse by
+   // u_peak·τ_peak. With τ_peak=300 ns and TBTime=20 ns, that's ~17.5 TBs
+   // ≈ 24 mm of drift. Subtract it before computing z to recover MC z.
+   psa->SetPeakingShiftTBs(17.5);
    AtPSAtask *psaTask = new AtPSAtask(std::move(psa));
    psaTask->SetPersistence(kTRUE);
 
