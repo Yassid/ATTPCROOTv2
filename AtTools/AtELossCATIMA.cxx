@@ -1,6 +1,8 @@
 #include "AtELossCATIMA.h"
 
 #include <FairLogger.h>
+
+#include <cmath>
 namespace AtTools {
 
 AtELossCATIMA::AtELossCATIMA(double density, std::vector<std::tuple<int, int, int>> materialComponents)
@@ -22,6 +24,14 @@ double AtELossCATIMA::GetdEdx(double energy) const
                     "GetdEdx will return 0!";
       return 0;
    }
+
+   // catima::calculate segfaults on non-finite or non-positive kinetic energy
+   // (it interpolates a stopping-power table that assumes T > 0). The UKF
+   // state can transiently take KE ≤ 0 or NaN when the particle is near rest
+   // during integration — return 0 (no further energy loss) instead of
+   // letting catima crash the process.
+   if (!std::isfinite(energy) || energy <= 0)
+      return 0;
 
    catima::Result result = catima::calculate(*fProjectile, *fMaterial, energy / fProjectileMassAmu);
    double dEdx = result.dEdxi * fDensity; // MeV/cm
