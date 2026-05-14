@@ -195,6 +195,19 @@ void AtELossCATIMA::SetMaterial(std::vector<std::tuple<int, int, int>> materialC
       fMaterial->add_element(std::get<0>(materialComponent), std::get<1>(materialComponent),
                              std::get<2>(materialComponent));
    }
+   WarmUp();
+}
+
+void AtELossCATIMA::WarmUp()
+{
+   // catima caches stopping-power tables on the first calculate() for a
+   // given (projectile, material) pair. If that first call happens later
+   // in a heavyweight context (FairRunAna initialised, plugins loaded),
+   // the cache initialisation can produce NaN tables — every subsequent
+   // calculate() then returns NaN for any input. Forcing an early call
+   // here on a known-good T=10 MeV/u primes the cache deterministically.
+   if (fProjectile != nullptr && fMaterial != nullptr && fProjectileMassAmu > 0)
+      (void)catima::calculate(*fProjectile, *fMaterial, 10.0);
 }
 
 } // namespace AtTools

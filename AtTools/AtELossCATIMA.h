@@ -60,9 +60,19 @@ public:
    {
       fProjectile = std::make_unique<catima::Projectile>(A, Z);
       fProjectileMassAmu = massAmu;
+      WarmUp();
    }
-   void SetMaterial(const catima::Material &material) { fMaterial = std::make_unique<catima::Material>(material); }
+   void SetMaterial(const catima::Material &material)
+   {
+      fMaterial = std::make_unique<catima::Material>(material);
+      WarmUp();
+   }
    void SetMaterial(std::vector<std::tuple<int, int, int>> materialComponents);
+
+private:
+   void WarmUp(); ///< prime catima's stopping-power cache deterministically
+
+public:
 
    /**
     * Setter of the range step size used for calculations. By default it is set to 0.1mm.
