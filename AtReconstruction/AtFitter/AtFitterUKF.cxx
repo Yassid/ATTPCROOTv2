@@ -759,6 +759,23 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
             vz -= dir.Z() * pathLength;
          }
 
+         // Optional straight-line tail beyond POCA. For setups where the
+         // production vertex sits in a field-free region upstream of the
+         // chamber, continue from POCA along the back-extrapolated momentum
+         // direction (phi_s is at POCA if fUpdateAnglesOnBackExtrap is on)
+         // until vx reaches fBackExtrapTargetX. No eloss in the tail
+         // (assumed vacuum). Skipped if NaN or already past the target.
+         if (!std::isnan(fBackExtrapTargetX) && vx > fBackExtrapTargetX) {
+            ROOT::Math::Polar3DVector momDir(1.0, theta_s, phi_s);
+            ROOT::Math::XYZVector dir(momDir);
+            if (std::abs(dir.X()) > 0.01) {
+               double tailPath = (vx - fBackExtrapTargetX) / dir.X();
+               vx -= dir.X() * tailPath;
+               vy -= dir.Y() * tailPath;
+               vz -= dir.Z() * tailPath;
+            }
+         }
+
          // Subtract a hardwired digi-z offset if requested. The PSA z formula
          // uses the pulse-peak time bucket without subtracting the
          // peakingTime·vDrift delay that AtPulse added — for PUMA this is a

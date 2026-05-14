@@ -10,6 +10,7 @@
 #include <Rtypes.h>
 #include <TMatrixD.h>
 
+#include <limits>
 #include <memory>
 
 class AtFitMetadata;
@@ -128,6 +129,16 @@ public:
    /// z-component, so only φ rotates. Sign uses fCharge: pi+/pi- handled
    /// automatically. Default false preserves all existing analyses.
    void SetUpdateAnglesOnBackExtrap(bool b) { fUpdateAnglesOnBackExtrap = b; }
+   /// After the helix back-extrap reaches POCA on the PRA circle, continue
+   /// in a STRAIGHT LINE along the back-extrapolated momentum direction
+   /// until vx reaches the target. Use this for setups where the production
+   /// vertex is in a field-free region upstream of the chamber (e.g. HYDRA
+   /// with vertex at x = -400 mm, field starts at x = -20 mm — POCA lands
+   /// near the chamber face and an additional ~390 mm of straight tail
+   /// reaches the target plane). The angle is unchanged in the tail (free
+   /// flight) and no eloss is applied along the tail (assumed vacuum).
+   /// NaN keeps the existing POCA endpoint. Requires the helix back-extrap.
+   void SetBackExtrapTargetX(double x_mm) { fBackExtrapTargetX = x_mm; }
    /// Subtract a constant offset (mm) from the back-extrapolated vertex z.
    /// Compensates a hardwired +peakingTime·vDrift bias in `AtPSA::CalculateZGeo`
    /// (the formula uses the pulse-peak time bucket but doesn't subtract the
@@ -237,6 +248,7 @@ private:
    bool fUseArcWalk{false};        // Use ClusterizeArcWalk instead of ClusterizeSmooth3D
    bool fForceVertexOnBeamAxis{false}; // Extrapolate to xy=(0,0), not POCA on PRA circle
    bool fUpdateAnglesOnBackExtrap{false}; // Rotate φ_s by arc/R so Kinematics.phi is at the vertex
+   double fBackExtrapTargetX{std::numeric_limits<double>::quiet_NaN()}; // Straight-line tail target x (mm)
    double fVertexZBias_mm{0.0};        // Subtract from final initialPositionXtr.Z()
    int fArcWalkMinHits{3};
    int fArcWalkKNN{10};
