@@ -24,43 +24,57 @@ AtPIDResult AtPIDEstimator::Estimate(AtTrack &track) const
          r.brho = 0.0;
    }
 
-   // --- dEdx: charge integrated from the vertex outward over the inner-pad
-   //     segment (r < smallPadRadius), divided by the arc length of that segment.
-   //     Hits are ordered by cylindrical radius (vertex -> outward for recoil
-   //     tracks) and the arc length is the sum of consecutive 3D hit distances.
-   const auto &hits = track.GetHitArray();
-   struct HitRC {
+   // --- dEdx: Spyral recipe = total charge integrated over the inner-pad
+   //     segment (r < smallPadRadius) / arc length of that segment. Computed on
+   //     the PRA CLUSTERS (charge-weighted, denoised) rather than raw hits — this
+   //     is what makes the bands sharp. Clusters carry the summed charge in
+   //     GetCharge(); we order them by cylindrical radius (vertex -> outward) and
+   //     sum consecutive 3D distances for the arc length. Falls back to raw hits
+   //     if the track has no cluster array.
+   struct PtRC {
       double rad;
       ROOT::Math::XYZPoint pos;
       double q;
    };
-   std::vector<HitRC> ordered;
-   ordered.reserve(hits.size());
-   for (const auto &h : hits) {
-      if (!h)
-         continue;
-      const auto p = h->GetPosition();
-      ordered.push_back({std::sqrt(p.X() * p.X() + p.Y() * p.Y()), p, h->GetCharge()});
+   std::vector<PtRC> pts;
+   const auto *clusters = track.GetHitClusterArray();
+   if (clusters && clusters->size() >= 3) {
+      pts.reserve(clusters->size());
+      for (const auto &c : *clusters) {
+         auto p = c.GetPositionCharge(); // charge-weighted centroid
+         if (p.X() == 0 && p.Y() == 0 && p.Z() == 0)
+            p = c.GetPosition();
+         pts.push_back({std::sqrt(p.X() * p.X() + p.Y() * p.Y()), ROOT::Math::XYZPoint(p.X(), p.Y(), p.Z()),
+                        c.GetCharge()});
+      }
+   } else {
+      const auto &hits = track.GetHitArray();
+      pts.reserve(hits.size());
+      for (const auto &h : hits) {
+         if (!h)
+            continue;
+         const auto p = h->GetPosition();
+         pts.push_back({std::sqrt(p.X() * p.X() + p.Y() * p.Y()), p, h->GetCharge()});
+      }
    }
-   std::sort(ordered.begin(), ordered.end(), [](const HitRC &a, const HitRC &b) { return a.rad < b.rad; });
-
-   if (!ordered.empty())
-      r.vertex = ordered.front().pos;
+   std::sort(pts.begin(), pts.end(), [](const PtRC &a, const PtRC &b) { return a.rad < b.rad; });
+   if (!pts.empty())
+      r.vertex = pts.front().pos;
 
    auto integrate = [&](double radiusCut) {
       double sumQ = 0.0, arclen = 0.0;
       bool havePrev = false;
       ROOT::Math::XYZPoint prev;
       int n = 0;
-      for (const auto &hc : ordered) {
-         if (hc.rad > radiusCut)
+      for (const auto &pt : pts) {
+         if (pt.rad > radiusCut)
             break;
-         sumQ += hc.q;
+         sumQ += pt.q;
          if (havePrev) {
-            const auto d = hc.pos - prev;
+            const auto d = pt.pos - prev;
             arclen += std::sqrt(d.X() * d.X() + d.Y() * d.Y() + d.Z() * d.Z());
          }
-         prev = hc.pos;
+         prev = pt.pos;
          havePrev = true;
          ++n;
       }
@@ -73,31 +87,7 @@ AtPIDResult AtPIDEstimator::Estimate(AtTrack &track) const
 
    r.dE = sumQ;
    r.arclength = arclen;
-
-   // dEdx: truncated mean of per-step dq/ds over the inner segment. The standard
-   // TPC ionization-PID estimator — dropping the high Landau tail (top fraction)
-   // sharpens species bands far better than total-charge/length. Falls back to
-   // total/length if too few steps.
-   double radiusCut = (nInner >= 2 ? fSmallPadRadius : 1e9);
-   std::vector<double> dqds;
-   for (std::size_t i = 1; i < ordered.size(); ++i) {
-      if (ordered[i].rad > radiusCut)
-         break;
-      const auto d = ordered[i].pos - ordered[i - 1].pos;
-      const double ds = std::sqrt(d.X() * d.X() + d.Y() * d.Y() + d.Z() * d.Z());
-      if (ds > 0.5) // ignore sub-pad steps (huge spurious dq/ds)
-         dqds.push_back(ordered[i].q / ds);
-   }
-   if (dqds.size() >= 3) {
-      std::sort(dqds.begin(), dqds.end());
-      const std::size_t keep = std::max<std::size_t>(1, (std::size_t)(0.70 * dqds.size())); // lowest 70%
-      double s = 0.0;
-      for (std::size_t i = 0; i < keep; ++i)
-         s += dqds[i];
-      r.dEdx = s / keep;
-   } else {
-      r.dEdx = (arclen > 0.0) ? sumQ / arclen : 0.0;
-   }
+   r.dEdx = (arclen > 0.0) ? sumQ / arclen : 0.0;
    r.sqrtdEdx = std::sqrt(std::max(0.0, r.dEdx));
    r.valid = (R > 0.0 && r.brho > 0.0 && r.dEdx > 0.0);
    return r;

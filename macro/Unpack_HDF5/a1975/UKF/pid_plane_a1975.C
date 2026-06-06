@@ -11,8 +11,8 @@
 ///   root -b -q 'pid_plane_a1975.C("run_0116")'                 // full, brho 0..1.5
 ///   root -b -q 'pid_plane_a1975.C("run_0116", 15, 1.5, true)'  // fast re-plot from cache
 
-void pid_plane_a1975(TString fileName = "run_0116", Double_t sqMax = 15.0, Double_t brMax = 1.5, Bool_t replot = false,
-                     Double_t bField = 2.85, Double_t smallPadRadius = 152.0)
+void pid_plane_a1975(TString fileName = "run_0116", Double_t dedxMax = 12000.0, Double_t brMax = 3.0,
+                     Bool_t replot = false, Double_t bField = 2.85, Double_t smallPadRadius = 152.0)
 {
    gSystem->Load("libAtTools.so");
    gSystem->Load("libAtReconstruction.so");
@@ -22,19 +22,20 @@ void pid_plane_a1975(TString fileName = "run_0116", Double_t sqMax = 15.0, Doubl
 
    TString obsFile = fileName + "_pidobs.root";
 
-   TH2F *h = new TH2F("hpid", "Particle ID  (C++ Spyral port);#sqrt{dEdx}  [#sqrt{ADC/mm}];B#rho  [T m]", 350, 0, sqMax,
-                      350, 0, brMax);
+   // Spyral-style axes: dEdx (counts) on x, brho on y.
+   TH2F *h = new TH2F("hpid", "Particle ID  (C++ Spyral port);dEdx  [counts];B#rho  [T m]", 400, 0, dedxMax, 400, 0,
+                      brMax);
 
    if (replot && gSystem->AccessPathName(obsFile) == 0) {
       // Fast path: read cached observables.
       TFile *fo = TFile::Open(obsFile);
       TNtuple *nt = (TNtuple *)fo->Get("pidobs");
-      float sq, br;
-      nt->SetBranchAddress("sqrtdedx", &sq);
+      float dedx, br;
+      nt->SetBranchAddress("dedx", &dedx);
       nt->SetBranchAddress("brho", &br);
       for (Long64_t i = 0; i < nt->GetEntries(); ++i) {
          nt->GetEntry(i);
-         h->Fill(sq, br);
+         h->Fill(dedx, br);
       }
       printf("Re-plotted %lld cached tracks\n", nt->GetEntries());
    } else {
@@ -67,7 +68,7 @@ void pid_plane_a1975(TString fileName = "run_0116", Double_t sqMax = 15.0, Doubl
             auto r = estimator.Estimate(const_cast<AtTrack &>(track));
             if (!r.valid)
                continue;
-            h->Fill(r.sqrtdEdx, r.brho);
+            h->Fill(r.dEdx, r.brho);
             nt->Fill(r.sqrtdEdx, r.brho, r.dEdx, r.polar * TMath::RadToDeg(), r.dE, r.arclength);
             ++n;
          }
@@ -84,5 +85,5 @@ void pid_plane_a1975(TString fileName = "run_0116", Double_t sqMax = 15.0, Doubl
    h->Draw("colz");
    TString png = fileName + "_pid_plane.png";
    c->SaveAs(png);
-   printf("Saved %s  (sqMax=%.1f, brMax=%.2f)\n", png.Data(), sqMax, brMax);
+   printf("Saved %s  (dedxMax=%.0f, brMax=%.2f)\n", png.Data(), dedxMax, brMax);
 }
