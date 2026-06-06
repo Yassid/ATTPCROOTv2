@@ -39,6 +39,10 @@ set(SRCS
 
   DataCleaning/AtDataCleaner.cxx
   DataCleaning/AtkNN.cxx
+
+  AtPID/AtCut2D.cxx
+  AtPID/AtParticleID.cxx
+  AtPID/AtPIDEstimator.cxx
   )
 
 Set(DEPENDENCIES
@@ -73,6 +77,7 @@ Set(INCLUDE_DIR
   ${CMAKE_SOURCE_DIR}/AtTools/AtHitSampling
   ${CMAKE_SOURCE_DIR}/AtTools/ElectronicResponse
   ${CMAKE_SOURCE_DIR}/AtTools/DataCleaning
+  ${CMAKE_SOURCE_DIR}/AtTools/AtPID
   )
 
 set(TEST_SRCS

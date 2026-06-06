@@ -74,4 +74,9 @@
 #pragma link C++ class AtTools::DataCleaning::AtkNN + ;
 #pragma link C++ class AtTools::DataCleaning::AtDataCleaner + ;
 
+#pragma link C++ class AtTools::AtCut2D - !;
+#pragma link C++ class AtTools::AtParticleID - !;
+#pragma link C++ class AtTools::AtPIDEstimator - !;
+#pragma link C++ struct AtTools::AtPIDResult + ;
+
 #endif
