@@ -19,6 +19,7 @@ struct AtPIDResult {
    double arclength{0.0}; // arc length of the inner segment (mm)
    double polar{0.0};     // polar angle (rad, digi frame) from PRA
    double azimuthal{0.0}; // azimuthal angle (rad) from PRA
+   int nClusters{0};      // number of clusters (or hits) used — for quality cuts
    ROOT::Math::XYZPoint vertex;
    bool valid{false};
 };

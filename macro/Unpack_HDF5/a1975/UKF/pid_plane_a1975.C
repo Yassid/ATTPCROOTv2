@@ -12,7 +12,8 @@
 ///   root -b -q 'pid_plane_a1975.C("run_0116", 15, 1.5, true)'  // fast re-plot from cache
 
 void pid_plane_a1975(TString fileName = "run_0116", Double_t dedxMax = 12000.0, Double_t brMax = 3.0,
-                     Bool_t replot = false, Double_t bField = 2.85, Double_t smallPadRadius = 152.0)
+                     Bool_t replot = false, Int_t minClusters = 0, Double_t bField = 2.85,
+                     Double_t smallPadRadius = 152.0)
 {
    gSystem->Load("libAtTools.so");
    gSystem->Load("libAtReconstruction.so");
@@ -30,14 +31,19 @@ void pid_plane_a1975(TString fileName = "run_0116", Double_t dedxMax = 12000.0, 
       // Fast path: read cached observables.
       TFile *fo = TFile::Open(obsFile);
       TNtuple *nt = (TNtuple *)fo->Get("pidobs");
-      float dedx, br;
+      float dedx, br, ncl;
       nt->SetBranchAddress("dedx", &dedx);
       nt->SetBranchAddress("brho", &br);
+      nt->SetBranchAddress("ncl", &ncl);
+      Long64_t kept = 0;
       for (Long64_t i = 0; i < nt->GetEntries(); ++i) {
          nt->GetEntry(i);
+         if (ncl < minClusters)
+            continue;
          h->Fill(dedx, br);
+         ++kept;
       }
-      printf("Re-plotted %lld cached tracks\n", nt->GetEntries());
+      printf("Re-plotted %lld / %lld cached tracks (minClusters=%d)\n", kept, nt->GetEntries(), minClusters);
    } else {
       // Compute from the reco file and cache.
       TString inputFile = fileName + "_reco.root";
@@ -55,7 +61,7 @@ void pid_plane_a1975(TString fileName = "run_0116", Double_t dedxMax = 12000.0, 
       AtTools::AtPIDEstimator estimator(bField, smallPadRadius);
 
       TFile *fo = new TFile(obsFile, "RECREATE");
-      TNtuple *nt = new TNtuple("pidobs", "PID observables", "sqrtdedx:brho:dedx:polar:dE:arclen");
+      TNtuple *nt = new TNtuple("pidobs", "PID observables", "sqrtdedx:brho:dedx:polar:dE:arclen:ncl");
       Long64_t n = 0;
       for (Long64_t i = 0; i < t->GetEntries(); ++i) {
          t->GetEntry(i);
@@ -68,8 +74,10 @@ void pid_plane_a1975(TString fileName = "run_0116", Double_t dedxMax = 12000.0, 
             auto r = estimator.Estimate(const_cast<AtTrack &>(track));
             if (!r.valid)
                continue;
+            nt->Fill(r.sqrtdEdx, r.brho, r.dEdx, r.polar * TMath::RadToDeg(), r.dE, r.arclength, r.nClusters);
+            if (r.nClusters < minClusters)
+               continue;
             h->Fill(r.dEdx, r.brho);
-            nt->Fill(r.sqrtdEdx, r.brho, r.dEdx, r.polar * TMath::RadToDeg(), r.dE, r.arclength);
             ++n;
          }
       }

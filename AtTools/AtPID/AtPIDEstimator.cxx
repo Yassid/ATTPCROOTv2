@@ -60,6 +60,7 @@ AtPIDResult AtPIDEstimator::Estimate(AtTrack &track) const
    std::sort(pts.begin(), pts.end(), [](const PtRC &a, const PtRC &b) { return a.rad < b.rad; });
    if (!pts.empty())
       r.vertex = pts.front().pos;
+   r.nClusters = static_cast<int>(pts.size());
 
    auto integrate = [&](double radiusCut) {
       double sumQ = 0.0, arclen = 0.0;
