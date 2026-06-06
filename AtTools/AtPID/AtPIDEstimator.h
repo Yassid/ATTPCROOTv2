@@ -15,6 +15,8 @@ struct AtPIDResult {
    double brho{0.0};      // magnetic rigidity, T*m  (B*R/sin(theta))
    double dEdx{0.0};      // integrated charge / arc length over the inner-pad segment
    double sqrtdEdx{0.0};  // sqrt(dEdx) — Spyral's default PID x-axis
+   double elossMean{0.0}; // native pid_dev.C variable: mean cluster charge over 80% from the Bragg end
+   double elossTrunc{0.0};// truncated mean (lowest 70%) of the same cluster charges
    double dE{0.0};        // integrated charge over the inner segment
    double arclength{0.0}; // arc length of the inner segment (mm)
    double polar{0.0};     // polar angle (rad, digi frame) from PRA

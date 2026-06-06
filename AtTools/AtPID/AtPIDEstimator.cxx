@@ -90,6 +90,38 @@ AtPIDResult AtPIDEstimator::Estimate(AtTrack &track) const
    r.arclength = arclen;
    r.dEdx = (arclen > 0.0) ? sumQ / arclen : 0.0;
    r.sqrtdEdx = std::sqrt(std::max(0.0, r.dEdx));
+
+   // --- Native pid_dev.C variables: mean cluster charge over the first 80% of
+   //     clusters from the Bragg end (forward tracks: high-index end; backward:
+   //     low-index end), in the cluster array's intrinsic (Z-sorted) order. This
+   //     is length-division-free (no noisy arclength) and emphasizes the
+   //     Bragg-rise region where species separate best. elossTrunc drops the
+   //     high Landau tail.
+   if (clusters && clusters->size() >= 3) {
+      const double thetaDeg = r.polar * 180.0 / M_PI;
+      const int nc = static_cast<int>(clusters->size());
+      const int maxN = std::max(1, static_cast<int>(0.8 * nc));
+      std::vector<double> q;
+      q.reserve(maxN);
+      if (thetaDeg < 90.0) {
+         for (int k = nc - 1; k >= 0 && static_cast<int>(q.size()) < maxN; --k)
+            q.push_back((*clusters)[k].GetCharge());
+      } else {
+         for (int k = 0; k < nc && static_cast<int>(q.size()) < maxN; ++k)
+            q.push_back((*clusters)[k].GetCharge());
+      }
+      double s = 0.0;
+      for (double v : q)
+         s += v;
+      r.elossMean = q.empty() ? 0.0 : s / q.size();
+      std::sort(q.begin(), q.end());
+      const int keep = std::max(1, static_cast<int>(0.7 * q.size()));
+      double st = 0.0;
+      for (int k = 0; k < keep; ++k)
+         st += q[k];
+      r.elossTrunc = st / keep;
+   }
+
    r.valid = (R > 0.0 && r.brho > 0.0 && r.dEdx > 0.0);
    return r;
 }

@@ -33,7 +33,7 @@ void pid_ic_a1975(TString runs = "run_0116,run_0117,run_0118", TString cacheTag 
    if (!replot) {
       AtTools::AtPIDEstimator estimator(bField, 152.0);
       TFile *fo = new TFile(cacheFile, "RECREATE");
-      TNtuple *nt = new TNtuple("pidobs", "PID + IC", "dedx:brho:ncl:ic:polar:vtxr:vtxz");
+      TNtuple *nt = new TNtuple("pidobs", "PID + IC", "dedx:brho:ncl:ic:polar:vtxr:vtxz:elm:elt");
 
       TObjArray *toks = runs.Tokenize(",");
       for (int ir = 0; ir < toks->GetEntries(); ++ir) {
@@ -85,7 +85,10 @@ void pid_ic_a1975(TString runs = "run_0116,run_0117,run_0118", TString cacheTag 
                if (!r.valid)
                   continue;
                double vtxr = std::sqrt(r.vertex.X() * r.vertex.X() + r.vertex.Y() * r.vertex.Y());
-               nt->Fill(r.dEdx, r.brho, r.nClusters, ic, r.polar * TMath::RadToDeg(), vtxr, r.vertex.Z());
+               float row[9] = {(float)r.dEdx,    (float)r.brho,      (float)r.nClusters,
+                               (float)ic,        (float)(r.polar * TMath::RadToDeg()), (float)vtxr,
+                               (float)r.vertex.Z(), (float)r.elossMean, (float)r.elossTrunc};
+               nt->Fill(row);
                ++filled;
             }
          }
