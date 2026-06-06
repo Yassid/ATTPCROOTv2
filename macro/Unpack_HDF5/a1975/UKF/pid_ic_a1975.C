@@ -19,7 +19,8 @@
 
 void pid_ic_a1975(TString runs = "run_0116,run_0117,run_0118", TString cacheTag = "combined", Double_t icMin = 950,
                   Double_t icMax = 1350, Double_t dedxMax = 4000, Double_t brMax = 1.0, Int_t minClusters = 15,
-                  Bool_t replot = false, Int_t icTbLo = 1000, Int_t icTbHi = 1350, Double_t bField = 2.85)
+                  Bool_t replot = false, Int_t icTbLo = 1000, Int_t icTbHi = 1350, Double_t bField = 2.85,
+                  Double_t maxVertexR = 40.0, Double_t polarMin = 10.0, Double_t polarMax = 170.0)
 {
    gSystem->Load("libAtTools.so");
    gSystem->Load("libAtReconstruction.so");
@@ -32,7 +33,7 @@ void pid_ic_a1975(TString runs = "run_0116,run_0117,run_0118", TString cacheTag 
    if (!replot) {
       AtTools::AtPIDEstimator estimator(bField, 152.0);
       TFile *fo = new TFile(cacheFile, "RECREATE");
-      TNtuple *nt = new TNtuple("pidobs", "PID + IC", "dedx:brho:ncl:ic:polar");
+      TNtuple *nt = new TNtuple("pidobs", "PID + IC", "dedx:brho:ncl:ic:polar:vtxr:vtxz");
 
       TObjArray *toks = runs.Tokenize(",");
       for (int ir = 0; ir < toks->GetEntries(); ++ir) {
@@ -83,7 +84,8 @@ void pid_ic_a1975(TString runs = "run_0116,run_0117,run_0118", TString cacheTag 
                auto r = estimator.Estimate(const_cast<AtTrack &>(track));
                if (!r.valid)
                   continue;
-               nt->Fill(r.dEdx, r.brho, r.nClusters, ic, r.polar * TMath::RadToDeg());
+               double vtxr = std::sqrt(r.vertex.X() * r.vertex.X() + r.vertex.Y() * r.vertex.Y());
+               nt->Fill(r.dEdx, r.brho, r.nClusters, ic, r.polar * TMath::RadToDeg(), vtxr, r.vertex.Z());
                ++filled;
             }
          }
@@ -101,34 +103,42 @@ void pid_ic_a1975(TString runs = "run_0116,run_0117,run_0118", TString cacheTag 
    // ---- plot from cache ----
    TFile *fo = TFile::Open(cacheFile);
    TNtuple *nt = (TNtuple *)fo->Get("pidobs");
-   float dedx, brho, ncl, ic, polar;
+   float dedx, brho, ncl, ic, polar, vtxr, vtxz;
    nt->SetBranchAddress("dedx", &dedx);
    nt->SetBranchAddress("brho", &brho);
    nt->SetBranchAddress("ncl", &ncl);
    nt->SetBranchAddress("ic", &ic);
    nt->SetBranchAddress("polar", &polar);
+   nt->SetBranchAddress("vtxr", &vtxr);
+   nt->SetBranchAddress("vtxz", &vtxz);
 
-   TH1F *hic = new TH1F("hic", "IC amplitude;IC amp [ADC];tracks", 250, 0, 2500);
-   TH2F *hall = new TH2F("hall", "PID (no IC gate);dEdx [counts];B#rho [T m]", 400, 0, dedxMax, 400, 0, brMax);
-   TH2F *hgate = new TH2F("hgate", "PID (IC-gated: 16C beam);dEdx [counts];B#rho [T m]", 400, 0, dedxMax, 400, 0, brMax);
-   long all = 0, gated = 0;
+   TH1F *hic = new TH1F("hic", "IC amplitude (quality cut);IC amp [ADC];tracks", 250, 0, 2500);
+   TH2F *hall = new TH2F("hall", "PID quality-cut, no IC gate;dEdx [counts];B#rho [T m]", 400, 0, dedxMax, 400, 0, brMax);
+   TH2F *hgate = new TH2F("hgate", "PID quality + IC gate (16C);dEdx [counts];B#rho [T m]", 400, 0, dedxMax, 400, 0,
+                          brMax);
+   TH2F *hkin = new TH2F("hkin", "Kinematics: quality + IC gate;#theta [deg];B#rho [T m]", 180, 0, 180, 400, 0, brMax);
+   long all = 0, gated = 0, raw = 0;
    for (Long64_t i = 0; i < nt->GetEntries(); ++i) {
       nt->GetEntry(i);
-      if (ncl < minClusters)
+      ++raw;
+      // quality cuts: enough clusters, vertex near beam axis, polar window
+      if (ncl < minClusters || vtxr > maxVertexR || polar < polarMin || polar > polarMax)
          continue;
       hic->Fill(ic);
       hall->Fill(dedx, brho);
       ++all;
       if (ic >= icMin && ic <= icMax) {
          hgate->Fill(dedx, brho);
+         hkin->Fill(polar, brho);
          ++gated;
       }
    }
-   printf("\033[1;32mtracks (minClusters>=%d): %ld total, %ld IC-gated [%.0f-%.0f] (%.0f%%)\033[0m\n", minClusters, all,
-          gated, icMin, icMax, all ? 100.0 * gated / all : 0);
+   printf("\033[1;32mtracks: %ld raw -> %ld after quality(ncl>=%d, vtxR<%.0f, polar[%.0f,%.0f]) -> %ld IC-gated "
+          "[%.0f-%.0f]\033[0m\n",
+          raw, all, minClusters, maxVertexR, polarMin, polarMax, gated, icMin, icMax);
 
-   TCanvas *c = new TCanvas("c", "pid_ic", 1600, 520);
-   c->Divide(3, 1);
+   TCanvas *c = new TCanvas("c", "pid_ic", 1500, 1100);
+   c->Divide(2, 2);
    c->cd(1);
    hic->SetFillColor(kAzure - 9);
    hic->Draw();
@@ -145,6 +155,9 @@ void pid_ic_a1975(TString runs = "run_0116,run_0117,run_0118", TString cacheTag 
    c->cd(3);
    gPad->SetLogz();
    hgate->Draw("colz");
+   c->cd(4);
+   gPad->SetLogz();
+   hkin->Draw("colz");
    TString png = cacheTag + "_pid_ic.png";
    c->SaveAs(png);
    printf("Saved %s\n", png.Data());
