@@ -46,7 +46,8 @@ const double kE_C = 1.602176634e-19;
 
 /// Build one fully-configured UKF hypothesis for a named particle.
 std::unique_ptr<EventFit::AtFitterUKF> MakeHypothesis(const TString &name, int bFieldSign, double bFieldMag,
-                                                      double gasDensity)
+                                                      double gasDensity, double measSigma, double momSigmaFrac,
+                                                      int nIter, int minClusters)
 {
    auto it = kParticleTable.find(name);
    if (it == kParticleTable.end()) {
@@ -69,11 +70,11 @@ std::unique_ptr<EventFit::AtFitterUKF> MakeHypothesis(const TString &name, int b
    // with the Bz sign flipped for experimental-data handedness.
    ukf->SetBField(ROOT::Math::XYZVector(0, 0, bFieldSign * bFieldMag));
    ukf->SetUKFParameters(1e-3, 2.0, 0.0);
-   ukf->SetMeasurementSigma(2.0);
-   ukf->SetMomentumSigmaFrac(0.3);
+   ukf->SetMeasurementSigma(measSigma);
+   ukf->SetMomentumSigmaFrac(momSigmaFrac);
    ukf->SetEnableEnergyStraggling(false);
-   ukf->SetMinClusters(10);
-   ukf->SetNIterations(1);
+   ukf->SetMinClusters(minClusters);
+   ukf->SetNIterations(nIter);
    ukf->SetZPadPlane(1000.0);
    return ukf;
 }
@@ -81,14 +82,15 @@ std::unique_ptr<EventFit::AtFitterUKF> MakeHypothesis(const TString &name, int b
 
 void fitUKF_a1975(TString fileName = "run_0116", Long64_t nEvents = -1, TString particles = "proton",
                   Int_t bFieldSign = -1, Double_t bFieldMag = 2.85, Double_t gasDensity = 9.0e-5,
-                  TString outSuffix = "")
+                  TString outSuffix = "", TString ioDir = "", Double_t measSigma = 2.0, Double_t momSigmaFrac = 0.3,
+                  Int_t nIter = 1, Int_t minClusters = 10)
 {
    gSystem->Load("libAtReconstruction.so");
    FairLogger::GetLogger()->SetLogScreenLevel("WARNING");
 
    TString dir = getenv("VMCWORKDIR");
-   TString inputFile = fileName + "_reco.root";
-   TString outputFile = fileName + "_ukf" + outSuffix + ".root";
+   TString inputFile = ioDir + fileName + "_reco.root";
+   TString outputFile = ioDir + fileName + "_ukf" + outSuffix + ".root";
    TString digiParFile = dir + "/parameters/ATTPC.a1954.par";
 
    if (gSystem->AccessPathName(inputFile.Data())) {
@@ -120,7 +122,7 @@ void fitUKF_a1975(TString fileName = "run_0116", Long64_t nEvents = -1, TString 
    TObjArray *toks = particles.Tokenize(",");
    for (int i = 0; i < toks->GetEntries(); ++i) {
       TString pname = ((TObjString *)toks->At(i))->GetString().Strip(TString::kBoth);
-      auto hypo = MakeHypothesis(pname, bFieldSign, bFieldMag, gasDensity);
+      auto hypo = MakeHypothesis(pname, bFieldSign, bFieldMag, gasDensity, measSigma, momSigmaFrac, nIter, minClusters);
       if (hypo) {
          // chargeSign = 0: do NOT filter by PRA charge sign. The PRA sign is
          // calibrated on SIM handedness and is unreliable for experimental data
