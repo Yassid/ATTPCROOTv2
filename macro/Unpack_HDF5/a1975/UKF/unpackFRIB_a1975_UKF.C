@@ -8,7 +8,7 @@
 ///
 /// Run: root -b -q 'unpackFRIB_a1975_UKF.C("run_0116", 5000)'
 
-void unpackFRIB_a1975_UKF(TString fileName = "run_0116", Long64_t nEvents = -1)
+void unpackFRIB_a1975_UKF(TString fileName = "run_0116", Long64_t nEvents = -1, TString outDir = "")
 {
    gSystem->Load("libAtReconstruction.so");
    TStopwatch timer;
@@ -19,7 +19,7 @@ void unpackFRIB_a1975_UKF(TString fileName = "run_0116", Long64_t nEvents = -1)
    TString mapDir = dir + "/scripts/ANL2023.xml";
    TString digiParFile = dir + "/parameters/ATTPC.a1954.par";
    gSystem->Setenv("GEOMPATH", (dir + "/geometry/").Data());
-   TString outputFile = fileName + "_FRIB.root";
+   TString outputFile = outDir + fileName + "_FRIB.root";
 
    if (gSystem->AccessPathName(inputFile)) {
       printf("\033[1;31mERROR: %s not found\033[0m\n", inputFile.Data());
