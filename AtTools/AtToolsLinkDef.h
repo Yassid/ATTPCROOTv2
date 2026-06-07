@@ -78,5 +78,8 @@
 #pragma link C++ class AtTools::AtParticleID - !;
 #pragma link C++ class AtTools::AtPIDEstimator - !;
 #pragma link C++ struct AtTools::AtPIDResult + ;
+#pragma link C++ class AtTools::AtSmoothingSpline - !;
+#pragma link C++ class AtTools::AtSpyralPID - !;
+#pragma link C++ struct AtTools::AtSpyralResult + ;
 
 #endif

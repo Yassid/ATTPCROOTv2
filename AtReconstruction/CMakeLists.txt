@@ -44,6 +44,8 @@ Set(DEPENDENCIES
 set(SRCS
   # Add all the source files below this line. Those must have cxx for their extension.
 
+  AtPIDEvent.cxx
+  AtPIDTask.cxx
   AtPulseAnalyzer/AtPSA.cxx
   AtPulseAnalyzer/AtPSASimple2.cxx
   AtPulseAnalyzer/AtPSASpectrum.cxx

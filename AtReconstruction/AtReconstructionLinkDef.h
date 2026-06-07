@@ -89,4 +89,9 @@
 #pragma link C++ class AtLinkDAQTask + ;
 #pragma link C++ class AtCopyAuxTreeTask + ;
 
+#pragma link C++ class std::vector < AtTools::AtPIDResult> + ;
+#pragma link C++ class std::vector < AtTools::AtSpyralResult> + ;
+#pragma link C++ class AtPIDEvent + ;
+#pragma link C++ class AtPIDTask + ;
+
 #endif

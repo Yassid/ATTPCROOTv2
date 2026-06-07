@@ -11,7 +11,8 @@
 //
 // persistRaw=true also keeps AtRawEvent + AtEventH so the output is self-contained
 // for the event display.
-void unpackReco_a1975_UKF(TString fileName = "run_0116", Long64_t nEvents = 1000, Bool_t persistRaw = true)
+void unpackReco_a1975_UKF(TString fileName = "run_0116", Long64_t nEvents = 1000, Bool_t persistRaw = true,
+                          TString outDir = "")
 {
    gSystem->Load("libAtReconstruction.so");
 
@@ -27,7 +28,7 @@ void unpackReco_a1975_UKF(TString fileName = "run_0116", Long64_t nEvents = 1000
    TString mapDir = dir + "/scripts/" + scriptfile;
    TString geomDir = dir + "/geometry/";
    gSystem->Setenv("GEOMPATH", geomDir.Data());
-   TString outputFile = fileName + "_reco.root";
+   TString outputFile = outDir + fileName + "_reco.root";
    TString digiParFile = dir + "/parameters/" + parameterFile;
    TString geoManFile = dir + "/geometry/ATTPC_H1bar_geomanager.root";
 
