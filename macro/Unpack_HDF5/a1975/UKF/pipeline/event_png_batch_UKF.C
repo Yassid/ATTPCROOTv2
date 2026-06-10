@@ -28,7 +28,7 @@ void event_png_batch_UKF(TString inFile = "run_0116_disp", Long64_t evStart = 0,
       return;
    }
 
-   TString outDir = inFile + "_pngs";
+   TString outDir = "pipeline/plots/" + inFile + "_pngs";
    gSystem->mkdir(outDir, kTRUE);
 
    // --- contact sheet grid ---

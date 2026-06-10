@@ -1,0 +1,6 @@
+# regenerable data products and plots — not tracked
+*.root
+*.png
+*.parquet
+plots/
+*_pngs/

@@ -87,7 +87,7 @@ void event_png_UKF(TString inFile = "run_0116_disp", Long64_t evt = -1, Int_t sc
    g3->SetMarkerColor(kAzure + 2);
    g3->Draw("P0"); // software TView 3D scatter, no OpenGL
 
-   TString png = Form("%s_evt%lld.png", inFile.Data(), evt);
+   TString png = Form("pipeline/plots/%s_evt%lld.png", inFile.Data(), evt);
    c->SaveAs(png);
    printf("Saved %s  (%d hits)\n", png.Data(), n);
 }

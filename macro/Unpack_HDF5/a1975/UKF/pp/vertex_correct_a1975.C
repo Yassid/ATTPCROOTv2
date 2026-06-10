@@ -96,6 +96,6 @@ void vertex_correct_a1975(TString cache = "proton_kin.root", int nz = 28, double
    leg->AddEntry(hraw, Form("raw (FWHM %.2f)", fw_raw), "l");
    leg->AddEntry(hcor, Form("corrected (FWHM %.2f)", fw_cor), "l");
    leg->Draw();
-   c->SaveAs("vertex_correction.png");
+   c->SaveAs("pp/plots/vertex_correction.png");
    printf("saved vertex_correction.png\n");
 }

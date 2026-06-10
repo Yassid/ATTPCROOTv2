@@ -16,7 +16,7 @@
 
 void ukf_clean_a1975(TString runsCSV = "run_0106,run_0107,run_0108,run_0109,run_0110,run_0111,run_0112,run_0113,"
                                        "run_0114,run_0115",
-                    TString inDir = "/mnt/f/a1975/reco/", TString gateFile = "proton_band.json", double icMin = 950,
+                    TString inDir = "/mnt/f/a1975/reco/", TString gateFile = "pid/proton_band.json", double icMin = 950,
                     double icMax = 1350, int icTbLo = 1000, int icTbHi = 1350, double chi2Cut = 5.0, double bField = 2.85)
 {
    gSystem->Load("libAtReconstruction.so");
@@ -115,6 +115,6 @@ void ukf_clean_a1975(TString runsCSV = "run_0106,run_0107,run_0108,run_0109,run_
    hkin->Draw("colz");
    c->cd(2);
    hke->Draw();
-   c->SaveAs("ukf_clean.png");
+   c->SaveAs("pp/plots/ukf_clean.png");
    printf("saved ukf_clean.png\n");
 }

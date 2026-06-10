@@ -125,7 +125,7 @@ void pid_a1975_UKF(TString fileName = "run_0116", TString gateFile = "", Double_
       hgated->Draw("colz");
       printf("\033[1;32mGated %d / %d tracks inside '%s'\033[0m\n", nGated, nTot, pid.GetName().c_str());
    }
-   TString png = fileName + "_pid.png";
+   TString png = "pid/plots/" + fileName + "_pid.png";
    c->SaveAs(png);
    printf("Saved %s\n", png.Data());
 }

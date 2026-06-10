@@ -79,7 +79,7 @@ void pid_spyral_a1975(TString fileName = "run_0116", Long64_t nEvents = -1, doub
    hSd->Draw("colz");
    c->cd(3);
    hO->Draw("colz");
-   c->SaveAs(fileName + "_spyral_pid.png");
+   c->SaveAs("pid/plots/" + fileName + "_spyral_pid.png");
    printf("saved %s_spyral_pid.png  (left/mid: Spyral, right: old recipe)\n", fileName.Data());
    fo->Close();
 }

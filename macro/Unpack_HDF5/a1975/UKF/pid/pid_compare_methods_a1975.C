@@ -65,6 +65,6 @@ void pid_compare_methods_a1975(TString runsCSV = "run_0116,run_0117,run_0118", T
    c->cd(2);
    gPad->SetLogz();
    hS->Draw("colz");
-   c->SaveAs("pid_methods_compare.png");
+   c->SaveAs("pid/plots/pid_methods_compare.png");
    printf("saved pid_methods_compare.png\n");
 }

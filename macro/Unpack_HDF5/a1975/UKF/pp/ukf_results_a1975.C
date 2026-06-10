@@ -67,7 +67,7 @@ void ukf_results_a1975(TString fileName = "run_0116", Double_t chi2Cut = 2.0, Do
    c->cd(3)->SetLogy();
    hc->SetFillColor(kOrange - 3);
    hc->Draw();
-   TString png = fileName + "_ukf_results.png";
+   TString png = "pp/plots/" + fileName + "_ukf_results.png";
    c->SaveAs(png);
    printf("Fitted tracks: %ld total, %ld with KE>0 & chi2/ndf<%.1f\n", nTot, nGood, chi2Cut);
    printf("Saved %s\n", png.Data());

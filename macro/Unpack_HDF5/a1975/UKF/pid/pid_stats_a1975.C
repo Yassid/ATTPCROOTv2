@@ -74,6 +74,6 @@ void pid_stats_a1975(TString runsCSV = "run_0116,run_0117,run_0118", double bFie
    c->cd(2);
    gPad->SetLogz();
    hSpy->Draw("colz");
-   c->SaveAs("pid_stats_compare.png");
+   c->SaveAs("pid/plots/pid_stats_compare.png");
    printf("saved pid_stats_compare.png\n");
 }

@@ -14,7 +14,7 @@
 
 void pid_clean_a1975(TString runsCSV = "run_0106,run_0107,run_0108,run_0109,run_0110,run_0111,run_0112,run_0113,"
                                        "run_0114,run_0115",
-                    TString inDir = "/mnt/f/a1975/reco/", TString gateFile = "proton_band.json", double icMin = 950,
+                    TString inDir = "/mnt/f/a1975/reco/", TString gateFile = "pid/proton_band.json", double icMin = 950,
                     double icMax = 1350, int icTbLo = 1000, int icTbHi = 1350, int minPts = 15, double maxVtxR = 40)
 {
    gSystem->Load("libAtReconstruction.so");
@@ -110,6 +110,6 @@ void pid_clean_a1975(TString runsCSV = "run_0106,run_0107,run_0108,run_0109,run_
    c->cd(3);
    gPad->SetLogz();
    hkin->Draw("colz");
-   c->SaveAs("pid_clean.png");
+   c->SaveAs("pid/plots/pid_clean.png");
    printf("saved pid_clean.png\n");
 }

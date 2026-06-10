@@ -88,7 +88,7 @@ void gate_proton_a1975(TString runsCSV = "run_0106,run_0107,run_0108,run_0109,ru
       c->cd(2);
       hkin->Draw("colz");
    }
-   c->SaveAs("proton_gate.png");
+   c->SaveAs("pid/plots/proton_gate.png");
    printf("saved proton_gate.png\n");
 
    if (applyGate) {

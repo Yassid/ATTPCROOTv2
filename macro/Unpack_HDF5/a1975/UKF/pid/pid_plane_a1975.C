@@ -91,7 +91,7 @@ void pid_plane_a1975(TString fileName = "run_0116", Double_t dedxMax = 12000.0, 
    c->SetRightMargin(0.13);
    c->SetLogz();
    h->Draw("colz");
-   TString png = fileName + "_pid_plane.png";
+   TString png = "pid/plots/" + fileName + "_pid_plane.png";
    c->SaveAs(png);
    printf("Saved %s  (dedxMax=%.0f, brMax=%.2f)\n", png.Data(), dedxMax, brMax);
 }

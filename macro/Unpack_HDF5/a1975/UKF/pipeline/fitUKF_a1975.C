@@ -83,14 +83,18 @@ std::unique_ptr<EventFit::AtFitterUKF> MakeHypothesis(const TString &name, int b
 void fitUKF_a1975(TString fileName = "run_0116", Long64_t nEvents = -1, TString particles = "proton",
                   Int_t bFieldSign = -1, Double_t bFieldMag = 2.85, Double_t gasDensity = 9.0e-5,
                   TString outSuffix = "", TString ioDir = "", Double_t measSigma = 2.0, Double_t momSigmaFrac = 0.3,
-                  Int_t nIter = 1, Int_t minClusters = 10)
+                  Int_t nIter = 1, Int_t minClusters = 10, TString outDir = "")
 {
    gSystem->Load("libAtReconstruction.so");
    FairLogger::GetLogger()->SetLogScreenLevel("WARNING");
 
    TString dir = getenv("VMCWORKDIR");
    TString inputFile = ioDir + fileName + "_reco.root";
-   TString outputFile = ioDir + fileName + "_ukf" + outSuffix + ".root";
+   // outDir (if given) keeps fit outputs separate from the input/reco dir — e.g.
+   // the (p,d) deuteron fits go to /mnt/f/a1975/reco_pd/ while reading reco from
+   // /mnt/f/a1975/reco/. Falls back to ioDir when empty.
+   TString outBase = (outDir.Length() ? outDir : ioDir);
+   TString outputFile = outBase + fileName + "_ukf" + outSuffix + ".root";
    TString digiParFile = dir + "/parameters/ATTPC.a1954.par";
 
    if (gSystem->AccessPathName(inputFile.Data())) {

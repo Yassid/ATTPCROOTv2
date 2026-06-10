@@ -161,7 +161,7 @@ void pid_ic_a1975(TString runs = "run_0116,run_0117,run_0118", TString cacheTag 
    c->cd(4);
    gPad->SetLogz();
    hkin->Draw("colz");
-   TString png = cacheTag + "_pid_ic.png";
+   TString png = "pid/plots/" + cacheTag + "_pid_ic.png";
    c->SaveAs(png);
    printf("Saved %s\n", png.Data());
 }

@@ -90,13 +90,13 @@ void pid_gates_a1975(TString cacheTag = "combined", TString gateFiles = "", Doub
          pl->SetLineWidth(3);
          pl->Draw();
       }
-      c0->SaveAs(cacheTag + "_pid_plane.png");
+      c0->SaveAs("pid/plots/" + cacheTag + "_pid_plane.png");
    }
    for (size_t g = 0; g < gates.size(); ++g) {
       TCanvas *ck = new TCanvas(Form("ck%zu", g), "kin", 900, 700);
       ck->SetLogz();
       hkin[g]->Draw("colz");
-      ck->SaveAs(cacheTag + "_kin_" + gnames[g] + ".png");
+      ck->SaveAs("pid/plots/" + cacheTag + "_kin_" + gnames[g] + ".png");
    }
    printf("Saved %s_pid_plane.png and per-gate kinematics PNGs\n", cacheTag.Data());
 }

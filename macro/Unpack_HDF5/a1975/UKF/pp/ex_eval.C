@@ -1,8 +1,14 @@
-/// @file ex_overlay.C
-/// @brief Overlay two 16C Ex spectra from two UKF files (e.g. different MeasurementSigma).
-///   root -b -q 'ex_overlay.C("..._s05.root","..._s20.root","..._FRIB.root","measSigma=0.5","measSigma=2.0")'
+/// @file ex_eval.C
+/// @brief Evaluate the 16C elastic-peak resolution for one UKF file (for param scans).
+///
+/// Same clean selection as ex_a1975.C (proton gate + IC gate + chi2 cut) on a single
+/// <ukfFile> + <fribFile>, computes Ex, fits the elastic peak, and prints
+/// "label nProton FWHM(MeV) peak(MeV)". Used by the UKF parameter scan.
+///
+///   root -b -q 'ex_eval.C("..._ukf_scan.root","..._FRIB.root","ms=1.0")'
 
 #include <map>
+#include <tuple>
 
 static double omega2(double x, double y, double z)
 {
@@ -11,7 +17,8 @@ static double omega2(double x, double y, double z)
 static double kineEx(double m1, double m2, double m3, double m4, double Kp, double thlab, double Ke)
 {
    double Et1 = Kp + m1, Et3 = Ke + m3;
-   double s = m1 * m1 + m2 * m2 + 2 * m2 * Et1, u = m2 * m2 + m3 * m3 - 2 * m2 * Et3;
+   double s = m1 * m1 + m2 * m2 + 2 * m2 * Et1;
+   double u = m2 * m2 + m3 * m3 - 2 * m2 * Et3;
    double m4e = std::sqrt((std::cos(thlab) * omega2(s, m1 * m1, m2 * m2) * omega2(u, m2 * m2, m3 * m3) -
                            (s - m1 * m1 - m2 * m2) * (m2 * m2 + m3 * m3 - u)) /
                             (2 * m2 * m2) +
@@ -19,10 +26,18 @@ static double kineEx(double m1, double m2, double m3, double m4, double Kp, doub
    return m4e - m4;
 }
 
-static void fillEx(TString ukfFile, TString fribFile, TH1F *h, AtTools::AtParticleID &pid, AtTools::AtSpyralPID &spy,
-                   double icMin, double icMax, int icTbLo, int icTbHi, double chi2Cut)
+void ex_eval(TString ukfFile, TString fribFile, TString label, TString gateFile = "pid/proton_band.json",
+             double Ebeam = 192.0, double icMin = 950, double icMax = 1350, int icTbLo = 1000, int icTbHi = 1350,
+             double chi2Cut = 5.0, double bField = 2.85)
 {
+   gSystem->Load("libAtReconstruction.so");
+   gSystem->Load("libAtTools.so");
    const double u = 931.49401, m_C16 = 16.0147 * u, m_p = 1.007825 * u;
+   auto pid = AtTools::AtParticleID::LoadJSON(gateFile.Data());
+   AtTools::AtSpyralPID spy;
+   spy.SetBField(bField);
+
+   TH1F *hex = new TH1F("hex", "", 240, -5, 10);
    TFile *fu = TFile::Open(ukfFile);
    TTree *tu = (TTree *)fu->Get("cbmsim");
    TClonesArray *te = nullptr;
@@ -31,7 +46,9 @@ static void fillEx(TString ukfFile, TString fribFile, TH1F *h, AtTools::AtPartic
    TTree *tc = (TTree *)fc->Get("cbmsim");
    TClonesArray *re = nullptr;
    tc->SetBranchAddress("AtRawEvent", &re);
+
    Long64_t N = std::min(tu->GetEntries(), tc->GetEntries());
+   long nP = 0;
    for (Long64_t i = 0; i < N; ++i) {
       tc->GetEntry(i);
       double ic = -1;
@@ -71,54 +88,19 @@ static void fillEx(TString ukfFile, TString fribFile, TH1F *h, AtTools::AtPartic
          auto r = spy.Estimate(*it->second);
          if (!r.valid || !pid.IsInside(r.sqrtdEdx, r.brho))
             continue;
-         double ex = kineEx(m_C16, m_p, m_p, m_C16, 192.0, thRad, ke);
-         if (!std::isnan(ex))
-            h->Fill(ex);
+         double ex = kineEx(m_C16, m_p, m_p, m_C16, Ebeam, thRad, ke);
+         if (!std::isnan(ex)) {
+            hex->Fill(ex);
+            ++nP;
+         }
       }
    }
    fu->Close();
    fc->Close();
-}
 
-void ex_overlay(TString ukfA, TString ukfB, TString fribFile, TString labelA, TString labelB,
-                TString gateFile = "proton_band.json", double icMin = 950, double icMax = 1350, int icTbLo = 1000,
-                int icTbHi = 1350, double chi2Cut = 5.0)
-{
-   gSystem->Load("libAtReconstruction.so");
-   gSystem->Load("libAtTools.so");
-   gStyle->SetOptStat(0);
-   auto pid = AtTools::AtParticleID::LoadJSON(gateFile.Data());
-   AtTools::AtSpyralPID spy;
-   spy.SetBField(2.85);
-
-   TH1F *hA = new TH1F("hA", "16C E_{x}: UKF MeasurementSigma comparison;E_{x} [MeV];protons (norm.)", 200, -4, 8);
-   TH1F *hB = new TH1F("hB", "", 200, -4, 8);
-   fillEx(ukfA, fribFile, hA, pid, spy, icMin, icMax, icTbLo, icTbHi, chi2Cut);
-   fillEx(ukfB, fribFile, hB, pid, spy, icMin, icMax, icTbLo, icTbHi, chi2Cut);
-
-   auto fwhm = [](TH1F *h) {
-      TF1 g("g", "gaus", -1.6, 1.6);
-      g.SetParameters(h->GetMaximum(), 0, 0.7);
-      h->Fit(&g, "QRN");
-      return 2.3548 * g.GetParameter(2);
-   };
-   double fA = fwhm(hA), fB = fwhm(hB);
-   if (hA->Integral() > 0)
-      hA->Scale(1.0 / hA->GetMaximum());
-   if (hB->Integral() > 0)
-      hB->Scale(1.0 / hB->GetMaximum());
-
-   TCanvas *c = new TCanvas("c", "exov", 900, 680);
-   hA->SetLineColor(kRed + 1);
-   hA->SetLineWidth(2);
-   hB->SetLineColor(kGray + 2);
-   hB->SetLineWidth(2);
-   hA->Draw("hist");
-   hB->Draw("hist same");
-   TLegend *leg = new TLegend(0.58, 0.72, 0.88, 0.88);
-   leg->AddEntry(hA, Form("%s (FWHM %.3f)", labelA.Data(), fA), "l");
-   leg->AddEntry(hB, Form("%s (FWHM %.3f)", labelB.Data(), fB), "l");
-   leg->Draw();
-   c->SaveAs("ex_overlay.png");
-   printf("FWHM  %s=%.3f   %s=%.3f MeV\n", labelA.Data(), fA, labelB.Data(), fB);
+   TF1 g("g", "gaus", -1.6, 1.6);
+   g.SetParameters(hex->GetMaximum(), 0, 0.7);
+   hex->Fit(&g, "QRN");
+   double fwhm = 2.3548 * g.GetParameter(2);
+   printf("SCAN %s  nProton=%ld  FWHM=%.3f MeV  peak=%.3f MeV\n", label.Data(), nP, fwhm, g.GetParameter(1));
 }

@@ -131,7 +131,7 @@ void build_proton_gate_a1975(TString runsCSV = "run_0106,run_0107,run_0108,run_0
    h->GetYaxis()->SetRangeUser(0, 1.0);
    h->Draw("colz");
    g->Draw("L same");
-   c->SaveAs("proton_gate.png");
+   c->SaveAs("pid/plots/proton_gate.png");
    printf("saved proton_gate.png\n");
 
    if (write) {
