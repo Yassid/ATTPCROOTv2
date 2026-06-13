@@ -1,0 +1,835 @@
+% =====================================================================
+%  ATTPCROOTv2-OpenKF
+%  Track Reconstruction with the UKF and genfit Fitters
+%  A user manual for the full simulation and experimental pipelines
+% =====================================================================
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[margin=2.4cm]{geometry}
+\usepackage{microtype}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{enumitem}
+\usepackage{amsmath}
+\usepackage{listings}
+\usepackage{tcolorbox}
+\usepackage{fancyhdr}
+\usepackage[hidelinks,colorlinks=true,linkcolor=teal!70!black,urlcolor=teal!70!black]{hyperref}
+
+% ---------- colors ----------
+\definecolor{codebg}{HTML}{F6F8FA}
+\definecolor{codeframe}{HTML}{D0D7DE}
+\definecolor{kw}{HTML}{0550AE}
+\definecolor{cmt}{HTML}{6E7781}
+\definecolor{str}{HTML}{0A7D33}
+\definecolor{accent}{HTML}{1F6F6F}
+
+% ---------- listings ----------
+\lstdefinestyle{cpp}{
+  language=C++,
+  backgroundcolor=\color{codebg},
+  basicstyle=\ttfamily\footnotesize,
+  keywordstyle=\color{kw}\bfseries,
+  commentstyle=\color{cmt}\itshape,
+  stringstyle=\color{str},
+  frame=single,
+  rulecolor=\color{codeframe},
+  breaklines=true,
+  showstringspaces=false,
+  columns=fullflexible,
+  numbers=none,
+  morekeywords={Float_t,Int_t,Double_t,Bool_t,TString,kTRUE,kFALSE,auto,nullptr,override,unique_ptr,make_unique,shared_ptr}
+}
+\lstdefinestyle{bash}{
+  language=bash,
+  backgroundcolor=\color{codebg},
+  basicstyle=\ttfamily\footnotesize,
+  keywordstyle=\color{kw},
+  commentstyle=\color{cmt}\itshape,
+  stringstyle=\color{str},
+  frame=single,
+  rulecolor=\color{codeframe},
+  breaklines=true,
+  showstringspaces=false,
+  columns=fullflexible,
+  numbers=none
+}
+\lstset{style=cpp}
+
+% ---------- callout boxes ----------
+\newtcolorbox{notebox}{colback=teal!4,colframe=accent,boxrule=0.6pt,arc=2pt,
+  left=6pt,right=6pt,top=4pt,bottom=4pt,fonttitle=\bfseries,title=Note}
+\newtcolorbox{warnbox}{colback=red!4,colframe=red!55!black,boxrule=0.6pt,arc=2pt,
+  left=6pt,right=6pt,top=4pt,bottom=4pt,fonttitle=\bfseries,title=Important}
+
+% ---------- headers ----------
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0.3pt}
+\lhead{\small ATTPCROOTv2-OpenKF}
+\rhead{\small UKF / genfit Pipeline Manual}
+\cfoot{\thepage}
+
+\newcommand{\code}[1]{\texttt{\small #1}}
+\newcommand{\file}[1]{\texttt{\small #1}}
+
+% =====================================================================
+\begin{document}
+
+% ---------------- title ----------------
+\begin{titlepage}
+\centering
+\vspace*{2.5cm}
+{\Huge\bfseries Track Reconstruction in ATTPCROOTv2-OpenKF\par}
+\vspace{0.6cm}
+{\LARGE The UKF and genfit Fitting Pipelines\par}
+\vspace{1.2cm}
+{\large A User Manual\par}
+\vspace{2.0cm}
+{\large\itshape From simulation / raw HDF5 to fitted kinematics\par}
+\vfill
+{\large Active Target Time Projection Chamber (AT-TPC)\par}
+\vspace{0.4cm}
+{\normalsize Repository: \file{ATTPCROOTv2-OpenKF} \quad branch \file{OpenKF-Claude}\par}
+\vspace{0.4cm}
+{\normalsize \today\par}
+\end{titlepage}
+
+\tableofcontents
+\newpage
+
+% =====================================================================
+\section{Introduction}
+% =====================================================================
+
+This manual describes how to reconstruct charged-particle tracks in the AT-TPC
+using \textbf{ATTPCROOTv2-OpenKF}, covering the two track fitters available in the
+framework:
+
+\begin{itemize}[nosep]
+  \item \textbf{UKF} --- the native \emph{Unscented Kalman Filter} built on the
+  vendored OpenKF library (class \code{EventFit::AtFitterUKF}). It uses a CATIMA
+  energy-loss model, sigma-point propagation through the magnetic field, and an
+  RTS smoother with back-extrapolation to the reaction vertex.
+  \item \textbf{genfit} --- the established GENFIT2 Kalman reference-track fitter
+  (class \code{AtFITTER::AtGenfit}, \code{KalmanFitterRefTrack}), with SRIM-style
+  energy-loss tables.
+\end{itemize}
+
+Both fitters consume the \emph{same} pattern-recognition output
+(\code{AtPatternEvent}) and produce fitted tracks (\code{AtTrackingEvent} /
+\code{AtFittedTrack}). They are interchangeable at the level of a single FairRoot
+task, which makes it easy to fit identical track candidates with both methods and
+compare.
+
+\begin{notebox}
+\textbf{When to use which.} The UKF is faster, native, easy to iterate, and uses
+CATIMA energy loss --- prefer it for quick parameter scans and for setups where
+its tuning has been validated. genfit uses analytic-Jacobian transport and tends
+to reach better intrinsic resolution; prefer it when resolution is the priority.
+The two are best used \emph{together}: reconstruct once, then fit with both.
+\end{notebox}
+
+The document is organized as a pipeline:
+
+\begin{center}
+\fbox{\parbox{0.95\textwidth}{\centering
+\small\ttfamily
+Simulation OR raw HDF5 \;$\rightarrow$\; Digitization / Unpacking \;$\rightarrow$\;
+PSA (hits) \;$\rightarrow$\; [Space-charge corr.] \;$\rightarrow$\; PRA (track
+candidates) \;$\rightarrow$\; \textbf{UKF / genfit fit} \;$\rightarrow$\;
+Kinematics / Ex spectrum
+}}
+\end{center}
+
+Section~\ref{sec:concepts} explains the stages.
+Section~\ref{sec:env} covers the environment.
+Section~\ref{sec:sim} walks the \emph{simulation} pipeline end-to-end
+(\code{16C\_pp} example).
+Section~\ref{sec:exp} walks the \emph{experimental} pipeline (\code{a1975}
+example), including the two fitters side-by-side.
+Section~\ref{sec:fitterapi} is the fitter API reference.
+Section~\ref{sec:conventions} documents the crucial magnetic-field-sign /
+handedness convention.
+Sections~\ref{sec:datamodel}--\ref{sec:trouble} cover the output data model,
+quick-reference cards, and troubleshooting.
+
+% =====================================================================
+\section{Pipeline concepts}\label{sec:concepts}
+% =====================================================================
+
+Every reconstruction is a chain of FairRoot tasks (\code{FairTask}) added to a
+\code{FairRunAna}. Each task reads one or more ROOT branches and writes another.
+The stages, in order:
+
+\begin{description}[leftmargin=1.4cm,style=nextline]
+  \item[Simulation / Unpacking] For simulation, a Geant4 (\code{TGeant4}) run
+  transports the beam and reaction products and writes Monte-Carlo points. For
+  experiment, \code{AtUnpackTask} (with \code{AtHDFUnpacker}) reads raw GET
+  electronics traces from HDF5 into \code{AtRawEvent}.
+  \item[Digitization] (Simulation only.) \code{AtClusterizeTask} converts MC
+  ionization to electron clusters and \code{AtPulseTask} produces realistic pad
+  signals (\code{AtRawEvent}), so simulation and experiment share the same
+  downstream code.
+  \item[PSA] \code{AtPSAtask} (pulse-shape analysis, typically \code{AtPSAMax})
+  turns pad waveforms into 3D hits with charge: branch \code{AtEventH}.
+  \item[Space-charge correction] (Experiment, optional.)
+  \code{AtSpaceChargeCorrectionTask} applies distortion look-up tables and writes
+  \code{AtEventCorrected}.
+  \item[Pattern recognition (PRA)] \code{AtPRAtask} (Hough/triplet RANSAC) or
+  \code{AtSampleConsensusTask} groups hits into clustered track candidates:
+  branch \code{AtPatternEvent}.
+  \item[Fitting] \code{AtFitterTask} (UKF or multi-hypothesis UKF) or
+  \code{AtFitterTaskOld} (genfit) fits each candidate, producing
+  \code{AtTrackingEvent} (a collection of \code{AtFittedTrack}) and optionally
+  \code{AtFitMetadata}.
+\end{description}
+
+\begin{notebox}
+The fitter only ever sees \code{AtPatternEvent}. This is why the fitting step can
+be \emph{iterated independently}: reconstruct once up to PRA, then refit many
+times with different fitter settings without re-running the slow stages.
+\end{notebox}
+
+% =====================================================================
+\section{Environment and build}\label{sec:env}
+% =====================================================================
+
+\subsection{Sourcing the environment}
+
+From the repository root, always source the environment before running any macro:
+
+\begin{lstlisting}[style=bash]
+cd /path/to/ATTPCROOTv2-OpenKF
+source build/config.sh        # sets VMCWORKDIR, ROOT, FairRoot, library paths
+\end{lstlisting}
+
+\code{\$VMCWORKDIR} points at the repository root and is used throughout the
+macros to locate geometry, parameter, and resource files.
+
+\subsection{Build dependencies}
+
+\begin{itemize}[nosep]
+  \item \textbf{ROOT} (with Eve, Geom, RGL, Gui, Physics, Matrix, MathCore, Tree)
+  \item \textbf{FairRoot} --- the task framework
+  \item \textbf{Eigen3} --- required by the vendored OpenKF (UKF)
+  \item \textbf{CATIMA} --- energy-loss model used by the UKF (auto-fetched if absent)
+  \item \textbf{GENFIT2} --- required for the genfit fitter (see below)
+\end{itemize}
+
+\subsection{Enabling genfit}
+
+genfit support is \emph{conditional} at build time. The top-level
+\file{CMakeLists.txt} calls \code{find\_package2(PUBLIC GENFIT2)}, and
+\file{AtReconstruction/CMakeLists.txt} only compiles \file{AtGenfit.cxx} and
+\file{AtSpacePointMeasurement.cxx} when \code{GENFIT2\_FOUND} is true:
+
+\begin{lstlisting}[style=bash]
+if(GENFIT2_FOUND)
+  set(SRCS ${SRCS} AtFitter/AtGenfit.cxx AtFitter/AtSpacePointMeasurement.cxx ...)
+  set(DEPENDENCIES ${DEPENDENCIES} GENFIT2::genfit2)
+endif()
+\end{lstlisting}
+
+\begin{warnbox}
+To build with genfit you must have GENFIT2 installed and the \code{GENFIT}
+environment variable (or CMake variable) pointing at its install prefix --- the
+finder expects \code{\$GENFIT/lib/libgenfit2.so} and \code{\$GENFIT/include/}.
+If \code{GENFIT2} is not found, the framework still builds, but the genfit fitter
+is simply absent and only the UKF is available.
+\end{warnbox}
+
+% =====================================================================
+\section{Simulation pipeline (16C+p example)}\label{sec:sim}
+% =====================================================================
+
+This section reconstructs simulated $^{16}$C$(p,p)$ data. All macros live in
+\file{macro/Simulation/ATTPC/16C\_pp/}. Run them from that directory.
+
+\subsection{Stage 1 --- Simulation}
+
+\textbf{Macro:} \file{C16\_pp\_sim.C} \quad
+\code{void C16\_pp\_sim(Int\_t nEvents = 100, TString mcEngine = "TGeant4")}
+
+\begin{lstlisting}[style=bash]
+root -b -q 'C16_pp_sim(10000)'
+\end{lstlisting}
+
+It runs the Geant4 transport for a $^{16}$C beam on a hydrogen target with the
+$(p,p)$ reaction generator, in a 28.5\,kG ($2.85$\,T) axial field. Key setup:
+
+\begin{lstlisting}
+// 16C beam
+AtTPCIonGenerator *ionGen = new AtTPCIonGenerator("Ion", 6,16,0,1, 0,0,2.297, ...);
+// (p,p) two-body reaction, CM 20-90 deg
+AtTPC2Body *TwoBody = new AtTPC2Body("TwoBody", ..., 40.0, 20.0, 90.0);
+// axial field B_z = 28.5 kG
+AtConstField *fMagField = new AtConstField();
+fMagField->SetField(0., 0., 28.5);
+fMagField->SetFieldRegion(-50,50, -50,50, -10,230);
+run->SetField(fMagField);
+ATTPC->SetGeometryFileName("ATTPC_H300torr.root");
+\end{lstlisting}
+
+\textbf{Output:} \file{data/attpcsim.root} (MC truth), \file{data/attpcpar.root}
+(parameters), \file{data/geofile\_full.root} (geometry).
+
+\subsection{Stage 2 --- Digitization + PSA + PRA}
+
+\textbf{Macro:} \file{run\_digi\_attpc.C} \quad
+\code{void run\_digi\_attpc(int nEvents = 10000, float tCluster = 8.0)}
+
+\begin{lstlisting}[style=bash]
+root -b -q 'run_digi_attpc.C(10000, 8.0)'
+\end{lstlisting}
+
+\textbf{Input:} \file{data/attpcsim.root}. Task chain (in order):
+
+\begin{lstlisting}
+AtClusterizeTask *clusterizer = new AtClusterizeTask();    // MC -> e- clusters
+clusterizer->SetPersistence(kFALSE);
+fRun->AddTask(clusterizer);
+
+AtPulseTask *pulse = new AtPulseTask(std::make_shared<AtPulse>(mapping)); // -> pads
+pulse->SetPersistence(kTRUE);  pulse->SetSaveMCInfo();
+fRun->AddTask(pulse);
+
+auto psa = std::make_unique<AtPSAMax>();   psa->SetThreshold(0);  // hits
+AtPSAtask *psaTask = new AtPSAtask(std::move(psa));
+psaTask->SetPersistence(kTRUE);
+fRun->AddTask(psaTask);
+
+AtPRAtask *praTask = new AtPRAtask();      // track candidates (RANSAC/triplet)
+praTask->SetTcluster(tCluster);            // time-clustering window (us)
+praTask->SetPersistence(kTRUE);
+fRun->AddTask(praTask);
+\end{lstlisting}
+
+Parameter file \file{\$VMCWORKDIR/parameters/ATTPC.e20009\_sim.par}, pad map
+\file{\$VMCWORKDIR/scripts/Lookup20150611.xml}.
+
+\textbf{Output:} \file{data/output\_digi.root} with branches \code{AtEventH}
+(hits) and \code{AtPatternEvent} (candidates, ready to fit).
+
+\subsection{Stage 3 --- UKF fit}
+
+\textbf{Macro:} \file{run\_ukf\_only.C} \quad \code{void run\_ukf\_only(int nEvents = 10000)}
+
+\begin{lstlisting}[style=bash]
+root -b -q 'run_ukf_only.C(10000)'
+\end{lstlisting}
+
+\textbf{Input:} \file{data/output\_digi.root}. The fitter task:
+
+\begin{lstlisting}
+double charge = 1.602176634e-19;   // C
+double mass   = 938.272;           // MeV/c^2 (proton)
+
+auto eloss = std::make_unique<AtTools::AtELossCATIMA>(3.553e-5);  // g/cm^3, H2 300 torr
+eloss->SetProjectile(1, 1, 1);                                    // Z, A, q
+eloss->SetMaterial({ std::make_tuple(1,1,1) });                   // hydrogen
+
+auto ukf = std::make_unique<EventFit::AtFitterUKF>(charge, mass, std::move(eloss));
+ukf->SetBField(ROOT::Math::XYZVector(0, 0, 2.85));   // +2.85 T : SIMULATION sign
+ukf->SetUKFParameters(1e-3, 2.0, 0.0);               // alpha, beta, kappa
+ukf->SetMeasurementSigma(2.0);                       // mm
+ukf->SetMomentumSigmaFrac(0.5);                      // loose seed
+ukf->SetEnableEnergyStraggling(false);
+ukf->SetMinClusters(10);
+ukf->SetNIterations(1);
+ukf->SetZPadPlane(1000.0);                           // digi->lab z conversion
+
+AtFitterTask *fitterTask = new AtFitterTask(std::move(ukf));
+fitterTask->SetInputBranch("AtPatternEvent");
+fitterTask->SetOutputBranch("AtTrackingEvent");
+fitterTask->SetFitMetadataBranch("AtFitMetadata");
+fitterTask->SetPersistence(kTRUE);
+fRun->AddTask(fitterTask);
+\end{lstlisting}
+
+\textbf{Output:} \file{data/output\_ukf\_only.root}, branch \code{AtTrackingEvent}
+(fitted $p,\theta,\phi,$ KE) plus \code{AtFitMetadata}.
+
+\begin{notebox}
+\textbf{Validated performance} on this channel ($\sim$10k events): efficiency
+$\approx 95.6\%$, KE bias $-0.2\%$ with RMS $\approx 5\%$, $\theta$ RMS
+$\approx 0.7^\circ$.
+\end{notebox}
+
+\subsection{Stage 4 --- Display and analysis}
+
+\begin{lstlisting}[style=bash]
+root -l 'run_ukf_display.C(1)'   # interactive: clusters + fit + MC truth (event 1)
+root -l 'display_ukf.C(3)'       # WSL-safe static projections (XY/XZ/YZ + 3D)
+root -b -q 'run_ukf_perf.C(500)' # timing / performance stats
+root -b -q show_kinematics.C     # KE vs theta, resolution plots
+\end{lstlisting}
+
+\subsection{One-shot command sequence}
+
+\begin{lstlisting}[style=bash]
+cd macro/Simulation/ATTPC/16C_pp/
+root -b -q 'C16_pp_sim(10000)'          # 1. simulate
+root -b -q 'run_digi_attpc.C(10000,8.0)'# 2. digi + PSA + PRA
+root -b -q 'run_ukf_only.C(10000)'      # 3. UKF fit
+root -l   'run_ukf_display.C(1)'        # 4. inspect
+\end{lstlisting}
+
+\begin{notebox}
+There are also combined macros (\file{run\_digi\_ukf.C}, \file{run\_reco\_ukf.C})
+that fold digitization and fitting into one process. They are convenient but the
+single-process digi+UKF chain has been observed to hang in some configurations;
+the staged sequence above is the robust path.
+\end{notebox}
+
+% =====================================================================
+\section{Experimental pipeline (a1975 example)}\label{sec:exp}
+% =====================================================================
+
+This section reconstructs experimental $^{16}$C+$p$ data (experiment a1975) from
+raw HDF5. Macros are in \file{macro/Unpack\_HDF5/a1975/UKF/}; run them from that
+folder (the ``UKF root''), as data is read by bare name and plots are written to
+each subfolder's \file{plots/}. The reusable infrastructure is under
+\file{pipeline/}.
+
+\subsection{The staged unpacking macros}
+
+The pipeline is built incrementally so each stage can be validated and cached. All
+read raw HDF5 from \file{/mnt/f/a1975/h5/<run>.h5}.
+
+\begin{longtable}{@{}p{4.2cm} p{3.2cm} p{7.2cm}@{}}
+\toprule
+\textbf{Macro} & \textbf{Output} & \textbf{Tasks (in order)} \\
+\midrule
+\endhead
+\file{unpack\_a1975\_UKF.C}    & \file{<run>\_unpack.root} & Unpack only \\
+\file{unpackPSA\_a1975\_UKF.C} & \file{<run>\_psa.root} / \file{\_disp.root} & Unpack + PSA \\
+\file{unpackReco\_a1975\_UKF.C}& \file{<run>\_reco.root}   & Unpack + PSA + SC + PRA \\
+\file{unpackNFit\_a1975\_UKF.C}& \file{<run>\_ukf\_full.root}& Unpack + PSA + SC + PRA + UKF \\
+\bottomrule
+\end{longtable}
+
+\code{unpackReco\_a1975\_UKF.C} is the \textbf{standard entry point}: it produces
+the \code{AtPatternEvent} that both fitters consume. Its task chain:
+
+\begin{lstlisting}
+auto unpacker = std::make_unique<AtHDFUnpacker>(fAtMapPtr);
+unpacker->SetInputFileName(inputFile.Data());
+unpacker->SetNumberTimestamps(2);
+unpacker->SetBaseLineSubtraction(true);
+auto unpackTask = new AtUnpackTask(std::move(unpacker));
+unpackTask->SetPersistence(persistRaw);
+fRun->AddTask(unpackTask);
+
+auto psa = new AtPSAMax();  psa->SetThreshold(20);
+AtPSAtask *psaTask = new AtPSAtask(psa);
+psaTask->SetPersistence(persistRaw);
+psaTask->SetOutputBranch("AtEventH");
+fRun->AddTask(psaTask);
+
+auto SCModel = std::make_unique<AtEDistortionModel>();
+SCModel->SetCorrectionMaps(zlutFile, radlutFile, tralutFile);   // a1954 LUTs
+auto SCTask = new AtSpaceChargeCorrectionTask(std::move(SCModel));
+SCTask->SetInputBranch("AtEventH");                              // -> AtEventCorrected
+fRun->AddTask(SCTask);
+
+AtPRAtask *praTask = new AtPRAtask();
+praTask->SetInputBranch("AtEventCorrected");
+praTask->SetOutputBranch("AtPatternEvent");
+praTask->SetClusterRadius(15.0);
+praTask->SetClusterDistance(7.5);
+praTask->SetPersistence(true);
+fRun->AddTask(praTask);
+\end{lstlisting}
+
+Resource files: geometry \file{ATTPC\_H1bar\_geomanager.root}, map
+\file{ANL2023.xml}, parameters \file{ATTPC.a1954.par}, space-charge LUTs in
+\file{\$VMCWORKDIR/resources/corrections/a1954/}.
+
+\begin{lstlisting}[style=bash]
+# produce the AtPatternEvent once (persistRaw=true keeps raw for displays)
+root -b -q 'pipeline/unpackReco_a1975_UKF.C("run_0116", 1000, true)'
+\end{lstlisting}
+
+\subsection{Fitter A --- UKF}
+
+\textbf{Macro:} \file{pipeline/fitUKF\_a1975.C}. It reads \file{<run>\_reco.root}
+and writes \file{<run>\_ukf<suffix>.root}. Signature (abbreviated):
+
+\begin{lstlisting}
+void fitUKF_a1975(TString fileName="run_0116", Long64_t nEvents=-1,
+                  TString particles="proton", Int_t bFieldSign=-1,
+                  Double_t bFieldMag=2.85, Double_t gasDensity=9.0e-5,
+                  TString outSuffix="", TString ioDir="",
+                  Double_t measSigma=2.0, Double_t momSigmaFrac=0.3,
+                  Int_t nIter=1, Int_t minClusters=10,
+                  TString outDir="", Bool_t refTrack=false,
+                  Double_t refInflation=4.0);
+\end{lstlisting}
+
+Each particle name builds an \code{AtFitterUKF} hypothesis (CATIMA energy loss,
+mass and charge from a particle table), and they are combined in an
+\code{AtFitterUKFMulti} that keeps the best $\chi^2/\mathrm{ndf}$ per track:
+
+\begin{lstlisting}
+auto multi = std::make_unique<EventFit::AtFitterUKFMulti>();
+for (each name in particles) {
+   auto ukf = MakeHypothesis(name, bFieldSign, bFieldMag, gasDensity,
+                             measSigma, momSigmaFrac, nIter, minClusters,
+                             refTrack, refInflation);
+   multi->AddHypothesis(std::move(ukf), name, /*chargeSign=*/0);
+}
+AtFitterTask *fitterTask = new AtFitterTask(std::move(multi));
+fitterTask->SetInputBranch("AtPatternEvent");
+fitterTask->SetOutputBranch("AtTrackingEvent");
+fitterTask->SetFitMetadataBranch("AtFitMetadata");
+fitterTask->SetPersistence(kTRUE);
+\end{lstlisting}
+
+Inside \code{MakeHypothesis} the decisive call for experimental data is the
+\textbf{field sign} (see Section~\ref{sec:conventions}):
+
+\begin{lstlisting}
+ukf->SetBField(ROOT::Math::XYZVector(0, 0, bFieldSign * bFieldMag)); // -1 for exp
+\end{lstlisting}
+
+\begin{lstlisting}[style=bash]
+# fast default fit (proton, exp field sign)
+root -b -q 'pipeline/fitUKF_a1975.C("run_0116", -1, "proton", -1)'
+# resolution-optimized (tighter sigmas), separate output file
+root -b -q 'pipeline/fitUKF_a1975.C("run_0116", -1, "proton", -1, 2.85, 9.0e-5, "_opt", "", 0.5, 0.1, 1, 10)'
+\end{lstlisting}
+
+\begin{notebox}
+\textbf{Resolution tuning.} \code{measSigma=0.5}\,mm with \code{momSigmaFrac=0.1}
+gives noticeably better excitation-energy FWHM than the conservative defaults
+(\code{2.0}\,mm, \code{0.3}). Use \code{outSuffix} to avoid clobbering files when
+scanning parameters.
+\end{notebox}
+
+\subsection{Fitter B --- genfit}
+
+\textbf{Macro:} \file{pipeline/fitGenfit\_a1975.C}. Same input
+(\file{<run>\_reco.root}), output \file{<run>\_genfit<suffix>.root}. Signature:
+
+\begin{lstlisting}
+void fitGenfit_a1975(TString fileName="run_0106", Long64_t nEvents=-1,
+                     TString particle="deuteron", Double_t magneticField=2.85,
+                     Double_t gasMediumDensity=0.083147, TString ioDir="",
+                     TString outSuffix="", TString outDir="",
+                     TString elossName="proton_D2_600torr.txt",
+                     Int_t minIter=5, Int_t maxIter=20);
+\end{lstlisting}
+
+It adds an \code{AtPIDTask} (caches Spyral PID observables) and then the
+\code{AtGenfit} fitter wrapped in \code{AtFitterTaskOld}:
+
+\begin{lstlisting}
+std::string elossFile = dir + "/resources/energy_loss/" + elossName;
+auto fitter = std::make_unique<AtFITTER::AtGenfit>(
+    magneticField, 0.00001, 1000.0, elossFile, gasMediumDensity,
+    pdg, minIter, maxIter, /*noMatEffects=*/1);
+fitter->SetIonName(particle);
+fitter->SetMass(mass);              // atomic mass units
+fitter->SetAtomicNumber(Z);
+fitter->SetNumFitPoints(1.0);
+fitter->SetSimulationConvention(0); // experimental data
+fitter->EnableMerging(1);
+fitter->EnableSingleVertexTrack(1);
+fitter->EnableReclustering(1, 15.0, 7.5);
+
+AtFitterTaskOld *fitterTask = new AtFitterTaskOld(std::move(fitter));
+fitterTask->SetInputBranch("AtPatternEvent");
+fitterTask->SetOutputBranch("AtTrackingEvent");
+fitterTask->SetPersistence(kTRUE);
+\end{lstlisting}
+
+\begin{lstlisting}[style=bash]
+root -b -q 'pipeline/fitGenfit_a1975.C("run_0106", 200, "deuteron")'
+\end{lstlisting}
+
+\subsection{Comparing the two fitters}
+
+Because both read the identical \code{AtPatternEvent}, any difference in the
+result is purely the fitter:
+
+\begin{lstlisting}[style=bash]
+root -b -q 'pipeline/unpackReco_a1975_UKF.C("run_0106", 500, true)'  # once
+root -b -q 'pipeline/fitUKF_a1975.C("run_0106", -1, "deuteron", -1, 2.85, 9.0e-5, "", "", 0.5, 0.1, 1, 10)'
+root -b -q 'pipeline/fitGenfit_a1975.C("run_0106", -1, "deuteron")'
+\end{lstlisting}
+
+\begin{center}
+\begin{tabular}{@{}lll@{}}
+\toprule
+ & \textbf{UKF} (\code{AtFitterUKF}) & \textbf{genfit} (\code{AtGenfit}) \\
+\midrule
+Algorithm     & Unscented KF + RTS smoother & \code{KalmanFitterRefTrack} \\
+Energy loss   & CATIMA (model)              & SRIM table (file) \\
+Iterations    & \code{nIter} (1--2)         & \code{minIter}--\code{maxIter} (5--20) \\
+Field sign    & \code{bFieldSign} ($-1$ exp)& \code{SetSimulationConvention(0)} \\
+Re-clustering & internal / adaptive         & \code{EnableReclustering(\dots)} \\
+Task wrapper  & \code{AtFitterTask}         & \code{AtFitterTaskOld} \\
+Output        & \code{AtTrackingEvent} + \code{AtFitMetadata} & \code{AtTrackingEvent} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Event display}
+
+\begin{lstlisting}[style=bash]
+# interactive EVE viewer (needs OpenGL/X11; not available under WSL)
+root -l 'pipeline/run_eve_UKF.C("run_0116_disp")'
+# WSL-safe static PNGs:
+root -b -q 'pipeline/event_png_UKF.C("run_0116_disp", -1)'        # busiest event
+root -b -q 'pipeline/event_png_batch_UKF.C("run_0116_disp", 0, 24)' # contact sheet
+\end{lstlisting}
+
+\begin{warnbox}
+Under WSL there is no working OpenGL/Eve --- interactive 3D viewers crash. Use the
+static PNG macros (\file{event\_png\_UKF.C}, \file{event\_png\_batch\_UKF.C})
+instead. Both require a \file{<run>\_disp.root} produced with \code{persistRaw=true}.
+\end{warnbox}
+
+% =====================================================================
+\section{Fitter API reference}\label{sec:fitterapi}
+% =====================================================================
+
+\subsection{\texttt{AtFitterTask} (the FairRoot wrapper)}
+
+\code{AtFitterTask} owns any \code{EventFit::AtFitter} and drives it per event.
+
+\begin{lstlisting}
+AtFitterTask(std::unique_ptr<EventFit::AtFitter> fitter);   // takes ownership
+
+void SetInputBranch(TString);       // default "AtPatternEvent"
+void SetOutputBranch(TString);      // default "AtTrackingEvent"
+void SetFitMetadataBranch(TString); // enable AtFitMetadata persistence
+void SetRawEventBranch(TString);    // optional, fitter access to AtRawEvent
+void SetEventBranch(TString);       // optional, fitter access to AtEvent
+void SetPersistence(Bool_t = kTRUE);
+\end{lstlisting}
+
+It reads a \code{TClonesArray} of \code{AtPatternEvent} and writes
+\code{AtTrackingEvent}. (genfit uses the analogous \code{AtFitterTaskOld}.)
+
+\subsection{\texttt{EventFit::AtFitterUKF}}
+
+\textbf{Constructor:}
+\begin{lstlisting}
+AtFitterUKF(double charge,        // Coulombs (Z * 1.602176634e-19)
+            double mass_MeV,      // MeV/c^2
+            std::unique_ptr<AtTools::AtELossModel> elossModel);
+\end{lstlisting}
+
+\textbf{Most-used setters} (defaults in parentheses):
+
+\begin{longtable}{@{}p{6.4cm} p{8.0cm}@{}}
+\toprule
+\textbf{Method} & \textbf{Meaning} \\
+\midrule
+\endhead
+\code{SetBField(XYZVector)}            & Magnetic field, Tesla (default $\{0,0,2.85\}$). Sign matters --- see \S\ref{sec:conventions}. \\
+\code{SetEField(XYZVector)}            & Electric field, V/m ($\{0,0,0\}$). \\
+\code{SetUKFParameters(a,b,k)}         & Unscented transform $\alpha,\beta,\kappa$ ($10^{-3},2,0$). \\
+\code{SetMeasurementSigma(mm)}         & Hit position uncertainty (1.0). Lower $\Rightarrow$ better resolution. \\
+\code{SetMomentumSigmaFrac(f)}         & Fractional momentum seed uncertainty (0.1). \\
+\code{SetMinClusters(n)}               & Skip tracks with fewer clusters (3). \\
+\code{SetNIterations(n)}               & Filter passes (1); $>1$ re-seeds with previous result. \\
+\code{SetEnableEnergyStraggling(b)}    & Energy straggling in propagator (false). \\
+\code{SetMomentumSeed(p\_MeV)}         & Override Brho seed if $>0$. \\
+\code{SetZPadPlane(z)}                 & Pad-plane $z$ (mm) for digi$\rightarrow$lab; $z_\mathrm{lab}=z-z_\mathrm{digi}$. \\
+\code{SetAdaptiveClustering(b)}        & Re-cluster inside the fit (true); disable for pre-clustered (GNN) input. \\
+\code{SetUseArcWalk(b)} / \code{SetArcWalkParams(\dots)} & kNN arc-ordering clustering for centered vertices. \\
+\code{SetUseHelixBackExtrap(b)}        & Helix (not linear) back-extrapolation to vertex; needed at high curvature. \\
+\code{SetBackExtrapMaxPath(mm)}        & Max back-extrapolation length to vertex (50). \\
+\code{SetForceVertexOnBeamAxis(b)}     & Force vertex to $xy=(0,0)$. \\
+\code{SetUseRefTrack(b)} / \code{SetUseRefTrackWarmStart(b)} & genfit-style re-linearization around the previous smoothed trajectory (needs \code{nIter}$\ge 2$). \\
+\bottomrule
+\end{longtable}
+
+\code{AtFitterUKF::Init()} is a no-op (the filter is created lazily on first fit).
+
+\subsection{\texttt{EventFit::AtFitterUKFMulti} (multi-hypothesis)}
+
+Runs several \code{AtFitterUKF} hypotheses on each track and keeps the best
+$\chi^2/\mathrm{ndf}$:
+
+\begin{lstlisting}
+void AddHypothesis(std::unique_ptr<AtFitterUKF> fitter,
+                   std::string name, int chargeSign = 0); // 0 = no PRA-sign filter
+void SetChi2Cap(double cap);
+std::size_t GetNHypotheses() const;
+\end{lstlisting}
+
+\begin{notebox}
+Pass \code{chargeSign = 0} for experimental data: the PRA charge sign is
+calibrated on the simulation handedness and is unreliable on experiment until
+independently validated, so all hypotheses should be evaluated equally.
+\end{notebox}
+
+\subsection{\texttt{AtFITTER::AtGenfit}}
+
+\textbf{Constructor:}
+\begin{lstlisting}
+AtGenfit(Float_t magfield,        // Tesla (stored internally as 10x)
+         Float_t minbrho,         // min Brho, Tm
+         Float_t maxbrho,         // max Brho, Tm
+         std::string eLossFile,   // SRIM-style energy-loss table
+         Float_t gasMediumDensity,// g/cm^3
+         Int_t pdg   = 2212,      // 2212 p, 1000010020 d, 1000020040 alpha
+         Int_t minit = 5,         // min Kalman iterations
+         Int_t maxit = 20,        // max Kalman iterations
+         Bool_t noMatEffects = kFALSE);
+\end{lstlisting}
+
+\textbf{Key setters:} \code{SetIonName}, \code{SetMass} (amu),
+\code{SetAtomicNumber}, \code{SetPDGCode}, \code{SetMinIterations} /
+\code{SetMaxIterations}, \code{SetMinBrho} / \code{SetMaxBrho},
+\code{SetNumFitPoints} (fraction of hits, 0--1), \code{SetSimulationConvention}
+(true = simulation $\theta$ convention; false = experiment), \code{EnableMerging},
+\code{EnableSingleVertexTrack}, \code{EnableReclustering(on, radius, size)},
+\code{SetVerbosityLevel}.
+
+It uses \code{genfit::KalmanFitterRefTrack} (DAF is available but not
+instantiated). Measurements come from \code{AtSpacepointMeasurement}, which
+converts \code{AtHitCluster} positions mm$\rightarrow$cm and uses a fixed
+covariance (diagonal $1,1,1.28$, the larger $z$ term reflecting drift-time
+resolution).
+
+\begin{warnbox}
+\code{AtGenfit} requires \code{TGeoManager} (geometry) to be loaded before
+construction --- it caches material properties for all volumes. The class is
+marked \code{[[deprecated]]} but remains the production genfit path.
+\end{warnbox}
+
+% =====================================================================
+\section{Coordinate conventions and the magnetic-field sign}\label{sec:conventions}
+% =====================================================================
+
+\begin{warnbox}
+This is the single most common source of unphysical fits. Read it before fitting
+\emph{any} experimental data.
+\end{warnbox}
+
+Simulation digitization reverses the drift coordinate
+($z_\mathrm{digi} = z_\mathrm{pad plane} - z_\mathrm{MC}$, in \code{AtClusterize}),
+but experimental data does \emph{not} --- its $z$ comes straight from the drift
+time. The two therefore have \textbf{opposite helix handedness}. To make the UKF
+helix match the data, flip the sign of $B_z$ for experimental data:
+
+\begin{lstlisting}
+// simulation:
+ukf->SetBField({0, 0, +2.85});   // bFieldSign = +1
+// experiment:
+ukf->SetBField({0, 0, -2.85});   // bFieldSign = -1  (the a1975 default)
+\end{lstlisting}
+
+Empirically (a1975 run\_0116):
+
+\begin{center}
+\begin{tabular}{@{}lccc@{}}
+\toprule
+$B_z$ & median $\chi^2/\mathrm{ndf}$ & median KE & physical? \\
+\midrule
+$-2.85$\,T (exp sign) & $\approx 0.04$ & $\approx 7.9$\,MeV & yes \\
+$+2.85$\,T (sim sign) & $\approx 3.09$ & $\approx 152$\,MeV & no \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+For genfit, the analogous control is \code{SetSimulationConvention(false)} for
+experimental data.
+
+% =====================================================================
+\section{Output data model}\label{sec:datamodel}
+% =====================================================================
+
+\begin{longtable}{@{}p{3.6cm} p{3.0cm} p{7.4cm}@{}}
+\toprule
+\textbf{Branch} & \textbf{Produced by} & \textbf{Contents} \\
+\midrule
+\endhead
+\code{AtRawEvent}       & Unpack / Pulse        & Raw pad waveforms (ADC vs time bucket). \\
+\code{AtEventH}         & \code{AtPSAtask}      & 3D hits with charge after PSA. \\
+\code{AtEventCorrected} & SC correction         & Hits after space-charge distortion correction. \\
+\code{AtPatternEvent}   & \code{AtPRAtask}      & Clustered track candidates (fitter input). \\
+\code{AtTrackingEvent}  & \code{AtFitterTask}   & \code{AtFittedTrack}: momentum, vertex, kinematics. \\
+\code{AtFitMetadata}    & \code{AtFitterTask}   & $\chi^2/\mathrm{ndf}$, iterations, convergence flag, hypothesis. \\
+\code{AtPIDEvent}       & \code{AtPIDTask}      & Spyral PID observables (Brho, $\sqrt{dE/dx}$, \dots). \\
+\bottomrule
+\end{longtable}
+
+% =====================================================================
+\section{Quick-reference command cards}\label{sec:quickref}
+% =====================================================================
+
+\subsection*{Simulation ($16$C+$p$)}
+\begin{lstlisting}[style=bash]
+cd macro/Simulation/ATTPC/16C_pp/
+root -b -q 'C16_pp_sim(10000)'            # MC truth         -> data/attpcsim.root
+root -b -q 'run_digi_attpc.C(10000,8.0)'  # digi+PSA+PRA     -> data/output_digi.root
+root -b -q 'run_ukf_only.C(10000)'        # UKF fit          -> data/output_ukf_only.root
+root -l   'run_ukf_display.C(1)'          # inspect
+\end{lstlisting}
+
+\subsection*{Experiment (a1975), UKF}
+\begin{lstlisting}[style=bash]
+cd macro/Unpack_HDF5/a1975/UKF/
+root -b -q 'pipeline/unpackReco_a1975_UKF.C("run_0116", 1000, true)'  # -> run_0116_reco.root
+root -b -q 'pipeline/fitUKF_a1975.C("run_0116", -1, "proton", -1)'    # -> run_0116_ukf.root
+root -b -q 'pipeline/event_png_UKF.C("run_0116_disp", -1)'            # static display
+\end{lstlisting}
+
+\subsection*{Experiment (a1975), genfit}
+\begin{lstlisting}[style=bash]
+cd macro/Unpack_HDF5/a1975/UKF/
+root -b -q 'pipeline/unpackReco_a1975_UKF.C("run_0106", 500, true)'   # shared input
+root -b -q 'pipeline/fitGenfit_a1975.C("run_0106", -1, "deuteron")'   # -> run_0106_genfit.root
+\end{lstlisting}
+
+\subsection*{One-shot experiment (no iteration)}
+\begin{lstlisting}[style=bash]
+root -b -q 'pipeline/unpackNFit_a1975_UKF.C("run_0116", 1000, "proton", -1, 2.85, 9.0e-5)'
+\end{lstlisting}
+
+% =====================================================================
+\section{Troubleshooting}\label{sec:trouble}
+% =====================================================================
+
+\begin{description}[leftmargin=0.5cm,style=nextline]
+  \item[Unphysical KE / huge $\chi^2$ on experimental data]
+  Almost always the magnetic-field sign. Use \code{bFieldSign = -1} (UKF) or
+  \code{SetSimulationConvention(false)} (genfit). The elastic recoil locus should
+  sit at a few MeV; see \S\ref{sec:conventions}.
+  \item[``Input file not found / run unpackReco first'']
+  The fitter macros require \file{<run>\_reco.root}. Run
+  \code{unpackReco\_a1975\_UKF.C} once to produce it.
+  \item[Event display crashes / hangs (WSL)]
+  No OpenGL under WSL. Use \file{event\_png\_UKF.C} /
+  \file{event\_png\_batch\_UKF.C} instead of \file{run\_eve\_UKF.C}.
+  \item[genfit fitter is missing]
+  The build did not find GENFIT2. Set \code{\$GENFIT} and rebuild
+  (\S\ref{sec:env}); without it only the UKF is compiled.
+  \item[Poor excitation-energy resolution]
+  Tighten the UKF measurement model: \code{measSigma}$\approx0.5$\,mm and
+  \code{momSigmaFrac}$\approx0.1$ instead of the conservative defaults.
+  \item[Fitter settings that helped one channel hurt another]
+  UKF/PRA knobs are physics-dependent --- always re-validate per reaction and
+  per field setting; do not copy tuning blindly between setups.
+\end{description}
+
+\vfill
+\begin{center}\small\itshape
+Source paths in this manual are relative to the ATTPCROOTv2-OpenKF repository
+root. Code excerpts are condensed for readability; consult the macros and the
+\file{AtReconstruction/AtFitter/} headers for exact, current signatures.
+\end{center}
+
+\end{document}

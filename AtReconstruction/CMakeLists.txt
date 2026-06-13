@@ -175,11 +175,12 @@ endif()
 if(GENFIT2_FOUND)
   set(SRCS ${SRCS}
     AtFitter/AtGenfit.cxx
+    AtFitter/AtGenfitter.cxx
     AtFitter/AtSpacePointMeasurement.cxx
 
     # Deprecated, to be removed:
     AtFitter/AtFitterOld.cxx
-    AtFitter/AtFitterTaskOld.cxx
+    AtFitterTaskOld.cxx
     )
   set(DEPENDENCIES ${DEPENDENCIES}
     GENFIT2::genfit2

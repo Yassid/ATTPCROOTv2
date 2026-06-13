@@ -183,6 +183,19 @@ public:
    /// Number of fit iterations (default 1). With >1, the first pass uses wide covariance
    /// and subsequent passes use the previous result as seed with tighter covariance.
    void SetNIterations(int n) { fNIterations = n; }
+   /// Reference-track warm start: on iterations >0, seed the forward pass with the
+   /// previous iteration's SMOOTHED vertex covariance (tight, well-constrained)
+   /// instead of the loose Brho prior. Mimics genfit KalmanFitterRefTrack's
+   /// re-linearization-around-the-reference behaviour. Off by default (= baseline).
+   void SetUseRefTrackWarmStart(bool use) { fUseRefTrackWarmStart = use; }
+   /// Inflation factor applied to the smoothed-vertex seed covariance on warm start
+   /// (keeps the re-pass from becoming overconfident and ignoring measurements).
+   void SetRefTrackInflation(double f) { fRefTrackInflation = f; }
+   /// FULL reference-track port (genfit KalmanFitterRefTrack style): on iterations
+   /// >0, linearize the transport around the PREVIOUS smoothed trajectory at EVERY
+   /// cluster (predictUKFRef) instead of the forward-filtered state. Requires
+   /// nIter>=2. Off by default (= baseline single-pass UKF).
+   void SetUseRefTrack(bool use) { fUseRefTrack = use; }
    /// Use per-cluster covariance matrix from AtHitCluster::GetCovMatrix() instead of fixed sigma.
    void SetUsePerClusterCov(bool use) { fUsePerClusterCov = use; }
    /// Set the pad plane Z position (mm) for converting digi→lab coordinates.
@@ -254,6 +267,9 @@ private:
    int fArcWalkKNN{10};
    double fMinLabTheta{10.0};      // Minimum lab angle (degrees) — skip beam-like tracks
    int fNIterations{1};            // Number of fit iterations (1=single pass)
+   bool fUseRefTrackWarmStart{false}; // Ref-track warm start (smoothed-vertex-cov seed on iter>0)
+   double fRefTrackInflation{4.0};    // Inflation of the smoothed-vertex seed cov on warm start
+   bool fUseRefTrack{false};          // Full per-cluster reference-track relinearization (iter>0)
    bool fAdaptiveClustering{true}; // Re-cluster based on Brho momentum estimate
 
    // Lazily initialised on first GetFittedTrack() call

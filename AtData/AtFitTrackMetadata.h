@@ -19,6 +19,11 @@ protected:
    Int_t fNdf{0};
    Bool_t fFitConverged{false};
 
+   // Post-fit quality flag: kTRUE if the fit passed the quality cut (converged,
+   // sensible chi2/ndf, physical kinematics). Tracks that fail are KEPT (not dropped)
+   // so curlers/blobs stay inspectable; downstream code can filter on this.
+   Bool_t fGoodFit{false};
+
    // The track ID for which this fit was done for.
    Int_t fTrackID{-1};
 
@@ -30,17 +35,19 @@ public:
    void SetChi2(Double_t value) { fChi2 = value; }
    void SetNdf(Int_t value) { fNdf = value; }
    void SetFitConverged(Bool_t value) { fFitConverged = value; }
+   void SetGoodFit(Bool_t value) { fGoodFit = value; }
    void SetTrackID(Int_t value) { fTrackID = value; }
 
    Double_t GetPValue() const { return fPValue; }
    Double_t GetChi2() const { return fChi2; }
    Int_t GetNdf() const { return fNdf; }
    Bool_t GetFitConverged() const { return fFitConverged; }
+   Bool_t GetGoodFit() const { return fGoodFit; }
    Int_t GetTrackID() const { return fTrackID; }
 
    virtual void Print() const;
 
-   ClassDefOverride(AtFitTrackMetadata, 1);
+   ClassDefOverride(AtFitTrackMetadata, 2);
 };
 
 #endif

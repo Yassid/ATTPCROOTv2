@@ -64,10 +64,19 @@ ClassImp(genfit::AtSpacepointMeasurement)
       cov(1, 2) = 0.0;
       cov(2, 0) = 0.0;
 
-      // Forced covariance matrix to be constant. Need to study later.
-      cov(0, 0) = 1.0 / 1.0;  // 0.2
-      cov(1, 1) = 1.0 / 1.0;  // 0.2
-      cov(2, 2) = 1.28 / 1.0; // 1.28
+      // Measurement covariance (cm^2). Use the cluster's covariance when the caller
+      // set one (AtGenfitter sets a tunable value, mm^2 -> cm^2 here); otherwise fall
+      // back to a realistic constant. The old 10 mm placeholder made the genfit fit
+      // ignore the data and follow the seed (chi2/ndf ~ 0.01).
+      if (mat.GetNrows() == 3 && mat(0, 0) > 0.0) {
+         cov(0, 0) = mat(0, 0) / 100.0; // mm^2 -> cm^2
+         cov(1, 1) = mat(1, 1) / 100.0;
+         cov(2, 2) = mat(2, 2) / 100.0;
+      } else {
+         cov(0, 0) = 0.04; // (2 mm)^2
+         cov(1, 1) = 0.04;
+         cov(2, 2) = 0.08;
+      }
 
       rawHitCov_ = cov;
       detId_ = hit->getDetId();

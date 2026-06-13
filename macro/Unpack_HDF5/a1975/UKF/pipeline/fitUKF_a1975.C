@@ -47,7 +47,8 @@ const double kE_C = 1.602176634e-19;
 /// Build one fully-configured UKF hypothesis for a named particle.
 std::unique_ptr<EventFit::AtFitterUKF> MakeHypothesis(const TString &name, int bFieldSign, double bFieldMag,
                                                       double gasDensity, double measSigma, double momSigmaFrac,
-                                                      int nIter, int minClusters)
+                                                      int nIter, int minClusters, bool refTrack = false,
+                                                      double refInflation = 4.0)
 {
    auto it = kParticleTable.find(name);
    if (it == kParticleTable.end()) {
@@ -75,6 +76,8 @@ std::unique_ptr<EventFit::AtFitterUKF> MakeHypothesis(const TString &name, int b
    ukf->SetEnableEnergyStraggling(false);
    ukf->SetMinClusters(minClusters);
    ukf->SetNIterations(nIter);
+   ukf->SetUseRefTrack(refTrack); // full per-cluster reference-track relinearization (iter>0)
+   ukf->SetRefTrackInflation(refInflation);
    ukf->SetZPadPlane(1000.0);
    return ukf;
 }
@@ -83,7 +86,8 @@ std::unique_ptr<EventFit::AtFitterUKF> MakeHypothesis(const TString &name, int b
 void fitUKF_a1975(TString fileName = "run_0116", Long64_t nEvents = -1, TString particles = "proton",
                   Int_t bFieldSign = -1, Double_t bFieldMag = 2.85, Double_t gasDensity = 9.0e-5,
                   TString outSuffix = "", TString ioDir = "", Double_t measSigma = 2.0, Double_t momSigmaFrac = 0.3,
-                  Int_t nIter = 1, Int_t minClusters = 10, TString outDir = "")
+                  Int_t nIter = 1, Int_t minClusters = 10, TString outDir = "", Bool_t refTrack = false,
+                  Double_t refInflation = 4.0)
 {
    gSystem->Load("libAtReconstruction.so");
    FairLogger::GetLogger()->SetLogScreenLevel("WARNING");
@@ -126,7 +130,8 @@ void fitUKF_a1975(TString fileName = "run_0116", Long64_t nEvents = -1, TString 
    TObjArray *toks = particles.Tokenize(",");
    for (int i = 0; i < toks->GetEntries(); ++i) {
       TString pname = ((TObjString *)toks->At(i))->GetString().Strip(TString::kBoth);
-      auto hypo = MakeHypothesis(pname, bFieldSign, bFieldMag, gasDensity, measSigma, momSigmaFrac, nIter, minClusters);
+      auto hypo = MakeHypothesis(pname, bFieldSign, bFieldMag, gasDensity, measSigma, momSigmaFrac, nIter, minClusters,
+                                 refTrack, refInflation);
       if (hypo) {
          // chargeSign = 0: do NOT filter by PRA charge sign. The PRA sign is
          // calibrated on SIM handedness and is unreliable for experimental data

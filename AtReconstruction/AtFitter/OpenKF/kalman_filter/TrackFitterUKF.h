@@ -24,6 +24,8 @@
 #include "kalman_filter.h"
 #include "kf_util.h"
 #include "unscented_kalman_filter.h"
+
+#include <array>
 namespace kf {
 
 /**  @brief Class for fitting tracks using the Unscented Kalman Filter (UKF) algorithm.
@@ -592,6 +594,13 @@ public:
    AtTools::AtPropagator &GetPropagator() { return fPropagator; }
 
    void predictUKF(const ROOT::Math::XYZPoint &z);
+   /// Reference-linearized prediction (genfit KalmanFitterRefTrack style).
+   /// Linearizes the transport around the supplied reference state xRefPrev (the
+   /// previous iteration's SMOOTHED state at cluster i-1) rather than the running
+   /// filtered state, then transports the actual estimate's deviation. Keeps the
+   /// sigma points in the linear regime even when the filter is poorly constrained
+   /// early in the track. Used on iterations >0; falls back to predictUKF() on iter 0.
+   void predictUKFRef(const ROOT::Math::XYZPoint &z, const std::array<double, TF_DIM_X> &xRefPrev);
    void correctUKF(const ROOT::Math::XYZPoint &z);
    void smoothUKF();
 

@@ -25,6 +25,7 @@ struct AtSpyralResult {
    double radius{0.0};     // fitted first-arc circle radius (mm)
    int direction{-1};      // 0 forward, 1 backward, -1 none
    int nPoints{0};         // points used
+   int trackID{-1};        // source AtTrack::GetTrackID() (so cached PID matches by ID, not array position)
    ROOT::Math::XYZPoint vertex; // reaction vertex (mm)
    ROOT::Math::XYZPoint center; // spiral center (mm)
    bool valid{false};

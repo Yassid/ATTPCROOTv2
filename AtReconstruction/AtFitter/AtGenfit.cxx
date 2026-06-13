@@ -297,7 +297,13 @@ std::vector<std::unique_ptr<AtFittedTrack>> AtFITTER::AtGenfit::ProcessTracks(st
       LOG(debug) << "   Track center - X :  " << center.first << " - Y : " << center.second << "\n";
       LOG(debug) << "   Track phi recalc : " << track.GetGeoPhi() * TMath::RadToDeg() << cNORMAL << "\n";
 
-      // Skip tracks that are far from Z (to be checked against number of iterations for extrapolation)
+      // distThres uses the distance of the CHOSEN vertex-end cluster (iniPos) to the
+      // beam axis. NOTE (2026-06-13): this also acts as a seed-quality filter — a
+      // track whose chosen vertex-end is far from the axis has a mis-identified
+      // vertex (back/front-by-GeoTheta, z-handedness) and would seed/fit badly, so
+      // dropping it is correct. (A min-cluster "fix" recovered ~half the deuterons
+      // but with biased seeds -> doublet 0.46->0.58, irrecoverable by chi2 -> reverted.
+      // The real recovery needs fixing the vertex-end identification, not this cut.)
       Double_t dist = TMath::Sqrt(iniPos.X() * iniPos.X() + iniPos.Y() * iniPos.Y());
       LOG(debug) << KRED << "    Distance to Z " << dist << cNORMAL << "\n";
       LOG(debug) << KGRN << "    ---- Adding track candidate " << cNORMAL << "\n";

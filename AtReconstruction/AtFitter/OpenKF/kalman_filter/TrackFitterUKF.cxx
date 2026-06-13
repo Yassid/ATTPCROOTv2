@@ -252,6 +252,104 @@ void TrackFitterUKF::predictUKF(const ROOT::Math::XYZPoint &z)
    m_matCPredHist.push_back(matCPred); // Store the cross-correlation matrix
 }
 
+void TrackFitterUKF::predictUKFRef(const ROOT::Math::XYZPoint &z, const std::array<double, TF_DIM_X> &xRefPrev)
+{
+   using namespace ROOT::Math;
+
+   // Current filtered estimate at i-1 (its deviation from the reference is what we transport).
+   Vector<TF_DIM_X> xEst = m_vecX;
+   Vector<TF_DIM_X> xRefVec;
+   for (int d = 0; d < TF_DIM_X; ++d)
+      xRefVec[d] = xRefPrev[d];
+
+   // Measurement plane from propagating the REFERENCE state to z (linearization surface).
+   XYZPoint refPos{xRefPrev[0], xRefPrev[1], xRefPrev[2]};
+   Polar3DVector refMom{xRefPrev[3], xRefPrev[4], xRefPrev[5]};
+   fPropagator.SetState(refPos, XYZVector(refMom));
+   fPropagator.PropagateToMeasurementSurface(AtTools::AtMeasurementPoint(z), *fStepper);
+   auto refStep = fPropagator.GetState();
+   fMeasurementPlane = Plane3D(refStep.fMom.Unit(), XYZPoint(z));
+
+   Vector<TF_DIM_Z> zVec;
+   zVec[0] = z.X();
+   zVec[1] = z.Y();
+   zVec[2] = z.Z();
+
+   // Augmented state/cov: state block CENTERED ON THE REFERENCE (spread = current cov), noise block.
+   m_vecXa.setZero();
+   for (int d = 0; d < TF_DIM_X; ++d)
+      m_vecXa[d] = xRefVec[d];
+   auto pnMean = calculateProcessNoiseMean();
+   for (int d = 0; d < TF_DIM_V; ++d)
+      m_vecXa[TF_DIM_X + d] = pnMean[d];
+   m_matPa.setZero();
+   for (int a = 0; a < TF_DIM_X; ++a)
+      for (int b = 0; b < TF_DIM_X; ++b)
+         m_matPa(a, b) = m_matP(a, b);
+   m_matQaug = calculateProcessNoiseCovariance();
+   for (int a = 0; a < TF_DIM_V; ++a)
+      for (int b = 0; b < TF_DIM_V; ++b)
+         m_matPa(TF_DIM_X + a, TF_DIM_X + b) = m_matQaug(a, b);
+
+   m_matSigmaXa = calculateSigmaPoints(m_vecXa, m_matPa);
+   Matrix<TF_DIM_X, SIGMA_DIM_A> sigmaXin{m_matSigmaXa.block(0, 0, TF_DIM_X, SIGMA_DIM_A)};
+   Matrix<TF_DIM_V, SIGMA_DIM_A> sigmaXv{m_matSigmaXa.block(TF_DIM_X, 0, TF_DIM_V, SIGMA_DIM_A)};
+
+   // Propagate each state sigma point (linearized around the reference).
+   Matrix<TF_DIM_X, SIGMA_DIM_A> sigmaY;
+   for (int32_t i = 0; i < SIGMA_DIM_A; ++i) {
+      const Vector<TF_DIM_X> xi{sigmaXin.col(i)};
+      const Vector<TF_DIM_V> vi{sigmaXv.col(i)};
+      sigmaY.col(i) = funcF(xi, vi, zVec);
+   }
+
+   // Predicted reference mean + covariance from propagated sigma points.
+   Vector<TF_DIM_X> yRef;
+   Matrix<TF_DIM_X, TF_DIM_X> Pyy;
+   calculateWeightedMeanAndCovariance<TF_DIM_X>(sigmaY, yRef, Pyy);
+
+   // Cross-corr (for the smoother) from the reference-centered sigma: Pxy = Cov(Xin, Y).
+   Matrix<TF_DIM_X, TF_DIM_X> Pxy = calculateCrossCorrelation<TF_DIM_X>(sigmaXin, xRefVec, sigmaY, yRef);
+
+   // Predicted MEAN = full nonlinear propagation of the actual estimate (funcF(xEst)) —
+   // as accurate as the standard predict, with NO linearization error. The earlier
+   // yRef + F*(xEst-xRef) linearization underestimated the nonlinear propagation and,
+   // re-applied each iteration, compounded into divergence (0.654->0.725->0.826).
+   // The reference is used only to STABILIZE the covariance/cross-corr (sigma stay in
+   // the linear regime), not the mean. shift recenters the sigma onto the mean.
+   Vector<TF_DIM_V> pnVec;
+   for (int d = 0; d < TF_DIM_V; ++d)
+      pnVec[d] = pnMean[d];
+   Vector<TF_DIM_X> yEst = funcF(xEst, pnVec, zVec);
+   bool badMean = false;
+   for (int d = 0; d < TF_DIM_X; ++d)
+      if (!std::isfinite(yEst[d])) badMean = true;
+   if (yEst[3] <= 0 || yEst[3] > 1000.0) badMean = true;
+   Vector<TF_DIM_X> mean = badMean ? yRef : yEst; // fall back to reference propagation if estimate prop is bad
+   Vector<TF_DIM_X> shift = mean - yRef;
+
+   if (std::getenv("REFDBG")) {
+      double dn = (xEst - xRefVec).norm();
+      fprintf(stderr, "[REF] |d|=%.3g refp=%.3g yRefp=%.3g meanp=%.3g badMean=%d Pyy33=%.3g\n", dn, xRefVec[3], yRef[3],
+              mean[3], (int)badMean, Pyy(3, 3));
+   }
+
+   // Predicted mean/cov; shift sigma points to the corrected mean (funcH linear -> valid).
+   m_vecX = mean;
+   m_matP = Pyy + m_matQmod;
+   ensurePD(m_matP);
+   for (int32_t i = 0; i < SIGMA_DIM_A; ++i)
+      m_matSigmaXa.block(0, 0, TF_DIM_X, SIGMA_DIM_A).col(i) = sigmaY.col(i) + shift;
+
+   // History for the smoother (one entry per predict, matching the standard path).
+   m_vecXPredHist.push_back(m_vecX);
+   m_matPPredHist.push_back(m_matP);
+   // Smoother cross-corr C_i = Cov(x_filt_{i-1}, x_pred_i) = Pxx*F^T = Pxy
+   // (NOT Pxy^T — Cov(a, F a) = E[a a^T] F^T = Pxx F^T). Matches the standard
+   // path's calculateCrossCorrelation(input, filt, output, pred) = Cov(in,out).
+   m_matCPredHist.push_back(Pxy);
+}
+
 void TrackFitterUKF::correctUKF(const ROOT::Math::XYZPoint &z)
 {
    Vector<TF_DIM_Z> zVec; // Initialize the measurement vector

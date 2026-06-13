@@ -25,7 +25,7 @@ class AtFittedTrackOld;
 
 ClassImp(AtFitterTaskOld);
 
-AtFitterTaskOld::AtFitterTaskOld(std::unique_ptr<AtFITTER::AtFitter> fitter)
+AtFitterTaskOld::AtFitterTaskOld(std::unique_ptr<AtFITTER::AtFitterOld> fitter)
    : fInputBranchName("AtPatternEvent"), fOutputBranchName("AtTrackingEvent"), fIsPersistence(kFALSE),
      fTrackingEventArray(TClonesArray("AtTrackingEvent", 1)), fFitter(std::move(fitter))
 {
@@ -89,7 +89,7 @@ void AtFitterTaskOld::Exec(Option_t *option)
 
    fTrackingEventArray.Delete();
 
-   auto trackingEvent = dynamic_cast<AtTrackingEventOld *>(fTrackingEventArray.ConstructedAt(0));
+   auto trackingEvent = dynamic_cast<AtTrackingEvent *>(fTrackingEventArray.ConstructedAt(0));
 
    std::cout << " Event Counter " << fEventCnt << "\n";
 

@@ -29,7 +29,7 @@ class [[deprecated]] AtFitterOld : public TObject {
 public:
    AtFitterOld();
    virtual ~AtFitterOld();
-   virtual std::vector<std::unique_ptr<AtFittedTrackOld>> ProcessTracks(std::vector<AtTrack> &tracks) = 0;
+   virtual std::vector<std::unique_ptr<AtFittedTrack>> ProcessTracks(std::vector<AtTrack> &tracks) = 0;
    virtual void Init() = 0;
 
    void MergeTracks(std::vector<AtTrack> *trackCandSource, std::vector<AtTrack> *trackJunkSource,

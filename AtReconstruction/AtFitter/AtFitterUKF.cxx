@@ -493,6 +493,13 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
    bool fitConverged = true;
    for (int iter = 0; iter < fNIterations; iter++) {
       fitConverged = true;
+      // Reference-track warm start: seed covariance taken from the previous
+      // iteration's smoothed vertex (tight) instead of the loose Brho prior.
+      TMatrixD warmSeedCov(6, 6);
+      bool useWarmSeed = false;
+      // Full per-cluster reference-track: previous iteration's smoothed trajectory.
+      std::vector<std::array<double, 6>> refTraj;
+      bool useRefThisIter = false;
       if (iter > 0) {
          // Use the smoothed vertex state from the previous iteration as seed
          auto &smoothedStates = fUKF->GetSmoothedStates();
@@ -508,6 +515,51 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
                p_MeV = pPrev;
                momSigmaFrac = fMomSigmaFrac; // Same sigma on subsequent iterations
                LOG(debug) << "AtFitterUKF: iter " << iter << " seed p=" << pPrev << " MeV/c";
+
+               // Warm-start covariance = DIAGONAL of the inflated smoothed-vertex
+               // covariance. We deliberately drop the off-diagonal correlations:
+               // the full smoothed matrix is near-singular and breaks the
+               // sigma-point Cholesky on the re-pass (mass fit drops). The diagonal
+               // carries the tight per-component uncertainty (the warm-start benefit)
+               // while staying well-conditioned.
+               if (fUseRefTrackWarmStart) {
+                  auto &smoothedCovs = fUKF->GetSmoothedCovariances();
+                  if (smoothedCovs.size() == smoothedStates.size() && !smoothedCovs.empty()) {
+                     const auto &c0 = smoothedCovs[0];
+                     warmSeedCov.Zero();
+                     bool finite = true;
+                     double posFloor = fMeasSigma_mm * fMeasSigma_mm;
+                     double angFloor = std::pow(0.5 * TMath::Pi() / 180.0, 2); // (0.5 deg)^2
+                     for (int d = 0; d < 6 && finite; ++d) {
+                        double v = c0(d, d) * fRefTrackInflation;
+                        if (!std::isfinite(v) || v < 0) { finite = false; break; }
+                        warmSeedCov(d, d) = v;
+                     }
+                     if (finite) {
+                        for (int d = 0; d < 3; ++d)
+                           if (warmSeedCov(d, d) < posFloor) warmSeedCov(d, d) = posFloor;
+                        for (int d = 4; d < 6; ++d)
+                           if (warmSeedCov(d, d) < angFloor) warmSeedCov(d, d) = angFloor;
+                        if (warmSeedCov(3, 3) <= 0) warmSeedCov(3, 3) = std::pow(0.05 * pPrev, 2);
+                        useWarmSeed = true;
+                     }
+                  }
+               }
+
+               // Full per-cluster reference-track: capture the previous iteration's
+               // smoothed trajectory (one state per cluster) before SetInitialState
+               // resets the filter. predictUKFRef linearizes around it at every step.
+               if (fUseRefTrack && smoothedStates.size() == clusters->size()) {
+                  refTraj.resize(smoothedStates.size());
+                  bool ok = true;
+                  for (size_t s = 0; s < smoothedStates.size() && ok; ++s)
+                     for (int d = 0; d < 6; ++d) {
+                        double v = smoothedStates[s][d];
+                        if (!std::isfinite(v)) { ok = false; break; }
+                        refTraj[s][d] = v;
+                     }
+                  useRefThisIter = ok;
+               }
             }
          }
       }
@@ -519,7 +571,7 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
       // Use current momSigmaFrac for this iteration's covariance
       double savedFrac = fMomSigmaFrac;
       fMomSigmaFrac = (iter == 0) ? fMomSigmaFrac : momSigmaFrac;
-      fUKF->SetInitialState(initialPos, initialMom, GetInitialCovariance(p_MeV));
+      fUKF->SetInitialState(initialPos, initialMom, useWarmSeed ? warmSeedCov : GetInitialCovariance(p_MeV));
       fMomSigmaFrac = savedFrac;
    }
    fUKF->SetMeasCov(GetMeasCovariance());
@@ -570,7 +622,23 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
             fUKF->SetMeasCov(measCov);
          }
 
-         fUKF->predictUKF(meas);
+         // Reference-track: linearize transport around the previous smoothed state
+         // at this cluster (i-1). The previous-iteration smoothed trajectory can
+         // contain unphysical points MID-TRACK (negative/huge momentum) — the
+         // baseline only ever uses the vertex point so it never noticed, but
+         // ref-linearizing around a garbage reference poisons the pass. Validate
+         // each reference point and fall back to the standard predict when bad.
+         bool refOk = useRefThisIter && (i - 1) < refTraj.size();
+         if (refOk) {
+            const auto &r = refTraj[i - 1];
+            double pp = r[3];
+            refOk = (pp > 0 && pp < 1000.0) && std::isfinite(r[0]) && std::isfinite(r[1]) &&
+                    std::isfinite(r[2]) && std::isfinite(r[4]) && std::isfinite(r[5]);
+         }
+         if (refOk)
+            fUKF->predictUKFRef(meas, refTraj[i - 1]);
+         else
+            fUKF->predictUKF(meas);
 
          // Validate predicted state: check for NaN, Inf, and extreme values
          auto &state = fUKF->vecX();

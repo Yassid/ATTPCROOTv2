@@ -61,7 +61,9 @@ void AtPIDTask::Exec(Option_t * /*opt*/)
    for (auto &track : patternEvent->GetTrackCand()) {
       AtTrack &tr = const_cast<AtTrack &>(track);
       pidEvent->AddClassic(fClassicEst.Estimate(tr));
-      pidEvent->AddSpyral(fSpyralEst.Estimate(tr));
+      auto sp = fSpyralEst.Estimate(tr);
+      sp.trackID = tr.GetTrackID(); // stamp source trackID for ID-based matching downstream
+      pidEvent->AddSpyral(sp);
    }
 }
 

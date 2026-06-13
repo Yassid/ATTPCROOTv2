@@ -63,6 +63,7 @@
 #pragma link C++ class AtFITTER::AtFitterOld + ;
 #pragma link C++ class AtFitterTaskOld + ;
 #pragma link C++ class AtFITTER::AtGenfit + ;
+#pragma link C++ class EventFit::AtGenfitter + ;
 
 #pragma link C++ namespace MCFitter;
 #pragma link C++ class MCFitter::AtParameterDistribution - !;
