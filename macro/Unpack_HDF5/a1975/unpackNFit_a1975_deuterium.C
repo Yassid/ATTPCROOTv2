@@ -92,36 +92,26 @@ void unpackNFit_a1975_deuterium(TString fileName = "run_0106")
    auto SCTask = new AtSpaceChargeCorrectionTask(std::move(SCModel));
    SCTask->SetInputBranch("AtEventH");
 
-   AtPRAtask *praTask = new AtPRAtask();
+   // PRA via dependency injection (AtPRAtask takes the algorithm as a unique_ptr).
+   // AtTrackFinderTC carries the standard TC defaults; only cluster radius/distance set.
+   auto praAlgo = std::make_unique<AtPATTERN::AtTrackFinderTC>();
+   praAlgo->SetClusterRadius(clusterRadius);
+   praAlgo->SetClusterDistance(clusterDistance);
+   AtPRAtask *praTask = new AtPRAtask(std::move(praAlgo));
    praTask->SetInputBranch("AtEventCorrected");
    praTask->SetOutputBranch("AtPatternEvent");
    praTask->SetPersistence(true);
-   praTask->SetClusterRadius(clusterRadius);
-   praTask->SetClusterDistance(clusterDistance);
    // praTask->SetMaxNumHits(3000);
    // praTask->SetMinNumHits(100);
-   // praTask->SetTcluster(8.0);
 
-   // Fitting task
-   Float_t gasMediumDensity = 0.083147;
-   Float_t magneticField = 2.85;
-   Int_t pdg = 1000010020; // 1000010020; 2212;
-   Bool_t noMatEffects = 1;
-   AtFITTER::AtGenfit::Exp exp = AtFITTER::AtGenfit::a1975;
-   std::string elossFile = (std::string)dir.Data() + "/resources/energy_loss/proton_D2_600torr.txt";
-   auto fitter = std::make_unique<AtFITTER::AtGenfit>(magneticField, 0.00001, 1000.0, elossFile, gasMediumDensity, pdg,
-                                                      5, 20, noMatEffects);
-   fitter->SetIonName("deuteron"); // deuteron proton
-   fitter->SetMass(2.0135532);     // 2.0135532 1.00727646
-   fitter->SetAtomicNumber(1);
-   fitter->SetNumFitPoints(1.0);
-   fitter->SetVerbosityLevel(1);
-   fitter->SetSimulationConvention(0);
-   // fitter->SetExpNum(exp);
-   fitter->SetFitDirection(0);
-   fitter->EnableMerging(1);
-   fitter->EnableSingleVertexTrack(1);
-   fitter->EnableReclustering(1, 15.0, 7.5);
+   // Fitting task — genfit via the clean EventFit::AtGenfitter (the legacy
+   // AtFITTER::AtGenfit was removed). Deuteron hypothesis; signed B for the a1975
+   // experimental handedness (z_lab = ZPadPlane - z_digi), mirroring fitGenfitter_a1975.C.
+   Int_t pdg = 1000010020; // deuteron
+   auto fitter = std::make_unique<EventFit::AtGenfitter>(-2.85, pdg, 2.0135532, 1, /*eLossFile*/ "",
+                                                         /*noMatEffects*/ kTRUE, 2, 5);
+   fitter->SetZPadPlane(1000.0);
+   fitter->SetMeasSigma(4.0);
 
    AtFitterTask *fitterTask = new AtFitterTask(std::move(fitter));
    fitterTask->SetPersistence(true);
