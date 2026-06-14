@@ -74,13 +74,14 @@ public:
       int exb=(int)fExBins->GetNumber(); double exLo=fExLo->GetNumber(), exHi=fExHi->GetNumber();
 
       int thLabB=(int)fThLabBins->GetNumber(), keB=(int)fKEBins->GetNumber(), thCmB=(int)fThCMBins->GetNumber();
+      int botExB=(int)fBotExBins->GetNumber(), vzB=(int)fZeVzBins->GetNumber(); // independent bottom-plot binning
       double keMax=fKEMax->GetNumber(), keCutLo=fKECutLo->GetNumber(), keCutHi=fKECutHi->GetNumber();
       delete gROOT->FindObject("hEx"); delete gROOT->FindObject("hKT");
       delete gROOT->FindObject("hEt"); delete gROOT->FindObject("hZE");
       TH1F *hEx=new TH1F("hEx",Form("%s E_{x}(^{15}C) (E_{beam}=%.0f);E_{x} [MeV];deuterons",fTag.Data(),Eb),exb,exLo,exHi);
       TH2F *hKT=new TH2F("hKT","deuteron KE vs #theta_{lab};#theta_{lab} [deg];KE [MeV]",thLabB,0,95,keB,0,keMax);
-      TH2F *hEt=new TH2F("hEt","E_{x} vs #theta_{cm};#theta_{cm} [deg];E_{x} [MeV]",thCmB,0,180,exb,exLo,exHi);
-      TH2F *hZE=new TH2F("hZE","vertex z vs E_{x};E_{x} [MeV];vertex z [mm]",exb,exLo,exHi,110,-50,1000);
+      TH2F *hEt=new TH2F("hEt","E_{x} vs #theta_{cm};#theta_{cm} [deg];E_{x} [MeV]",thCmB,0,180,botExB,exLo,exHi);
+      TH2F *hZE=new TH2F("hZE","vertex z vs E_{x};E_{x} [MeV];vertex z [mm]",botExB,exLo,exHi,vzB,-50,1000);
 
       long n=0;
       for(size_t i=0;i<fKe.size();++i){
@@ -154,6 +155,10 @@ private:
       fThLabBins=mkNum(bar3,"#theta_{lab} bins",100,10,1000); fKEBins=mkNum(bar3,"KE bins",120,10,1000);
       fKEMax=mkNum(bar3,"KE max",45,5,500,1); fThCMBins=mkNum(bar3,"#theta_{cm} bins",90,10,1000);
       main->AddFrame(bar3,new TGLayoutHints(kLHintsTop|kLHintsExpandX));
+      auto*bar4=new TGHorizontalFrame(main);  // independent binning for the two BOTTOM plots
+      bar4->AddFrame(new TGLabel(bar4,"bottom plots:"),new TGLayoutHints(kLHintsLeft|kLHintsCenterY,6,2,3,3));
+      fBotExBins=mkNum(bar4,"E_{x} bins",120,10,2000); fZeVzBins=mkNum(bar4,"vertex-z bins",110,10,1000);
+      main->AddFrame(bar4,new TGLayoutHints(kLHintsTop|kLHintsExpandX));
       auto*ec=new TRootEmbeddedCanvas("ec_pd",main,1680,740);
       main->AddFrame(ec,new TGLayoutHints(kLHintsExpandX|kLHintsExpandY));
       fCanvas=ec->GetCanvas(); fCanvas->Divide(2,2);
@@ -167,6 +172,7 @@ private:
    TGNumberEntry *fEbeam{nullptr},*fChi2{nullptr},*fThLo{nullptr},*fThHi{nullptr},*fIcLo{nullptr},*fIcHi{nullptr},
                  *fExBins{nullptr},*fExLo{nullptr},*fExHi{nullptr},
                  *fThLabBins{nullptr},*fKEBins{nullptr},*fKEMax{nullptr},*fThCMBins{nullptr},
+                 *fBotExBins{nullptr},*fZeVzBins{nullptr},
                  *fKECutLo{nullptr},*fKECutHi{nullptr};
    TGCheckButton*fKinLines{nullptr};
    std::vector<TGraph*> fLines;
