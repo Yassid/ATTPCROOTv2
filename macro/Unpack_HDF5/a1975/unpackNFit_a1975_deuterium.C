@@ -105,11 +105,12 @@ void unpackNFit_a1975_deuterium(TString fileName = "run_0106", Long64_t nEvents 
    // praTask->SetMinNumHits(100);
 
    // Fitting task — genfit via the clean EventFit::AtGenfitter (the legacy
-   // AtFITTER::AtGenfit was removed). Proton hypothesis for the validated 16C(p,p)
-   // elastic channel; signed B for the a1975 experimental handedness
+   // AtFITTER::AtGenfit was removed). Deuteron hypothesis for the 16C(p,d)15C
+   // deuteron-pickup channel (this macro's purpose; cf. unpackNFit_a1975.C for the
+   // 16C(p,p) proton channel); signed B for the a1975 experimental handedness
    // (z_lab = ZPadPlane - z_digi), mirroring fitGenfitter_a1975.C.
-   Int_t pdg = 2212; // proton
-   auto fitter = std::make_unique<EventFit::AtGenfitter>(-2.85, pdg, 1.00727646688, 1, /*eLossFile*/ "",
+   Int_t pdg = 1000010020; // deuteron
+   auto fitter = std::make_unique<EventFit::AtGenfitter>(-2.85, pdg, 2.0135532, 1, /*eLossFile*/ "",
                                                          /*noMatEffects*/ kTRUE, 2, 5);
    fitter->SetZPadPlane(1000.0);
    fitter->SetMeasSigma(4.0);
