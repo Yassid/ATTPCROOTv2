@@ -43,6 +43,25 @@ static TGraph *kinLine_pd(double Eb,double Ex,double m1,double m2,double m3,doub
       if(ke>0&&th>=0) g->SetPoint(g->GetN(),th,ke); }
    return g;
 }
+// --- Ex-vs-theta_cm drift correction (see pp/excorr_pd.C) ---
+static void pdGsFit(TH1 *h,double &gs,double &fwhm){
+   double pk=h->GetBinCenter(h->GetMaximumBin());
+   TF1 dg("dg","[0]*exp(-0.5*((x-[1])/[2])^2)+[3]*exp(-0.5*((x-[1]-0.740)/[4])^2)",pk-1.1,pk+1.1);
+   double mx=h->GetMaximum(); dg.SetParameters(0.6*mx,pk-0.4,0.30,mx,0.30);
+   dg.SetParLimits(1,pk-1.1,pk+0.3); dg.SetParLimits(2,0.10,0.8); dg.SetParLimits(4,0.10,0.8);
+   h->Fit(&dg,"QRN"); gs=dg.GetParameter(1); fwhm=2.3548*dg.GetParameter(2);
+}
+static TGraph* pdMeasureDrift(const std::vector<float>&vex,const std::vector<float>&vtc,double tcLo,double tcHi,int nProf){
+   auto*g=new TGraph(); double bw=(tcHi-tcLo)/nProf;
+   for(int b=0;b<nProf;++b){ double t0=tcLo+b*bw,t1=t0+bw,tc=0.5*(t0+t1);
+      TH1F hb("hbd","",120,-3,5); hb.SetDirectory(nullptr); long n=0;
+      for(size_t i=0;i<vex.size();++i) if(vtc[i]>=t0&&vtc[i]<t1){hb.Fill(vex[i]);++n;}
+      if(n>200){double gs,fw; pdGsFit(&hb,gs,fw); g->SetPoint(g->GetN(),tc,gs);} }
+   return g;
+}
+static double pdDriftEval(TGraph*g,double tc){ if(!g||g->GetN()<2) return 0;
+   double x0,x1,y; g->GetPoint(0,x0,y); g->GetPoint(g->GetN()-1,x1,y);
+   return g->Eval(std::min(x1,std::max(x0,(double)tc))); }
 
 class PDExplorer : public TObject {
 public:
@@ -76,6 +95,7 @@ public:
       int thLabB=(int)fThLabBins->GetNumber(), keB=(int)fKEBins->GetNumber(), thCmB=(int)fThCMBins->GetNumber();
       int botExB=(int)fBotExBins->GetNumber(), vzB=(int)fZeVzBins->GetNumber(); // independent bottom-plot binning
       double keMax=fKEMax->GetNumber(), keCutLo=fKECutLo->GetNumber(), keCutHi=fKECutHi->GetNumber();
+      double zLo=fZLo->GetNumber(), zHi=fZHi->GetNumber();
       delete gROOT->FindObject("hEx"); delete gROOT->FindObject("hKT");
       delete gROOT->FindObject("hEt"); delete gROOT->FindObject("hZE");
       TH1F *hEx=new TH1F("hEx",Form("%s E_{x}(^{15}C) (E_{beam}=%.0f);E_{x} [MeV];deuterons",fTag.Data(),Eb),exb,exLo,exHi);
@@ -83,18 +103,25 @@ public:
       TH2F *hEt=new TH2F("hEt","E_{x} vs #theta_{cm};#theta_{cm} [deg];E_{x} [MeV]",thCmB,0,180,botExB,exLo,exHi);
       TH2F *hZE=new TH2F("hZE","vertex z vs E_{x};E_{x} [MeV];vertex z [mm]",botExB,exLo,exHi,vzB,-50,1000);
 
-      long n=0;
+      // pass 1: apply cuts, fill KE-vs-theta, collect (ex,theta_cm,vz) for the Ex plots
+      std::vector<float> sex,stc,svz;
       for(size_t i=0;i<fKe.size();++i){
          if(fC2[i]>c2max) continue;
          if(fTh[i]<thLo||fTh[i]>thHi) continue;
          if(fIc[i]<icLo||fIc[i]>icHi) continue;
          if(fKe[i]<keCutLo||fKe[i]>keCutHi) continue;
+         if(fVz[i]<zLo||fVz[i]>zHi) continue; // vertex-z bounds
          double thr=fTh[i]*TMath::DegToRad();
          auto [ex,thcm]=kine2b_pd(fMbeam,fMtarg,fMeject,fMresid,Eb,thr,fKe[i]);
          hKT->Fill(fTh[i],fKe[i]);
-         if(!std::isnan(ex)){ hEx->Fill(ex); hEt->Fill(thcm,ex); hZE->Fill(ex,fVz[i]); }
-         ++n;
+         if(std::isnan(ex)) continue;
+         sex.push_back(ex); stc.push_back(thcm); svz.push_back(fVz[i]);
       }
+      // pass 2: optional Ex-vs-theta_cm drift correction, then fill the Ex plots
+      TGraph* gpk = fDriftCorr->IsDown() ? pdMeasureDrift(sex,stc,20,115,19) : nullptr;
+      long n=0;
+      for(size_t i=0;i<sex.size();++i){ double exc=sex[i]-pdDriftEval(gpk,stc[i]);
+         hEx->Fill(exc); hEt->Fill(stc[i],exc); hZE->Fill(exc,svz[i]); ++n; }
       double mean=0,sig=0;
       if(hEx->GetEntries()>50){ hEx->Fit("gaus","Q0","",exLo,std::min(exHi,2.0)); // 15C g.s. peak near 0
          if(hEx->GetFunction("gaus")){ mean=hEx->GetFunction("gaus")->GetParameter(1); sig=hEx->GetFunction("gaus")->GetParameter(2); } }
@@ -137,6 +164,7 @@ private:
       fEbeam=mkNum(bar,"Ebeam",192,50,400,1); fChi2=mkNum(bar,"chi2/ndf<",5,0,1000,1);
       fThLo=mkNum(bar,"thetaLo",5,0,180,1); fThHi=mkNum(bar,"thetaHi",90,0,180,1);
       fIcLo=mkNum(bar,"ICmin",950,0,5000,1); fIcHi=mkNum(bar,"ICmax",1350,0,5000,1); // 16C beam gate on by default
+      fZLo=mkNum(bar,"Zmin",-50,-100,1200,1); fZHi=mkNum(bar,"Zmax",1000,-100,1200,1); // vertex-z bounds [mm]
       main->AddFrame(bar,new TGLayoutHints(kLHintsTop|kLHintsExpandX));
       auto*bar2=new TGHorizontalFrame(main);
       fExBins=mkNum(bar2,"ExBins",120,10,2000); fExLo=mkNum(bar2,"ExLo",-5,-20,0,1); fExHi=mkNum(bar2,"ExHi",12,1,50,1);
@@ -147,6 +175,9 @@ private:
       fKinLines=new TGCheckButton(bar2,"15C lines"); fKinLines->SetState(kButtonDown);
       fKinLines->Connect("Clicked()","PDExplorer",this,"Redraw()");
       bar2->AddFrame(fKinLines,new TGLayoutHints(kLHintsLeft|kLHintsCenterY,10,4,3,3));
+      fDriftCorr=new TGCheckButton(bar2,"E_{x}(#theta_{cm}) drift corr"); fDriftCorr->SetState(kButtonDown);
+      fDriftCorr->Connect("Clicked()","PDExplorer",this,"Redraw()");
+      bar2->AddFrame(fDriftCorr,new TGLayoutHints(kLHintsLeft|kLHintsCenterY,10,4,3,3));
       fLabel=new TGLabel(bar2,"                                                            ");
       bar2->AddFrame(fLabel,new TGLayoutHints(kLHintsLeft|kLHintsCenterY,16,4,3,3));
       main->AddFrame(bar2,new TGLayoutHints(kLHintsTop|kLHintsExpandX));
@@ -172,9 +203,9 @@ private:
    TGNumberEntry *fEbeam{nullptr},*fChi2{nullptr},*fThLo{nullptr},*fThHi{nullptr},*fIcLo{nullptr},*fIcHi{nullptr},
                  *fExBins{nullptr},*fExLo{nullptr},*fExHi{nullptr},
                  *fThLabBins{nullptr},*fKEBins{nullptr},*fKEMax{nullptr},*fThCMBins{nullptr},
-                 *fBotExBins{nullptr},*fZeVzBins{nullptr},
+                 *fBotExBins{nullptr},*fZeVzBins{nullptr},*fZLo{nullptr},*fZHi{nullptr},
                  *fKECutLo{nullptr},*fKECutHi{nullptr};
-   TGCheckButton*fKinLines{nullptr};
+   TGCheckButton*fKinLines{nullptr},*fDriftCorr{nullptr};
    std::vector<TGraph*> fLines;
    TGLabel*fLabel{nullptr};
    ClassDef(PDExplorer,0);

@@ -19,11 +19,31 @@ static std::pair<double,double> pd_kine(double Kp,double thl,double Ke){
                                     /(pd_om2(s,m1*m1,m2*m2)*pd_om2(s,m3*m3,m4x*m4x)));
    return {ex, tcm*TMath::RadToDeg()};
 }
+// --- Ex-vs-theta_cm drift correction (see pp/excorr_pd.C) ---
+static void gsFit(TH1 *h,double &gs,double &fwhm){
+   double pk=h->GetBinCenter(h->GetMaximumBin());
+   TF1 dg("dg","[0]*exp(-0.5*((x-[1])/[2])^2)+[3]*exp(-0.5*((x-[1]-0.740)/[4])^2)",pk-1.1,pk+1.1);
+   double mx=h->GetMaximum(); dg.SetParameters(0.6*mx,pk-0.4,0.30,mx,0.30);
+   dg.SetParLimits(1,pk-1.1,pk+0.3); dg.SetParLimits(2,0.10,0.8); dg.SetParLimits(4,0.10,0.8);
+   h->Fit(&dg,"QRN"); gs=dg.GetParameter(1); fwhm=2.3548*dg.GetParameter(2);
+}
+// g.s. centroid vs theta_cm (TGraph for interpolation); needs vex already exShift-applied
+static TGraph* pdMeasureDrift(const std::vector<float>&vex,const std::vector<float>&vtc,double tcLo,double tcHi,int nProf){
+   auto*g=new TGraph(); double bw=(tcHi-tcLo)/nProf;
+   for(int b=0;b<nProf;++b){ double t0=tcLo+b*bw,t1=t0+bw,tc=0.5*(t0+t1);
+      TH1F hb("hbd","",120,-3,5); hb.SetDirectory(nullptr); long n=0;
+      for(size_t i=0;i<vex.size();++i) if(vtc[i]>=t0&&vtc[i]<t1){hb.Fill(vex[i]);++n;}
+      if(n>200){double gs,fw; gsFit(&hb,gs,fw); g->SetPoint(g->GetN(),tc,gs);} }
+   return g;
+}
+static double pdDriftEval(TGraph*g,double tc){ if(!g||g->GetN()<2) return 0;
+   double x0,x1,y; g->GetPoint(0,x0,y); g->GetPoint(g->GetN()-1,x1,y);
+   return g->Eval(std::min(x1,std::max(x0,(double)tc))); }
 
 void plot_pd_angbins(double thcmStart=10, double thcmWidth=10, int nbins=8, double exShift=-0.38,
                      double Ebeam=192, double chi2max=5, double icMin=950, double icMax=1350,
-                     double exLo=-3, double exHi=11, int nex=140, TString cache="/tmp/pd_kin.root",
-                     TString out="/tmp/pd_angbins.png")
+                     double exLo=-3, double exHi=11, int nex=140, bool driftCorr=true,
+                     TString cache="/tmp/pd_kin.root", TString out="/tmp/pd_angbins.png")
 {
    gStyle->SetOptStat(0);
    TFile*f=TFile::Open(cache);
@@ -36,12 +56,19 @@ void plot_pd_angbins(double thcmStart=10, double thcmWidth=10, int nbins=8, doub
    for(int k=0;k<nbins;++k){ double lo=thcmStart+k*thcmWidth, hi=lo+thcmWidth;
       h[k]=new TH1F(Form("hex%d",k),Form("#theta_{cm} = %.0f-%.0f#circ;E_{x}(^{15}C) [MeV];deuterons",lo,hi),nex,exLo,exHi); }
 
-   std::vector<long> cnt(nbins,0);
+   // pass 1: collect selected (ex+exShift, theta_cm)
+   std::vector<float> vex,vtc;
    for(Long64_t i=0;i<t->GetEntries();++i){ t->GetEntry(i);
       if(chi2ndf>chi2max) continue; if(ic<icMin||ic>icMax) continue;
       auto[ex,tcm]=pd_kine(Ebeam,theta*TMath::DegToRad(),ke); if(std::isnan(ex)) continue;
-      int k=(int)((tcm-thcmStart)/thcmWidth); if(k<0||k>=nbins) continue;
-      h[k]->Fill(ex+exShift); cnt[k]++; }
+      vex.push_back(ex+exShift); vtc.push_back(tcm); }
+   // pass 2: optional Ex-vs-theta_cm drift correction, then fill the angle bins
+   TGraph* gpk = driftCorr ? pdMeasureDrift(vex,vtc,20,115,19) : nullptr;
+   if(gpk && gpk->GetN()>=2) printf("drift-corrected (%d profile points)\n",gpk->GetN());
+   std::vector<long> cnt(nbins,0);
+   for(size_t i=0;i<vex.size();++i){ double exc=vex[i]-pdDriftEval(gpk,vtc[i]);
+      int k=(int)((vtc[i]-thcmStart)/thcmWidth); if(k<0||k>=nbins) continue;
+      h[k]->Fill(exc); cnt[k]++; }
 
    int nc=(nbins<=4)?nbins:((nbins<=6)?3:4), nr=(nbins+nc-1)/nc;
    auto*c=new TCanvas("c_ang","(p,d) Ex per theta_cm",380*nc,300*nr); c->Divide(nc,nr);
