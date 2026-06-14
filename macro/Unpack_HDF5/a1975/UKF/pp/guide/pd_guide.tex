@@ -1,0 +1,187 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{hyperref}
+\usepackage{amsmath}
+\usepackage{enumitem}
+\hypersetup{colorlinks=true, linkcolor=blue!50!black, urlcolor=blue!50!black}
+
+\definecolor{codebg}{gray}{0.96}
+\lstset{
+  basicstyle=\ttfamily\small, backgroundcolor=\color{codebg},
+  breaklines=true, columns=fullflexible, frame=single, framesep=4pt,
+  xleftmargin=4pt, xrightmargin=4pt, aboveskip=6pt, belowskip=6pt,
+  keepspaces=true, showstringspaces=false
+}
+\newcommand{\code}[1]{\texttt{#1}}
+
+\title{\vspace{-1cm}A Student's Guide to the $^{16}$C$(p,d)^{15}$C Analysis\\[2pt]
+       \large (a1975, AT-TPC active target, genfit reconstruction)}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+\vspace{-1.2cm}
+
+\section{What you are measuring}
+The a1975 experiment is a $^{16}$C beam ($\sim$192~MeV, $\sim$12~MeV/u) stopped in an
+\textbf{H$_2$ gas active target} at 1~bar. The gas is \emph{both} the proton target and the
+tracking medium. You will analyze the \textbf{neutron pickup} reaction
+\[
+  ^{16}\mathrm{C} + p \;\rightarrow\; ^{15}\mathrm{C}^{*} + d,
+\]
+i.e.\ $^{16}$C$(p,d)^{15}$C, by detecting the outgoing \textbf{deuteron}. From the deuteron's
+kinetic energy $T_d$ and lab angle $\theta_{\mathrm{lab}}$ you reconstruct the $^{15}$C
+excitation energy $E_x$ via two-body relativistic kinematics, and you study which $^{15}$C
+states are populated and how strongly (the angular distribution).
+
+\medskip
+\noindent\textbf{Goal of this guide:} starting from the reconstructed data, produce a clean
+$^{15}$C excitation-energy spectrum and its angular dependence, and understand the two
+systematics that matter: \emph{triton contamination} and the \emph{$E_x$-vs-$\theta_{cm}$ drift}.
+
+\section{Setup}
+All commands below are run from the (p,d) macro directory after sourcing the environment:
+\begin{lstlisting}[language=bash]
+cd ~/fair_install/ATTPCROOTv2-OpenKF/macro/Unpack_HDF5/a1975/UKF
+source ~/fair_install/ATTPCROOTv2-OpenKF/build/config.sh
+\end{lstlisting}
+The raw data and reconstructed files live on the \code{F:} drive (mount it in WSL with
+\code{sudo mount -t drvfs F: /mnt/f} if needed):
+\begin{itemize}[nosep]
+  \item \code{/mnt/f/a1975/h5/}\hfill raw HDF5 (one file per run, \code{run\_0106}--\code{run\_0189})
+  \item \code{/mnt/f/a1975/reco/}\hfill reconstructed \code{*\_reco.root} (hits + pattern/tracks) + \code{*\_FRIB.root} (ion chamber)
+  \item \code{/mnt/f/a1975/reco\_pd/}\hfill your (p,d) fit outputs go here
+\end{itemize}
+The analysis macros are in \code{pp/}; the interactive ones need an X display
+(they work over WSLg; the static ones write a PNG you open with \code{explorer.exe}).
+
+\section{The pipeline at a glance}
+\begin{center}
+\code{raw HDF5} $\to$ \fbox{unpack + PSA + space-charge + PRA} $\to$ \code{*\_reco.root}
+$\to$ \fbox{deuteron genfit fit} $\to$ \code{*\_genfitter\_pd.root}
+$\to$ \fbox{cache} $\to$ \code{pd\_kin.root} $\to$ \fbox{plots}
+\end{center}
+\textbf{Key idea:} pattern recognition (PRA, finding the tracks) does not depend on what
+particle you assume, so the \code{*\_reco.root} files are shared by all channels. For (p,d) you
+only need to \emph{fit} the existing tracks with the \textbf{deuteron} hypothesis. You do
+\emph{not} re-run the reconstruction.
+
+\section{Step 1 --- Fit the deuterons}
+\code{fitGenfitter\_a1975.C} reads a \code{*\_reco.root}, keeps only tracks inside the deuteron
+PID band (\code{pid/deuteron\_band.json}), fits each as a deuteron with genfit, and writes the
+fitted kinematics. Its defaults are already the deuteron hypothesis, so for one run:
+\begin{lstlisting}[language=bash]
+root -l -b -q 'pipeline/fitGenfitter_a1975.C("run_0106", -1, "/mnt/f/a1975/reco/", "_pd", "/mnt/f/a1975/reco_pd/")'
+\end{lstlisting}
+The arguments are \code{(run, nEvents=-1 for all, inputDir, outputSuffix, outputDir)}. The output
+is \code{/mnt/f/a1975/reco\_pd/run\_0106\_genfitter\_pd.root}. Run the whole experiment on 4 cores:
+\begin{lstlisting}[language=bash]
+ls /mnt/f/a1975/reco/run_*_reco.root | grep -oE 'run_[0-9]+' | sort -u > /tmp/pd_runs.txt
+cat /tmp/pd_runs.txt | xargs -P4 -I{} \
+  root -l -b -q "pipeline/fitGenfitter_a1975.C(\"{}\", -1, \"/mnt/f/a1975/reco/\", \"_pd\", \"/mnt/f/a1975/reco_pd/\")"
+\end{lstlisting}
+A deuteron is rare ($\sim$1.5\% of tracks), so most events show \code{0/1 tracks fitted} --- that
+is the PID gate doing its job, not an error. Expect $\sim$30{,}000 deuterons over the 84 runs.
+
+\section{Step 2 --- Cache the kinematics}
+The fit files are large; cache just the per-deuteron numbers you need into a flat ntuple. The
+cache also pulls the \textbf{ion-chamber (IC)} value from the \code{*\_FRIB.root} files
+(the IC tags good $^{16}$C beam particles).
+\begin{lstlisting}[language=bash]
+cat /tmp/pd_runs.txt | xargs -P4 -I{} root -b -q 'pp/cache_pd_run.C("{}","/tmp/pdkin_{}.root")'
+hadd -f /tmp/pd_kin.root /tmp/pdkin_run_01*.root
+\end{lstlisting}
+This makes \code{/tmp/pd\_kin.root}, an ntuple \code{pk} with branches
+\code{ke, theta, vz, chi2ndf, ic, run}. All later plots read this single file (fast).
+
+\section{Step 3 --- The excitation-energy spectrum}
+From $T_d$ and $\theta_{\mathrm{lab}}$ the macros compute $E_x(^{15}\mathrm{C})$ with relativistic
+two-body kinematics. Make the 4-panel overview:
+\begin{lstlisting}[language=bash]
+root -l -b -q 'pp/plot_pd.C'                          # -> /tmp/pd_spectrum.png
+explorer.exe "$(wslpath -w /tmp/pd_spectrum.png)"
+\end{lstlisting}
+You should see (i) the $E_x$ spectrum with a sharp $^{15}$C ground-state peak near 0 and excited
+states ($\sim$3.10, 4.66~MeV); (ii) the deuteron $T_d$-vs-$\theta_{\mathrm{lab}}$ band lying on the
+analytic kinematic line; (iii) $E_x$ vs $\theta_{cm}$; (iv) vertex-$z$ vs $E_x$.
+
+\paragraph{Cuts.} \code{plot\_pd.C} applies a $\chi^2/\mathrm{ndf}$ cut and the IC beam gate
+($950$--$1350$) by default. These remove badly-fit and non-beam events.
+
+\section{Step 4 --- Angular dependence}
+A discrete state should appear at the same $E_x$ at every angle, and its population (cross
+section) changes with angle. Plot $E_x$ in $\theta_{cm}$ slices:
+\begin{lstlisting}[language=bash]
+root -l -b -q 'pp/plot_pd_angbins.C(10,5,12)'         # start 10 deg, 5 deg wide, 12 bins
+explorer.exe "$(wslpath -w /tmp/pd_angbins.png)"
+\end{lstlisting}
+Arguments are \code{(thcmStart, thcmWidth, nbins, \dots)}. The ground-state resolution is best at
+forward angles ($\sigma\approx0.15$~MeV at $20$--$30^\circ$) and degrades toward back angles.
+
+\section{Step 5 --- Correct the $E_x$-vs-$\theta_{cm}$ drift (important!)}
+The reconstructed ground state is \emph{not} flat in $\theta_{cm}$: its centroid drifts by
+$\sim$0.9~MeV across the angular range. This is a kinematic/reconstruction systematic, and it
+\textbf{smears the integrated spectrum}. The fix measures the g.s.\ centroid versus $\theta_{cm}$
+and subtracts it event-by-event:
+\begin{lstlisting}[language=bash]
+root -l -b -q 'pp/excorr_pd.C'                         # -> /tmp/pd_excorr.png
+\end{lstlisting}
+The left panel shows the measured drift (and the curve subtracted); the right panel shows the
+integrated $^{15}$C spectrum before and after. The ground-state FWHM improves from
+$\sim$1.7~MeV to $\sim$0.43~MeV. \emph{This is the single most important correction for the
+integrated spectrum.} The same correction is built into \code{plot\_pd\_angbins.C}
+(argument \code{driftCorr}, on by default) and into the interactive explorer (a checkbox).
+
+\section{Step 6 --- Beware triton contamination}
+$^{16}$C$(p,t)^{14}$C produces \textbf{tritons}. The deuteron PID gate is loose enough to admit
+some of them, and genfit fits a triton \emph{as a deuteron} with a perfectly good $\chi^2$
+(so you cannot remove tritons with a $\chi^2$ or IC cut --- we checked). They show up as a faint
+second band above the deuteron locus in $T_d$ vs $\theta_{\mathrm{lab}}$. Look at the PID plane:
+\begin{lstlisting}[language=bash]
+root -l -b -q 'pp/pid_pd.C(106,113)'                   # sqrt(dE/dx) vs Brho + the gate
+explorer.exe "$(wslpath -w /tmp/pid_pd.png)"
+\end{lstlisting}
+The proton, deuteron and triton bands are separated in the $\sqrt{dE/dx}$--$B\rho$ plane; the red
+polygon is the current (loose) deuteron gate. \textbf{The fix is to tighten the gate} so the
+triton band is excluded --- because the species separation must come from the gate, not from the
+fit. Use the interactive editor (draw a polygon, save it to JSON, then re-run Step~1 with the new
+gate):
+\begin{lstlisting}[language=bash]
+root -l 'pp/pid_gate_edit.C'      # Draw new gate -> click vertices, double-click to close -> Save JSON
+\end{lstlisting}
+
+\section{Step 7 --- Interactive exploration}
+For tuning cuts and binning live (needs a display):
+\begin{lstlisting}[language=bash]
+root -l 'pp/explore_pd.C'
+\end{lstlisting}
+Controls: beam energy, $\chi^2/\mathrm{ndf}$, $\theta$ window, IC window, \textbf{vertex-$z$
+bounds}, $E_x$ binning, plus check-boxes for the \textbf{drift correction} and the $^{15}$C
+reference lines. Adjust and press \code{Redraw}; \code{Save PNG} to export.
+
+\section{Physics checklist}
+\begin{itemize}[nosep]
+  \item The $^{15}$C ground state ($1/2^+$) should sit at $E_x=0$ after calibration; the first
+        excited state is at 0.740~MeV ($5/2^+$, on the g.s.\ shoulder).
+  \item Prominent strength near 3.10 and 4.66~MeV; broad structure at 6--8~MeV.
+  \item The deuteron $T_d(\theta)$ band must follow the analytic ground-state kinematic line --- if
+        it does not, suspect a wrong beam energy, $B$-field sign, or frame convention.
+\end{itemize}
+
+\section{Troubleshooting}
+\begin{itemize}[nosep]
+  \item \emph{``Macro is slow / hangs.''} The PID macros only need the \code{AtPIDEvent} branch;
+        they already disable the big track branch. The IC gate reads the large FRIB files and is
+        therefore slower --- it is opt-in in \code{pid\_pd.C}.
+  \item \emph{``\code{/tmp/pd\_kin.root} missing.''} \code{/tmp} clears on reboot --- rebuild the
+        cache (Step~2).
+  \item \emph{``Gate file not found.''} Run from the \code{UKF} directory so \code{pid/...json}
+        resolves.
+  \item \emph{``Interactive window does not open.''} The explorer/editor need X (WSLg); the
+        \code{-b} flag means batch --- drop it for the GUIs.
+\end{itemize}
+
+\end{document}
