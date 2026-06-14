@@ -655,20 +655,25 @@ root -b -q 'pipeline/fitGenfit_a1975.C("run_0106", -1, "deuteron")'  # legacy ge
 \end{lstlisting}
 
 \begin{center}
-\small
-\begin{tabular}{@{}lp{3.3cm}p{3.3cm}p{3.3cm}@{}}
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\renewcommand{\arraystretch}{1.15}
+\begin{tabular}{@{}p{1.9cm}
+  >{\raggedright\arraybackslash}p{3.5cm}
+  >{\raggedright\arraybackslash}p{3.5cm}
+  >{\raggedright\arraybackslash}p{3.5cm}@{}}
 \toprule
- & \textbf{UKF}\newline(\code{AtFitterUKF}) & \textbf{AtGenfitter}\newline(clean) & \textbf{AtGenfit}\newline(legacy) \\
+ & \textbf{UKF} (\code{AtFitterUKF}) & \textbf{AtGenfitter} (clean) & \textbf{AtGenfit} (legacy) \\
 \midrule
-Algorithm     & Unscented KF + RTS smoother & \code{KalmanFitterRefTrack} & \code{KalmanFitterRefTrack} \\
-Energy loss   & CATIMA (model)              & SRIM table or internal Bethe--Bloch & SRIM table (file) \\
+Algorithm     & Unscented KF + RTS smoother & genfit reference-track KF & genfit reference-track KF \\
+Energy loss   & CATIMA (model)              & SRIM table, or internal Bethe--Bloch & SRIM table (file) \\
 Iterations    & \code{nIter} (1--2)         & \code{minIter}--\code{maxIter} (2--5) & \code{minIter}--\code{maxIter} (5--20) \\
-Field sign    & signed \code{SetBField}     & signed \code{SetBField} ($-2.85$ exp) & \code{SetSimulationConvention(0)} \\
-Re-clustering & internal / adaptive         & none (drift-$z$ ordering) & \code{EnableReclustering(\dots)} \\
-PID gating    & --- (multi-hyp $\chi^2$)    & \code{SetPIDGate} (internal Spyral PID) & --- \\
+Field sign    & signed \code{SetBField}     & signed \code{SetBField} ($-2.85$ exp) & sim.\ convention flag \\
+Re-clustering & internal / adaptive         & none (drift-$z$ order) & built-in merge / recluster \\
+PID gating    & multi-hyp $\chi^2$          & \code{SetPIDGate} (Spyral PID) & --- \\
 Task wrapper  & \code{AtFitterTask}         & \code{AtFitterTask}        & \code{AtFitterTaskOld} \\
-Output        & \code{AtTrackingEvent} + \code{AtFitMetadata} & \code{AtTrackingEvent} + \code{AtFitMetadata} & \code{AtTrackingEvent} \\
-Status        & native, recommended         & recommended genfit         & \code{[[deprecated]]} fallback \\
+Output        & track + metadata            & track + metadata           & track \\
+Status        & native, recommended         & recommended genfit         & deprecated fallback \\
 \bottomrule
 \end{tabular}
 \end{center}
