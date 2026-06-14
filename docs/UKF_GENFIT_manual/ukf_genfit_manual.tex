@@ -79,6 +79,14 @@
 \newcommand{\code}[1]{\texttt{\small #1}}
 \newcommand{\file}[1]{\texttt{\small #1}}
 
+% Long unbreakable typewriter tokens (class names, file paths) can protrude into
+% the right margin. A small emergencystretch lets TeX, as a last resort, drop such
+% a token to a fresh line (where it fits) instead of overflowing -- without
+% loosening normal paragraphs. The worst multi-slash paths also carry explicit
+% \allowbreak hints at their separators.
+\tolerance=1500
+\setlength{\emergencystretch}{3em}
+
 % =====================================================================
 \begin{document}
 
@@ -118,11 +126,11 @@ framework:
   energy-loss model, sigma-point propagation through the magnetic field, and an
   RTS smoother with back-extrapolation to the reaction vertex.
   \item \textbf{AtGenfitter} --- the \emph{clean} GENFIT2 reference-track fitter
-  (class \code{EventFit::AtGenfitter}, \code{KalmanFitterRefTrack}). It keeps only
+  (class \code{EventFit::\allowbreak AtGenfitter}, \code{KalmanFitterRefTrack}). It keeps only
   the working genfit core (\code{RKTrackRep} + \code{AtSpacepointMeasurement}) and
   shares the validated UKF frame conventions (uniform $z_\mathrm{lab}=$
   \code{ZPadPlane}$-z_\mathrm{digi}$, signed $B$ field, highest-$z_\mathrm{digi}$
-  vertex). It derives from the \emph{modern} \code{EventFit::AtFitter} base, so it
+  vertex). It derives from the \emph{modern} \code{EventFit::\allowbreak AtFitter} base, so it
   runs in the maintained \code{AtFitterTask}, and it can gate which species it
   fits via an upstream Spyral-PID cut (\S\ref{sec:pidgate}).
   \item \textbf{AtGenfit} (legacy) --- the original GENFIT2 fitter
@@ -243,8 +251,8 @@ macros to locate geometry, parameter, and resource files.
 
 genfit support is \emph{conditional} at build time. The top-level
 \file{CMakeLists.txt} calls \code{find\_package2(PUBLIC GENFIT2)}, and
-\file{AtReconstruction/CMakeLists.txt} only compiles \file{AtGenfit.cxx} and
-\file{AtSpacePointMeasurement.cxx} when \code{GENFIT2\_FOUND} is true:
+\file{AtReconstruction/\allowbreak CMakeLists.txt} only compiles \file{AtGenfit.cxx} and
+\file{AtSpacePoint\allowbreak Measurement.cxx} when \code{GENFIT2\_FOUND} is true:
 
 \begin{lstlisting}[style=bash]
 if(GENFIT2_FOUND)
@@ -266,7 +274,8 @@ is simply absent and only the UKF is available.
 % =====================================================================
 
 This section reconstructs simulated $^{16}$C$(p,p)$ data. All macros live in
-\file{macro/Simulation/ATTPC/16C\_pp/}. Run them from that directory.
+\file{macro/\allowbreak Simulation/\allowbreak ATTPC/\allowbreak 16C\_pp/}. Run
+them from that directory.
 
 \subsection{Stage 1 --- Simulation}
 
@@ -294,7 +303,7 @@ ATTPC->SetGeometryFileName("ATTPC_H300torr.root");
 \end{lstlisting}
 
 \textbf{Output:} \file{data/attpcsim.root} (MC truth), \file{data/attpcpar.root}
-(parameters), \file{data/geofile\_full.root} (geometry).
+(parameters), \file{data/\allowbreak geofile\_full.root} (geometry).
 
 \subsection{Stage 2 --- Digitization + PSA + PRA}
 
@@ -327,8 +336,9 @@ praTask->SetPersistence(kTRUE);
 fRun->AddTask(praTask);
 \end{lstlisting}
 
-Parameter file \file{\$VMCWORKDIR/parameters/ATTPC.e20009\_sim.par}, pad map
-\file{\$VMCWORKDIR/scripts/Lookup20150611.xml}.
+Parameter file \file{\$VMCWORKDIR/\allowbreak parameters/\allowbreak
+ATTPC.e20009\_sim.par}, pad map \file{\$VMCWORKDIR/\allowbreak scripts/\allowbreak
+Lookup20150611.xml}.
 
 \textbf{Output:} \file{data/output\_digi.root} with branches \code{AtEventH}
 (hits) and \code{AtPatternEvent} (candidates, ready to fit).
@@ -419,7 +429,7 @@ each subfolder's \file{plots/}. The reusable infrastructure is under
 The pipeline is built incrementally so each stage can be validated and cached. All
 read raw HDF5 from \file{/mnt/f/a1975/h5/<run>.h5}.
 
-\begin{longtable}{@{}p{4.2cm} p{3.2cm} p{7.2cm}@{}}
+\begin{longtable}{@{}p{4.4cm} p{3.7cm} p{7.0cm}@{}}
 \toprule
 \textbf{Macro} & \textbf{Output} & \textbf{Tasks (in order)} \\
 \midrule
@@ -531,10 +541,10 @@ scanning parameters.
 
 \subsection{Fitter B --- AtGenfitter (clean genfit)}\label{sec:fitgenfitter}
 
-\textbf{Macro:} \file{pipeline/fitGenfitter\_a1975.C}. Same input
+\textbf{Macro:} \file{pipeline/\allowbreak fitGenfitter\_a1975.C}. Same input
 (\file{<run>\_reco.root}), output \file{<run>\_genfitter<suffix>.root} (note the
 \code{genfitter}, not \code{genfit}, stem). This is the \textbf{recommended genfit
-path}. It uses the clean \code{EventFit::AtGenfitter} on the \emph{modern}
+path}. It uses the clean \code{EventFit::\allowbreak AtGenfitter} on the \emph{modern}
 \code{AtFitterTask} --- the same wrapper as the UKF --- so the two share frame
 conventions exactly. Signature:
 
@@ -602,7 +612,7 @@ candidates, not fitter failures.
 
 \subsection{Fitter C --- AtGenfit (legacy genfit)}
 
-\textbf{Macro:} \file{pipeline/fitGenfit\_a1975.C}. Same input
+\textbf{Macro:} \file{pipeline/\allowbreak fitGenfit\_a1975.C}. Same input
 (\file{<run>\_reco.root}), output \file{<run>\_genfit<suffix>.root}. The original
 genfit path, kept as a validated fallback for reproducing older results. Signature:
 
@@ -745,7 +755,7 @@ loss, which is why \file{ex\_vtxcorr.C} moves the peak only marginally.
 
 \subsection{\texttt{AtFitterTask} (the FairRoot wrapper)}
 
-\code{AtFitterTask} owns any \code{EventFit::AtFitter} and drives it per event.
+\code{AtFitterTask} owns any \code{EventFit::\allowbreak AtFitter} and drives it per event.
 
 \begin{lstlisting}
 AtFitterTask(std::unique_ptr<EventFit::AtFitter> fitter);   // takes ownership
@@ -974,7 +984,7 @@ $+2.85$\,T (sim sign) & $\approx 3.09$ & $\approx 152$\,MeV & no \\
 For the clean \code{AtGenfitter} the control is identical to the UKF: it takes a
 \textbf{signed} field, so pass \code{bField=-2.85} for experiment (the default) and
 \code{+2.85} for simulation --- there is no separate convention flag. The legacy
-\code{AtGenfit} instead uses \code{SetSimulationConvention(false)} for experimental
+\code{AtGenfit} instead uses \code{SetSimulationConvention\allowbreak (false)} for experimental
 data.
 
 % =====================================================================
@@ -1042,7 +1052,7 @@ root -b -q 'pipeline/unpackNFit_a1975_UKF.C("run_0116", 1000, "proton", -1, 2.85
 \begin{description}[leftmargin=0.5cm,style=nextline]
   \item[Unphysical KE / huge $\chi^2$ on experimental data]
   Almost always the magnetic-field sign. Use \code{bFieldSign = -1} (UKF) or
-  \code{SetSimulationConvention(false)} (genfit). The elastic recoil locus should
+  \code{SetSimulationConvention\allowbreak (false)} (genfit). The elastic recoil locus should
   sit at a few MeV; see \S\ref{sec:conventions}.
   \item[``Input file not found / run unpackReco first'']
   The fitter macros require \file{<run>\_reco.root}. Run
