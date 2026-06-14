@@ -28,8 +28,8 @@ static std::pair<double,double> kine2b(double m1,double m2,double m3,double m4,d
 
 // proton KE vs lab angle locus for p(16C,16C*)p at excitation Ex (relativistic 2-body,
 // CM-angle scan): beam 16C (m1,KE=Eb), target p at rest, ejectile p (m3), residual 16C* (m4=mC+Ex).
-static TGraph *kinLine(double Eb,double Ex,double mC,double mp,Color_t col,int style){
-   double m1=mC,m2=mp,m3=mp,m4=mC+Ex;
+static TGraph *kinLine(double Eb,double Ex,double m1,double m2,double m3,double m4_0,Color_t col,int style){
+   double m4=m4_0+Ex;
    double E1=Eb+m1, P=std::sqrt(E1*E1-m1*m1), W=E1+m2, s=W*W-P*P;
    auto*g=new TGraph(); g->SetLineColor(col); g->SetLineWidth(2); g->SetLineStyle(style);
    if(s<=(m3+m4)*(m3+m4)) return g; // below threshold
@@ -44,8 +44,10 @@ static TGraph *kinLine(double Eb,double Ex,double mC,double mp,Color_t col,int s
 
 class PPExplorer : public TObject {
 public:
-   PPExplorer(TString cache)
+   PPExplorer(TString cache, double mEjectAmu, double mResidAmu, TString tag)
    {
+      const double u=931.49401;
+      fMbeam=16.0147*u; fMtarg=1.007825*u; fMeject=mEjectAmu*u; fMresid=mResidAmu*u; fTag=tag;
       TFile *f=TFile::Open(cache);
       if(!f||f->IsZombie()){ std::cerr<<"cannot open "<<cache<<"\n"; return; }
       TTree *t=(TTree*)f->Get("pk");
@@ -64,7 +66,6 @@ public:
 
    void Redraw()
    {
-      const double u=931.49401,mC=16.0147*u,mp=1.007825*u;
       double Eb=fEbeam->GetNumber(), c2max=fChi2->GetNumber();
       double thLo=fThLo->GetNumber(), thHi=fThHi->GetNumber();
       double icLo=fIcLo->GetNumber(), icHi=fIcHi->GetNumber();
@@ -74,7 +75,7 @@ public:
       double keMax=fKEMax->GetNumber(), keCutLo=fKECutLo->GetNumber(), keCutHi=fKECutHi->GetNumber();
       delete gROOT->FindObject("hEx"); delete gROOT->FindObject("hKT");
       delete gROOT->FindObject("hEt"); delete gROOT->FindObject("hZE");
-      TH1F *hEx=new TH1F("hEx",Form("E_{x} (E_{beam}=%.0f);E_{x} [MeV];protons",Eb),exb,exLo,exHi);
+      TH1F *hEx=new TH1F("hEx",Form("%s E_{x} (E_{beam}=%.0f);E_{x} [MeV];ejectiles",fTag.Data(),Eb),exb,exLo,exHi);
       TH2F *hKT=new TH2F("hKT","KE vs #theta_{lab};#theta_{lab} [deg];KE [MeV]",thLabB,0,95,keB,0,keMax);
       TH2F *hEt=new TH2F("hEt","E_{x} vs #theta_{cm};#theta_{cm} [deg];E_{x} [MeV]",thCmB,0,180,exb,exLo,exHi);
       TH2F *hZE=new TH2F("hZE","vertex z vs E_{x};E_{x} [MeV];vertex z [mm]",exb,exLo,exHi,110,-50,1000);
@@ -86,7 +87,7 @@ public:
          if(fIc[i]<icLo||fIc[i]>icHi) continue;
          if(fKe[i]<keCutLo||fKe[i]>keCutHi) continue; // KE physics cut (affects Ex too)
          double thr=fTh[i]*TMath::DegToRad();
-         auto [ex,thcm]=kine2b(mC,mp,mp,mC,Eb,thr,fKe[i]);
+         auto [ex,thcm]=kine2b(fMbeam,fMtarg,fMeject,fMresid,Eb,thr,fKe[i]);
          hKT->Fill(fTh[i],fKe[i]);
          if(!std::isnan(ex)){ hEx->Fill(ex); hEt->Fill(thcm,ex); hZE->Fill(ex,fVz[i]); }
          ++n;
@@ -103,11 +104,11 @@ public:
       if(fKinLines->IsDown()){ // elastic (red) + excited-state reference lines at current Ebeam
          struct L{double ex;Color_t col;int st;};
          for(L l:{L{0,kRed+1,1},L{2,kGray+2,2},L{4,kGray+2,2},L{6,kGray+2,2}}){
-            TGraph*g=kinLine(Eb,l.ex,mC,mp,l.col,l.st);
+            TGraph*g=kinLine(Eb,l.ex,fMbeam,fMtarg,fMeject,fMresid,l.col,l.st);
             if(g->GetN()>0){ g->Draw("L same"); fLines.push_back(g); } else delete g;
          }
          auto*tx=new TLatex(); tx->SetNDC(); tx->SetTextSize(0.04);
-         tx->SetTextColor(kRed+1);  tx->DrawLatex(0.5,0.85,"elastic (E_{x}=0)");
+         tx->SetTextColor(kRed+1);  tx->DrawLatex(0.5,0.85,"E_{x}=0 (g.s.)");
          tx->SetTextColor(kGray+2); tx->DrawLatex(0.5,0.80,"E_{x}=2,4,6 MeV");
       }
       fCanvas->cd(3); hEt->Draw("colz");
@@ -153,6 +154,7 @@ private:
       main->MapSubwindows(); main->Resize(main->GetDefaultSize()); main->MapWindow();
    }
    std::vector<float> fKe,fTh,fVz,fC2,fIc;
+   double fMbeam,fMtarg,fMeject,fMresid; TString fTag;
    TCanvas*fCanvas{nullptr};
    TGNumberEntry *fEbeam{nullptr},*fChi2{nullptr},*fThLo{nullptr},*fThHi{nullptr},*fIcLo{nullptr},*fIcHi{nullptr},
                  *fExBins{nullptr},*fExLo{nullptr},*fExHi{nullptr},
@@ -164,9 +166,12 @@ private:
    ClassDef(PPExplorer,0);
 };
 
-void explore_pp(TString cache="/tmp/pp_kin.root")
+/// (p,p): defaults. (p,d) 16C(p,d)15C: ejectile=deuteron(2.014102), residual=15C(15.010599):
+///   root -l 'pp/explore_pp.C("/tmp/pd_kin.root",2.014102,15.010599,"16C(p,d)15C")'
+void explore_pp(TString cache="/tmp/pp_kin.root", double mEjectAmu=1.007825, double mResidAmu=16.0147,
+                TString tag="16C(p,p)")
 {
    gSystem->Load("libAtReconstruction.so");
    gStyle->SetOptStat(0); gStyle->SetPalette(kBird); gStyle->SetNumberContours(255);
-   new PPExplorer(cache);
+   new PPExplorer(cache, mEjectAmu, mResidAmu, tag);
 }
