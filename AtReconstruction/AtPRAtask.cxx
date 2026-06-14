@@ -47,6 +47,12 @@ AtPRAtask::AtPRAtask()
    fkNNDist = 10.0;
 }
 
+AtPRAtask::AtPRAtask(std::unique_ptr<AtPATTERN::AtPRA> pra) : AtPRAtask()
+{
+   fPRA = std::move(pra);
+   fInjected = true;
+}
+
 AtPRAtask::~AtPRAtask()
 {
    LOG(debug) << "Destructor of AtPRAtask";
@@ -82,18 +88,22 @@ InitStatus AtPRAtask::Init()
 {
    LOG(debug) << "Initilization of AtPRAtask";
 
+   // Legacy path: construct the algorithm from fPRAlgorithm. Skipped when an algorithm
+   // was injected via the unique_ptr constructor (the caller configured it already);
+   // only the runtime AtDigiPar diffusion bridge below then applies to it.
+   if (!fInjected) {
    if (fPRAlgorithm == 0) {
       LOG(info) << "Using Track Finder TriplClust algorithm";
 
-      fPRA = new AtPATTERN::AtTrackFinderTC();
-      dynamic_cast<AtPATTERN::AtTrackFinderTC *>(fPRA)->SetTcluster(fHCt);
-      dynamic_cast<AtPATTERN::AtTrackFinderTC *>(fPRA)->SetScluster(fHCs);
-      dynamic_cast<AtPATTERN::AtTrackFinderTC *>(fPRA)->SetKtriplet(fHCk);
-      dynamic_cast<AtPATTERN::AtTrackFinderTC *>(fPRA)->SetNtriplet(fHCn);
-      dynamic_cast<AtPATTERN::AtTrackFinderTC *>(fPRA)->SetMcluster(fHCm);
-      dynamic_cast<AtPATTERN::AtTrackFinderTC *>(fPRA)->SetRsmooth(fHCr);
-      dynamic_cast<AtPATTERN::AtTrackFinderTC *>(fPRA)->SetAtriplet(fHCa);
-      dynamic_cast<AtPATTERN::AtTrackFinderTC *>(fPRA)->SetPadding(fHCpadding);
+      fPRA.reset(new AtPATTERN::AtTrackFinderTC());
+      dynamic_cast<AtPATTERN::AtTrackFinderTC *>(fPRA.get())->SetTcluster(fHCt);
+      dynamic_cast<AtPATTERN::AtTrackFinderTC *>(fPRA.get())->SetScluster(fHCs);
+      dynamic_cast<AtPATTERN::AtTrackFinderTC *>(fPRA.get())->SetKtriplet(fHCk);
+      dynamic_cast<AtPATTERN::AtTrackFinderTC *>(fPRA.get())->SetNtriplet(fHCn);
+      dynamic_cast<AtPATTERN::AtTrackFinderTC *>(fPRA.get())->SetMcluster(fHCm);
+      dynamic_cast<AtPATTERN::AtTrackFinderTC *>(fPRA.get())->SetRsmooth(fHCr);
+      dynamic_cast<AtPATTERN::AtTrackFinderTC *>(fPRA.get())->SetAtriplet(fHCa);
+      dynamic_cast<AtPATTERN::AtTrackFinderTC *>(fPRA.get())->SetPadding(fHCpadding);
 
       std::cout << " Track Finder TriplClust parameters (see Dalitz et al.) "
                 << "\n";
@@ -105,9 +115,9 @@ InitStatus AtPRAtask::Init()
       std::cout << " R Smooth  : " << fHCr << "\n";
       std::cout << " A Triplet : " << fHCa << "\n";
 
-      dynamic_cast<AtPATTERN::AtTrackFinderTC *>(fPRA)->SetClusterRadius(fClusterRadius);
-      dynamic_cast<AtPATTERN::AtTrackFinderTC *>(fPRA)->SetClusterDistance(fClusterDistance);
-      dynamic_cast<AtPATTERN::AtTrackFinderTC *>(fPRA)->SetUseSelectAndMerge(fTCUseSelectAndMerge);
+      dynamic_cast<AtPATTERN::AtTrackFinderTC *>(fPRA.get())->SetClusterRadius(fClusterRadius);
+      dynamic_cast<AtPATTERN::AtTrackFinderTC *>(fPRA.get())->SetClusterDistance(fClusterDistance);
+      dynamic_cast<AtPATTERN::AtTrackFinderTC *>(fPRA.get())->SetUseSelectAndMerge(fTCUseSelectAndMerge);
 
       std::cout << " Track finder - Parameters for clusterization "
                 << "\n";
@@ -134,7 +144,7 @@ InitStatus AtPRAtask::Init()
       riemann->SetUseArcWalkExtend(fRiemannUseArcWalkExtend);
       riemann->SetArcWalkWindow(fRiemannArcWalkWindow);
       riemann->SetArcWalkMaxMiss(fRiemannArcWalkMaxMiss);
-      fPRA = riemann;
+      fPRA.reset(riemann);
 
       std::cout << " Riemann track finder parameters\n";
       std::cout << "   Inlier distance : " << fRiemannInlierDist << " mm\n";
@@ -146,6 +156,7 @@ InitStatus AtPRAtask::Init()
                 << "  win=" << fRiemannArcWalkWindow
                 << "  maxMiss=" << fRiemannArcWalkMaxMiss << "\n";
    }
+   } // end legacy construction (skipped when an algorithm was injected)
 
    // Arc-walk clustering options
    if (fUseArcWalk && fPRA) {

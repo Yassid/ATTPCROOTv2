@@ -8,6 +8,7 @@
 #include <TString.h>
 
 #include <cstddef> // for size_t
+#include <memory>  // for unique_ptr
 #include <utility>
 
 class AtDigiPar;
@@ -33,7 +34,8 @@ private:
 
    AtDigiPar *fPar;
 
-   AtPATTERN::AtPRA *fPRA{};
+   std::unique_ptr<AtPATTERN::AtPRA> fPRA; //<! Pattern-recognition algorithm (owned)
+   bool fInjected{false};                  //<! true when the algorithm was supplied via the ctor
 
    Int_t fPRAlgorithm;
 
@@ -89,6 +91,12 @@ private:
 
 public:
    AtPRAtask();
+   /// Dependency-injection constructor (mirrors AtFitterTask): drive a pre-configured
+   /// pattern-recognition algorithm supplied by the caller. Configure the concrete
+   /// AtPRA (e.g. AtTrackFinderTC / AtTrackFinderRiemann) fully before injecting; the
+   /// task only forwards runtime AtDigiPar diffusion parameters and handles branch I/O.
+   /// The legacy default constructor + SetPRAlgorithm() path is kept for existing macros.
+   explicit AtPRAtask(std::unique_ptr<AtPATTERN::AtPRA> pra);
    ~AtPRAtask();
 
    virtual InitStatus Init();
