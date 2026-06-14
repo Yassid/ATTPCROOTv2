@@ -37,7 +37,7 @@ static TGraph *pd_line(double Eb,double Ex,Color_t col,int style){
 }
 
 void plot_pd(TString cache="/tmp/pd_kin.root", double Ebeam=192, double chi2max=5,
-             TString out="/tmp/pd_spectrum.png")
+             double icMin=950, double icMax=1350, TString out="/tmp/pd_spectrum.png")
 {
    gStyle->SetOptStat(0); gStyle->SetPalette(kBird); gStyle->SetNumberContours(255);
    TFile*f=TFile::Open(cache);
@@ -52,7 +52,9 @@ void plot_pd(TString cache="/tmp/pd_kin.root", double Ebeam=192, double chi2max=
    auto*hZE=new TH2F("hZE","vertex z vs E_{x};E_{x} [MeV];vertex z [mm]",160,-5,12,110,-50,1000);
 
    long n=0;
-   for(Long64_t i=0;i<t->GetEntries();++i){ t->GetEntry(i); if(chi2ndf>chi2max) continue;
+   for(Long64_t i=0;i<t->GetEntries();++i){ t->GetEntry(i);
+      if(chi2ndf>chi2max) continue;
+      if(ic<icMin||ic>icMax) continue; // ion-chamber 16C beam gate (set icMin<0 to disable)
       hKT->Fill(theta,ke); auto[ex,tcm]=pd_kine(Ebeam,theta*TMath::DegToRad(),ke);
       if(!std::isnan(ex)){ hEx->Fill(ex); hEt->Fill(tcm,ex); hZE->Fill(ex,vz); } ++n; }
 

@@ -136,7 +136,7 @@ private:
       auto*bar=new TGHorizontalFrame(main);
       fEbeam=mkNum(bar,"Ebeam",192,50,400,1); fChi2=mkNum(bar,"chi2/ndf<",5,0,1000,1);
       fThLo=mkNum(bar,"thetaLo",5,0,180,1); fThHi=mkNum(bar,"thetaHi",90,0,180,1);
-      fIcLo=mkNum(bar,"ICmin",0,0,5000,1); fIcHi=mkNum(bar,"ICmax",5000,0,5000,1);
+      fIcLo=mkNum(bar,"ICmin",950,0,5000,1); fIcHi=mkNum(bar,"ICmax",1350,0,5000,1); // 16C beam gate on by default
       main->AddFrame(bar,new TGLayoutHints(kLHintsTop|kLHintsExpandX));
       auto*bar2=new TGHorizontalFrame(main);
       fExBins=mkNum(bar2,"ExBins",120,10,2000); fExLo=mkNum(bar2,"ExLo",-5,-20,0,1); fExHi=mkNum(bar2,"ExHi",12,1,50,1);
