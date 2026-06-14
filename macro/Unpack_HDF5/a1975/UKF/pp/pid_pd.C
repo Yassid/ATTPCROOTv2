@@ -9,8 +9,9 @@
 
 void pid_pd(int runLo=106, int runHi=113, TString dir="/mnt/f/a1975/reco_pd/",
             TString suffix="_genfitter_pd", TString gateJson="pid/deuteron_band.json",
-            TString out="/tmp/pid_pd.png", double icMin=950, double icMax=1350,
+            TString out="/tmp/pid_pd.png", double icMin=-1, double icMax=1350,
             TString fribDir="/mnt/f/a1975/reco/", int icTbLo=1000, int icTbHi=1350)
+            // icMin<0 => IC gate OFF (fast, no FRIB read). Set icMin=950 to beam-gate (slower: reads FRIB).
 {
    gSystem->Load("libAtReconstruction.so");
    gStyle->SetOptStat(0); gStyle->SetPalette(kBird); gStyle->SetNumberContours(255);
@@ -25,6 +26,7 @@ void pid_pd(int runLo=106, int runHi=113, TString dir="/mnt/f/a1975/reco_pd/",
       if(gSystem->AccessPathName(gf)) continue;
       bool haveFrib = useIC && !gSystem->AccessPathName(ff);
       TFile*f=TFile::Open(gf); auto*t=(TTree*)f->Get("cbmsim");
+      t->SetBranchStatus("*",0); t->SetBranchStatus("AtPIDEvent*",1); // skip the big AtTrackingEvent branch
       TClonesArray*pe=nullptr; t->SetBranchAddress("AtPIDEvent",&pe);
       TFile*fc=haveFrib?TFile::Open(ff):nullptr; TTree*tc=haveFrib?(TTree*)fc->Get("cbmsim"):nullptr;
       TClonesArray*re=nullptr; if(tc) tc->SetBranchAddress("AtRawEvent",&re);

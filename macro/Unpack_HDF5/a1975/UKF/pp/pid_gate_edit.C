@@ -25,6 +25,7 @@ public:
          TString gf=Form("%srun_%04d%s.root",dir.Data(),r,suffix.Data());
          if(gSystem->AccessPathName(gf)) continue;
          TFile*f=TFile::Open(gf); auto*t=(TTree*)f->Get("cbmsim");
+         t->SetBranchStatus("*",0); t->SetBranchStatus("AtPIDEvent*",1); // skip the big AtTrackingEvent branch
          TClonesArray*pe=nullptr; t->SetBranchAddress("AtPIDEvent",&pe);
          for(Long64_t i=0;i<t->GetEntries();++i){ t->GetEntry(i);
             if(pe->GetEntries()==0) continue; auto*ev=(AtPIDEvent*)pe->At(0); if(!ev) continue;
