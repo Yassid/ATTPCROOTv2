@@ -127,13 +127,15 @@ void unpackNFit_a1975_UKF(TString fileName = "run_0116", Long64_t nEvents = 1000
    auto SCTask = new AtSpaceChargeCorrectionTask(std::move(SCModel));
    SCTask->SetInputBranch("AtEventH");
 
-   // --- PRA ---
-   AtPRAtask *praTask = new AtPRAtask();
+   // --- PRA via dependency injection (AtPRAtask takes the algorithm as a unique_ptr) ---
+   // AtTrackFinderTC carries the standard TC defaults; only cluster radius/distance set.
+   auto praAlgo = std::make_unique<AtPATTERN::AtTrackFinderTC>();
+   praAlgo->SetClusterRadius(15.0);
+   praAlgo->SetClusterDistance(7.5);
+   AtPRAtask *praTask = new AtPRAtask(std::move(praAlgo));
    praTask->SetInputBranch("AtEventCorrected");
    praTask->SetOutputBranch("AtPatternEvent");
    praTask->SetPersistence(true);
-   praTask->SetClusterRadius(15.0);
-   praTask->SetClusterDistance(7.5);
 
    // --- UKF (multi-hypothesis from the particle list) ---
    auto multi = std::make_unique<EventFit::AtFitterUKFMulti>();

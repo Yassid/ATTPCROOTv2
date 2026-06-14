@@ -82,22 +82,13 @@ void unpackReco_a1975_UKF(TString fileName = "run_0116", Long64_t nEvents = 1000
    // --- PRA: AtEventCorrected -> AtPatternEvent (track candidates) ---
    Double_t clusterRadius = 15.0;
    Double_t clusterDistance = 7.5;
-   // PRA via dependency injection: AtPRAtask now takes the algorithm as a unique_ptr
-   // (mirrors AtFitterTask). The TC track finder is configured explicitly here rather
-   // than via defaults hidden inside the task. These values reproduce the legacy
-   // AtPRAtask TC path exactly (validated by testPRAinject_a1975.C).
+   // PRA via dependency injection: AtPRAtask takes the algorithm as a unique_ptr
+   // (mirrors AtFitterTask). AtTrackFinderTC already carries the standard TC defaults
+   // the legacy AtPRAtask pushed, so only the cluster radius/distance are set here.
+   // Behaviour-identical to the legacy path (validated by testPRAinject_a1975.C).
    auto praAlgo = std::make_unique<AtPATTERN::AtTrackFinderTC>();
-   praAlgo->SetTcluster(4.0);
-   praAlgo->SetScluster(0.3);
-   praAlgo->SetKtriplet(19);
-   praAlgo->SetNtriplet(2);
-   praAlgo->SetMcluster(15);
-   praAlgo->SetRsmooth(2.0);
-   praAlgo->SetAtriplet(0.03);
-   praAlgo->SetPadding(0);
    praAlgo->SetClusterRadius(clusterRadius);
    praAlgo->SetClusterDistance(clusterDistance);
-   praAlgo->SetUseSelectAndMerge(true);
    AtPRAtask *praTask = new AtPRAtask(std::move(praAlgo));
    praTask->SetInputBranch("AtEventCorrected");
    praTask->SetOutputBranch("AtPatternEvent");

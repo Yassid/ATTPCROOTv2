@@ -33,20 +33,13 @@ void testPRAinject_a1975(TString runName = "run_0106", Long64_t nEv = 300, TStri
    praLegacy->SetClusterRadius(clusterRadius);
    praLegacy->SetClusterDistance(clusterDistance);
 
-   // INJECTION path — build + configure the SAME algorithm the legacy task would
-   // (TC defaults that AtPRAtask::Init pushes), then inject it.
+   // INJECTION path — AtTrackFinderTC already carries the standard TC HC defaults
+   // (s=0.3,k=19,n=2,m=15,r=2,a=0.03,t=4.0, selectAndMerge on) that the legacy task
+   // pushed, so only the cluster radius/distance need setting. This is the CLEAN
+   // migration form used by the production macros.
    auto tc = std::make_unique<AtPATTERN::AtTrackFinderTC>();
-   tc->SetTcluster(4.0);
-   tc->SetScluster(0.3);
-   tc->SetKtriplet(19);
-   tc->SetNtriplet(2);
-   tc->SetMcluster(15);
-   tc->SetRsmooth(2.0);
-   tc->SetAtriplet(0.03);
-   tc->SetPadding(0);
    tc->SetClusterRadius(clusterRadius);
    tc->SetClusterDistance(clusterDistance);
-   tc->SetUseSelectAndMerge(true);
    auto *praInject = new AtPRAtask(std::move(tc));
    praInject->SetInputBranch("AtEventCorrected");
    praInject->SetOutputBranch("AtPatternEventInject");
