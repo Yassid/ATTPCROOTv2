@@ -206,7 +206,9 @@ The stages, in order:
   \code{AtEventCorrected}.
   \item[Pattern recognition (PRA)] \code{AtPRAtask} (Hough/triplet RANSAC) or
   \code{AtSampleConsensusTask} groups hits into clustered track candidates:
-  branch \code{AtPatternEvent}.
+  branch \code{AtPatternEvent}. \code{AtPRAtask} now also accepts the
+  finder algorithm by \emph{dependency injection} (a \code{unique\_ptr}, like
+  \code{AtFitterTask}); see \S\ref{sec:prainject}.
   \item[Fitting] \code{AtFitterTask} (UKF, multi-hypothesis UKF, or the clean
   \code{AtGenfitter}) or the legacy \code{AtFitterTaskOld} (\code{AtGenfit}) fits
   each candidate, producing \code{AtTrackingEvent} (a collection of
@@ -441,6 +443,16 @@ read raw HDF5 from \file{/mnt/f/a1975/h5/<run>.h5}.
 \bottomrule
 \end{longtable}
 
+\begin{notebox}
+\textbf{Genfit one-shot macros.} For a single-pass unpack$\rightarrow$genfit run
+there are standalone macros one level up, in \file{macro/Unpack\_HDF5/a1975/}:
+\file{unpackNFit\_a1975.C} fits the proton $(p,p)$ channel and
+\file{unpackNFit\_a1975\_deuterium.C} the deuteron $(p,d)$ channel. Both run the
+full \code{Unpack}$\rightarrow$\code{PSA}$\rightarrow$SC$\rightarrow$\code{PRA}
+(injected) $\rightarrow$\code{EventFit::AtGenfitter} chain and take
+\code{(TString fileName="run\_0106", Long64\_t nEvents=-1)}.
+\end{notebox}
+
 \code{unpackReco\_a1975\_UKF.C} is the \textbf{standard entry point}: it produces
 the \code{AtPatternEvent} that all three fitters consume. Its task chain:
 
@@ -465,11 +477,15 @@ auto SCTask = new AtSpaceChargeCorrectionTask(std::move(SCModel));
 SCTask->SetInputBranch("AtEventH");                              // -> AtEventCorrected
 fRun->AddTask(SCTask);
 
-AtPRAtask *praTask = new AtPRAtask();
+// PRA by dependency injection: the task takes a pre-configured finder
+// (AtTrackFinderTC already carries the standard TC defaults), so only the
+// cluster radius/distance are set here. See section 5.2.
+auto praAlgo = std::make_unique<AtPATTERN::AtTrackFinderTC>();
+praAlgo->SetClusterRadius(15.0);
+praAlgo->SetClusterDistance(7.5);
+AtPRAtask *praTask = new AtPRAtask(std::move(praAlgo));
 praTask->SetInputBranch("AtEventCorrected");
 praTask->SetOutputBranch("AtPatternEvent");
-praTask->SetClusterRadius(15.0);
-praTask->SetClusterDistance(7.5);
 praTask->SetPersistence(true);
 fRun->AddTask(praTask);
 \end{lstlisting}
@@ -482,6 +498,30 @@ Resource files: geometry \file{ATTPC\_H1bar\_geomanager.root}, map
 # produce the AtPatternEvent once (persistRaw=true keeps raw for displays)
 root -b -q 'pipeline/unpackReco_a1975_UKF.C("run_0116", 1000, true)'
 \end{lstlisting}
+
+\subsection{Pattern recognition by dependency injection}\label{sec:prainject}
+
+\code{AtPRAtask} now mirrors \code{AtFitterTask}: it can \emph{own} a
+pre-configured finder passed as a \code{unique\_ptr}, instead of constructing one
+internally from an integer selector. The task then only forwards the runtime
+\code{AtDigiPar} diffusion parameters and handles branch I/O.
+
+\begin{lstlisting}
+// modern (injected) form -- the task owns the algorithm
+AtPRAtask(std::unique_ptr<AtPATTERN::AtPRA> pra);
+// legacy form (still supported, unchanged): default ctor + SetPRAlgorithm(id)
+AtPRAtask();   void SetPRAlgorithm(Int_t id = 0);
+\end{lstlisting}
+
+\begin{notebox}
+The injection form is \emph{behaviour-identical} to the legacy path:
+\code{AtTrackFinderTC} already carries the standard triplet-cluster defaults the
+old task pushed ($s{=}0.3,\,k{=}19,\,n{=}2,\,m{=}15,\,r{=}2,\,a{=}0.03,\,t{=}4.0$,
+select-and-merge on), so a migrated macro only sets the cluster radius/distance.
+Validated byte-identical over 15k events by \file{testPRAinject\_a1975.C} and
+\file{cmpReco\_a1975.C} (\S\ref{sec:analysis}). The $\sim$60 existing macros that
+use the legacy constructor are unaffected.
+\end{notebox}
 
 \subsection{Fitter A --- UKF}
 
@@ -610,6 +650,43 @@ fitter; the residual non-converging fraction is dominated by PRA ``blob''
 candidates, not fitter failures.
 \end{notebox}
 
+\subsubsection*{Advanced options: continuity merging and diffusion covariance}
+\label{sec:advgenfit}
+
+Two opt-in refinements extend \code{AtGenfitter} beyond the production defaults.
+Both are \emph{off} by default and both leave the validated (p,p)/(p,d) results
+unchanged when unused.
+
+\textbf{Continuity merging} (\code{SetMergeContinuity}) rejoins track fragments
+that PRA split across breaks but that belong to one physical trajectory, before
+the fit. Two fragments merge when (i) their PRA circles are the \emph{same}
+circle --- centres within \code{centerDist} (default $15$\,mm; fragments of one
+helix share a centre to $\sim$10\,mm, while two distinct tracks sit $20+$\,mm
+apart) and radii within \code{radiusFrac} --- and (ii) their nearest endpoints
+are within \code{gapMM} in 3D and that junction is \emph{not}
+vertex-end-to-vertex-end (which would be two tracks sharing the production vertex
+and diverging). Chains merge transitively. It runs on a \emph{copy} of the
+pattern tracks, so the shared \code{AtPatternEvent} --- and any parallel UKF task
+on the same event --- is untouched.
+
+\begin{lstlisting}
+fitter->SetMergeContinuity(kTRUE);            // 15 mm / 0.3 / 30 mm defaults
+\end{lstlisting}
+
+\textbf{Diffusion covariance} (\code{SetDiffusion}, \code{SetZLongFactor},
+\code{SetChargeCovRef}) replaces the flat per-cluster measurement sigma with a
+drift-distance model, $\sigma^2 = \sigma_0^2 + D^2\,L_\mathrm{cm}$ (with
+$\sigma_0=$\code{SetMeasSigma} and $D$ in mm$/\sqrt{\mathrm{cm}}$), so
+long-drift, electron-diffused clusters are down-weighted. The defaults $(0,0)$
+reduce \emph{exactly} to the flat covariance.
+
+\begin{warnbox}
+Both are physics-dependent: A/B-test before adopting (\file{featureScan\_a1975.C},
+\file{testMerge\_a1975.C}, \file{mergeQuality\_a1975.C} in \S\ref{sec:analysis}).
+The merge criteria were tuned by measurement on a1975; a chord-direction guard
+was tried and dropped (anti-correlated on curved tracks).
+\end{warnbox}
+
 \subsection{Fitter C --- AtGenfit (legacy genfit)}
 
 \textbf{Macro:} \file{pipeline/\allowbreak fitGenfit\_a1975.C}. Same input
@@ -679,7 +756,7 @@ Algorithm     & Unscented KF + RTS smoother & genfit reference-track KF & genfit
 Energy loss   & CATIMA (model)              & SRIM table, or internal Bethe--Bloch & SRIM table (file) \\
 Iterations    & \code{nIter} (1--2)         & \code{minIter}--\code{maxIter} (2--5) & \code{minIter}--\code{maxIter} (5--20) \\
 Field sign    & signed \code{SetBField}     & signed \code{SetBField} ($-2.85$ exp) & sim.\ convention flag \\
-Re-clustering & internal / adaptive         & none (drift-$z$ order) & built-in merge / recluster \\
+Re-clustering & internal / adaptive         & none; opt-in continuity merge & built-in merge / recluster \\
 PID gating    & multi-hyp $\chi^2$          & \code{SetPIDGate} (Spyral PID) & --- \\
 Task wrapper  & \code{AtFitterTask}         & \code{AtFitterTask}        & \code{AtFitterTaskOld} \\
 Output        & track + metadata            & track + metadata           & track \\
@@ -703,6 +780,38 @@ Under WSL there is no working OpenGL/Eve --- interactive 3D viewers crash. Use t
 static PNG macros (\file{event\_png\_UKF.C}, \file{event\_png\_batch\_UKF.C})
 instead. Both require a \file{<run>\_disp.root} produced with \code{persistRaw=true}.
 \end{warnbox}
+
+\subsection{Overlaying both fitters (dual-fitter display)}\label{sec:dualdisp}
+
+Because the UKF and \code{AtGenfitter} share the \code{AtPatternEvent} and the
+frame conventions, their fitted trajectories can be drawn \emph{together} on the
+same hits. \file{fitBoth\_a1975.C} runs both Kalman filters in one pass over a
+\file{<run>\_reco.root} and writes \emph{two} tracking branches to a
+\file{<run>\_both.root}:
+
+\begin{lstlisting}
+void fitBoth_a1975(TString fileName="run_0106", Long64_t nEvents=200,
+                   TString ioDir="/mnt/f/a1975/reco/", TString outDir="",
+                   Int_t bFieldSign=-1, Double_t bFieldMag=2.85,
+                   TString pidGate="pid/proton_band.json",
+                   Double_t measSigma=4.0, Double_t gasDensity=9.0e-5);
+// branches: AtTrackingEventGenfit (AtGenfitter) + AtTrackingEventUKF (AtFitterUKF)
+\end{lstlisting}
+
+The display reads that file and the \file{<run>\_reco.root} hits, mapping the
+lab-frame fits back to the digi frame via \code{SetZPadPlane}. The underlying
+\code{AtTabFitted} tab gained the setters that make the overlay possible:
+\code{SetBranchName}, \code{SetDrawSmoothed(bool)} (draw the smoothed polyline,
+not the analytic helix), \code{SetTrackColor} / \code{SetLineStyle} /
+\code{SetLineWidth}, and \code{SetZPadPlane}.
+
+\begin{lstlisting}[style=bash]
+# fit both, then overlay (genfit = red solid, UKF = blue dashed)
+root -b -q 'pipeline/fitBoth_a1975.C("run_0106", 200, "/mnt/f/a1975/reco/", "/tmp/")'
+root -l    'pipeline/run_eve_both_a1975.C("run_0106", "/mnt/f/a1975/reco/", "/tmp/")'  # interactive (needs OpenGL)
+# WSL-safe static PNGs (single / multi-track / backward modes):
+root -l -b -q 'pipeline/dispBoth_a1975.C("run_0106", "multi", 4, "/mnt/f/a1975/reco/", "/tmp/")'
+\end{lstlisting}
 
 \subsection{Analysis: excitation-energy spectra and the interactive explorer}
 \label{sec:analysis}
@@ -748,6 +857,25 @@ On a1975 the $(p,p)$ elastic core sits at $\sigma\!\approx\!0.18$\,MeV and is
 large-angle-dominated --- i.e.\ limited by angular resolution, not beam energy
 loss, which is why \file{ex\_vtxcorr.C} moves the peak only marginally.
 \end{notebox}
+
+\subsection{Regression and tuning tools}\label{sec:tools}
+
+A set of small driver macros (in \file{pipeline/}) underpin the validation and
+parameter studies above. They are not part of the production chain but are the
+recommended way to A/B-test any physics-dependent knob before adopting it.
+
+\begin{longtable}{@{}p{4.2cm} p{10.4cm}@{}}
+\toprule
+\textbf{Macro} & \textbf{Purpose} \\
+\midrule
+\endhead
+\file{testPRAinject\_a1975.C} & Prove the \code{AtPRAtask} injection ctor reproduces the legacy path (per-event track-count comparison). \\
+\file{praDump\_a1975.C} / \file{cmpReco\_a1975.C} & Emit a deterministic per-event PRA signature, and diff the \code{AtPatternEvent} of two \file{\_reco.root} files --- used to show a refactor is byte-identical. \\
+\file{testMerge\_a1975.C} / \file{mergeQuality\_a1975.C} / \file{mergeDiag\_a1975.C} & Validate \code{AtGenfitter} continuity merging: how often it fires, classify each merge (dedup / recover / neutral / harmful), and print the geometric discriminators per track pair. \\
+\file{featureScan\_a1975.C} & Scan the genfit covariance knobs (\code{SetMeasSigma}, \code{SetDiffusion}); median $\chi^2/\mathrm{ndf}$ and good-fit rate per config. \\
+\file{ukfMSscan\_a1975.C} / \file{ukfMinClus\_a1975.C} & Scan UKF multiple scattering and \code{MinClusters} versus yield / median KE. \\
+\bottomrule
+\end{longtable}
 
 % =====================================================================
 \section{Fitter API reference}\label{sec:fitterapi}
@@ -803,6 +931,8 @@ AtFitterUKF(double charge,        // Coulombs (Z * 1.602176634e-19)
 \code{SetBackExtrapMaxPath(mm)}        & Max back-extrapolation length to vertex (50). \\
 \code{SetForceVertexOnBeamAxis(b)}     & Force vertex to $xy=(0,0)$. \\
 \code{SetUseRefTrack(b)} / \code{SetUseRefTrackWarmStart(b)} & genfit-style re-linearization around the previous smoothed trajectory (needs \code{nIter}$\ge 2$). \\
+\code{SetEnableMultipleScattering(b)}  & Highland multiple-scattering angular process noise (false). Opt-in; negligible in H$_2$ at 1\,bar, scales for denser gas / lower momentum. \\
+\code{SetRadiationLength(mm)}          & Radiation length $X_0$ of the medium used by the Highland model ($7.6\times10^{6}$\,mm, $\approx$H$_2$ at 1\,bar). \\
 \bottomrule
 \end{longtable}
 
@@ -857,6 +987,10 @@ AtGenfitter(Double_t bFieldTesla = -2.85,        // signed; exp a1975 handedness
 \code{SetThetaWindow(min, max)}         & Fitted-$\theta$ acceptance window in deg ($10$--$170$); outside $\Rightarrow$ track dropped. \\
 \code{SetQualityCut(chi2NdfMax, keMin, keMax)} & Post-fit flag only ($5.0$, $0.5$, $60$); failing tracks are kept but \code{GetGoodFit()==false}. \\
 \code{SetPIDGate(jsonFile)}             & Fit only tracks inside a Spyral-PID gate, see \S\ref{sec:pidgate}. \\
+\code{SetMergeContinuity(on, centerDist, radiusFrac, gapMM)} & \emph{Opt-in} (default off). Merge PRA-split fragments of one track before fitting --- see \S\ref{sec:advgenfit}. ($15$\,mm, $0.3$, $30$\,mm). \\
+\code{SetDiffusion(transv, long)}       & Drift-distance diffusion model for the per-cluster covariance, mm$/\sqrt{\mathrm{cm}}$ ($0,0$ $\Rightarrow$ flat \code{SetMeasSigma}). \\
+\code{SetZLongFactor(f)}                & Drift-$z$ variance looseness at zero drift (2.0). \\
+\code{SetChargeCovRef(qRef)}            & If $>0$, weight clusters by charge (clamp $q_\mathrm{ref}/Q$); off (0). \\
 \bottomrule
 \end{longtable}
 
@@ -1040,9 +1174,20 @@ cd macro/Unpack_HDF5/a1975/UKF/
 root -b -q 'pipeline/fitGenfit_a1975.C("run_0106", -1, "deuteron")'   # -> run_0106_genfit.root
 \end{lstlisting}
 
+\subsection*{Experiment (a1975), overlay both fitters}
+\begin{lstlisting}[style=bash]
+cd macro/Unpack_HDF5/a1975/UKF/
+root -b -q 'pipeline/fitBoth_a1975.C("run_0106", 200, "/mnt/f/a1975/reco/", "/tmp/")'  # -> _both.root
+root -l -b -q 'pipeline/dispBoth_a1975.C("run_0106", "multi", 4, "/mnt/f/a1975/reco/", "/tmp/")'
+\end{lstlisting}
+
 \subsection*{One-shot experiment (no iteration)}
 \begin{lstlisting}[style=bash]
+# UKF one-shot (in macro/Unpack_HDF5/a1975/UKF/)
 root -b -q 'pipeline/unpackNFit_a1975_UKF.C("run_0116", 1000, "proton", -1, 2.85, 9.0e-5)'
+# genfit one-shot (in macro/Unpack_HDF5/a1975/): (p,p) proton / (p,d) deuteron
+root -l -b -q 'unpackNFit_a1975.C("run_0106", 5000)'
+root -l -b -q 'unpackNFit_a1975_deuterium.C("run_0106", 5000)'
 \end{lstlisting}
 
 % =====================================================================
