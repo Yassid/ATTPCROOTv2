@@ -90,6 +90,26 @@ public:
    /// off. ~2-3 mm keeps real tracks converging while still constraining momentum.
    void SetMeasSigma(Double_t mm) { fMeasSigmaMM = mm; }
 
+   /// Diffusion model for the per-cluster measurement covariance. The transverse (x,y)
+   /// and drift-z position variance grow with drift distance L as
+   ///   sigma^2 = sigma0^2 + D^2 * L_cm
+   /// with sigma0 = SetMeasSigma and the diffusion coefficients D in mm/sqrt(cm). This
+   /// captures the detector physics that long-drift clusters are blurrier (electron
+   /// diffusion) so the fit weights near-pad-plane clusters more. The defaults (0, 0)
+   /// reduce EXACTLY to the flat SetMeasSigma covariance, preserving the validated
+   /// production; tune per gas/field (physics-dependent, A/B test before adopting).
+   void SetDiffusion(Double_t transvMM_per_sqrtcm, Double_t longMM_per_sqrtcm)
+   {
+      fDiffTransMM = transvMM_per_sqrtcm;
+      fDiffLongMM = longMM_per_sqrtcm;
+   }
+   /// Looseness factor applied to the drift-z measurement variance at zero drift
+   /// (default 2.0: z from drift time is a bit less certain than the pad-plane x,y).
+   void SetZLongFactor(Double_t f) { fZLongFactor = f; }
+   /// If >0, scale each cluster's measurement variance by clamp(qRef/Q, 0.25, 4):
+   /// high-charge (more-electron) clusters get a tighter centroid. Default 0 (off).
+   void SetChargeCovRef(Double_t qRef) { fChargeRefForCov = qRef; }
+
    /// Post-fit quality cut. Tracks failing it are KEPT but flagged (GetGoodFit()==false)
    /// so curling/blob tracks remain inspectable. A fit passes if it converged, has
    /// ndf>0 with chi2/ndf < chi2NdfMax, and keMin < KE < keMax.
@@ -110,9 +130,42 @@ public:
       fUsePIDGate = kTRUE;
    }
 
+   /// Continuity merging: before fitting, merge AtTrack fragments that PRA split
+   /// across breaks but belong to ONE physical trajectory — clusters are concatenated
+   /// and the fit's drift-z sort re-sequences them. Two fragments merge when:
+   ///  - their PRA circles are the SAME circle: centres within centerDistMM (default
+   ///    15 mm — fragments of one helix share a centre to ~10 mm; two distinct tracks,
+   ///    even of similar radius, sit ~20+ mm apart, validated on a1975) and radii
+   ///    within radiusFrac;
+   ///  - their nearest endpoints are within gapMM in 3D AND that closest junction is
+   ///    NOT vertex-end-to-vertex-end (which is two tracks sharing the production
+   ///    vertex and diverging, not a continuation).
+   /// Chains (A-B-C) merge transitively. Operates on a COPY of the pattern tracks, so
+   /// the shared AtPatternEvent is untouched and a parallel UKF task on the same event
+   /// is unaffected. Default off. (A global chord-direction guard was tried and dropped:
+   /// it is anti-correlated on real data — strongly-curved split tracks have diverging
+   /// chords while two short parallel tracks align — the shared-centre test is the clean
+   /// discriminator.)
+   void SetMergeContinuity(Bool_t on, Double_t centerDistMM = 15.0, Double_t radiusFrac = 0.3, Double_t gapMM = 30.0)
+   {
+      fMergeContinuity = on;
+      fMergeCenterDist = centerDistMM;
+      fMergeRadiusFrac = radiusFrac;
+      fMergeGapMM = gapMM;
+   }
+
+   /// Event-level entry point. Overridden to optionally run continuity merging on a
+   /// copy of the pattern tracks before the per-track fit loop.
+   void FitEvent(AtTrackingEvent *trackingEvent, AtPatternEvent *patternEvent, AtFitMetadata *fitMetadata = nullptr,
+                 AtRawEvent *rawEvent = nullptr, AtEvent *event = nullptr) override;
+
 protected:
    AtFittedTrack *GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata = nullptr, AtRawEvent *rawEvent = nullptr,
                                  AtEvent *event = nullptr) override;
+
+   /// Merge continuous AtTrack fragments (see SetMergeContinuity). Returns the merged
+   /// track list; a no-op returning the input unchanged when merging is disabled.
+   std::vector<AtTrack> MergeContinuousTracks(std::vector<AtTrack> tracks) const;
 
 private:
    Double_t fBField;        // signed, Tesla (kGauss internally)
@@ -129,10 +182,19 @@ private:
    Double_t fKEMin{0.5};
    Double_t fKEMax{60.0};
    Double_t fMeasSigmaMM{4.0};         // per-cluster measurement resolution (mm)
+   Double_t fDiffTransMM{0.0};         // transverse diffusion (mm/sqrt(cm)); var += fDiffTrans^2 * L_cm
+   Double_t fDiffLongMM{0.0};          // drift-z diffusion (mm/sqrt(cm)); var += fDiffLong^2 * L_cm
+   Double_t fZLongFactor{2.0};         // drift-z variance looseness factor at zero drift
+   Double_t fChargeRefForCov{0.0};     // if >0, scale cov by clamp(qRef/Q): more charge -> tighter
    Double_t fThetaMinDeg{10.0};         // fitted-theta acceptance window (deg); outside -> dropped
    Double_t fThetaMaxDeg{170.0};
    Int_t fTPCDetID{0};
    Bool_t fInit{kFALSE};
+
+   Bool_t fMergeContinuity{kFALSE};    // merge PRA-split fragments of one track before fitting
+   Double_t fMergeCenterDist{15.0};    // max PRA-circle centre distance to merge (mm) — "same circle" test
+   Double_t fMergeRadiusFrac{0.3};     // max fractional PRA-radius difference to merge
+   Double_t fMergeGapMM{30.0};         // max 3D endpoint gap to merge (mm)
 
    Bool_t fUsePIDGate{kFALSE};
    std::string fPidGateFile;

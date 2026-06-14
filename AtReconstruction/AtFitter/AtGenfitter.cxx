@@ -4,9 +4,11 @@
 #include "AtFittedTrack.h"
 #include "AtHitCluster.h"
 #include "AtParticleID.h"
+#include "AtPatternEvent.h"
 #include "AtSpacePointMeasurement.h"
 #include "AtSpyralPID.h"
 #include "AtTrack.h"
+#include "AtTrackingEvent.h"
 
 #include <FairLogger.h>
 
@@ -57,7 +59,10 @@ AtGenfitter::~AtGenfitter()
 {
    delete fGenfitTrackArray;
    delete fHitClusterArray;
-   delete fMeasurementProducer;
+   // NOTE: do NOT delete fMeasurementProducer here. Init() registers it with the
+   // MeasurementFactory via addProducer(), and MeasurementFactory::clear() (called by
+   // ~MeasurementFactory) deletes every registered producer. Deleting it here too was a
+   // double-free that crashed when more than one AtGenfitter was constructed/destroyed.
    delete fMeasurementFactory;
 }
 
@@ -166,20 +171,34 @@ AtFittedTrack *AtGenfitter::GetFittedTrack(AtTrack *track, AtFitMetadata * /*fit
    if (!(p_GeV > 0) || p_GeV > 100)
       return nullptr;
 
-   // measurement covariance fed to genfit (mm^2; AtSpacepointMeasurement converts to cm^2)
-   TMatrixDSym measCov(3);
-   measCov.Zero();
-   double s2 = fMeasSigmaMM * fMeasSigmaMM;
-   measCov(0, 0) = s2;
-   measCov(1, 1) = s2;
-   measCov(2, 2) = 2.0 * s2; // z (drift) a bit looser
-
    // --- build the genfit track from the (ordered, lab-frame) clusters ---
+   // Per-cluster measurement covariance (mm^2; AtSpacepointMeasurement -> cm^2): a
+   // diffusion model where the transverse (x,y) and drift-z variance grow with the
+   // drift distance L (sigma^2 = sigma0^2 + D^2 * L_cm), optionally scaled by cluster
+   // charge. With the default diffusion coefficients (0) and fZLongFactor=2 this
+   // reduces EXACTLY to the previous flat (s2, s2, 2*s2) covariance.
+   const double s2 = fMeasSigmaMM * fMeasSigmaMM;
    genfit::TrackCand trackCand;
    fHitClusterArray->Clear("C");
    for (int oi = 0; oi < n; ++oi) {
-      AtHitCluster cl = hc->at(order[oi]);
-      cl.SetPosition({pos[order[oi]].X(), pos[order[oi]].Y(), pos[order[oi]].Z()}); // lab-frame
+      const int ci = order[oi];
+      double Ldrift_cm = std::max(0.0, (fZPadPlane - pos[ci].Z()) / 10.0);   // drift distance (cm)
+      double varT = s2 + fDiffTransMM * fDiffTransMM * Ldrift_cm;            // transverse (mm^2)
+      double varZ = fZLongFactor * s2 + fDiffLongMM * fDiffLongMM * Ldrift_cm; // drift-z (mm^2)
+      if (fChargeRefForCov > 0) {
+         double q = hc->at(ci).GetCharge();
+         double scale = (q > 0) ? std::clamp(fChargeRefForCov / q, 0.25, 4.0) : 1.0;
+         varT *= scale;
+         varZ *= scale;
+      }
+      TMatrixDSym measCov(3);
+      measCov.Zero();
+      measCov(0, 0) = varT;
+      measCov(1, 1) = varT;
+      measCov(2, 2) = varZ;
+
+      AtHitCluster cl = hc->at(ci);
+      cl.SetPosition({pos[ci].X(), pos[ci].Y(), pos[ci].Z()}); // lab-frame
       cl.SetCovMatrix(measCov);
       int idx = fHitClusterArray->GetEntriesFast();
       new ((*fHitClusterArray)[idx]) AtHitCluster(cl);
@@ -282,6 +301,124 @@ AtFittedTrack *AtGenfitter::GetFittedTrack(AtTrack *track, AtFitMetadata * /*fit
    ft->SetTrackMetadata(std::move(meta));
 
    return owner.release();
+}
+
+// ─── Continuity merging ──────────────────────────────────────────────────────────
+namespace {
+// 3D distance (mm) between two cluster positions.
+double clusterDist(const AtHitCluster &a, const AtHitCluster &b)
+{
+   auto pa = a.GetPosition();
+   auto pb = b.GetPosition();
+   return std::sqrt(std::pow(pa.X() - pb.X(), 2) + std::pow(pa.Y() - pb.Y(), 2) + std::pow(pa.Z() - pb.Z(), 2));
+}
+// A track's two ends classified by distance to the beam axis (XY radius): the
+// vertex-end (closest to the axis) and the far-end (farthest). This is the
+// physically meaningful split for continuity: PRA fragments one track into pieces
+// joined far-end -> next piece, whereas two distinct tracks sharing the production
+// vertex meet vertex-end <-> vertex-end (and diverge). Robust to unordered clusters.
+struct TrackEnds {
+   int vtx, far;
+};
+TrackEnds axisEnds(const std::vector<AtHitCluster> &cl)
+{
+   int iv = 0, ifar = 0;
+   double rmin = 1e18, rmax = -1.0;
+   for (int i = 0; i < (int)cl.size(); ++i) {
+      auto p = cl[i].GetPosition();
+      double r = std::hypot(p.X(), p.Y());
+      if (r < rmin) { rmin = r; iv = i; }
+      if (r > rmax) { rmax = r; ifar = i; }
+   }
+   return {iv, ifar};
+}
+} // namespace
+
+std::vector<AtTrack> AtGenfitter::MergeContinuousTracks(std::vector<AtTrack> tracks) const
+{
+   if (!fMergeContinuity || tracks.size() < 2)
+      return tracks;
+
+   // Two fragments merge when their PRA circles are compatible (centre + radius) AND
+   // their nearest endpoints are within fMergeGapMM in 3D.
+   auto shouldMerge = [&](AtTrack &A, AtTrack &B) -> bool {
+      auto *clA = A.GetHitClusterArray();
+      auto *clB = B.GetHitClusterArray();
+      if (clA->empty() || clB->empty())
+         return false;
+      auto cA = A.GetGeoCenter();
+      auto cB = B.GetGeoCenter();
+      if (std::hypot(cA.first - cB.first, cA.second - cB.second) > fMergeCenterDist)
+         return false;
+      double rA = A.GetGeoRadius(), rB = B.GetGeoRadius();
+      double rMax = std::max(rA, rB);
+      if (rMax > 0 && std::abs(rA - rB) > fMergeRadiusFrac * rMax)
+         return false;
+
+      // Continuity is a far-end -> next-piece junction. The vertex-end <-> vertex-end
+      // junction is two distinct tracks sharing the production vertex (they diverge),
+      // NOT a fragmented track, so it must NOT merge. Take the smallest gap over the
+      // three ALLOWED junctions (farA-vtxB, farA-farB, vtxA-farB); the vtxA-vtxB pair
+      // is excluded. Merge only if a far-end participates and the gap is small.
+      TrackEnds eA = axisEnds(*clA);
+      TrackEnds eB = axisEnds(*clB);
+      double gap = std::min({clusterDist((*clA)[eA.far], (*clB)[eB.vtx]), clusterDist((*clA)[eA.far], (*clB)[eB.far]),
+                             clusterDist((*clA)[eA.vtx], (*clB)[eB.far])});
+      double vtxGap = clusterDist((*clA)[eA.vtx], (*clB)[eB.vtx]);
+      if (vtxGap < gap) // the closest approach is vertex-to-vertex -> shared vertex, diverging tracks
+         return false;
+      return gap < fMergeGapMM;
+   };
+
+   std::vector<bool> used(tracks.size(), false);
+   std::vector<AtTrack> out;
+   for (size_t i = 0; i < tracks.size(); ++i) {
+      if (used[i])
+         continue;
+      AtTrack merged = tracks[i];
+      used[i] = true;
+      bool grew = true;
+      while (grew) { // grow the seed track until no more fragments attach (transitive chains)
+         grew = false;
+         for (size_t j = 0; j < tracks.size(); ++j) {
+            if (used[j] || !shouldMerge(merged, tracks[j]))
+               continue;
+            auto *dst = merged.GetHitClusterArray();
+            for (const auto &c : *tracks[j].GetHitClusterArray())
+               dst->push_back(c); // concatenate clusters; the fit's drift-z sort reorders
+            used[j] = true;
+            grew = true;
+         }
+      }
+      out.push_back(std::move(merged));
+   }
+   if (out.size() != tracks.size())
+      LOG(debug) << "AtGenfitter continuity merge: " << tracks.size() << " -> " << out.size() << " tracks";
+   return out;
+}
+
+void AtGenfitter::FitEvent(AtTrackingEvent *trackingEvent, AtPatternEvent *patternEvent, AtFitMetadata *fitMetadata,
+                           AtRawEvent *rawEvent, AtEvent *event)
+{
+   if (!fMergeContinuity) { // default path: unchanged base behaviour
+      AtFitter::FitEvent(trackingEvent, patternEvent, fitMetadata, rawEvent, event);
+      return;
+   }
+   if (trackingEvent == nullptr || patternEvent == nullptr) {
+      LOG(error) << "AtGenfitter::FitEvent: null tracking/pattern event";
+      return;
+   }
+   // Merge a COPY of the pattern tracks (the shared AtPatternEvent stays intact for any
+   // parallel fitter task on the same event), then run the normal per-track fit loop.
+   std::vector<AtTrack> tracks = MergeContinuousTracks(patternEvent->GetTrackCand());
+   if (tracks.empty())
+      return;
+   trackingEvent->SetTrackArray(&tracks);
+   for (auto track : tracks) {
+      std::unique_ptr<AtFittedTrack> fittedTrack(GetFittedTrack(&track, fitMetadata, rawEvent, event));
+      if (fittedTrack)
+         trackingEvent->AddFittedTrack(std::move(fittedTrack));
+   }
 }
 
 } // namespace EventFit

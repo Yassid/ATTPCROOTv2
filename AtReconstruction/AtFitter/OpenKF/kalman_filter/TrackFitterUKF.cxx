@@ -151,8 +151,57 @@ Matrix<TrackFitterUKF::TF_DIM_V, TrackFitterUKF::TF_DIM_V> TrackFitterUKF::calcu
    } else {
       throw std::runtime_error("Cannot calculate process noise covariance without an energy loss model");
    }
-   // TODO: Add multiple scattering
+   // Note: multiple scattering is NOT added here. It is angular (theta/phi) noise on
+   // the state, not a scaling of the dE/dx process noise, so it is injected through the
+   // model noise Q_mod (updateMultScatteringNoise) which is added to the predicted state
+   // covariance, rather than through this augmented dE/dx noise vector.
    return matQ;
+}
+
+void TrackFitterUKF::updateMultScatteringNoise()
+{
+   // Baseline: angular model noise is the floor unless MS is enabled.
+   m_matQmod(4, 4) = fAngModelNoise; // theta
+   m_matQmod(5, 5) = fAngModelNoise; // phi
+
+   if (!fEnableMultScattering || fRadLength_mm <= 0)
+      return;
+
+   // Step geometry + kinematics from the just-completed mean propagation.
+   double L = (fMeanStep.fPos - fMeanStep.fLastPos).R(); // path length in the gas (mm)
+   double p = fMeanStep.fLastMom.R();                    // momentum at step entrance (MeV/c)
+   double m = fMeanStep.fMass;                           // mass (MeV/c^2)
+   if (!(L > 0) || !(p > 0) || !(m > 0))
+      return;
+   double E = std::sqrt(p * p + m * m);
+   double beta = p / E;
+   if (!(beta > 0))
+      return;
+   double z = std::round(std::abs(fMeanStep.fQ) / 1.602176634e-19); // charge number
+   if (z < 1)
+      z = 1;
+
+   // Highland-Lynch-Dahl RMS projected scattering angle over this step.
+   double LoverX0 = L / fRadLength_mm;
+   double theta0 = (13.6 / (beta * p)) * z * std::sqrt(LoverX0);
+   double logArg = LoverX0 * z * z / (beta * beta);
+   double corr = (logArg > 0) ? (1.0 + 0.038 * std::log(logArg)) : 1.0;
+   if (!(corr > 0)) // very thin gas step: log correction outside its validated regime -> drop it
+      corr = 1.0;
+   theta0 *= corr;
+   double var = theta0 * theta0; // variance of the projected deflection angle (rad^2)
+   if (!std::isfinite(var) || var <= 0)
+      return;
+
+   // Map the two orthogonal projected-plane deflections onto the (theta, phi) state.
+   // The polar-direction projection adds var to Var(theta); the azimuthal projection
+   // adds var to the arc deflection sin(theta)*dphi, i.e. var/sin^2(theta) to Var(phi).
+   double sinTheta = std::sin(m_vecX[4]);
+   double sin2 = sinTheta * sinTheta;
+   if (sin2 < 1e-4)
+      sin2 = 1e-4;
+   m_matQmod(4, 4) = fAngModelNoise + var;
+   m_matQmod(5, 5) = fAngModelNoise + var / sin2;
 }
 
 Vector<TrackFitterUKF::TF_DIM_X> TrackFitterUKF::funcF(const Vector<TrackFitterUKF::TF_DIM_X> &x,
@@ -231,6 +280,10 @@ void TrackFitterUKF::predictUKF(const ROOT::Math::XYZPoint &z)
 
    LOG(debug) << "Propagated to position: " << fMeanStep.fPos << " with momentum: " << fMeanStep.fMom;
 
+   // Inject multiple-scattering angular noise for this step into Q_mod (added to the
+   // predicted covariance inside TrackFitterUKFBase::predictUKF below).
+   updateMultScatteringNoise();
+
    // Now we can construct the reference plane.
    fMeasurementPlane = Plane3D(fMeanStep.fMom.Unit(),
                                XYZPoint(z)); // Create a plane using the momentum direction and position
@@ -269,6 +322,13 @@ void TrackFitterUKF::predictUKFRef(const ROOT::Math::XYZPoint &z, const std::arr
    fPropagator.PropagateToMeasurementSurface(AtTools::AtMeasurementPoint(z), *fStepper);
    auto refStep = fPropagator.GetState();
    fMeasurementPlane = Plane3D(refStep.fMom.Unit(), XYZPoint(z));
+
+   // Record the reference step so straggling (calculateProcessNoiseCovariance) and
+   // multiple scattering (updateMultScatteringNoise) use this step's true geometry.
+   fMeanStep = refStep;
+   fMeanStep.fLastPos = refPos;
+   fMeanStep.fLastMom = refMom;
+   updateMultScatteringNoise();
 
    Vector<TF_DIM_Z> zVec;
    zVec[0] = z.X();

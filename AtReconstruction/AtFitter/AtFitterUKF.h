@@ -57,6 +57,15 @@ public:
    /// Enable energy straggling in the propagator (default false).
    /// Only enable if the ELoss model supports GetRangeVariance() over the full energy range.
    void SetEnableEnergyStraggling(bool enable) { fEnableEnStraggling = enable; }
+   /// Enable Highland multiple-scattering angular process noise in the propagation
+   /// (default false; opt-in to preserve calibrated 16C+p behaviour). Adds per-step
+   /// theta/phi variance from the Highland-Lynch-Dahl formula using the configured
+   /// radiation length. Needed to match genfit's transport on longer/curved tracks.
+   void SetEnableMultipleScattering(bool enable) { fEnableMultScattering = enable; }
+   /// Radiation length of the active medium (mm) used by the multiple-scattering
+   /// model. Default ~7.6e6 mm (H2 gas at 1 bar). Set per gas; genfit reads the
+   /// equivalent from the TGeo material.
+   void SetRadiationLength(double radLen_mm) { fRadLength_mm = radLen_mm; }
    /// Scale the forward-pass dE/dx in the propagator's process model
    /// (default 1.0 = no scaling). Diagnostic knob to test whether energy-loss
    /// model bias is responsible for residual KE bias; values <1 reduce dE/dx.
@@ -244,6 +253,8 @@ private:
    double fMomSigmaFrac{0.1};
    int fMinClusters{3};
    bool fEnableEnStraggling{true};
+   bool fEnableMultScattering{false}; // Highland multiple-scattering angular process noise (opt-in)
+   double fRadLength_mm{7.6e6};        // Radiation length of the medium (mm); default ~H2 gas at 1 bar
    double fELossScaleFactor{1.0};
    bool fUsePerClusterCov{false};
    double fZPadPlane{-1};      // If >0, convert digi→lab: Z_lab = fZPadPlane - Z_digi

@@ -562,6 +562,9 @@ public:
    double fMomModelNoise{1e-4};
    double fAngModelNoise{1e-6};
    double fELossScaleFactor{1.0}; ///< Baseline scaling for energy loss model (e.g., 0.95 to reduce CATIMA dE/dx by 5%)
+   bool fEnableMultScattering{false}; ///< @brief Enable Highland multiple-scattering angular process noise
+   double fRadLength_mm{7.6e6};       ///< @brief Radiation length of the medium (mm). Default ~ H2 gas at 1 bar;
+                                      ///< set per gas (genfit reads this from the TGeo material).
 
    /**
     * @brief Constructor for the TrackFitterUKF class.
@@ -607,6 +610,12 @@ public:
 protected:
    std::array<float32_t, TF_DIM_V> calculateProcessNoiseMean() override;
    Matrix<TF_DIM_V, TF_DIM_V> calculateProcessNoiseCovariance() override;
+
+   /// Update the angular entries (theta, phi) of the model process-noise Q_mod with
+   /// the Highland multiple-scattering variance for the just-propagated mean step
+   /// (uses fMeanStep). Resets the angular Q_mod to the fAngModelNoise floor when
+   /// multiple scattering is disabled.
+   void updateMultScatteringNoise();
 
    kf::Vector<TF_DIM_X>
    funcF(const kf::Vector<TF_DIM_X> &x, const kf::Vector<TF_DIM_V> &v, const kf::Vector<TF_DIM_Z> &z);

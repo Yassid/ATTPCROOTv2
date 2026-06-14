@@ -11,7 +11,7 @@ void fitGenfitter_a1975(TString fileName = "run_0106", Long64_t nEvents = -1, TS
                         Int_t maxIter = 5, TString elossName = "deuteron_H2_catima.txt",
                         TString pidGate = "pid/deuteron_band.json", Double_t measSigma = 4.0,
                         Bool_t matEffects = kFALSE, Int_t pdg = 1000010020, Double_t massAmu = 2.0135532,
-                        Int_t Z = 1)
+                        Int_t Z = 1, Bool_t mergeContinuity = kFALSE)
 {
    gSystem->Load("libAtReconstruction.so");
    FairLogger::GetLogger()->SetLogScreenLevel("WARNING");
@@ -54,6 +54,10 @@ void fitGenfitter_a1975(TString fileName = "run_0106", Long64_t nEvents = -1, TS
                                                          maxIter);
    fitter->SetZPadPlane(1000.0);
    fitter->SetMeasSigma(measSigma);
+   if (mergeContinuity) {
+      fitter->SetMergeContinuity(kTRUE); // merge PRA-split fragments of one track before fitting
+      std::cout << "  continuity merging: ON\n";
+   }
    if (pidGate.Length()) {
       if (gSystem->AccessPathName(pidGate.Data()))
          std::cout << "\033[1;31mWARNING: PID gate " << pidGate << " not found; gating will be disabled.\033[0m\n";

@@ -59,13 +59,20 @@ protected:
    bool fDrawVertex{true};
    bool fInitialized{false};
 
+   std::string fBranchName{"AtTrackingEvent"}; //< Branch to read fitted tracks from
+   bool fDrawSmoothed{false};                  //< Draw smoothed polyline instead of analytical helix
+   Color_t fFixedColor{-1};                    //< <0: per-track palette; else single colour
+   Style_t fLineStyle{1};                      //< Line style (1=solid, 2=dashed, ...)
+   int fLineWidthCfg{2};                       //< Line width
+   double fZPadPlane{0.0};                      //< Pad-plane z (mm) for lab->digi z mapping (smoothed mode)
+
    // Analytical helix sampling (from fit kinematics)
    double fBField_T{4.0};      //< Solenoid B (Tesla); along +ẑ for PUMA.
    double fMaxArc_mm{500.0};   //< Stop the helix after this arc length.
    int fHelixSamples{200};     //< Number of points sampled along the arc.
 
 public:
-   AtTabFitted();
+   explicit AtTabFitted(const std::string &name = "Fitted", const std::string &branchName = "AtTrackingEvent");
    ~AtTabFitted() override;
    void InitTab() override;
    void Exec() override {}
@@ -85,6 +92,26 @@ public:
       fMaxArc_mm = maxArc_mm;
       fHelixSamples = nSamples;
    }
+
+   /// Read fitted tracks from this branch (default "AtTrackingEvent"). Point two
+   /// AtTabFitted tabs at two fitters' outputs (e.g. "AtTrackingEventUKF" and
+   /// "AtTrackingEventGenfit") to overlay both Kalman filters in one view.
+   void SetBranchName(const std::string &name) { fBranchName = name; }
+   /// Draw the actual fitted trajectory (vertex + GetSmoothedPositions polyline)
+   /// instead of an analytical helix reconstructed from the fit kinematics. This is
+   /// the honest per-filter trajectory and is fitter-agnostic (both UKF and genfit
+   /// store it via SetSmoothedPositions). Default false (helix, legacy PUMA behaviour).
+   void SetDrawSmoothed(bool s) { fDrawSmoothed = s; }
+   /// Force a single colour for every track of this tab (e.g. blue=UKF, red=genfit).
+   /// <0 keeps the per-track palette.
+   void SetTrackColor(Color_t c) { fFixedColor = c; }
+   void SetLineStyle(Style_t s) { fLineStyle = s; }
+   void SetLineWidth(int w) { fLineWidthCfg = w; }
+   /// Pad-plane z (mm). When >0 and drawing smoothed trajectories, the fitted
+   /// lab-frame z (= ZPadPlane - z_digi as stored by the fitters) is mapped back to
+   /// the digi frame z_digi = ZPadPlane - z_lab so the trajectory overlays the
+   /// (digi-frame) hits drawn by AtTabMain. 0 keeps the SetFlipZ behaviour.
+   void SetZPadPlane(double z) { fZPadPlane = z; }
 
 protected:
    void MakeTab(TEveWindowSlot * /*slot*/) override {}

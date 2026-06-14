@@ -29,12 +29,15 @@ Color_t TrackColor(int i)
 
 } // namespace
 
-AtTabFitted::AtTabFitted() : AtTabBase("Fitted")
+AtTabFitted::AtTabFitted(const std::string &name, const std::string &branchName)
+   : AtTabBase(name), fBranchName(branchName)
 {
    if (AtViewerManager::Instance() == nullptr)
       throw "AtViewerManager must be initialized before creating AtTabFitted!";
    fEntry = &AtViewerManager::Instance()->GetCurrentEntry();
    fEntry->Attach(this);
+   // Unique Eve container per branch so two tabs (e.g. UKF + genfit) do not collide.
+   fEveTracking = std::make_unique<TEveEventManager>(branchName.c_str());
 }
 
 AtTabFitted::~AtTabFitted()
@@ -78,9 +81,9 @@ void AtTabFitted::UpdateFittedElements()
    // wrong global branch in chained-source setups.
    if (fTrackingArray == nullptr) {
       fTrackingArray = dynamic_cast<TClonesArray *>(
-         FairRootManager::Instance()->GetObject("AtTrackingEvent"));
+         FairRootManager::Instance()->GetObject(fBranchName.c_str()));
       if (fTrackingArray == nullptr) {
-         std::cout << "[AtTabFitted] AtTrackingEvent branch not in this file — "
+         std::cout << "[AtTabFitted] branch '" << fBranchName << "' not in this file — "
                       "tab inactive\n";
          return;
       }
@@ -106,6 +109,45 @@ void AtTabFitted::UpdateFittedElements()
    fEveTracking->AddElement(fVertexSet.get());
    fVertexSet->Reset();
    fFittedTrackLines.reserve(fits.size());
+
+   // Smoothed-trajectory mode: draw the actual fitted polyline (vertex + the points
+   // the Kalman filter integrated, GetSmoothedPositions). Fitter-agnostic, so two
+   // tabs can overlay UKF and genfit for the same event. The fitters store positions
+   // in the lab frame (z_lab = ZPadPlane - z_digi); AtTabMain draws the hits in the
+   // digi frame, so map back z_digi = ZPadPlane - z_lab when fZPadPlane is set.
+   if (fDrawSmoothed) {
+      auto zDisp = [&](double zLab) { return (fZPadPlane != 0.0) ? (fZPadPlane - zLab) : fZSign * zLab; };
+      int nDrawn = 0;
+      for (size_t i = 0; i < fits.size(); ++i) {
+         const auto &ft = *fits[i];
+         const auto &sm = ft.GetSmoothedPositions();
+         if (sm.empty())
+            continue;
+         const auto &pV = ft.GetTrackPropertiesStruct().initialPositionXtr;
+         const bool hasVertex = pV.X() != 0 || pV.Y() != 0 || pV.Z() != 0;
+
+         auto *line = new TEveLine(TString::Format("%s_Fit_%zu", fBranchName.c_str(), i));
+         const Color_t col = (fFixedColor >= 0) ? fFixedColor : TrackColor((int)i);
+         line->SetLineColor(col);
+         line->SetMainColor(col);
+         line->SetLineWidth(fLineWidthCfg);
+         line->SetLineStyle(fLineStyle);
+
+         if (hasVertex)
+            line->SetNextPoint(pV.X() * 0.1, pV.Y() * 0.1, zDisp(pV.Z()) * 0.1);
+         for (const auto &sp : sm)
+            line->SetNextPoint(sp.X() * 0.1, sp.Y() * 0.1, zDisp(sp.Z()) * 0.1);
+
+         fEveTracking->AddElement(line);
+         fFittedTrackLines.push_back(line);
+         if (fDrawVertex && hasVertex)
+            fVertexSet->SetNextPoint(pV.X() * 0.1, pV.Y() * 0.1, zDisp(pV.Z()) * 0.1);
+         ++nDrawn;
+      }
+      std::cout << "[AtTabFitted:" << fBranchName << "] drew " << nDrawn << " of " << fits.size()
+                << " smoothed trajectories\n";
+      return;
+   }
 
    // Analytical helix from the fit's stored parameters:
    //   vertex = initialPositionXtr (mm)
