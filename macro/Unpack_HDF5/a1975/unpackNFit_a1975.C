@@ -7,7 +7,7 @@ bool reduceFunc(AtRawEvent *evt)
 {
    return (evt->GetNumPads() > 0) && evt->IsGood();
 }
-void unpackNFit_a1975(TString fileName = "run_0106")
+void unpackNFit_a1975(TString fileName = "run_0106", Long64_t nEvents = -1)
 {
 
    // Load the library for unpacking and reconstruction
@@ -18,7 +18,7 @@ void unpackNFit_a1975(TString fileName = "run_0106")
 
    TString parameterFile = "ATTPC.a1954.par";
    TString mappath = "";
-   TString filepath = "/media/yassid/bdcb3c81-adb9-4a9d-9172-0bd5935c1dd5/data/a1975/";
+   TString filepath = "/mnt/f/a1975/h5/"; // 16C+p raw HDF5 on the F: drive (matches the UKF pipeline)
    TString fileExt = ".h5";
    TString inputFile = filepath + fileName + fileExt;
    TString scriptfile = "ANL2023.xml";
@@ -127,8 +127,10 @@ void unpackNFit_a1975(TString fileName = "run_0106")
    run->Init();
    std::cout << "***** Ending Init ******" << std::endl;
 
-   // Get the number of events and unpack the whole run
+   // Get the number of events (cap at nEvents when >0, else run the whole run)
    auto numEvents = unpackTask->GetNumEvents();
+   if (nEvents > 0 && nEvents < (Long64_t)numEvents)
+      numEvents = nEvents;
    std::cout << "Unpacking " << numEvents << " events. " << std::endl;
 
    run->Run(0, numEvents);
