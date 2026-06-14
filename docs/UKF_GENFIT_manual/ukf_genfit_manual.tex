@@ -109,7 +109,7 @@
 % =====================================================================
 
 This manual describes how to reconstruct charged-particle tracks in the AT-TPC
-using \textbf{ATTPCROOTv2-OpenKF}, covering the two track fitters available in the
+using \textbf{ATTPCROOTv2-OpenKF}, covering the track fitters available in the
 framework:
 
 \begin{itemize}[nosep]
@@ -117,23 +117,36 @@ framework:
   vendored OpenKF library (class \code{EventFit::AtFitterUKF}). It uses a CATIMA
   energy-loss model, sigma-point propagation through the magnetic field, and an
   RTS smoother with back-extrapolation to the reaction vertex.
-  \item \textbf{genfit} --- the established GENFIT2 Kalman reference-track fitter
-  (class \code{AtFITTER::AtGenfit}, \code{KalmanFitterRefTrack}), with SRIM-style
-  energy-loss tables.
+  \item \textbf{AtGenfitter} --- the \emph{clean} GENFIT2 reference-track fitter
+  (class \code{EventFit::AtGenfitter}, \code{KalmanFitterRefTrack}). It keeps only
+  the working genfit core (\code{RKTrackRep} + \code{AtSpacepointMeasurement}) and
+  shares the validated UKF frame conventions (uniform $z_\mathrm{lab}=$
+  \code{ZPadPlane}$-z_\mathrm{digi}$, signed $B$ field, highest-$z_\mathrm{digi}$
+  vertex). It derives from the \emph{modern} \code{EventFit::AtFitter} base, so it
+  runs in the maintained \code{AtFitterTask}, and it can gate which species it
+  fits via an upstream Spyral-PID cut (\S\ref{sec:pidgate}).
+  \item \textbf{AtGenfit} (legacy) --- the original GENFIT2 fitter
+  (class \code{AtFITTER::AtGenfit}, run via \code{AtFitterTaskOld}), with SRIM-style
+  energy-loss tables and built-in merging / reclustering / single-vertex pooling.
+  It is \code{[[deprecated]]} but retained as a validated fallback.
 \end{itemize}
 
-Both fitters consume the \emph{same} pattern-recognition output
+All three fitters consume the \emph{same} pattern-recognition output
 (\code{AtPatternEvent}) and produce fitted tracks (\code{AtTrackingEvent} /
 \code{AtFittedTrack}). They are interchangeable at the level of a single FairRoot
-task, which makes it easy to fit identical track candidates with both methods and
-compare.
+task, which makes it easy to fit identical track candidates with different methods
+and compare.
 
 \begin{notebox}
 \textbf{When to use which.} The UKF is faster, native, easy to iterate, and uses
 CATIMA energy loss --- prefer it for quick parameter scans and for setups where
-its tuning has been validated. genfit uses analytic-Jacobian transport and tends
-to reach better intrinsic resolution; prefer it when resolution is the priority.
-The two are best used \emph{together}: reconstruct once, then fit with both.
+its tuning has been validated. \code{AtGenfitter} is now the \textbf{recommended
+genfit path}: it reaches genfit's analytic-Jacobian resolution while sharing the
+UKF conventions and adding PID gating; on a1975 \code{run\_0106} it converges on
+$\approx 95.6\%$ of tracks ($\approx 91\%$ forward) and runs $\sim 15\times$ faster
+than the legacy \code{AtGenfit}. Reach for the legacy \code{AtGenfit} only to
+reproduce older results. The fitters are best used \emph{together}: reconstruct
+once, then fit with whichever combination you need and compare.
 \end{notebox}
 
 The document is organized as a pipeline:
@@ -155,6 +168,7 @@ Section~\ref{sec:sim} walks the \emph{simulation} pipeline end-to-end
 Section~\ref{sec:exp} walks the \emph{experimental} pipeline (\code{a1975}
 example), including the two fitters side-by-side.
 Section~\ref{sec:fitterapi} is the fitter API reference.
+Section~\ref{sec:pidgate} covers particle identification and the in-fitter PID gate.
 Section~\ref{sec:conventions} documents the crucial magnetic-field-sign /
 handedness convention.
 Sections~\ref{sec:datamodel}--\ref{sec:trouble} cover the output data model,
@@ -185,10 +199,12 @@ The stages, in order:
   \item[Pattern recognition (PRA)] \code{AtPRAtask} (Hough/triplet RANSAC) or
   \code{AtSampleConsensusTask} groups hits into clustered track candidates:
   branch \code{AtPatternEvent}.
-  \item[Fitting] \code{AtFitterTask} (UKF or multi-hypothesis UKF) or
-  \code{AtFitterTaskOld} (genfit) fits each candidate, producing
-  \code{AtTrackingEvent} (a collection of \code{AtFittedTrack}) and optionally
-  \code{AtFitMetadata}.
+  \item[Fitting] \code{AtFitterTask} (UKF, multi-hypothesis UKF, or the clean
+  \code{AtGenfitter}) or the legacy \code{AtFitterTaskOld} (\code{AtGenfit}) fits
+  each candidate, producing \code{AtTrackingEvent} (a collection of
+  \code{AtFittedTrack}) and optionally \code{AtFitMetadata}. An \code{AtPIDTask}
+  may run alongside the fitter to write \code{AtPIDEvent} (Spyral PID observables);
+  \code{AtGenfitter} can also compute the same PID internally to gate its input.
 \end{description}
 
 \begin{notebox}
@@ -416,7 +432,7 @@ read raw HDF5 from \file{/mnt/f/a1975/h5/<run>.h5}.
 \end{longtable}
 
 \code{unpackReco\_a1975\_UKF.C} is the \textbf{standard entry point}: it produces
-the \code{AtPatternEvent} that both fitters consume. Its task chain:
+the \code{AtPatternEvent} that all three fitters consume. Its task chain:
 
 \begin{lstlisting}
 auto unpacker = std::make_unique<AtHDFUnpacker>(fAtMapPtr);
@@ -513,10 +529,82 @@ gives noticeably better excitation-energy FWHM than the conservative defaults
 scanning parameters.
 \end{notebox}
 
-\subsection{Fitter B --- genfit}
+\subsection{Fitter B --- AtGenfitter (clean genfit)}\label{sec:fitgenfitter}
+
+\textbf{Macro:} \file{pipeline/fitGenfitter\_a1975.C}. Same input
+(\file{<run>\_reco.root}), output \file{<run>\_genfitter<suffix>.root} (note the
+\code{genfitter}, not \code{genfit}, stem). This is the \textbf{recommended genfit
+path}. It uses the clean \code{EventFit::AtGenfitter} on the \emph{modern}
+\code{AtFitterTask} --- the same wrapper as the UKF --- so the two share frame
+conventions exactly. Signature:
+
+\begin{lstlisting}
+void fitGenfitter_a1975(TString fileName="run_0106", Long64_t nEvents=-1,
+                        TString ioDir="/mnt/f/a1975/reco/",
+                        TString outSuffix="", TString outDir="",
+                        Double_t bField=-2.85, Int_t minIter=2, Int_t maxIter=5,
+                        TString elossName="deuteron_H2_catima.txt",
+                        TString pidGate="pid/deuteron_band.json",
+                        Double_t measSigma=4.0, Bool_t matEffects=kFALSE,
+                        Int_t pdg=1000010020, Double_t massAmu=2.0135532,
+                        Int_t Z=1);
+\end{lstlisting}
+
+The setup is deliberately small --- a constructor, two setters, and the optional
+PID gate:
+
+\begin{lstlisting}
+auto fitter = std::make_unique<EventFit::AtGenfitter>(
+    bField, pdg, massAmu, Z, elossFile, /*noMatEffects=*/!matEffects,
+    minIter, maxIter);
+fitter->SetZPadPlane(1000.0);
+fitter->SetMeasSigma(measSigma);                 // per-cluster sigma (mm)
+if (pidGate.Length())
+   fitter->SetPIDGate(pidGate.Data());           // fit only the gated species
+
+AtFitterTask *fitterTask = new AtFitterTask(std::move(fitter));
+fitterTask->SetInputBranch("AtPatternEvent");
+fitterTask->SetOutputBranch("AtTrackingEvent");
+fitterTask->SetFitMetadataBranch("AtFitMetadata");
+fitterTask->SetPersistence(kTRUE);
+
+AtPIDTask *pidTask = new AtPIDTask();             // also persist PID for analysis
+pidTask->SetInputBranch("AtPatternEvent");
+pidTask->SetOutputBranch("AtPIDEvent");
+run->AddTask(pidTask);
+run->AddTask(fitterTask);
+\end{lstlisting}
+
+Note the \textbf{signed} field default (\code{bField=-2.85}, the a1975 experimental
+handedness --- \S\ref{sec:conventions}); no separate ``simulation convention''
+flag exists, the sign \emph{is} the convention. \code{elossName=""} falls back to
+genfit's internal Bethe--Bloch. The vertex is taken as the highest-$z_\mathrm{digi}$
+cluster end (matching PRA and the UKF), and a fitted-$\theta$ acceptance window
+(default $10$--$170^\circ$) drops near-beam / backward junk.
+
+\begin{lstlisting}[style=bash]
+# (p,d): deuteron hypothesis, deuteron PID gate (defaults)
+root -b -q 'pipeline/fitGenfitter_a1975.C("run_0106", -1)'
+# (p,p): proton hypothesis + proton gate, separate output stem
+root -b -q 'pipeline/fitGenfitter_a1975.C("run_0106", -1, "/mnt/f/a1975/reco/", "_pp", "", -2.85, 2, 5, "proton_H2_catima.txt", "pid/proton_band.json", 4.0, kFALSE, 2212, 1.00727646, 1)'
+\end{lstlisting}
+
+\begin{notebox}
+\textbf{Why ``clean''.} \code{AtGenfitter} drops the legacy merging,
+reclustering, single-vertex pooling and per-direction frame special cases that
+made \code{AtGenfit} hard to reason about. Clusters are ordered by the drift
+coordinate $z_\mathrm{digi}$ (monotonic along any helix, so curling tracks
+sequence correctly). On a1975 \code{run\_0106} this gives $\approx 95.6\%$
+convergence ($\approx 91\%$ forward) at $\sim 15\times$ the speed of the legacy
+fitter; the residual non-converging fraction is dominated by PRA ``blob''
+candidates, not fitter failures.
+\end{notebox}
+
+\subsection{Fitter C --- AtGenfit (legacy genfit)}
 
 \textbf{Macro:} \file{pipeline/fitGenfit\_a1975.C}. Same input
-(\file{<run>\_reco.root}), output \file{<run>\_genfit<suffix>.root}. Signature:
+(\file{<run>\_reco.root}), output \file{<run>\_genfit<suffix>.root}. The original
+genfit path, kept as a validated fallback for reproducing older results. Signature:
 
 \begin{lstlisting}
 void fitGenfit_a1975(TString fileName="run_0106", Long64_t nEvents=-1,
@@ -556,27 +644,31 @@ root -b -q 'pipeline/fitGenfit_a1975.C("run_0106", 200, "deuteron")'
 
 \subsection{Comparing the two fitters}
 
-Because both read the identical \code{AtPatternEvent}, any difference in the
+Because all three read the identical \code{AtPatternEvent}, any difference in the
 result is purely the fitter:
 
 \begin{lstlisting}[style=bash]
 root -b -q 'pipeline/unpackReco_a1975_UKF.C("run_0106", 500, true)'  # once
 root -b -q 'pipeline/fitUKF_a1975.C("run_0106", -1, "deuteron", -1, 2.85, 9.0e-5, "", "", 0.5, 0.1, 1, 10)'
-root -b -q 'pipeline/fitGenfit_a1975.C("run_0106", -1, "deuteron")'
+root -b -q 'pipeline/fitGenfitter_a1975.C("run_0106", -1)'           # clean genfit
+root -b -q 'pipeline/fitGenfit_a1975.C("run_0106", -1, "deuteron")'  # legacy genfit
 \end{lstlisting}
 
 \begin{center}
-\begin{tabular}{@{}lll@{}}
+\small
+\begin{tabular}{@{}lp{3.3cm}p{3.3cm}p{3.3cm}@{}}
 \toprule
- & \textbf{UKF} (\code{AtFitterUKF}) & \textbf{genfit} (\code{AtGenfit}) \\
+ & \textbf{UKF}\newline(\code{AtFitterUKF}) & \textbf{AtGenfitter}\newline(clean) & \textbf{AtGenfit}\newline(legacy) \\
 \midrule
-Algorithm     & Unscented KF + RTS smoother & \code{KalmanFitterRefTrack} \\
-Energy loss   & CATIMA (model)              & SRIM table (file) \\
-Iterations    & \code{nIter} (1--2)         & \code{minIter}--\code{maxIter} (5--20) \\
-Field sign    & \code{bFieldSign} ($-1$ exp)& \code{SetSimulationConvention(0)} \\
-Re-clustering & internal / adaptive         & \code{EnableReclustering(\dots)} \\
-Task wrapper  & \code{AtFitterTask}         & \code{AtFitterTaskOld} \\
-Output        & \code{AtTrackingEvent} + \code{AtFitMetadata} & \code{AtTrackingEvent} \\
+Algorithm     & Unscented KF + RTS smoother & \code{KalmanFitterRefTrack} & \code{KalmanFitterRefTrack} \\
+Energy loss   & CATIMA (model)              & SRIM table or internal Bethe--Bloch & SRIM table (file) \\
+Iterations    & \code{nIter} (1--2)         & \code{minIter}--\code{maxIter} (2--5) & \code{minIter}--\code{maxIter} (5--20) \\
+Field sign    & signed \code{SetBField}     & signed \code{SetBField} ($-2.85$ exp) & \code{SetSimulationConvention(0)} \\
+Re-clustering & internal / adaptive         & none (drift-$z$ ordering) & \code{EnableReclustering(\dots)} \\
+PID gating    & --- (multi-hyp $\chi^2$)    & \code{SetPIDGate} (internal Spyral PID) & --- \\
+Task wrapper  & \code{AtFitterTask}         & \code{AtFitterTask}        & \code{AtFitterTaskOld} \\
+Output        & \code{AtTrackingEvent} + \code{AtFitMetadata} & \code{AtTrackingEvent} + \code{AtFitMetadata} & \code{AtTrackingEvent} \\
+Status        & native, recommended         & recommended genfit         & \code{[[deprecated]]} fallback \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -596,6 +688,51 @@ Under WSL there is no working OpenGL/Eve --- interactive 3D viewers crash. Use t
 static PNG macros (\file{event\_png\_UKF.C}, \file{event\_png\_batch\_UKF.C})
 instead. Both require a \file{<run>\_disp.root} produced with \code{persistRaw=true}.
 \end{warnbox}
+
+\subsection{Analysis: excitation-energy spectra and the interactive explorer}
+\label{sec:analysis}
+
+Once a run is fitted, per-reaction analysis macros turn \code{AtTrackingEvent}
+(plus the ion-chamber gate from the FRIB stream) into kinematics and excitation
+energy. The $^{16}$C$(p,p)$ workflow lives in \file{macro/Unpack\_HDF5/a1975/UKF/pp/}
+and reads the clean-genfit proton output (\file{<run>\_genfitter\_pp.root}):
+
+\begin{longtable}{@{}p{3.2cm} p{11.4cm}@{}}
+\toprule
+\textbf{Macro} & \textbf{Role} \\
+\midrule
+\endhead
+\file{cache\_pp\_run.C} & Flatten one run's fitted proton kinematics into a small
+ntuple (\code{ke, theta, vz, chi2ndf, ic, run}) so the explorer never re-reads the
+slow FRIB files. Drive it over all runs in parallel, then \code{hadd}. \\
+\file{explore\_pp.C}    & Interactive GUI over the cached ntuple: live sliders for
+beam energy, $\chi^2/\mathrm{ndf}$ and $\theta$ cuts, IC gate, and per-plot binning;
+draws the Ex spectrum (Gaussian-fit elastic peak), KE-vs-$\theta_\mathrm{lab}$,
+Ex-vs-$\theta_\mathrm{cm}$, and vertex-$z$-vs-Ex with kinematic-line overlays. \\
+\file{prod\_ex\_pp.C}   & Batch production over many runs: IC-gated combined Ex
+spectrum and elastic KE-vs-$\theta$ from the genfit protons. \\
+\file{ex\_vtxcorr.C}    & Ex with a vertex energy-loss correction: self-calibrates a
+linear beam-energy profile $E(z)$ (CATIMA $^{16}$C $dE/dx$) by flattening the
+forward-elastic Ex tilt, then recomputes Ex per event. \\
+\bottomrule
+\end{longtable}
+
+\begin{lstlisting}[style=bash]
+# cache one run, then explore interactively (p,p)
+root -b -q 'pp/cache_pp_run.C("run_0106","/tmp/ppkin_run0106.root")'
+root -l   'pp/explore_pp.C("/tmp/pp_kin.root", 1.007825, 16.0147, "16C(p,p)")'
+# production Ex over the run list, and the vertex-eloss-corrected Ex
+root -b -q 'pp/prod_ex_pp.C()'
+root -b -q 'pp/ex_vtxcorr.C("run_0106","/tmp/run_0106_genfitter_pp.root")'
+\end{lstlisting}
+
+\begin{notebox}
+The same explorer serves other channels by passing the ejectile/residual masses,
+e.g.\ \code{explore\_pp.C("/tmp/pd\_kin.root", 2.014102, 15.010599, "16C(p,d)15C")}.
+On a1975 the $(p,p)$ elastic core sits at $\sigma\!\approx\!0.18$\,MeV and is
+large-angle-dominated --- i.e.\ limited by angular resolution, not beam energy
+loss, which is why \file{ex\_vtxcorr.C} moves the peak only marginally.
+\end{notebox}
 
 % =====================================================================
 \section{Fitter API reference}\label{sec:fitterapi}
@@ -674,7 +811,47 @@ calibrated on the simulation handedness and is unreliable on experiment until
 independently validated, so all hypotheses should be evaluated equally.
 \end{notebox}
 
-\subsection{\texttt{AtFITTER::AtGenfit}}
+\subsection{\texttt{EventFit::AtGenfitter} (clean genfit)}
+
+\textbf{Constructor} (all arguments defaulted):
+\begin{lstlisting}
+AtGenfitter(Double_t bFieldTesla = -2.85,        // signed; exp a1975 handedness
+            Int_t    pdg         = 1000010020,   // deuteron (2212 p, 1000020040 alpha)
+            Double_t massAmu     = 2.0135532,    // atomic mass units
+            Int_t    Z           = 1,
+            std::string eLossFile = "",          // SRIM table; "" -> internal Bethe-Bloch
+            Bool_t   noMatEffects = kTRUE,
+            Int_t    minIter      = 2,
+            Int_t    maxIter      = 5);
+\end{lstlisting}
+
+\textbf{Setters} (defaults in parentheses):
+
+\begin{longtable}{@{}p{6.6cm} p{7.8cm}@{}}
+\toprule
+\textbf{Method} & \textbf{Meaning} \\
+\midrule
+\endhead
+\code{SetParticle(pdg, massAmu, Z)}     & Override the particle hypothesis. \\
+\code{SetBField(tesla)}                 & Signed field, Tesla ($-2.85$). Sign $=$ handedness, see \S\ref{sec:conventions}. \\
+\code{SetZPadPlane(z)}                  & Pad-plane $z$ (mm); $z_\mathrm{lab}=z-z_\mathrm{digi}$ (1000). \\
+\code{SetMinClusters(n)}                & Skip candidates with fewer clusters (4). \\
+\code{SetIterations(mn, mx)}            & Min / max Kalman iterations (2, 5). \\
+\code{SetMeasSigma(mm)}                 & Per-cluster measurement resolution (4.0); absorbs scattering when material effects are off. \\
+\code{SetVertexAxisMaxDist(mm)}         & Keep only tracks whose closest cluster is within this of the beam axis (150). \\
+\code{SetThetaWindow(min, max)}         & Fitted-$\theta$ acceptance window in deg ($10$--$170$); outside $\Rightarrow$ track dropped. \\
+\code{SetQualityCut(chi2NdfMax, keMin, keMax)} & Post-fit flag only ($5.0$, $0.5$, $60$); failing tracks are kept but \code{GetGoodFit()==false}. \\
+\code{SetPIDGate(jsonFile)}             & Fit only tracks inside a Spyral-PID gate, see \S\ref{sec:pidgate}. \\
+\bottomrule
+\end{longtable}
+
+It uses \code{genfit::KalmanFitterRefTrack} with \code{RKTrackRep} and
+\code{AtSpacepointMeasurement}, and (like the legacy fitter) requires a loaded
+\code{TGeoManager}. Clusters are ordered by drift coordinate $z_\mathrm{digi}$;
+the vertex is the highest-$z_\mathrm{digi}$ end (lowest $z_\mathrm{lab}$), matching
+PRA and the UKF.
+
+\subsection{\texttt{AtFITTER::AtGenfit} (legacy)}
 
 \textbf{Constructor:}
 \begin{lstlisting}
@@ -708,6 +885,51 @@ resolution).
 construction --- it caches material properties for all volumes. The class is
 marked \code{[[deprecated]]} but remains the production genfit path.
 \end{warnbox}
+
+% =====================================================================
+\section{Particle identification and the PID gate}\label{sec:pidgate}
+% =====================================================================
+
+Particle identification uses a C++ port of Spyral's algorithm. \code{AtPIDTask}
+(class \code{AtTools::AtSpyralPID} / \code{AtPIDEstimator}) reads
+\code{AtPatternEvent} and writes \code{AtPIDEvent}, a per-track set of observables
+--- magnetic rigidity $B\rho$, a truncated-mean $\sqrt{dE/dx}$ on the denoised PRA
+clusters, integrated charge, and cluster count. Plotting $\sqrt{dE/dx}$ versus
+$B\rho$ separates species into the familiar PID bands.
+
+\begin{lstlisting}
+AtPIDTask *pidTask = new AtPIDTask();
+pidTask->SetInputBranch("AtPatternEvent");
+pidTask->SetOutputBranch("AtPIDEvent");
+pidTask->SetPersistence(kTRUE);
+run->AddTask(pidTask);
+\end{lstlisting}
+
+A 2D acceptance region is stored as an \code{AtParticleID} JSON gate (a polygon in
+the $(\sqrt{dE/dx}, B\rho)$ plane), e.g.\ \file{pid/deuteron\_band.json} or
+\file{pid/proton\_band.json}.
+
+\subsection{In-fitter gating with \texttt{SetPIDGate}}
+
+\code{EventFit::AtGenfitter::SetPIDGate(jsonFile)} makes the fitter compute the
+\emph{same} Spyral PID internally (it owns its own \code{AtSpyralPID}, so it needs
+no \code{AtPIDEvent} branch) and skip any track whose PID falls outside the gate
+\emph{before} the expensive genfit fit. This both speeds up production --- only
+the species of interest is fitted --- and removes most mis-identified candidates
+from the output. The gate is purely an input filter; tracks it rejects never
+appear in \code{AtTrackingEvent}.
+
+\begin{lstlisting}
+fitter->SetPIDGate("pid/deuteron_band.json"); // fit only deuterons
+\end{lstlisting}
+
+\begin{notebox}
+Match the gate to the hypothesis: a proton fit (\code{pdg=2212}) should use
+\code{pid/proton\_band.json}, a deuteron fit \code{pid/deuteron\_band.json}. If the
+JSON path does not exist the macro warns and disables gating (every candidate is
+fitted), so a silently mistyped path simply removes the speed-up rather than
+crashing.
+\end{notebox}
 
 % =====================================================================
 \section{Coordinate conventions and the magnetic-field sign}\label{sec:conventions}
@@ -744,8 +966,11 @@ $+2.85$\,T (sim sign) & $\approx 3.09$ & $\approx 152$\,MeV & no \\
 \end{tabular}
 \end{center}
 
-For genfit, the analogous control is \code{SetSimulationConvention(false)} for
-experimental data.
+For the clean \code{AtGenfitter} the control is identical to the UKF: it takes a
+\textbf{signed} field, so pass \code{bField=-2.85} for experiment (the default) and
+\code{+2.85} for simulation --- there is no separate convention flag. The legacy
+\code{AtGenfit} instead uses \code{SetSimulationConvention(false)} for experimental
+data.
 
 % =====================================================================
 \section{Output data model}\label{sec:datamodel}
@@ -787,10 +1012,16 @@ root -b -q 'pipeline/fitUKF_a1975.C("run_0116", -1, "proton", -1)'    # -> run_0
 root -b -q 'pipeline/event_png_UKF.C("run_0116_disp", -1)'            # static display
 \end{lstlisting}
 
-\subsection*{Experiment (a1975), genfit}
+\subsection*{Experiment (a1975), genfit (clean, recommended)}
 \begin{lstlisting}[style=bash]
 cd macro/Unpack_HDF5/a1975/UKF/
 root -b -q 'pipeline/unpackReco_a1975_UKF.C("run_0106", 500, true)'   # shared input
+root -b -q 'pipeline/fitGenfitter_a1975.C("run_0106", -1)'           # -> run_0106_genfitter.root
+\end{lstlisting}
+
+\subsection*{Experiment (a1975), genfit (legacy fallback)}
+\begin{lstlisting}[style=bash]
+cd macro/Unpack_HDF5/a1975/UKF/
 root -b -q 'pipeline/fitGenfit_a1975.C("run_0106", -1, "deuteron")'   # -> run_0106_genfit.root
 \end{lstlisting}
 
@@ -816,7 +1047,18 @@ root -b -q 'pipeline/unpackNFit_a1975_UKF.C("run_0116", 1000, "proton", -1, 2.85
   \file{event\_png\_batch\_UKF.C} instead of \file{run\_eve\_UKF.C}.
   \item[genfit fitter is missing]
   The build did not find GENFIT2. Set \code{\$GENFIT} and rebuild
-  (\S\ref{sec:env}); without it only the UKF is compiled.
+  (\S\ref{sec:env}); without it neither \code{AtGenfitter} nor \code{AtGenfit} is
+  compiled and only the UKF is available.
+  \item[Which genfit fitter to run]
+  Use the clean \code{AtGenfitter} (\file{fitGenfitter\_a1975.C}) for all new work
+  --- it is faster, shares the UKF conventions, and supports PID gating. Fall back
+  to the legacy \code{AtGenfit} (\file{fitGenfit\_a1975.C}) only to reproduce older
+  results. Mind the output stems: \file{\_genfitter} vs \file{\_genfit}.
+  \item[PID gate ``not found''; everything still fitted]
+  The \code{pidGate} path passed to \file{fitGenfitter\_a1975.C} does not resolve,
+  so gating is disabled (a warning is printed) and every candidate is fitted. Pass
+  a gate that matches the hypothesis (\file{pid/proton\_band.json} for a proton
+  fit, \file{pid/deuteron\_band.json} for a deuteron fit); see \S\ref{sec:pidgate}.
   \item[Poor excitation-energy resolution]
   Tighten the UKF measurement model: \code{measSigma}$\approx0.5$\,mm and
   \code{momSigmaFrac}$\approx0.1$ instead of the conservative defaults.
