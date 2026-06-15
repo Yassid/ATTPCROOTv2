@@ -77,6 +77,15 @@ public:
    }
    void SetVertexAxisMaxDist(Double_t mm) { fVertexAxisMaxDist = mm; }
 
+   /// Opt-in fix for BACKWARD-track seed reversal. The default seed always takes the
+   /// lowest-z_lab end as the vertex and points the momentum toward +z_lab, which is
+   /// correct for forward tracks but REVERSES backward ones (genfit reflects them into
+   /// the forward hemisphere -> wrong theta/KE). When on, tracks PRA-tagged backward
+   /// (GeoTheta > 90 deg) are instead seeded from the highest-z_lab end with the
+   /// momentum pointing into the track (-z_lab). Forward tracks are unchanged. Default
+   /// off, so the validated forward (p,d)/(p,p) pipelines are byte-for-byte preserved.
+   void SetBackwardSeedFix(Bool_t on) { fBackwardSeedFix = on; }
+
    /// Acceptance window on the fitted polar angle (deg). Tracks outside are DROPPED
    /// as unphysical (near-beam / backward). Default 10-170 deg.
    void SetThetaWindow(Double_t minDeg, Double_t maxDeg)
@@ -190,6 +199,8 @@ private:
    Double_t fThetaMaxDeg{170.0};
    Int_t fTPCDetID{0};
    Bool_t fInit{kFALSE};
+
+   Bool_t fBackwardSeedFix{kFALSE};    // seed backward (GeoTheta>90) tracks from the far end (see setter)
 
    Bool_t fMergeContinuity{kFALSE};    // merge PRA-split fragments of one track before fitting
    Double_t fMergeCenterDist{15.0};    // max PRA-circle centre distance to merge (mm) — "same circle" test

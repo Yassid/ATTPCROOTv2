@@ -154,8 +154,17 @@ AtFittedTrack *AtGenfitter::GetFittedTrack(AtTrack *track, AtFitMetadata * /*fit
    if (dVtx > fVertexAxisMaxDist)
       return nullptr; // never comes near the beam axis -> not a beam-vertex track
 
-   XYZPoint vPos = pos[order.front()];
-   XYZPoint sPos = pos[order.size() > 1 ? order[1] : order.front()];
+   // Vertex end: default = lowest-z_lab end (order.front()), seed dir -> +z_lab. Correct
+   // for forward tracks but REVERSES backward ones (genfit reflects them into the forward
+   // hemisphere). With fBackwardSeedFix, tracks PRA-tagged backward (GeoTheta > 90 deg)
+   // are seeded from the highest-z_lab end with the momentum pointing INTO the track
+   // (-z_lab). Forward tracks are byte-for-byte unchanged (backwardSeed stays false).
+   bool backwardSeed = fBackwardSeedFix && (track->GetGeoTheta() > M_PI / 2.0);
+   int iVtx = backwardSeed ? order.back() : order.front();
+   int iSec = (order.size() > 1) ? (backwardSeed ? order[order.size() - 2] : order[1]) : iVtx;
+
+   XYZPoint vPos = pos[iVtx];
+   XYZPoint sPos = pos[iSec];
    XYZVector dir = (sPos - vPos);
    if (dir.R() < 1e-6)
       return nullptr;
@@ -227,6 +236,11 @@ AtFittedTrack *AtGenfitter::GetFittedTrack(AtTrack *track, AtFitMetadata * /*fit
    // false on any genfit failure (the RK loops THROW on non-convergence rather than
    // spinning, so this can fail but never hang).
    auto doFit = [&]() -> bool {
+      // Free the previous fit's genfit::Track (its track points, reps and fitted states).
+      // Without this the array grows by one heavy Track per fit and is never released ->
+      // multi-GB growth over a full run that OOM-crashes the VM (esp. multi-parallel).
+      // Results are copied into locals below, so nothing downstream references it.
+      fGenfitTrackArray->Delete();
       auto *gfTrack = new ((*fGenfitTrackArray)[fGenfitTrackArray->GetEntriesFast()])
                          genfit::Track(trackCand, *fMeasurementFactory);
       gfTrack->addTrackRep(new genfit::RKTrackRep(fPDG));

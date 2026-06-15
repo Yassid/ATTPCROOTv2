@@ -1,0 +1,10 @@
+# regenerable data products, logs and plots — not tracked
+*.root
+*.png
+*.parquet
+plots/
+*_pngs/
+# per-run unpack/fit logs (multi-MB each)
+log_run_*.txt
+fitlog_*.txt
+*.log
