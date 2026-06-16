@@ -52,39 +52,36 @@ clustering for short backward tracks (the UKF already has `fTargetClusters` re-c
 
 ---
 
-## Thread #2 — UKF conventions lose backward tracks
+## Thread #2 — UKF loses backward tracks → DIAGNOSED & FIXED (existing flags, no code change)
 
 Comparison (10 starter runs, same gate): **genfit 17.8% backward vs UKF 0.5% backward**
-(`genfit_vs_ukf_dp.png`). The UKF (`AtFitterUKF`) mis-handles backward tracks the way
-genfit did pre-fix. Root cause localized in `AtReconstruction/AtFitter/AtFitterUKF.cxx`:
+(`genfit_vs_ukf_dp.png`).
 
-- **`:233` — `double thetaLab = 180.0 - GeoTheta*180/π;`** This is the **simulation**
-  z-frame convention (sim digitizes z_digi = ZPadPlane − z_MC, so theta is mirrored).
-  EXPERIMENTAL data has the *opposite* z-handedness (the same reason the fit macro flips
-  `bFieldSign=-1`). But this `180 − GeoTheta` is **hardcoded** and NOT flipped with the
-  handedness, so for exp data the lab angle (and the forward/backward sense) is mirrored.
-  This contradicts the genfit-validated mapping where **GeoTheta>90 *is* backward lab**.
-- **`:117` vertex = `GetHitClusterArray()->front()`** and **`:128` seed momentum at
-  `θ = GeoTheta`** directly. With the mirrored convention, the vertex-end and the seed
-  direction are taken in the wrong frame for backward tracks → genfit-style reflection.
+**The `:233` "convention bug" hypothesis was WRONG (checked & discarded).** Line 233's
+`thetaLab = 180−GeoTheta` only feeds a *symmetric* beam-like cut, so the convention flip
+doesn't change which tracks it drops. And empirically the UKF output theta is in the
+SAME frame as genfit (95.7% agreement, not flipped — `SetZPadPlane` already converts to
+lab). So it is neither a `:233` nor an output-frame bug.
 
-Contrast — what genfit does (the fix that works): positions in lab frame
-`z_lab = ZPadPlane − z_digi`; `SetBackwardSeedFix` seeds GeoTheta>90 tracks from the
-far (highest-z_lab) end. The UKF needs the analogous, handedness-consistent treatment.
+**Real cause (empirical, of genfit's validated backward protons on run_0016):**
+the UKF **drops 76% (no fit)**, fits 15% **as forward** (flip), 9% bad-chi2, 0.2% correct.
+Two independent levers, both EXISTING AtFitterUKF knobs (default off / 10 → so (p,p)/(p,d)
+untouched, NO framework code changed):
+- **`SetUseClusterDirSeed(true)`** — seeds the direction from the cluster geometry
+  (vertex = closest-to-axis cluster, dir = PRA-circle tangent disambiguated by the chord)
+  instead of the half-sphere-ambiguous GeoTheta. Fixes the FLIP (15%→5.5%). Its own code
+  comment already names this exact failure ("upward tracks see GeoTheta=115° not 65°").
+- **`SetMinClusters(4)`** (was 10) — backward (d,p) tracks are cluster-poor (§Thread #1),
+  so min=10 DROPPED 76% of them. min=4 (matching genfit) recovers them: no-fit 77%→24%.
 
-**Proposed fix (NEEDS physics validation by Yassid — do not land blind):**
-1. Make the GeoTheta→θ_lab convention at `:233` depend on the data handedness (same
-   switch as `bFieldSign`), i.e. `θ_lab = GeoTheta` for experimental a1975, not
-   `180 − GeoTheta`. Add a `SetExperimentalHandedness(bool)` / reuse the B-sign.
-2. Re-derive the vertex-end + seed direction from that corrected θ_lab (mirror the
-   genfit `SetBackwardSeedFix`: backward = corrected θ_lab > 90 → seed from far end).
-3. **Validate with the objective metric**: backward candidate fraction on run_0016
-   should jump from ~0.5% toward genfit's ~17–18%. `genfit_vs_ukf_dp.C` already
-   measures it; `fitUKF_a1975_deuterium.C` + `ex_dp_a1975.C(...,"_UKF")` produce the
-   UKF spectrum to compare.
+**★ VALIDATED, run_0016:** clusterDirSeed + minClusters=4 →
+- good-fit of genfit-validated backward protons: **0.2% → 19.2%**
+- backward candidate fraction through ex_dp: **0.5% → 15.2%** (genfit 17.8%).
 
-This was left UNCHANGED on purpose — conventions/handedness are physics calls that
-need your sign-off, and the objective test above makes validation a 1-run check.
+**Landed (no framework change):** `fitUKF_a1975_deuterium.C` now defaults
+`clusterDirSeed=true` + `minClusters=4`. Residual (~24% no-fit + ~26% flip on the
+shortest tracks) is the real clustering deficit (§Thread #1) — short backward tracks are
+genuinely hard; adaptive clustering is the next lever there.
 
 ---
 

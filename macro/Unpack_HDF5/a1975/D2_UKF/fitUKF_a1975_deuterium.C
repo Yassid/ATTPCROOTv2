@@ -9,6 +9,16 @@
 ///   root -b -q 'fitUKF_a1975_deuterium.C("run_0016", -1, "proton", -1, 2.85, 9.0e-5, "/mnt/f/a1975/reco_d2/")'
 ///
 /// bFieldSign=-1 = experimental handedness (default), same as the genfit B=-2.85.
+///
+/// ★ BACKWARD-TRACK FIX (defaults on for this (d,p) macro; both are EXISTING AtFitterUKF
+/// knobs, so the framework is unchanged and (p,p)/(p,d) are untouched):
+///   - clusterDirSeed=true  -> SetUseClusterDirSeed: seed direction from the cluster
+///     geometry instead of the half-sphere-ambiguous PRA GeoTheta (fixes the ~15% of
+///     backward protons the UKF otherwise FLIPS to forward).
+///   - minClusters=4 (was 10) -> backward (d,p) tracks are cluster-poor; the old min=10
+///     DROPPED ~77% of them. min=4 (matching genfit) recovers them.
+/// Effect on run_0016: backward (theta_lab>90) candidate fraction 0.5% -> 15.2%
+/// (genfit 17.8%); UKF good-fit of genfit-validated backward protons 0.2% -> 19.2%.
 
 #include <map>
 
@@ -25,7 +35,7 @@ const double kE_Cu = 1.602176634e-19;
 
 std::unique_ptr<EventFit::AtFitterUKF> MakeHypoU(const TString &name, int bFieldSign, double bFieldMag,
                                                  double gasDensity, double measSigma, double momSigmaFrac, int nIter,
-                                                 int minClusters)
+                                                 int minClusters, bool clusterDirSeed)
 {
    auto it = kParticleTableU.find(name);
    if (it == kParticleTableU.end())
@@ -47,6 +57,12 @@ std::unique_ptr<EventFit::AtFitterUKF> MakeHypoU(const TString &name, int bField
    ukf->SetMinClusters(minClusters);
    ukf->SetNIterations(nIter);
    ukf->SetZPadPlane(1000.0);
+   // BACKWARD-TRACK FIX: seed the direction from the cluster geometry (vertex =
+   // closest-to-axis cluster, dir = PRA-circle tangent disambiguated by the chord)
+   // instead of the half-sphere-ambiguous PRA GeoTheta. Without it the UKF DROPS ~76%
+   // of backward (d,p) protons (seed mis-orientation -> fit divergence) and flips ~15%
+   // to forward. Existing AtFitterUKF flag (default off) -> (p,p)/(p,d) unaffected.
+   ukf->SetUseClusterDirSeed(clusterDirSeed);
    return ukf;
 }
 } // namespace
@@ -54,7 +70,8 @@ std::unique_ptr<EventFit::AtFitterUKF> MakeHypoU(const TString &name, int bField
 void fitUKF_a1975_deuterium(TString fileName = "run_0016", Long64_t nEvents = -1, TString particles = "proton",
                             Int_t bFieldSign = -1, Double_t bFieldMag = 2.85, Double_t gasDensity = 9.0e-5,
                             TString ioDir = "/mnt/f/a1975/reco_d2/", TString outDir = "", Double_t measSigma = 2.0,
-                            Double_t momSigmaFrac = 0.3, Int_t nIter = 1, Int_t minClusters = 10)
+                            Double_t momSigmaFrac = 0.3, Int_t nIter = 1, Int_t minClusters = 4,
+                            Bool_t clusterDirSeed = kTRUE)
 {
    gSystem->Load("libAtReconstruction.so");
    gSystem->Load("libAtTools.so");
@@ -86,7 +103,8 @@ void fitUKF_a1975_deuterium(TString fileName = "run_0016", Long64_t nEvents = -1
    TObjArray *toks = particles.Tokenize(",");
    for (int i = 0; i < toks->GetEntries(); ++i) {
       TString pname = ((TObjString *)toks->At(i))->GetString().Strip(TString::kBoth);
-      auto hypo = MakeHypoU(pname, bFieldSign, bFieldMag, gasDensity, measSigma, momSigmaFrac, nIter, minClusters);
+      auto hypo =
+         MakeHypoU(pname, bFieldSign, bFieldMag, gasDensity, measSigma, momSigmaFrac, nIter, minClusters, clusterDirSeed);
       if (hypo) {
          multi->AddHypothesis(std::move(hypo), pname.Data(), 0);
          std::cout << "  + hypothesis: " << pname << "\n";
