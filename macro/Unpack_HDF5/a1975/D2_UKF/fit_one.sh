@@ -10,8 +10,11 @@ REPO=/home/yassid/fair_install/ATTPCROOTv2-OpenKF
 IODIR=/mnt/f/a1975/reco_d2/
 OUT="${IODIR}${RUN}_genfitter_p.root"
 
-if [ ! -f "${IODIR}${RUN}_reco.root" ]; then
-  echo "[miss] $RUN has no reco yet (${IODIR}${RUN}_reco.root) — skipping"
+# require the reco .done marker (NOT just the file): the reco file exists and grows
+# while reco is still running, so fitting on mere existence races on a PARTIAL reco
+# (and the resulting fit .done would block any later re-fit on the complete reco).
+if [ ! -f "${IODIR}${RUN}_reco.root.done" ]; then
+  echo "[wait] $RUN reco not complete (no .done marker yet) — skipping fit"
   exit 0
 fi
 # trust a .done marker (written only after root exits 0); a partial fit output can
