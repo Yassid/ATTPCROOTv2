@@ -7,4 +7,5 @@ plots/
 # per-run unpack/fit logs (multi-MB each)
 log_run_*.txt
 fitlog_*.txt
+ukflog_*.txt
 *.log
