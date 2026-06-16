@@ -109,8 +109,26 @@ So forward-vs-backward (GeoTheta ≷ 90°) is decided ENTIRELY by `sign(dirX·di
 **This is the highest-leverage thing to fix:** give PRA a robust 3D GeoTheta (use the
 drift-z direction / the z-ordered cluster sequence to set the forward/backward sense),
 and both the clustering-metric discontinuity and the cross-fitter backward seeding
-become well-defined. Worth checking first whether `dir2D` even carries reliable sign
-info for near-90° (|dirY|→0) tracks. Recommend starting here before the per-fitter fixes.
+become well-defined.
+
+### ★ DECISIVE TEST (`geotheta_check.C`, 102,704 tracks, runs 0016–0019)
+Compared PRA GeoTheta to an INDEPENDENT 3D geometric theta (clusters in lab frame
+z_lab=ZPadPlane−z_digi, vertex = cluster nearest the beam axis):
+
+- **32.7% of tracks DISAGREE on forward-vs-backward** (>90°) between the two methods.
+- The confusion is concentrated as a bright cross at **θ ≈ 80–100°** in the 2D plot
+  (`plots/geotheta_check.png`) — exactly where the 2D sign is degenerate (|dirY|→0)…
+  …and **exactly where the (d,p) protons live**. So the backward protons sit in the
+  single worst angular region for the current GeoTheta. This is quantitative proof that
+  the forward/backward determination is NOT robust, and it is upstream of both fitters.
+- Caveat: the 3D-geom reference is not ground truth either (vertex-end ambiguity for
+  forward near-axis tracks), so 32.7% is the *disagreement* rate, not a pure GeoTheta
+  error rate — but a 1/3 disagreement concentrated at the physics-relevant angle is
+  decisive that the classification needs a robust 3D treatment.
+
+**Conclusion: fix PRA GeoTheta (robust 3D, drift-z aware) FIRST** — it is the common
+upstream cause; the per-fitter seed/convention fixes (§Thread #2) are downstream and
+will be far cleaner once GeoTheta is reliable.
 
 ---
 
