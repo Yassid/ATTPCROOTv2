@@ -88,7 +88,7 @@ need your sign-off, and the objective test above makes validation a 1-run check.
 
 ---
 
-## ★★ Likely COMMON ROOT of both threads: how GeoTheta is computed
+## GeoTheta was suspected as a common root — INVESTIGATED & CLEARED (93% reliable)
 
 `AtPRA.cxx:289–315` computes the track's GeoTheta from the **2D XY-projection** of the
 RANSAC direction, with the forward/backward sense set by a discrete sign:
@@ -114,7 +114,22 @@ drift-z direction / the z-ordered cluster sequence to set the forward/backward s
 and both the clustering-metric discontinuity and the cross-fitter backward seeding
 become well-defined.
 
-### ★ DECISIVE TEST (`geotheta_check.C`, 102,704 tracks, runs 0016–0019)
+### ⚠ RETRACTED: PRA GeoTheta is actually GOOD (93%) — do NOT fix it
+A follow-up check against the **validated truth** (genfit *fitted* theta on 19,270
+good-fit run_0016 tracks) measured forward/backward agreement:
+- **PRA GeoTheta: 93.0% correct** | my 3D-geom reference: 81.5%.
+
+So the PRA GeoTheta is the BETTER estimator — it is **not** the bottleneck. The 32.7%
+"disagreement" below was my crude 2-point 3D-geom reference being WORSE, not GeoTheta
+being wrong. The current GeoTheta = `acos(slope/√(1+slope²))` with `slope` from the
+**outlier-robust RANSAC fit of z-vs-arclength** (`AtPRA.cxx:289-315`) is a sound 3D
+pitch; the genfit seed-fix already relies on it successfully (17.8% backward, physics-
+consistent). **Recommendation reversed: leave PRA GeoTheta alone.** The real fixable
+backward issue is the per-fitter seeding/conventions (§Thread #2, esp. the UKF), plus
+the real clustering deficit (§Thread #1). The naive geotheta_check below is kept only
+as the cautionary example that motivated this verification.
+
+### (superseded) geotheta_check.C, 102,704 tracks, runs 0016–0019
 Compared PRA GeoTheta to an INDEPENDENT 3D geometric theta (clusters in lab frame
 z_lab=ZPadPlane−z_digi, vertex = cluster nearest the beam axis):
 
@@ -129,9 +144,11 @@ z_lab=ZPadPlane−z_digi, vertex = cluster nearest the beam axis):
   error rate — but a 1/3 disagreement concentrated at the physics-relevant angle is
   decisive that the classification needs a robust 3D treatment.
 
-**Conclusion: fix PRA GeoTheta (robust 3D, drift-z aware) FIRST** — it is the common
-upstream cause; the per-fitter seed/convention fixes (§Thread #2) are downstream and
-will be far cleaner once GeoTheta is reliable.
+**Conclusion (revised after verification above): PRA GeoTheta is 93% reliable — do NOT
+change it** (risks the (p,p)/(p,d) regression for no gain). The real backward fixes are
+downstream: the per-fitter seed/conventions (§Thread #2 — the UKF `:233` handedness is
+the concrete one), and the real clustering deficit (§Thread #1). Priority order:
+**(1) UKF convention fix, (2) adaptive clustering for short backward tracks.**
 
 ---
 
