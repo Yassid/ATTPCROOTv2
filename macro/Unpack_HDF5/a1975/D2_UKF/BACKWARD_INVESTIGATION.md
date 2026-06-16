@@ -27,12 +27,16 @@ fit constraints with a longer lever arm → this is the **second limiter** on ba
 fit efficiency, on top of the (now-fixed) seed direction. Plot:
 `plots/cluster_quality_dp.png`.
 
-### ★ Key lead: a sharp STEP at exactly θ_geo = 90°
-All metrics step discontinuously at 90° (clusters 42→22, max gap ~50→100 mm,
-hits/cluster drops). A *clean step at exactly 90°* is an **algorithmic boundary**, not
-smooth physics (physics would be gradual). Strong suspicion: the hit-finding / cluster
-ordering / PRA arc-walk has a forward-vs-backward branch keyed on 90° that under-serves
-the backward branch.
+### The clustering deficit is REAL physics, not a binning artifact (corrected)
+Initial suspicion was a sharp *algorithmic* step at 90°. **That was checked and ruled
+out** (`cluster_step_pra_vs_3d.png`): binning clusters/track by the PRA GeoTheta and by
+the independent 3D-geom theta gives the SAME profile (curves overlap) — a *smooth*
+minimum at ~90° (step right at 90° is only 1.05×, not a discontinuity). Tracks near 90°
+are perpendicular to the beam → shortest extent in the detector → genuinely fewest
+clusters. So the backward cluster deficit is **real physics that the fitter must cope
+with** (fewer constraints), NOT a clustering bug. Possible mitigation: finer/adaptive
+clustering for short backward tracks (the UKF already has `fTargetClusters` re-clustering
+— worth A/B testing on backward good-fit fraction).
 
 **Next steps (thread #1):**
 - Inspect the clustering + PRA ordering code for a θ=90° (or "going-away-from-pad-plane"
@@ -101,10 +105,9 @@ So forward-vs-backward (GeoTheta ≷ 90°) is decided ENTIRELY by `sign(dirX·di
 - The forward/backward assignment is fragile/projection-dependent — exactly the kind of
   thing that makes backward tracks mis-seeded and that both genfit and UKF inherit (each
   then interprets the inherited GeoTheta with its own convention, §Thread #2).
-- It discretely partitions tracks into the two sign branches, which is almost certainly
-  the **sharp step at θ_geo=90°** seen in every clustering metric (§Thread #1) — the step
-  is an artifact of binning by this projection-based angle, on top of the real backward
-  cluster deficit.
+- (It does NOT cause the clustering-vs-angle profile — that was checked and is robust to
+  the angle definition, §Thread #1. GeoTheta's damage is to the fwd/bwd SEEDING the
+  fitters inherit, not to the clustering metrics.)
 
 **This is the highest-leverage thing to fix:** give PRA a robust 3D GeoTheta (use the
 drift-z direction / the z-ordered cluster sequence to set the forward/backward sense),
