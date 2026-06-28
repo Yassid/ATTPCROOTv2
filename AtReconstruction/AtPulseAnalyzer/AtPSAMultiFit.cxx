@@ -166,8 +166,11 @@ AtPSAMultiFit::HitVector AtPSAMultiFit::AnalyzePad(AtPad *pad)
    HitVector hits;
    for (int i = 0; i < n; ++i) {
       double A = good ? tf.GetParameter(2 * i) : adc[seeds[i]] / fRespPeakVal;
-      double t0 = good ? tf.GetParameter(2 * i + 1) : seeds[i] - peakOff;
-      double peakTB = t0 + peakOff;
+      // time-bucket = MAXIMUM of the fitted curve in this peak's window (GetMaximumX interpolates
+      // with Brent -> sub-bucket precision). Window = midpoints to neighbouring seeds.
+      double wLo = (i == 0) ? (double)lo : 0.5 * (seeds[i - 1] + seeds[i]);
+      double wHi = (i == n - 1) ? (double)hi : 0.5 * (seeds[i] + seeds[i + 1]);
+      double peakTB = good ? tf.GetMaximumX(wLo, wHi) : (double)seeds[i];
       double amp = A * fRespPeakVal;
       double Q = A * fRespIntegral * tauTB;
 

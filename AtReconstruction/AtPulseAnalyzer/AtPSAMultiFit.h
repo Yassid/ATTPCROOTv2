@@ -38,7 +38,9 @@ private:
                                  ///< instead of the noise-adaptive secondary-only fSeedSigma cut
    Double_t fMinSignif{3.0};     ///< FIT-QUALITY gate: keep a fitted pulse only if amplitude/error(amplitude)
                                  ///< >= fMinSignif (a real pulse has A >> sigma(A); noise has A ~ sigma(A))
-   Bool_t fPromPrimary{true};    ///< require prominence on the PRIMARY peak too. Rejects broad baseline humps
+   Bool_t fPromPrimary{false};   ///< prominence on PRIMARY peak. Default false: primary=threshold only (matches
+                                 ///< AtPSAMax). true rejects broad baseline humps BUT also kills diffusion-broadened
+                                 ///< far-drift pulses -> collapses track z. Only enable if noise pads are a problem.
                                  ///< (FWHM ~50-90 TB, low prominence) that a threshold-only primary would keep.
    Bool_t fFloatTau{false};      ///< let the peaking time float in the fit (else fixed)
    // Spyral-style z calibration (SetSpyralZ) + per-pad time map are now provided by the base AtPSA.
