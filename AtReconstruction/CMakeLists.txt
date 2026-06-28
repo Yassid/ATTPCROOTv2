@@ -57,6 +57,7 @@ set(SRCS
   AtPulseAnalyzer/AtPSADeconv.cxx
   AtPulseAnalyzer/AtPSADeconvFit.cxx
   AtPulseAnalyzer/AtPSAIterDeconv.cxx
+  AtPulseAnalyzer/AtPSAMultiFit.cxx
   AtPulseAnalyzer/AtPSAComposite.cxx
 
   AtFilter/AtFilter.cxx

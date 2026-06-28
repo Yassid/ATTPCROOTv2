@@ -1,0 +1,78 @@
+#ifndef ATPSAMULTIFIT_H
+#define ATPSAMULTIFIT_H
+
+#include "AtPSA.h" // for AtPSA, AtPSA::HitVector
+
+#include "AtPad.h" // for AtPad::trace
+
+#include <Rtypes.h> // for Double_t, Int_t, ClassDefOverride
+
+#include <memory> // for unique_ptr
+#include <vector>
+
+class AtPad;
+class TBuffer;
+class TClass;
+class TMemberInspector;
+
+/**
+ * @brief Multi-peak PSA: search peaks, fit a SUM of GET response pulses to the raw trace.
+ *
+ * Finds candidate peaks (local maxima above threshold) in a pad trace, then fits a sum of the
+ * electronics response function used in digitization
+ * (ElectronicResponse::AtNominalResponse: exp(-3u) sin(u) u^3, u = (t-t0)/tau) -- one component
+ * per peak -- directly to the trace. The fit simultaneously validates each pulse against the
+ * true response and DECONVOLVES overlapping pulses (two tracks crossing the same pad at
+ * different drift times), returning one AtHit per fitted component. This resolves the
+ * single-peak limitation of AtPSAMax that loses hits on shared pads.
+ *
+ * @ingroup PSA
+ */
+class AtPSAMultiFit : public AtPSA {
+private:
+   Double_t fPeakingTime{0.720}; ///< electronics peaking time tau [us] (GET nominal ~0.72)
+   Int_t fMaxPeaks{4};           ///< max simultaneous pulses to fit per pad
+   Int_t fMinSep{8};             ///< min separation between seed peaks [TB]
+   Double_t fSeedSigma{4.0};     ///< an ADDITIONAL seed peak must have prominence > fSeedSigma*noiseRMS
+   Double_t fAbsProminence{0};   ///< if >0, use this ABSOLUTE prominence (ADC) for ALL peaks (Spyral-style)
+                                 ///< instead of the noise-adaptive secondary-only fSeedSigma cut
+   Double_t fMinSignif{3.0};     ///< FIT-QUALITY gate: keep a fitted pulse only if amplitude/error(amplitude)
+                                 ///< >= fMinSignif (a real pulse has A >> sigma(A); noise has A ~ sigma(A))
+   Bool_t fPromPrimary{true};    ///< require prominence on the PRIMARY peak too. Rejects broad baseline humps
+                                 ///< (FWHM ~50-90 TB, low prominence) that a threshold-only primary would keep.
+   Bool_t fFloatTau{false};      ///< let the peaking time float in the fit (else fixed)
+   // Spyral-style z calibration (SetSpyralZ) + per-pad time map are now provided by the base AtPSA.
+
+   // response constants, precomputed in Init() (reduced-time units)
+   double fRespPeakRedT{0};  ///< reduced time of the response maximum
+   double fRespPeakVal{1};   ///< response value at its maximum (for amplitude init)
+   double fRespIntegral{1};  ///< integral of the response over reduced time (for charge)
+
+public:
+   void Init() override;
+   HitVector AnalyzePad(AtPad *pad) override;
+   std::unique_ptr<AtPSA> Clone() override { return std::make_unique<AtPSAMultiFit>(*this); }
+
+   void SetPeakingTime(Double_t tauUs) { fPeakingTime = tauUs; }
+   void SetMaxPeaks(Int_t n) { fMaxPeaks = n; }
+   void SetMinSeparation(Int_t tb) { fMinSep = tb; }
+   void SetSeedSigma(Double_t s) { fSeedSigma = s; }
+   void SetProminence(Double_t p) { fAbsProminence = p; } ///< absolute prominence (ADC), Spyral-style; 0=adaptive
+   void SetMinSignificance(Double_t s) { fMinSignif = s; }
+   void SetProminenceOnPrimary(Bool_t v) { fPromPrimary = v; } ///< false = old behavior (primary=threshold only)
+   void SetFloatPeakingTime(Bool_t v) { fFloatTau = v; }
+   // SetSpyralZ / LoadPadTimeOffsets are inherited from AtPSA.
+
+private:
+   /// GET response to a unit charge arriving at t0 (all in TB), tau in TB. 0 for t<t0.
+   static double Response(double t, double t0, double tauTB);
+   /// Robust per-pad noise RMS from the trace (median + MAD; insensitive to the pulse).
+   static double EstimateNoise(const AtPad::trace &adc);
+   /// Prominent local maxima: smoothed local max, prominence > fSeedSigma*noise above local valleys,
+   /// >= fMinSep apart, strongest first (up to fMaxPeaks). Rejects noise-wiggle seeds.
+   std::vector<int> FindSeeds(const AtPad::trace &adc, double threshold, double noise, double tauTB) const;
+
+   ClassDefOverride(AtPSAMultiFit, 1)
+};
+
+#endif

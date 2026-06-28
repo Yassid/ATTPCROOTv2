@@ -47,6 +47,14 @@ protected:
    Double_t fDriftVelocity{}; //< drift velocity of electron in cm/us
    Double_t fZk{};            //< Relative position of micromegas-cathode
 
+   // Optional Spyral-style two-point z calibration: z = (window-tb)/(window-mm)*length [mm].
+   // fWindowTB<=0 (default) => use the par-file geometric calibration (CalculateZGeo).
+   Double_t fWindowTB{0};       //< time bucket of the window plane (z=0 reference)
+   Double_t fMicromegasTB{10};  //< time bucket of the micromegas/pad plane (z=length reference)
+   Double_t fDetLength{1000};   //< detector active length in mm
+   // Optional per-pad time-bucket offset (electronics-timing calibration; padNum -> offset in TB).
+   std::map<Int_t, Double_t> fPadTimeOffset; //!< transient: loaded per run, not persisted
+
    using HitVector = std::vector<std::unique_ptr<AtHit>>;
 
 public:
@@ -61,6 +69,18 @@ public:
    int GetThresholdLow() { return fThresholdlow; }
 
    void SetSimulatedEvent(TClonesArray *MCSimPointArray);
+
+   /// Enable Spyral-style two-point z calibration: z = (windowTB - peakTB)/(windowTB - mmTB) * length [mm].
+   /// (a1975 D2: windowTB=560, mmTB=10, length=1000). Pass windowTB<=0 to revert to CalculateZGeo.
+   void SetSpyralZ(Double_t windowTB, Double_t mmTB = 10, Double_t length = 1000)
+   {
+      fWindowTB = windowTB; fMicromegasTB = mmTB; fDetLength = length;
+   }
+   /// Load a per-pad time-bucket offset map from a CSV (one value per line, line index = pad number;
+   /// an optional non-numeric header line is skipped). Same format as Spyral's pad_time_correction.csv.
+   void LoadPadTimeOffsets(const char *csvFile);
+   void SetPadTimeOffset(Int_t padNum, Double_t tb) { fPadTimeOffset[padNum] = tb; }
+   void ClearPadTimeOffsets() { fPadTimeOffset.clear(); }
 
    AtEvent Analyze(AtRawEvent &rawEvent);
    virtual void Analyze(AtRawEvent *rawEvent, AtEvent *event);
@@ -77,11 +97,15 @@ protected:
    [[deprecated]] Double_t CalculateZ(Double_t peakIdx); ///< Calculate z position in mm using the peak index.
 
    Double_t CalculateZGeo(Double_t peakIdx);
+   /// Unified z from a peak time bucket: applies the per-pad time offset (if loaded for padNum),
+   /// then the Spyral two-point calibration if enabled, else the geometric CalculateZGeo.
+   /// PSA implementations should call this (with the pad number) instead of CalculateZGeo directly.
+   Double_t CalibrateZ(Double_t peakIdx, Int_t padNum = -1);
    Double_t getThreshold(int padSize = -1);
 
    virtual double getZhitVariance(double zLoc, double zLocVar) const;
    virtual std::pair<double, double> getXYhitVariance() const;
-   ClassDef(AtPSA, 5)
+   ClassDef(AtPSA, 6)
 };
 
 #endif

@@ -19,8 +19,12 @@
 #include <algorithm>
 #include <array> // for array
 #include <cmath> // for pow
+#include <fstream>
 #include <iostream>
 #include <iterator>
+#include <sstream>
+#include <stdexcept>
+#include <string>
 #include <utility> // for pair
 
 using std::distance;
@@ -90,6 +94,45 @@ Double_t AtPSA::CalculateZ(Double_t peakIdx)
 Double_t AtPSA::CalculateZGeo(Double_t peakIdx)
 {
    return fZk - (fEntTB - peakIdx) * fTBTime * fDriftVelocity / 100.;
+}
+
+void AtPSA::LoadPadTimeOffsets(const char *csvFile)
+{
+   std::ifstream in(csvFile);
+   if (!in) {
+      LOG(error) << "AtPSA::LoadPadTimeOffsets: cannot open " << csvFile;
+      return;
+   }
+   // Read whole file and tokenize on any line ending (\n, \r, \r\n) or comma -> robust to formats.
+   std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+   for (auto &ch : content)
+      if (ch == '\r' || ch == '\n' || ch == ',')
+         ch = ' ';
+   std::istringstream ss(content);
+   fPadTimeOffset.clear();
+   std::string tok;
+   Int_t pad = 0;
+   while (ss >> tok) {
+      try {
+         fPadTimeOffset[pad] = std::stod(tok); // token order == pad number
+         ++pad;
+      } catch (const std::exception &) {
+         // non-numeric token (e.g. a "tcorr" header) -> skip without advancing the pad index
+      }
+   }
+   LOG(info) << "AtPSA: loaded " << fPadTimeOffset.size() << " per-pad time offsets from " << csvFile;
+}
+
+Double_t AtPSA::CalibrateZ(Double_t peakIdx, Int_t padNum)
+{
+   if (padNum >= 0 && !fPadTimeOffset.empty()) {
+      auto it = fPadTimeOffset.find(padNum);
+      if (it != fPadTimeOffset.end())
+         peakIdx += it->second; // per-pad electronics-timing correction
+   }
+   if (fWindowTB > 0) // Spyral-style two-point calibration
+      return (fWindowTB - peakIdx) / (fWindowTB - fMicromegasTB) * fDetLength;
+   return CalculateZGeo(peakIdx); // par-file geometric calibration
 }
 
 void AtPSA::TrackMCPoints(std::multimap<Int_t, std::size_t> &map, AtHit &hit)
