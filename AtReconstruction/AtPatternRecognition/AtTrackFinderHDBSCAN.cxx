@@ -270,7 +270,8 @@ bool fitCircle(const std::vector<int> &idx, const std::vector<P3> &P, double &cx
    return true;
 }
 
-// Cluster winding direction vs z: +1 forward, -1 backward, 0 none.
+// Cluster winding direction vs z: +1 forward, -1 backward, 0 none (Spyral get_direction: sign-fraction
+// of angle steps around the circle center, ordered by z).
 int clusterDirection(std::vector<int> idx, const std::vector<P3> &P, double thr)
 {
    if (idx.size() < 6)
@@ -288,8 +289,7 @@ int clusterDirection(std::vector<int> idx, const std::vector<P3> &P, double thr)
    }
    int pos = 0, tot = 0;
    for (size_t i = 1; i < ang.size(); ++i) {
-      double da = ang[i] - ang[i - 1];
-      if (da > 0) pos++;
+      if (ang[i] - ang[i - 1] > 0) pos++;
       tot++;
    }
    if (tot == 0) return 0;
@@ -414,9 +414,16 @@ std::unique_ptr<AtPatternEvent> AtPATTERN::AtTrackFinderHDBSCAN::FindTracks(AtEv
    for (auto &kv : byLabel)
       clusters.push_back(std::move(kv.second));
 
-   // Spyral-style joining of over-segmented pieces
-   joinClusters(clusters, pts, fJoinMethod, fCircleOverlapRatio, fMinClusterSizeJoin, fJoinZFraction,
-                fJoinRadiusFraction, fDirectionThreshold);
+   // Spyral-style joining of over-segmented pieces. "both" = continuity (safe z-stitching) then overlap.
+   if (fJoinMethod == "both") {
+      joinClusters(clusters, pts, "continuity", fCircleOverlapRatio, fMinClusterSizeJoin, fJoinZFraction,
+                   fJoinRadiusFraction, fDirectionThreshold);
+      joinClusters(clusters, pts, "overlap", fCircleOverlapRatio, fMinClusterSizeJoin, fJoinZFraction,
+                   fJoinRadiusFraction, fDirectionThreshold);
+   } else {
+      joinClusters(clusters, pts, fJoinMethod, fCircleOverlapRatio, fMinClusterSizeJoin, fJoinZFraction,
+                   fJoinRadiusFraction, fDirectionThreshold);
+   }
 
    auto retEvent = std::make_unique<AtPatternEvent>();
    std::vector<char> claimed(nHits, 0);
