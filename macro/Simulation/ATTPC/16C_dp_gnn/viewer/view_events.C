@@ -100,8 +100,8 @@ void EvViewer::DrawEv() {
    int ev = fIds[fIdx];
    TCanvas *c = fEC->GetCanvas();
    c->Clear(); c->Divide(2, 1);
-   c->cd(1); DrawPad(fSp, "ATTPCROOT (triplclust)", ev);
-   c->cd(2); DrawPad(fGn, "Spyral (HDBSCAN)", ev);
+   c->cd(1); DrawPad(fSp, "ATTPCROOT-GNN", ev);
+   c->cd(2); DrawPad(fGn, "Spyral", ev);
    c->Update();
    fNum->SetIntNumber(ev);
    int nsp = fSp.count(ev) ? fSp[ev].size() : 0;
