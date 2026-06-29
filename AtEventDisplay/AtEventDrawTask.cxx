@@ -1201,7 +1201,7 @@ void AtEventDrawTask::Reset()
  {
  if(uaIdx%100<0 || uaIdx%100>11 || uaIdx/100<0 || uaIdx/100>3)
  {
- fLogger->Error(MESSAGE_ORIGIN,
+ gLogger->Error(MESSAGE_ORIGIN,
  "2DPlotRange should be ABB ( A = [0, 3], BB = [00, 11] )!");
  return;
  }

@@ -1,4 +1,5 @@
 #include "AtHDFParserTask.h"
+#include "FairLogger.h"
 
 #include "FairRootManager.h"
 #include "FairRunOnline.h"
@@ -186,7 +187,7 @@ InitStatus AtHDFParserTask::Init()
 {
    FairRootManager *ioMan = FairRootManager::Instance();
    if (ioMan == 0) {
-      fLogger->Error(MESSAGE_ORIGIN, "Cannot find RootManager!");
+      gLogger->Error(MESSAGE_ORIGIN, "Cannot find RootManager!");
       return kERROR;
    }
 
@@ -198,7 +199,7 @@ InitStatus AtHDFParserTask::Init()
    auto numUniqueEvents = HDFParser->getFirstEvent() - HDFParser->getLastEvent();
 
    if (fIniEventID > numUniqueEvents) {
-      fLogger->Fatal(MESSAGE_ORIGIN, "Exceeded the valid range of event numbers");
+      gLogger->Fatal(MESSAGE_ORIGIN, "Exceeded the valid range of event numbers");
       return kERROR;
    } else
       fEventID = fIniEventID + HDFParser->getFirstEvent();
@@ -211,15 +212,15 @@ void AtHDFParserTask::SetParContainers()
 {
    FairRun *run = FairRun::Instance();
    if (!run)
-      fLogger->Fatal(MESSAGE_ORIGIN, "No analysis run!");
+      gLogger->Fatal(MESSAGE_ORIGIN, "No analysis run!");
 
    FairRuntimeDb *db = run->GetRuntimeDb();
    if (!db)
-      fLogger->Fatal(MESSAGE_ORIGIN, "No runtime database!");
+      gLogger->Fatal(MESSAGE_ORIGIN, "No runtime database!");
 
    fPar = (AtDigiPar *)db->getContainer("AtDigiPar");
    if (!fPar)
-      fLogger->Fatal(MESSAGE_ORIGIN, "Cannot find AtDigiPar!");
+      gLogger->Fatal(MESSAGE_ORIGIN, "Cannot find AtDigiPar!");
 }
 
 void AtHDFParserTask::Exec(Option_t *opt)
@@ -228,7 +229,7 @@ void AtHDFParserTask::Exec(Option_t *opt)
    fRawEvent->Clear();
 
    if (fEventID > HDFParser->getLastEvent()) {
-      fLogger->Fatal(MESSAGE_ORIGIN, "Tried to unpack an event that was too large!");
+      gLogger->Fatal(MESSAGE_ORIGIN, "Tried to unpack an event that was too large!");
       return;
    }
 

@@ -1,4 +1,5 @@
 #include "AtAnalysis.h"
+#include "FairLogger.h"
 
 // FairRoot classes
 #include "FairRuntimeDb.h"
@@ -12,15 +13,15 @@ ClassImp(AtAnalysis)
 
    FairRun *run = FairRun::Instance();
    if (!run)
-      fLogger->Fatal(MESSAGE_ORIGIN, "No analysis run!");
+      gLogger->Fatal(MESSAGE_ORIGIN, "No analysis run!");
 
    FairRuntimeDb *db = run->GetRuntimeDb();
    if (!db)
-      fLogger->Fatal(MESSAGE_ORIGIN, "No runtime database!");
+      gLogger->Fatal(MESSAGE_ORIGIN, "No runtime database!");
 
    fPar = (AtDigiPar *)db->getContainer("AtDigiPar");
    if (!fPar)
-      fLogger->Fatal(MESSAGE_ORIGIN, "AtDigiPar not found!!");
+      gLogger->Fatal(MESSAGE_ORIGIN, "AtDigiPar not found!!");
 
    fNumTbs = fPar->GetNumTbs();
    fTBTime = fPar->GetTBTime();

@@ -1,6 +1,7 @@
 #include "AtAvalancheTask.h"
 
 // Fair class header
+#include "FairLogger.h"
 #include "FairRootManager.h"
 #include "FairRunAna.h"
 #include "FairRuntimeDb.h"
@@ -20,12 +21,12 @@ AtAvalancheTask::AtAvalancheTask() : FairTask("AtAvalanacheTask"), fEventID(0) {
 
 AtAvalancheTask::~AtAvalancheTask()
 {
-   fLogger->Debug(MESSAGE_ORIGIN, "Destructor of AtAvalancheTask");
+   gLogger->Debug(MESSAGE_ORIGIN, "Destructor of AtAvalancheTask");
 }
 
 void AtAvalancheTask::SetParContainers()
 {
-   fLogger->Debug(MESSAGE_ORIGIN, "SetParContainers of AtAvalancheTask");
+   gLogger->Debug(MESSAGE_ORIGIN, "SetParContainers of AtAvalancheTask");
 
    FairRunAna *ana = FairRunAna::Instance();
    FairRuntimeDb *rtdb = ana->GetRuntimeDb();
@@ -34,13 +35,13 @@ void AtAvalancheTask::SetParContainers()
 
 InitStatus AtAvalancheTask::Init()
 {
-   fLogger->Debug(MESSAGE_ORIGIN, "Initilization of AtAvalancheTask");
+   gLogger->Debug(MESSAGE_ORIGIN, "Initilization of AtAvalancheTask");
 
    FairRootManager *ioman = FairRootManager::Instance();
 
    fMCPointArray = (TClonesArray *)ioman->GetObject("AtTpcPoint");
    if (fMCPointArray == 0) {
-      fLogger->Error(MESSAGE_ORIGIN, "Cannot find fMCPointArray array!");
+      gLogger->Error(MESSAGE_ORIGIN, "Cannot find fMCPointArray array!");
       return kERROR;
    }
 
@@ -60,16 +61,16 @@ InitStatus AtAvalancheTask::Init()
 
 void AtAvalancheTask::Exec(Option_t *option)
 {
-   fLogger->Debug(MESSAGE_ORIGIN, "Exec of AtAvalancheTask");
+   gLogger->Debug(MESSAGE_ORIGIN, "Exec of AtAvalancheTask");
 
    /* if(!fElectronArray)
-      fLogger->Fatal(MESSAGE_ORIGIN,"No DigitizedElectronArray!");
+      gLogger->Fatal(MESSAGE_ORIGIN,"No DigitizedElectronArray!");
     fElectronArray -> Delete();*/
 
    Int_t nMCPoints = fMCPointArray->GetEntries();
    std::cout << " Number of MC Points " << nMCPoints << std::endl;
    if (nMCPoints < 10) {
-      fLogger->Warning(MESSAGE_ORIGIN, "Not enough hits for digitization! (<10)");
+      gLogger->Warning(MESSAGE_ORIGIN, "Not enough hits for digitization! (<10)");
       return;
    }
 
@@ -122,7 +123,7 @@ void AtAvalancheTask::Exec(Option_t *option)
 
    // Int_t nDriftElectrons = fElectronArray->GetEntriesFast();
 
-   /* fLogger->Info(MESSAGE_ORIGIN,
+   /* gLogger->Info(MESSAGE_ORIGIN,
                   Form("Event #%d : MC points (%d) found. Drift electrons (%d) created.",
                        fEventID++, nMCPoints, nDriftElectrons));*/
 

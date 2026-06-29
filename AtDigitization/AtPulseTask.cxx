@@ -3,6 +3,7 @@
 #include "AtTpcPoint.h"
 
 // Fair class header
+#include "FairLogger.h"
 #include "FairRootManager.h"
 #include "FairRunAna.h"
 #include "FairRuntimeDb.h"
@@ -78,7 +79,7 @@ InitStatus AtPulseTask::Init()
    // Retrieve kinematics for each simulated point
    fMCPointArray = (TClonesArray *)ioman->GetObject("AtTpcPoint");
    if (fMCPointArray == 0) {
-      fLogger->Error(MESSAGE_ORIGIN, "Cannot find fMCPointArray array!");
+      gLogger->Error(MESSAGE_ORIGIN, "Cannot find fMCPointArray array!");
       return kERROR;
    }
 

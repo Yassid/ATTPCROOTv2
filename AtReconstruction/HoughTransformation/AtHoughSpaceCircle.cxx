@@ -1,4 +1,5 @@
 #include "AtHoughSpaceCircle.h"
+#include "FairLogger.h"
 #include "AtMCMinimization.h"
 #include "AtMCQMinimization.h"
 #ifdef _OPENMP
@@ -53,15 +54,15 @@ ClassImp(AtHoughSpaceCircle)
 
    FairRun *run = FairRun::Instance();
    if (!run)
-      fLogger->Fatal(MESSAGE_ORIGIN, "No analysis run!");
+      gLogger->Fatal(MESSAGE_ORIGIN, "No analysis run!");
 
    FairRuntimeDb *db = run->GetRuntimeDb();
    if (!db)
-      fLogger->Fatal(MESSAGE_ORIGIN, "No runtime database!");
+      gLogger->Fatal(MESSAGE_ORIGIN, "No runtime database!");
 
    fPar = (AtDigiPar *)db->getContainer("AtDigiPar");
    if (!fPar)
-      fLogger->Fatal(MESSAGE_ORIGIN, "AtDigiPar not found!!");
+      gLogger->Fatal(MESSAGE_ORIGIN, "AtDigiPar not found!!");
 
    fDriftVelocity = fPar->GetDriftVelocity();
    fTBTime = fPar->GetTBTime();

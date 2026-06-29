@@ -1,5 +1,7 @@
 #include "AtSiArray.h"
 
+#include "FairLogger.h"
+
 #include "AtSiArrayPoint.h"
 #include "AtSiArrayGeo.h"
 #include "AtSiArrayGeoPar.h"

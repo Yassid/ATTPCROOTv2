@@ -64,10 +64,10 @@ SET(FAIRROOTPATH $ENV{FAIRROOTPATH})
 
 # where to look first for cmake modules, before ${CMAKE_ROOT}/Modules/
 # is checked
-set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/modules")
-set(CMAKE_MODULE_PATH "${FAIRROOTPATH}/share/fairbase/cmake/modules"  ${CMAKE_MODULE_PATH})
+set(CMAKE_MODULE_PATH "${FAIRROOTPATH}/share/fairbase/cmake/modules")
+set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/modules"  ${CMAKE_MODULE_PATH})
 
-Set(CheckSrcDir "${FAIRROOTPATH}/share/fairbase/cmake/checks")
+Set(CheckSrcDir "${CMAKE_SOURCE_DIR}/cmake/checks")
 
 find_package(FairRoot)
 
@@ -87,10 +87,10 @@ If(NOT CMAKE_BUILD_TYPE)
 EndIf(NOT CMAKE_BUILD_TYPE)
 Check_Compiler()
 
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
-set(CMAKE_CXX_FLAGS "-std=c++11 -O2")
+set(CMAKE_CXX_FLAGS "-std=c++17 -O2")
 
 #String(FIND "${CMAKE_CXX_FLAGS}" "-std=c++14" POS_C++11)
 #If(${POS_C++11} EQUAL -1)
@@ -146,6 +146,7 @@ endif()
 #set(PCL_DIR "/mnt/simulations/attpcroot/fair_install_2020/pcl_1.9.0_inst/share/pcl-1.9/")
 
 
+find_package(fmt REQUIRED)
 find_package(FairLogger 1.1.0 REQUIRED)
 find_package(ROOT 5.32.00 REQUIRED)
 find_package(Pythia8)
@@ -204,6 +205,9 @@ EndIf (Boost_FOUND)
 # set a variable which should be used in all CMakeLists.txt
 # Defines all basic include directories from fairbase
 SetBasicVariables()
+
+# ROOT 6.26 / FairRoot 19: VMC headers (TMCProcess.h, etc.) live in include/vmc
+include_directories(SYSTEM ${SIMPATH}/include/vmc)
 
 # Set the library version in the main CMakeLists.txt
 SET(FAIRROOT_MAJOR_VERSION 0)

@@ -1,5 +1,6 @@
 // FAIRROOT classes
 #include "FairRootManager.h"
+#include "FairLogger.h"
 #include "FairRun.h"
 #include "FairRuntimeDb.h"
 
@@ -40,22 +41,22 @@ InitStatus AtPhiRecoTask::Init()
 
    FairRootManager *ioMan = FairRootManager::Instance();
    if (ioMan == 0) {
-      fLogger->Error(MESSAGE_ORIGIN, "Cannot find RootManager!");
+      gLogger->Error(MESSAGE_ORIGIN, "Cannot find RootManager!");
       return kERROR;
    }
 
    fEventHArray = (TClonesArray *)ioMan->GetObject("AtEventH");
    if (fEventHArray == 0) {
-      fLogger->Error(MESSAGE_ORIGIN, "Cannot find AtEvent array!");
+      gLogger->Error(MESSAGE_ORIGIN, "Cannot find AtEvent array!");
       return kERROR;
    }
 
    if (fPhiRecoMode == 0) {
-      fLogger->Info(MESSAGE_ORIGIN, "Using AtPhiRecoSimple!");
+      gLogger->Info(MESSAGE_ORIGIN, "Using AtPhiRecoSimple!");
 
       fPhiReco = new AtPhiRecoSimple();
    } else if (fPhiRecoMode == 1) {
-      fLogger->Info(MESSAGE_ORIGIN, "Using AtPhiRecoTriple!");
+      gLogger->Info(MESSAGE_ORIGIN, "Using AtPhiRecoTriple!");
 
       fPhiReco = new AtPhiRecoTriple();
    }
@@ -72,15 +73,15 @@ void AtPhiRecoTask::SetParContainers()
 
    FairRun *run = FairRun::Instance();
    if (!run)
-      fLogger->Fatal(MESSAGE_ORIGIN, "No analysis run!");
+      gLogger->Fatal(MESSAGE_ORIGIN, "No analysis run!");
 
    FairRuntimeDb *db = run->GetRuntimeDb();
    if (!db)
-      fLogger->Fatal(MESSAGE_ORIGIN, "No runtime database!");
+      gLogger->Fatal(MESSAGE_ORIGIN, "No runtime database!");
 
    fPar = (AtDigiPar *)db->getContainer("AtDigiPar");
    if (!fPar)
-      fLogger->Fatal(MESSAGE_ORIGIN, "AtDigiPar not found!!");
+      gLogger->Fatal(MESSAGE_ORIGIN, "AtDigiPar not found!!");
 }
 
 void AtPhiRecoTask::Exec(Option_t *opt)

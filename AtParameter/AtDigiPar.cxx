@@ -1,4 +1,5 @@
 #include "AtDigiPar.h"
+#include "FairLogger.h"
 
 ClassImp(AtDigiPar)
 
@@ -169,168 +170,168 @@ Int_t AtDigiPar::GetTBTime()
 Bool_t AtDigiPar::getParams(FairParamList *paramList) // TODO Change all these parameters
 {
    if (!paramList) {
-      fLogger->Fatal(MESSAGE_ORIGIN, "Parameter list doesn't exist!");
+      gLogger->Fatal(MESSAGE_ORIGIN, "Parameter list doesn't exist!");
       return kFALSE;
    }
 
    if (!fInitialized) {
       if (!(paramList->fill("PadPlaneX", &fPadPlaneX))) {
-         fLogger->Fatal(MESSAGE_ORIGIN, "Cannot find PadPlaneX parameter!");
+         gLogger->Fatal(MESSAGE_ORIGIN, "Cannot find PadPlaneX parameter!");
          return kFALSE;
       }
       if (!(paramList->fill("PadPlaneZ", &fPadPlaneZ))) {
-         fLogger->Fatal(MESSAGE_ORIGIN, "Cannot find PadPlaneZ parameter!");
+         gLogger->Fatal(MESSAGE_ORIGIN, "Cannot find PadPlaneZ parameter!");
          return kFALSE;
       }
       if (!(paramList->fill("PadSizeX", &fPadSizeX))) {
-         fLogger->Fatal(MESSAGE_ORIGIN, "Cannot find PadSizeX parameter!");
+         gLogger->Fatal(MESSAGE_ORIGIN, "Cannot find PadSizeX parameter!");
          return kFALSE;
       }
       if (!(paramList->fill("PadSizeZ", &fPadSizeZ))) {
-         fLogger->Fatal(MESSAGE_ORIGIN, "Cannot find PadSizeZ parameter!");
+         gLogger->Fatal(MESSAGE_ORIGIN, "Cannot find PadSizeZ parameter!");
          return kFALSE;
       }
       if (!(paramList->fill("PadRows", &fPadRows))) {
-         fLogger->Fatal(MESSAGE_ORIGIN, "Cannot find PadRows parameter!");
+         gLogger->Fatal(MESSAGE_ORIGIN, "Cannot find PadRows parameter!");
          return kFALSE;
       }
       if (!(paramList->fill("PadLayers", &fPadLayers))) {
-         fLogger->Fatal(MESSAGE_ORIGIN, "Cannot find PadRows parameter!");
+         gLogger->Fatal(MESSAGE_ORIGIN, "Cannot find PadRows parameter!");
          return kFALSE;
       }
       if (!(paramList->fill("AnodeWirePlaneY", &fAnodeWirePlaneY))) {
-         fLogger->Fatal(MESSAGE_ORIGIN, "Cannot find AnodeWirePlaneY parameter!");
+         gLogger->Fatal(MESSAGE_ORIGIN, "Cannot find AnodeWirePlaneY parameter!");
          return kFALSE;
       }
       if (!(paramList->fill("GroundWirePlaneY", &fGroundWirePlaneY))) {
-         fLogger->Fatal(MESSAGE_ORIGIN, "Cannot find GroundWirePlaneY parameter!");
+         gLogger->Fatal(MESSAGE_ORIGIN, "Cannot find GroundWirePlaneY parameter!");
          return kFALSE;
       }
       if (!(paramList->fill("GatingWirePlaneY", &fGatingWirePlaneY))) {
-         fLogger->Fatal(MESSAGE_ORIGIN, "Cannot find GatingWirePlaneY parameter!");
+         gLogger->Fatal(MESSAGE_ORIGIN, "Cannot find GatingWirePlaneY parameter!");
          return kFALSE;
       }
       if (!(paramList->fill("EField", &fEField))) {
-         fLogger->Fatal(MESSAGE_ORIGIN, "Cannot find EField parameter!");
+         gLogger->Fatal(MESSAGE_ORIGIN, "Cannot find EField parameter!");
          return kFALSE;
       }
       if (!(paramList->fill("NumTbs", &fNumTbs))) {
-         fLogger->Fatal(MESSAGE_ORIGIN, "Cannot find NumTbs parameter!");
+         gLogger->Fatal(MESSAGE_ORIGIN, "Cannot find NumTbs parameter!");
          return kFALSE;
       }
       if (!(paramList->fill("SamplingRate", &fSamplingRate))) {
-         fLogger->Fatal(MESSAGE_ORIGIN, "Cannot find SamplingRate parameter!");
+         gLogger->Fatal(MESSAGE_ORIGIN, "Cannot find SamplingRate parameter!");
          return kFALSE;
       }
       if (!(paramList->fill("DriftVelocity", &fDriftVelocity))) {
-         fLogger->Fatal(MESSAGE_ORIGIN, "Cannot find DriftVelocity parameter!");
+         gLogger->Fatal(MESSAGE_ORIGIN, "Cannot find DriftVelocity parameter!");
          return kFALSE;
       }
       if (!(paramList->fill("DriftLength", &fDriftLength))) {
-         fLogger->Fatal(MESSAGE_ORIGIN, "Cannot find DriftLength parameter!");
+         gLogger->Fatal(MESSAGE_ORIGIN, "Cannot find DriftLength parameter!");
          return kFALSE;
       }
       if (!(paramList->fill("YDivider", &fYDivider))) {
-         fLogger->Fatal(MESSAGE_ORIGIN, "Cannot find YDivider parameter!");
+         gLogger->Fatal(MESSAGE_ORIGIN, "Cannot find YDivider parameter!");
          return kFALSE;
       }
       if (!(paramList->fill("GasFile", &fGasFile))) {
-         fLogger->Fatal(MESSAGE_ORIGIN, "Cannot find GasFile parameter!");
+         gLogger->Fatal(MESSAGE_ORIGIN, "Cannot find GasFile parameter!");
          return kFALSE;
       }
       if (!(paramList->fill("PadPlaneFile", &fPadPlaneFile))) {
-         fLogger->Fatal(MESSAGE_ORIGIN, "Cannot find PadPlaneFile parameter!");
+         gLogger->Fatal(MESSAGE_ORIGIN, "Cannot find PadPlaneFile parameter!");
          return kFALSE;
       }
       if (!(paramList->fill("PadShapeFile", &fPadShapeFile))) {
-         fLogger->Fatal(MESSAGE_ORIGIN, "Cannot find PadShapeFile parameter!");
+         gLogger->Fatal(MESSAGE_ORIGIN, "Cannot find PadShapeFile parameter!");
          return kFALSE;
       }
       if (!(paramList->fill("BField", &fBField))) {
-         fLogger->Fatal(MESSAGE_ORIGIN, "Cannot find BField parameter!");
+         gLogger->Fatal(MESSAGE_ORIGIN, "Cannot find BField parameter!");
          return kFALSE;
       }
       if (!(paramList->fill("TiltAng", &fTiltAng))) {
-         fLogger->Fatal(MESSAGE_ORIGIN, "Cannot find TiltAng parameter!");
+         gLogger->Fatal(MESSAGE_ORIGIN, "Cannot find TiltAng parameter!");
          return kFALSE;
       }
       if (!(paramList->fill("TB0", &fTB0))) {
-         fLogger->Fatal(MESSAGE_ORIGIN, "Cannot find TB0 parameter!");
+         gLogger->Fatal(MESSAGE_ORIGIN, "Cannot find TB0 parameter!");
          return kFALSE;
       }
 
       if (!(paramList->fill("LorentzAngle", &fThetaLorentz))) {
-         fLogger->Fatal(MESSAGE_ORIGIN, "Cannot find LorentzAngle parameter!");
+         gLogger->Fatal(MESSAGE_ORIGIN, "Cannot find LorentzAngle parameter!");
          return kFALSE;
       }
 
       if (!(paramList->fill("TBEntrance", &fTBEntrance))) {
-         fLogger->Fatal(MESSAGE_ORIGIN, "Cannot find TBEntrance parameter!");
+         gLogger->Fatal(MESSAGE_ORIGIN, "Cannot find TBEntrance parameter!");
          return kFALSE;
       }
 
       if (!(paramList->fill("ZPadPlane", &fZPadPlane))) {
-         fLogger->Fatal(MESSAGE_ORIGIN, "Cannot find ZPadPlane parameter!");
+         gLogger->Fatal(MESSAGE_ORIGIN, "Cannot find ZPadPlane parameter!");
          return kFALSE;
       }
 
       if (!(paramList->fill("Density", &fDensity))) {
-         fLogger->Fatal(MESSAGE_ORIGIN, "Cannot find Density parameter!");
+         gLogger->Fatal(MESSAGE_ORIGIN, "Cannot find Density parameter!");
          return kFALSE;
       }
 
       if (!(paramList->fill("ThetaPad", &fThetaPad))) {
-         fLogger->Fatal(MESSAGE_ORIGIN, "Cannot find ThetaPad parameter!");
+         gLogger->Fatal(MESSAGE_ORIGIN, "Cannot find ThetaPad parameter!");
          return kFALSE;
       }
 
       if (!(paramList->fill("ThetaRot", &fThetaRot))) {
-         fLogger->Fatal(MESSAGE_ORIGIN, "Cannot find ThetaRot parameter!");
+         gLogger->Fatal(MESSAGE_ORIGIN, "Cannot find ThetaRot parameter!");
          return kFALSE;
       }
 
       if (!(paramList->fill("GasPressure", &fGasPressure))) {
-         fLogger->Fatal(MESSAGE_ORIGIN, "Cannot find GasPressure parameter!");
+         gLogger->Fatal(MESSAGE_ORIGIN, "Cannot find GasPressure parameter!");
          return kFALSE;
       }
 
       if (!(paramList->fill("EIonize", &fEIonize))) {
-         fLogger->Fatal(MESSAGE_ORIGIN, "Cannot find EIonize parameter!");
+         gLogger->Fatal(MESSAGE_ORIGIN, "Cannot find EIonize parameter!");
          return kFALSE;
       }
 
       if (!(paramList->fill("Fano", &fFano))) {
-         fLogger->Fatal(MESSAGE_ORIGIN, "Cannot find Fano parameter!");
+         gLogger->Fatal(MESSAGE_ORIGIN, "Cannot find Fano parameter!");
          return kFALSE;
       }
 
       if (!(paramList->fill("CoefL", &fCoefL))) {
-         fLogger->Fatal(MESSAGE_ORIGIN, "Cannot find CoefL parameter!");
+         gLogger->Fatal(MESSAGE_ORIGIN, "Cannot find CoefL parameter!");
          return kFALSE;
       }
 
       if (!(paramList->fill("CoefT", &fCoefT))) {
-         fLogger->Fatal(MESSAGE_ORIGIN, "Cannot find CoefT parameter!");
+         gLogger->Fatal(MESSAGE_ORIGIN, "Cannot find CoefT parameter!");
          return kFALSE;
       }
 
       if (!(paramList->fill("Gain", &fGain))) {
-         fLogger->Fatal(MESSAGE_ORIGIN, "Cannot find Gain parameter!");
+         gLogger->Fatal(MESSAGE_ORIGIN, "Cannot find Gain parameter!");
          return kFALSE;
       }
 
       if (!(paramList->fill("GETGain", &fGETGain))) {
-         fLogger->Fatal(MESSAGE_ORIGIN, "Cannot find GETGain parameter!");
+         gLogger->Fatal(MESSAGE_ORIGIN, "Cannot find GETGain parameter!");
          return kFALSE;
       }
 
       if (!(paramList->fill("PeakingTime", &fPeakingTime))) {
-         fLogger->Fatal(MESSAGE_ORIGIN, "Cannot find PeakingTime parameter!");
+         gLogger->Fatal(MESSAGE_ORIGIN, "Cannot find PeakingTime parameter!");
          return kFALSE;
       }
 
       if (!(paramList->fill("MaxRange", &fMaxRange))) {
-         fLogger->Fatal(MESSAGE_ORIGIN, "Cannot find Gain parameter!");
+         gLogger->Fatal(MESSAGE_ORIGIN, "Cannot find Gain parameter!");
          return kFALSE;
       }
 
@@ -343,7 +344,7 @@ Bool_t AtDigiPar::getParams(FairParamList *paramList) // TODO Change all these p
 void AtDigiPar::putParams(FairParamList *paramList)
 {
    if (!paramList) {
-      fLogger->Fatal(MESSAGE_ORIGIN, "Parameter list doesn't exist!");
+      gLogger->Fatal(MESSAGE_ORIGIN, "Parameter list doesn't exist!");
       return;
    }
 
@@ -393,7 +394,7 @@ TString AtDigiPar::GetFile(Int_t fileNum)
    fileList.open(parFile.Data());
 
    if (!fileList) {
-      fLogger->Fatal(MESSAGE_ORIGIN, Form("File %s not found!", parFile.Data()));
+      gLogger->Fatal(MESSAGE_ORIGIN, Form("File %s not found!", parFile.Data()));
 
       throw;
    }
@@ -401,7 +402,7 @@ TString AtDigiPar::GetFile(Int_t fileNum)
    Char_t buffer[256];
    for (Int_t iFileNum = 0; iFileNum < fileNum + 1; ++iFileNum) {
       if (fileList.eof()) {
-         fLogger->Fatal(MESSAGE_ORIGIN, Form("Did not find string #%d in file %s.", fileNum, parFile.Data()));
+         gLogger->Fatal(MESSAGE_ORIGIN, Form("Did not find string #%d in file %s.", fileNum, parFile.Data()));
 
          throw;
       }

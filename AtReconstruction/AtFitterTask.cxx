@@ -1,4 +1,5 @@
 #include "AtFitterTask.h"
+#include "FairLogger.h"
 
 // AtTPCROOT classes
 #include "AtEvent.h"
@@ -68,20 +69,20 @@ InitStatus AtFitterTask::Init()
 {
    FairRootManager *ioMan = FairRootManager::Instance();
    if (ioMan == 0) {
-      fLogger->Error(MESSAGE_ORIGIN, "Cannot find RootManager!");
+      gLogger->Error(MESSAGE_ORIGIN, "Cannot find RootManager!");
       return kERROR;
    }
 
    fPatternEventArray = (TClonesArray *)ioMan->GetObject("AtPatternEvent");
    if (fPatternEventArray == 0) {
-      fLogger->Error(MESSAGE_ORIGIN, "Cannot find AtPatternEvent array!");
+      gLogger->Error(MESSAGE_ORIGIN, "Cannot find AtPatternEvent array!");
       return kERROR;
    }
 
    // Algorithm selection
 
    if (fFitterAlgorithm == 0) {
-      fLogger->Info(MESSAGE_ORIGIN, "Using GENFIT2");
+      gLogger->Info(MESSAGE_ORIGIN, "Using GENFIT2");
       std::cout << cGREEN << " AtFitterTask::Init - Fit parameters. "
                 << "\n";
       std::cout << " Magnetic Field       : " << fMagneticField << " T\n";
@@ -103,10 +104,10 @@ InitStatus AtFitterTask::Init()
       dynamic_cast<AtFITTER::AtGenfit *>(fFitter)->SetNumFitPoints(fNumFitPoints);
 
    } else if (fFitterAlgorithm == 1) {
-      fLogger->Error(MESSAGE_ORIGIN, "Fitter algorithm not defined!");
+      gLogger->Error(MESSAGE_ORIGIN, "Fitter algorithm not defined!");
       return kERROR;
    } else if (fFitterAlgorithm == 2) {
-      fLogger->Error(MESSAGE_ORIGIN, "Fitter algorithm not defined!");
+      gLogger->Error(MESSAGE_ORIGIN, "Fitter algorithm not defined!");
       return kERROR;
    }
 
@@ -118,19 +119,19 @@ InitStatus AtFitterTask::Init()
 
 void AtFitterTask::SetParContainers()
 {
-   fLogger->Debug(MESSAGE_ORIGIN, "SetParContainers of AtFitterTask");
+   gLogger->Debug(MESSAGE_ORIGIN, "SetParContainers of AtFitterTask");
 
    FairRun *run = FairRun::Instance();
    if (!run)
-      fLogger->Fatal(MESSAGE_ORIGIN, "No analysis run!");
+      gLogger->Fatal(MESSAGE_ORIGIN, "No analysis run!");
 
    FairRuntimeDb *db = run->GetRuntimeDb();
    if (!db)
-      fLogger->Fatal(MESSAGE_ORIGIN, "No runtime database!");
+      gLogger->Fatal(MESSAGE_ORIGIN, "No runtime database!");
 
    fPar = (AtDigiPar *)db->getContainer("AtDigiPar");
    if (!fPar)
-      fLogger->Fatal(MESSAGE_ORIGIN, "AtDigiPar not found!!");
+      gLogger->Fatal(MESSAGE_ORIGIN, "AtDigiPar not found!!");
 }
 
 void AtFitterTask::Exec(Option_t *option)

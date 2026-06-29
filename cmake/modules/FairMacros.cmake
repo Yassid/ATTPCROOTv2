@@ -263,8 +263,7 @@ IF(FAIRROOT_FOUND)
                      COMMAND ${CMAKE_COMMAND} -DSOURCE_DIR=${PROJECT_SOURCE_DIR}
 		     -DBINARY_DIR=${CMAKE_BINARY_DIR}	      
                      -DINCLUDE_OUTPUT_DIRECTORY=${INCLUDE_OUTPUT_DIRECTORY}
-                     -DFAIRROOT=${FAIRROOT_CMAKEMOD_DIR}
-                     -P ${FAIRROOT_CMAKEMOD_DIR}/modules/GenerateVersionInfo.cmake
+                     -P ${CMAKE_SOURCE_DIR}/cmake/modules/GenerateVersionInfo.cmake
                       )
 ELSE(FAIRROOT_FOUND)
   Add_Custom_Target(svnheader ALL)
@@ -288,6 +287,7 @@ IF(FAIRROOT_FOUND)
   Set(SYSTEM_INCLUDE_DIRECTORIES
     ${ROOT_INCLUDE_DIR}
     ${Boost_INCLUDE_DIRS}
+    ${SIMPATH}/include/vmc
   )
 ELSE(FAIRROOT_FOUND)
   Set(BASE_INCLUDE_DIRECTORIES

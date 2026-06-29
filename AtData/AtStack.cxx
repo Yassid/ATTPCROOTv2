@@ -136,7 +136,7 @@ TParticle *AtStack::PopPrimaryForTracking(Int_t iPrim)
 
    // Test for index
    if (iPrim < 0 || iPrim >= fNPrimaries) {
-      fLogger->Fatal(MESSAGE_ORIGIN, "AtStack: Primary index out of range! %i ", iPrim);
+      gLogger->Fatal(MESSAGE_ORIGIN, "AtStack: Primary index out of range! %i ", iPrim);
       Fatal("AtStack::PopPrimaryForTracking", "Index out of range");
    }
 
@@ -144,7 +144,7 @@ TParticle *AtStack::PopPrimaryForTracking(Int_t iPrim)
    // a primary.
    TParticle *part = (TParticle *)fParticles->At(iPrim);
    if (!(part->GetMother(0) < 0)) {
-      fLogger->Fatal(MESSAGE_ORIGIN, "AtStack:: Not a primary track! %i ", iPrim);
+      gLogger->Fatal(MESSAGE_ORIGIN, "AtStack:: Not a primary track! %i ", iPrim);
       Fatal("AtStack::PopPrimaryForTracking", "Not a primary track");
    }
 
@@ -157,7 +157,7 @@ TParticle *AtStack::GetCurrentTrack() const
 {
    TParticle *currentPart = GetParticle(fCurrentTrack);
    if (!currentPart) {
-      fLogger->Warning(MESSAGE_ORIGIN, "AtStack: Current track not found in stack!");
+      gLogger->Warning(MESSAGE_ORIGIN, "AtStack: Current track not found in stack!");
       Warning("AtStack::GetCurrentTrack", "Track not found in stack");
    }
    return currentPart;
@@ -179,7 +179,7 @@ void AtStack::AddParticle(TParticle *oldPart)
 void AtStack::FillTrackArray()
 {
 
-   fLogger->Debug(MESSAGE_ORIGIN, "AtStack: Filling MCTrack array...");
+   gLogger->Debug(MESSAGE_ORIGIN, "AtStack: Filling MCTrack array...");
 
    // --> Reset index map and number of output tracks
    fIndexMap.clear();
@@ -193,7 +193,7 @@ void AtStack::FillTrackArray()
 
       fStoreIter = fStoreMap.find(iPart);
       if (fStoreIter == fStoreMap.end()) {
-         fLogger->Fatal(MESSAGE_ORIGIN, "AtStack: Particle %i not found in storage map! ", iPart);
+         gLogger->Fatal(MESSAGE_ORIGIN, "AtStack: Particle %i not found in storage map! ", iPart);
          Fatal("AtStack::FillTrackArray", "Particle not found in storage map.");
       }
       Bool_t store = (*fStoreIter).second;
@@ -224,7 +224,7 @@ void AtStack::FillTrackArray()
 void AtStack::UpdateTrackIndex(TRefArray *detList)
 {
 
-   fLogger->Debug(MESSAGE_ORIGIN, "AtStack: Updating track indizes...");
+   gLogger->Debug(MESSAGE_ORIGIN, "AtStack: Updating track indizes...");
    Int_t nColl = 0;
 
    // First update mother ID in MCTracks
@@ -233,7 +233,7 @@ void AtStack::UpdateTrackIndex(TRefArray *detList)
       Int_t iMotherOld = track->GetMotherId();
       fIndexIter = fIndexMap.find(iMotherOld);
       if (fIndexIter == fIndexMap.end()) {
-         fLogger->Fatal(MESSAGE_ORIGIN, "AtStack: Particle index %i not found in dex map! ", iMotherOld);
+         gLogger->Fatal(MESSAGE_ORIGIN, "AtStack: Particle index %i not found in dex map! ", iMotherOld);
          Fatal("AtStack::UpdateTrackIndex", "Particle index not found in map");
       }
       track->SetMotherId((*fIndexIter).second);
@@ -264,7 +264,7 @@ void AtStack::UpdateTrackIndex(TRefArray *detList)
 
             fIndexIter = fIndexMap.find(iTrack);
             if (fIndexIter == fIndexMap.end()) {
-               fLogger->Fatal(MESSAGE_ORIGIN, "AtStack: Particle index %i not found in index map! ", iTrack);
+               gLogger->Fatal(MESSAGE_ORIGIN, "AtStack: Particle index %i not found in index map! ", iTrack);
                Fatal("AtStack::UpdateTrackIndex", "Particle index not found in map");
             }
             point->SetTrackID((*fIndexIter).second);
@@ -273,7 +273,7 @@ void AtStack::UpdateTrackIndex(TRefArray *detList)
 
       } // Collections of this detector
    }    // List of active detectors
-   fLogger->Debug(MESSAGE_ORIGIN, "...stack and  %i collections updated.", nColl);
+   gLogger->Debug(MESSAGE_ORIGIN, "...stack and  %i collections updated.", nColl);
 }
 // -------------------------------------------------------------------------
 
@@ -359,7 +359,7 @@ Int_t AtStack::GetCurrentParentTrackNumber() const
 TParticle *AtStack::GetParticle(Int_t trackID) const
 {
    if (trackID < 0 || trackID >= fNParticles) {
-      fLogger->Debug(MESSAGE_ORIGIN, "AtStack: Particle index %i out of range.", trackID);
+      gLogger->Debug(MESSAGE_ORIGIN, "AtStack: Particle index %i out of range.", trackID);
       Fatal("AtStack::GetParticle", "Index out of range");
    }
    return (TParticle *)fParticles->At(trackID);

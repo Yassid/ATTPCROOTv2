@@ -1,4 +1,5 @@
 #include "AtDecoderSpecMATTask.h"
+#include "FairLogger.h"
 
 // FAIRROOT classes
 #include "FairRootManager.h"
@@ -120,7 +121,7 @@ Long64_t AtDecoderSpecMATTask::GetEventID() { return fEventIDLast; }
 InitStatus AtDecoderSpecMATTask::Init() {
   FairRootManager *ioMan = FairRootManager::Instance();
   if (ioMan == 0) {
-    fLogger->Error(MESSAGE_ORIGIN, "Cannot find RootManager!");
+    gLogger->Error(MESSAGE_ORIGIN, "Cannot find RootManager!");
 
     return kERROR;
   }
@@ -153,7 +154,7 @@ InitStatus AtDecoderSpecMATTask::Init() {
   Bool_t kMapIn = fDecoder->SetAtTpcMap(fMap);
   // std::cout<<kMapIn<<std::endl;
   if (!kMapIn) {
-    fLogger->Error(MESSAGE_ORIGIN, "Cannot find SpecMAT Map!");
+    gLogger->Error(MESSAGE_ORIGIN, "Cannot find SpecMAT Map!");
 
     return kERROR;
   }
@@ -205,15 +206,15 @@ InitStatus AtDecoderSpecMATTask::Init() {
 void AtDecoderSpecMATTask::SetParContainers() {
   FairRun *run = FairRun::Instance();
   if (!run)
-    fLogger->Fatal(MESSAGE_ORIGIN, "No analysis run!");
+    gLogger->Fatal(MESSAGE_ORIGIN, "No analysis run!");
 
   FairRuntimeDb *db = run->GetRuntimeDb();
   if (!db)
-    fLogger->Fatal(MESSAGE_ORIGIN, "No runtime database!");
+    gLogger->Fatal(MESSAGE_ORIGIN, "No runtime database!");
 
   fPar = (AtDigiPar *)db->getContainer("AtDigiPar");
   if (!fPar)
-    fLogger->Fatal(MESSAGE_ORIGIN, "Cannot find AtDigiPar!");
+    gLogger->Fatal(MESSAGE_ORIGIN, "Cannot find AtDigiPar!");
 }
 
 void AtDecoderSpecMATTask::Exec(Option_t *opt) {
@@ -256,7 +257,7 @@ void AtDecoderSpecMATTask::FinishEvent() {
   fRawEvent = fDecoder->GetRawEvent();
 
   if (fRawEvent == NULL) {
-    fLogger->Info(MESSAGE_ORIGIN, "End of file. Terminating FairRun.");
+    gLogger->Info(MESSAGE_ORIGIN, "End of file. Terminating FairRun.");
     FairRootManager::Instance()->SetFinishRun();
   }
 }

@@ -15,14 +15,14 @@
 AtTrackFinderHCTask::AtTrackFinderHCTask() : FairTask("AtTrackFinderHCTask")
 {
    fLogger = FairLogger::GetLogger();
-   fLogger->Debug(MESSAGE_ORIGIN, "Defaul Constructor of AtTrackFinderHCTask");
+   gLogger->Debug(MESSAGE_ORIGIN, "Defaul Constructor of AtTrackFinderHCTask");
    fPar = NULL;
    kIsPersistence = kFALSE;
 }
 
 AtTrackFinderHCTask::~AtTrackFinderHCTask()
 {
-   fLogger->Debug(MESSAGE_ORIGIN, "Destructor of AtTrackFinderHCTask");
+   gLogger->Debug(MESSAGE_ORIGIN, "Destructor of AtTrackFinderHCTask");
 }
 
 void AtTrackFinderHCTask::SetPersistence(Bool_t value)
@@ -32,37 +32,37 @@ void AtTrackFinderHCTask::SetPersistence(Bool_t value)
 
 void AtTrackFinderHCTask::SetParContainers()
 {
-   fLogger->Debug(MESSAGE_ORIGIN, "SetParContainers of AtHierarchicalClusteringTask");
+   gLogger->Debug(MESSAGE_ORIGIN, "SetParContainers of AtHierarchicalClusteringTask");
 
    FairRun *run = FairRun::Instance();
    if (!run)
-      fLogger->Fatal(MESSAGE_ORIGIN, "No analysis run!");
+      gLogger->Fatal(MESSAGE_ORIGIN, "No analysis run!");
 
    FairRuntimeDb *db = run->GetRuntimeDb();
    if (!db)
-      fLogger->Fatal(MESSAGE_ORIGIN, "No runtime database!");
+      gLogger->Fatal(MESSAGE_ORIGIN, "No runtime database!");
 
    fPar = (AtDigiPar *)db->getContainer("AtDigiPar");
    if (!fPar)
-      fLogger->Fatal(MESSAGE_ORIGIN, "AtDigiPar not found!!");
+      gLogger->Fatal(MESSAGE_ORIGIN, "AtDigiPar not found!!");
 }
 
 InitStatus AtTrackFinderHCTask::Init()
 {
-   fLogger->Debug(MESSAGE_ORIGIN, "Initilization of AtTrackFinderHCTaskTask");
+   gLogger->Debug(MESSAGE_ORIGIN, "Initilization of AtTrackFinderHCTaskTask");
 
    fTrackFinderHCArray = new TClonesArray("AtTrackFinderHC");
 
    // Get a handle from the IO manager
    FairRootManager *ioMan = FairRootManager::Instance();
    if (ioMan == 0) {
-      fLogger->Error(MESSAGE_ORIGIN, "Cannot find RootManager!");
+      gLogger->Error(MESSAGE_ORIGIN, "Cannot find RootManager!");
       return kERROR;
    }
 
    fEventHArray = (TClonesArray *)ioMan->GetObject("AtEventH");
    if (fEventHArray == 0) {
-      fLogger->Error(MESSAGE_ORIGIN, "Cannot find AtEvent array!");
+      gLogger->Error(MESSAGE_ORIGIN, "Cannot find AtEvent array!");
       return kERROR;
    }
 
@@ -73,7 +73,7 @@ InitStatus AtTrackFinderHCTask::Init()
 
 void AtTrackFinderHCTask::Exec(Option_t *option)
 {
-   fLogger->Debug(MESSAGE_ORIGIN, "Exec of AtTrackFinderHCTask");
+   gLogger->Debug(MESSAGE_ORIGIN, "Exec of AtTrackFinderHCTask");
 
    fTrackFinderHCArray->Delete();
 
@@ -100,5 +100,5 @@ void AtTrackFinderHCTask::Exec(Option_t *option)
 
 void AtTrackFinderHCTask::Finish()
 {
-   fLogger->Debug(MESSAGE_ORIGIN, "Finish of AtTrackFinderHCTask");
+   gLogger->Debug(MESSAGE_ORIGIN, "Finish of AtTrackFinderHCTask");
 }

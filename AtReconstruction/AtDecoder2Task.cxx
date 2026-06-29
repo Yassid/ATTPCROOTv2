@@ -1,4 +1,5 @@
 #include "AtDecoder2Task.h"
+#include "FairLogger.h"
 
 //#include "STGlobal.h"
 //#include "STDebugLogger.h"
@@ -149,7 +150,7 @@ InitStatus AtDecoder2Task::Init()
 
    FairRootManager *ioMan = FairRootManager::Instance();
    if (ioMan == 0) {
-      fLogger->Error(MESSAGE_ORIGIN, "Cannot find RootManager!");
+      gLogger->Error(MESSAGE_ORIGIN, "Cannot find RootManager!");
 
       return kERROR;
    }
@@ -188,7 +189,7 @@ InitStatus AtDecoder2Task::Init()
    Bool_t kMapIn = fDecoder->SetAtTpcMap(fMap);
 
    if (!kMapIn) {
-      fLogger->Error(MESSAGE_ORIGIN, "Cannot find AtTPC Map!");
+      gLogger->Error(MESSAGE_ORIGIN, "Cannot find AtTPC Map!");
 
       return kERROR;
    }
@@ -207,15 +208,15 @@ void AtDecoder2Task::SetParContainers()
 {
    FairRun *run = FairRun::Instance();
    if (!run)
-      fLogger->Fatal(MESSAGE_ORIGIN, "No analysis run!");
+      gLogger->Fatal(MESSAGE_ORIGIN, "No analysis run!");
 
    FairRuntimeDb *db = run->GetRuntimeDb();
    if (!db)
-      fLogger->Fatal(MESSAGE_ORIGIN, "No runtime database!");
+      gLogger->Fatal(MESSAGE_ORIGIN, "No runtime database!");
 
    fPar = (AtDigiPar *)db->getContainer("AtDigiPar");
    if (!fPar)
-      fLogger->Fatal(MESSAGE_ORIGIN, "Cannot find AtDigiPar!");
+      gLogger->Fatal(MESSAGE_ORIGIN, "Cannot find AtDigiPar!");
 }
 
 void AtDecoder2Task::Exec(Option_t *opt)
@@ -260,7 +261,7 @@ void AtDecoder2Task::FinishEvent()
    fRawEvent = fDecoder->GetRawEvent();
 
    if (fRawEvent == NULL) {
-      fLogger->Info(MESSAGE_ORIGIN, "End of file. Terminating FairRun.");
+      gLogger->Info(MESSAGE_ORIGIN, "End of file. Terminating FairRun.");
       FairRootManager::Instance()->SetFinishRun();
    }
 }

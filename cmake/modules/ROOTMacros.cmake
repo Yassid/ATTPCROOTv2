@@ -79,9 +79,13 @@ Macro(ROOT_GENERATE_DICTIONARY_NEW)
   Format(Int_DEF "${Int_DEF}" "-D" "")
 
   set_source_files_properties(${Int_DICTIONARY} PROPERTIES GENERATED TRUE)
+  # ROOT 6 emits a <dict>_rdict.pcm next to the dictionary; ROOT looks for it
+  # next to the library, so copy it into the library output directory.
+  string(REGEX REPLACE "\\.cxx$" "_rdict.pcm" Int_PCM "${Int_DICTIONARY}")
   If (CMAKE_SYSTEM_NAME MATCHES Linux)
     add_custom_command(OUTPUT  ${Int_DICTIONARY}
-                       COMMAND LD_LIBRARY_PATH=${ROOT_LIBRARY_DIR}:${_intel_lib_dirs}:$ENV{LD_LIBRARY_PATH} ROOTSYS=${ROOTSYS} ${ROOT_CINT_EXECUTABLE} -f ${Int_DICTIONARY} -c  ${Int_DEF} ${Int_INC} ${Int_HDRS} ${Int_LINKDEF}
+                       COMMAND LD_LIBRARY_PATH=${ROOT_LIBRARY_DIR}:${_intel_lib_dirs}:$ENV{LD_LIBRARY_PATH} ROOTSYS=${ROOTSYS} ${ROOT_CINT_EXECUTABLE} -f ${Int_DICTIONARY} -rmf ${LIBRARY_OUTPUT_PATH}/lib${LIBRARY_NAME}.rootmap -rml lib${LIBRARY_NAME}.so -c  ${Int_DEF} ${Int_INC} ${Int_HDRS} ${Int_LINKDEF}
+                       COMMAND ${CMAKE_COMMAND} -E copy ${Int_PCM} ${LIBRARY_OUTPUT_PATH}/
                        DEPENDS ${Int_HDRS} ${Int_LINKDEF}
                        )
   Else (CMAKE_SYSTEM_NAME MATCHES Linux)
@@ -200,14 +204,9 @@ Macro(ROOT_GENERATE_ROOTMAP)
     set(Int_LIB ${LIBRARY_NAME})
     set(Int_OUTFILE ${LIBRARY_OUTPUT_PATH}/lib${Int_LIB}.rootmap)
 
-    add_custom_command(OUTPUT ${Int_OUTFILE}
-                       COMMAND ${RLIBMAP_EXECUTABLE} -o ${Int_OUTFILE} -l ${Int_LIB}
-                               -d ${Int_DEPENDENCIES} -c ${Int_LINKDEF}
-                       DEPENDS ${Int_LINKDEF} ${RLIBMAP_EXECUTABLE} )
-    add_custom_target( lib${Int_LIB}.rootmap ALL DEPENDS  ${Int_OUTFILE})
-    set_target_properties(lib${Int_LIB}.rootmap PROPERTIES FOLDER RootMaps )
-    #---Install the rootmap file------------------------------------
-    #install(FILES ${Int_OUTFILE} DESTINATION lib COMPONENT libraries)
+    # ROOT 6: the .rootmap is produced by rootcling during dictionary
+    # generation (-rmf/-rml in ROOT_GENERATE_DICTIONARY_NEW). The standalone
+    # rlibmap tool no longer exists, so we only install the generated file.
     install(FILES ${Int_OUTFILE} DESTINATION lib)
   endif(DEFINED LINKDEF)
 EndMacro(ROOT_GENERATE_ROOTMAP)

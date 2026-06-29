@@ -1,5 +1,6 @@
 
 #include "AtS800Task.h"
+#include "FairLogger.h"
 
 // FAIRROOT classes
 #include "FairRootManager.h"
@@ -63,11 +64,11 @@ void AtS800Task::SetParContainers()
 
    FairRun *run = FairRun::Instance();
    if (!run)
-      fLogger->Fatal(MESSAGE_ORIGIN, "No analysis run!");
+      gLogger->Fatal(MESSAGE_ORIGIN, "No analysis run!");
 
    FairRuntimeDb *db = run->GetRuntimeDb();
    if (!db)
-      fLogger->Fatal(MESSAGE_ORIGIN, "No runtime database!");
+      gLogger->Fatal(MESSAGE_ORIGIN, "No runtime database!");
 
    /*fPar = (AtDigiPar *) db -> getContainer("AtDigiPar");
    if (!fPar)

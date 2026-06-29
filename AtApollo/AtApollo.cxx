@@ -6,6 +6,8 @@
  *                  copied verbatim in the file "LICENSE"                       *
  ********************************************************************************/
 #include "AtApollo.h"
+
+#include "FairLogger.h"
 #include "AtApolloPoint.h"
 
 #include "FairVolume.h"

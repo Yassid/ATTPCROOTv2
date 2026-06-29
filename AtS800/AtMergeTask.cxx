@@ -1,5 +1,7 @@
 #include "AtMergeTask.h"
+#include "FairLogger.h"
 #include "TFile.h"
+#include "TKey.h"
 // FAIRROOT classes
 #include "FairRootManager.h"
 #include "FairRun.h"
@@ -250,13 +252,13 @@ InitStatus AtMergeTask::Init()
 
    FairRootManager *ioMan = FairRootManager::Instance();
    if (ioMan == 0) {
-      fLogger->Error(MESSAGE_ORIGIN, "Cannot find RootManager!");
+      gLogger->Error(MESSAGE_ORIGIN, "Cannot find RootManager!");
       return kERROR;
    }
 
    fRawEventArray = (TClonesArray *)ioMan->GetObject("AtRawEvent");
    if (fRawEventArray == 0) {
-      fLogger->Error(MESSAGE_ORIGIN, "Cannot find AtRawEvent array!");
+      gLogger->Error(MESSAGE_ORIGIN, "Cannot find AtRawEvent array!");
       return kERROR;
    }
 

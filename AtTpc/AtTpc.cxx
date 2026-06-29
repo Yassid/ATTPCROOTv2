@@ -7,6 +7,8 @@
  ********************************************************************************/
 #include "AtTpc.h"
 
+#include "FairLogger.h"
+
 #include "AtTpcPoint.h"
 #include "AtTpcGeo.h"
 #include "AtTpcGeoPar.h"

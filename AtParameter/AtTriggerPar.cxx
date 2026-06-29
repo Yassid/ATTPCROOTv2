@@ -1,4 +1,5 @@
 #include "AtTriggerPar.h"
+#include "FairLogger.h"
 
 ClassImp(AtTriggerPar)
 
@@ -56,49 +57,49 @@ Double_t AtTriggerPar::GetTrigger_height()
 Bool_t AtTriggerPar::getParams(FairParamList *paramList)
 {
    if (!paramList) {
-      fLogger->Fatal(MESSAGE_ORIGIN, "Parameter list doesn't exist!");
+      gLogger->Fatal(MESSAGE_ORIGIN, "Parameter list doesn't exist!");
       return kFALSE;
    }
 
    if (!fInitialized) {
       if (!(paramList->fill("Write_clock", &fWrite_clock))) {
-         fLogger->Fatal(MESSAGE_ORIGIN, "Cannot find write_clock parameter!");
+         gLogger->Fatal(MESSAGE_ORIGIN, "Cannot find write_clock parameter!");
          return kFALSE;
       }
       if (!(paramList->fill("Read_clock", &fRead_clock))) {
-         fLogger->Fatal(MESSAGE_ORIGIN, "Cannot find read_clock parameter!");
+         gLogger->Fatal(MESSAGE_ORIGIN, "Cannot find read_clock parameter!");
          return kFALSE;
       }
       if (!(paramList->fill("Master_clock", &fMaster_clock))) {
-         fLogger->Fatal(MESSAGE_ORIGIN, "Cannot find master_clock parameter!");
+         gLogger->Fatal(MESSAGE_ORIGIN, "Cannot find master_clock parameter!");
          return kFALSE;
       }
       if (!(paramList->fill("Pad_thresh_MSB", &fPad_thresh_MSB))) {
-         fLogger->Fatal(MESSAGE_ORIGIN, "Cannot find pad_thresh_MSB parameter!");
+         gLogger->Fatal(MESSAGE_ORIGIN, "Cannot find pad_thresh_MSB parameter!");
          return kFALSE;
       }
       if (!(paramList->fill("Pad_thresh_LSB", &fPad_thresh_LSB))) {
-         fLogger->Fatal(MESSAGE_ORIGIN, "Cannot find pad_thresh_LSB parameter!");
+         gLogger->Fatal(MESSAGE_ORIGIN, "Cannot find pad_thresh_LSB parameter!");
          return kFALSE;
       }
       if (!(paramList->fill("Trigger_signal_width", &fTrigger_signal_width))) {
-         fLogger->Fatal(MESSAGE_ORIGIN, "Cannot find trigger_signal_width parameter!");
+         gLogger->Fatal(MESSAGE_ORIGIN, "Cannot find trigger_signal_width parameter!");
          return kFALSE;
       }
       if (!(paramList->fill("Trigger_discriminator_fraction", &fTrigger_discriminator_fraction))) {
-         fLogger->Fatal(MESSAGE_ORIGIN, "Cannot find trigger_discriminator_fraction parameter!");
+         gLogger->Fatal(MESSAGE_ORIGIN, "Cannot find trigger_discriminator_fraction parameter!");
          return kFALSE;
       }
       if (!(paramList->fill("Multiplicity_threshold", &fMultiplicity_threshold))) {
-         fLogger->Fatal(MESSAGE_ORIGIN, "Cannot find multiplicity_threshold parameter!");
+         gLogger->Fatal(MESSAGE_ORIGIN, "Cannot find multiplicity_threshold parameter!");
          return kFALSE;
       }
       if (!(paramList->fill("Multiplicity_window", &fMultiplicity_window))) {
-         fLogger->Fatal(MESSAGE_ORIGIN, "Cannot find multiplicity_window parameter!");
+         gLogger->Fatal(MESSAGE_ORIGIN, "Cannot find multiplicity_window parameter!");
          return kFALSE;
       }
       if (!(paramList->fill("Trigger_height", &fTrigger_height))) {
-         fLogger->Fatal(MESSAGE_ORIGIN, "Cannot find trigger_height parameter!");
+         gLogger->Fatal(MESSAGE_ORIGIN, "Cannot find trigger_height parameter!");
          return kFALSE;
       }
    }
@@ -108,7 +109,7 @@ Bool_t AtTriggerPar::getParams(FairParamList *paramList)
 void AtTriggerPar::putParams(FairParamList *paramList)
 {
    if (!paramList) {
-      fLogger->Fatal(MESSAGE_ORIGIN, "Parameter list doesn't exist!");
+      gLogger->Fatal(MESSAGE_ORIGIN, "Parameter list doesn't exist!");
       return;
    }
 
@@ -132,7 +133,7 @@ TString AtTriggerPar::GetFile(Int_t fileNum)
    fileList.open(parFile.Data());
 
    if (!fileList) {
-      fLogger->Fatal(MESSAGE_ORIGIN, Form("File %s not found!", parFile.Data()));
+      gLogger->Fatal(MESSAGE_ORIGIN, Form("File %s not found!", parFile.Data()));
 
       throw;
    }
@@ -140,7 +141,7 @@ TString AtTriggerPar::GetFile(Int_t fileNum)
    Char_t buffer[256];
    for (Int_t iFileNum = 0; iFileNum < fileNum + 1; ++iFileNum) {
       if (fileList.eof()) {
-         fLogger->Fatal(MESSAGE_ORIGIN, Form("Did not find string #%d in file %s.", fileNum, parFile.Data()));
+         gLogger->Fatal(MESSAGE_ORIGIN, Form("Did not find string #%d in file %s.", fileNum, parFile.Data()));
 
          throw;
       }

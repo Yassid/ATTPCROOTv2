@@ -2,6 +2,7 @@
 
 // FairRoot Classes
 #include "FairLogger.h"
+#include "FairRootManager.h"
 
 // Root Classes
 #include "AtFilter.h"

@@ -1,6 +1,7 @@
 #include "AtClusterizeTask.h"
 
 // Fair class header
+#include "FairLogger.h"
 #include "FairRootManager.h"
 #include "FairRunAna.h"
 #include "FairRuntimeDb.h"
@@ -22,12 +23,12 @@ AtClusterizeTask::AtClusterizeTask() : FairTask("AtClusterizeTask"), fEventID(0)
 
 AtClusterizeTask::~AtClusterizeTask()
 {
-   fLogger->Debug(MESSAGE_ORIGIN, "Destructor of AtClusterizeTask");
+   gLogger->Debug(MESSAGE_ORIGIN, "Destructor of AtClusterizeTask");
 }
 
 void AtClusterizeTask::SetParContainers()
 {
-   fLogger->Debug(MESSAGE_ORIGIN, "SetParContainers of AtAvalancheTask");
+   gLogger->Debug(MESSAGE_ORIGIN, "SetParContainers of AtAvalancheTask");
 
    FairRunAna *ana = FairRunAna::Instance();
    FairRuntimeDb *rtdb = ana->GetRuntimeDb();
@@ -36,13 +37,13 @@ void AtClusterizeTask::SetParContainers()
 
 InitStatus AtClusterizeTask::Init()
 {
-   fLogger->Debug(MESSAGE_ORIGIN, "Initilization of AtClusterizeTask");
+   gLogger->Debug(MESSAGE_ORIGIN, "Initilization of AtClusterizeTask");
 
    FairRootManager *ioman = FairRootManager::Instance();
 
    fMCPointArray = (TClonesArray *)ioman->GetObject("AtTpcPoint");
    if (fMCPointArray == 0) {
-      fLogger->Error(MESSAGE_ORIGIN, "Cannot find fMCPointArray array!");
+      gLogger->Error(MESSAGE_ORIGIN, "Cannot find fMCPointArray array!");
       return kERROR;
    }
 
@@ -68,11 +69,11 @@ InitStatus AtClusterizeTask::Init()
 
 void AtClusterizeTask::Exec(Option_t *option)
 {
-   fLogger->Debug(MESSAGE_ORIGIN, "Exec of AtClusterizeTask");
+   gLogger->Debug(MESSAGE_ORIGIN, "Exec of AtClusterizeTask");
    Int_t nMCPoints = fMCPointArray->GetEntries();
    // std::cout<<"AtClusterizeTask: Number of MC Points "<<nMCPoints<<std::endl;
    /*if(nMCPoints<10){
-     fLogger->Warning(MESSAGE_ORIGIN, "Not enough hits for digitization! (<10)");
+     gLogger->Warning(MESSAGE_ORIGIN, "Not enough hits for digitization! (<10)");
      return;
    }*///Commented to process all events
 
