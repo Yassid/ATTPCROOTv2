@@ -190,6 +190,7 @@ Int_t AtTpcMap::fill_coord(int pindex, float padxoff, float padyoff, float trisi
    AtPadCoord[pindex][1][1] = padyoff + fort * triside * TMath::Sqrt(3.) / 2.;
    AtPadCoord[pindex][2][0] = padxoff + triside;
    AtPadCoord[pindex][2][1] = padyoff;
+   return 0;
 }
 
 TH2Poly *AtTpcMap::GetAtTpcPlane()
