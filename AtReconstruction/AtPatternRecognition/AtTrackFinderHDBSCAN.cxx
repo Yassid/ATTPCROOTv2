@@ -505,6 +505,53 @@ void motionJoin(std::vector<std::vector<int>> &clusters, const std::vector<P3> &
       clusters.push_back(std::move(kv.second));
 }
 
+// Per-cluster Local Outlier Factor (sklearn LOF). Returns the indices kept (inliers); points with
+// LOF > thr are outliers. k = max(2, scale*n). Mirrors Spyral clean_cluster / outlier_scale_factor.
+std::vector<int> lofClean(const std::vector<int> &idx, const std::vector<P3> &P, double scale, double thr)
+{
+   int n = (int)idx.size();
+   if (n < 3 || scale <= 0)
+      return idx;
+   int k = std::max(2, (int)(scale * n));
+   k = std::min(k, n - 1);
+   auto d3 = [&](int a, int b) {
+      double dx = P[idx[a]][0] - P[idx[b]][0], dy = P[idx[a]][1] - P[idx[b]][1], dz = P[idx[a]][2] - P[idx[b]][2];
+      return std::sqrt(dx * dx + dy * dy + dz * dz);
+   };
+   std::vector<std::vector<int>> knn(n);
+   std::vector<double> kdist(n);
+   std::vector<std::pair<double, int>> dd;
+   for (int i = 0; i < n; ++i) {
+      dd.clear();
+      for (int j = 0; j < n; ++j)
+         if (j != i)
+            dd.push_back({d3(i, j), j});
+      std::partial_sort(dd.begin(), dd.begin() + k, dd.end());
+      knn[i].reserve(k);
+      for (int t = 0; t < k; ++t)
+         knn[i].push_back(dd[t].second);
+      kdist[i] = dd[k - 1].first;
+   }
+   std::vector<double> lrd(n);
+   for (int i = 0; i < n; ++i) {
+      double s = 0;
+      for (int j : knn[i])
+         s += std::max(kdist[j], d3(i, j)); // reachability distance
+      lrd[i] = s > 0 ? k / s : 1e18;
+   }
+   std::vector<int> kept;
+   kept.reserve(n);
+   for (int i = 0; i < n; ++i) {
+      double s = 0;
+      for (int j : knn[i])
+         s += lrd[j];
+      double lof = lrd[i] > 0 ? s / (k * lrd[i]) : 1.0;
+      if (lof <= thr)
+         kept.push_back(idx[i]);
+   }
+   return kept;
+}
+
 } // namespace
 
 std::unique_ptr<AtPatternEvent> AtPATTERN::AtTrackFinderHDBSCAN::FindTracks(AtEvent &event)
@@ -548,6 +595,11 @@ std::unique_ptr<AtPatternEvent> AtPATTERN::AtTrackFinderHDBSCAN::FindTracks(AtEv
       joinClusters(clusters, pts, fJoinMethod, fCircleOverlapRatio, fMinClusterSizeJoin, fJoinZFraction,
                    fJoinRadiusFraction, fDirectionThreshold);
    }
+
+   // per-cluster Local Outlier Factor cleaning (Spyral): strip the scattered haze inside each cluster
+   if (fOutlierScaleFactor > 0)
+      for (auto &cl : clusters)
+         cl = lofClean(cl, pts, fOutlierScaleFactor, fOutlierThreshold);
 
    auto retEvent = std::make_unique<AtPatternEvent>();
    std::vector<char> claimed(nHits, 0);

@@ -46,6 +46,9 @@ private:
    // --- "motion" join: vertex-seeded smooth-trajectory following (lightweight equation-of-motion) ---
    double fMotionGapTol{40.0};       ///< max position gap (mm) between chunk ends to chain
    double fMotionAngleTol{35.0};     ///< max tangent-continuity angle (deg) at the junction
+   // --- per-cluster Local Outlier Factor cleaning (Spyral outlier_scale_factor), after the join ---
+   double fOutlierScaleFactor{0.05}; ///< LOF n_neighbors = scale*clusterSize (min 2); <=0 disables
+   double fOutlierThreshold{1.5};    ///< LOF > this => outlier -> noise (sklearn contamination='auto')
 
 public:
    AtTrackFinderHDBSCAN() = default;
@@ -67,6 +70,8 @@ public:
    void SetDirectionThreshold(double t) { fDirectionThreshold = t; }
    void SetMotionGapTol(double g) { fMotionGapTol = g; }
    void SetMotionAngleTol(double a) { fMotionAngleTol = a; }
+   void SetOutlierScaleFactor(double s) { fOutlierScaleFactor = s; } // <=0 disables LOF cleaning
+   void SetOutlierThreshold(double t) { fOutlierThreshold = t; }
 
    ClassDefOverride(AtTrackFinderHDBSCAN, 1);
 };
