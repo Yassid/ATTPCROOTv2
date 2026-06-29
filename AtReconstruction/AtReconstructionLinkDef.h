@@ -30,6 +30,7 @@
 #pragma link C++ nestedtypedef;
 
 #pragma link C++ class AtPATTERN::AtTrackFinderTC + ;
+#pragma link C++ class AtPATTERN::AtTrackFinderHDBSCAN + ;
 #pragma link C++ class AtPATTERN::AtTrackFinderRiemann + ;
 #pragma link C++ class AtPATTERN::AtPRA + ;
 #pragma link C++ namespace AtPATTERN;

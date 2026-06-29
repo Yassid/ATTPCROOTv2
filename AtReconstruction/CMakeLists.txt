@@ -105,6 +105,7 @@ set(SRCS
   AtPatternRecognition/triplclust/src/directedgraph.cxx
   AtPatternRecognition/triplclust/src/postprocess.cxx
   AtPatternRecognition/AtTrackFinderTC.cxx
+  AtPatternRecognition/AtTrackFinderHDBSCAN.cxx
   AtPatternRecognition/AtTrackFinderRiemann.cxx
 
   AtPatternModificationTask.cxx
