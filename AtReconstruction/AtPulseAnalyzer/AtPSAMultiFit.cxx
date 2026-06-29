@@ -135,14 +135,17 @@ AtPSAMultiFit::HitVector AtPSAMultiFit::AnalyzePad(AtPad *pad)
    int lo = std::max(1, seeds.front() - 5);
    int hi = std::min(510, (int)(seeds.back() + 5 * tauTB));
 
-   // sum-of-pulses model, params [A_i, t0_i]
-   auto model = [this, n, tauTB](double *x, double *p) {
+   // sum-of-pulses model, params [A_i, t0_i] (+ a shared peaking time tau as the last param if floated)
+   const bool floatTau = fFloatTau || fFitChi2Cut > 0; // chi2 shape gate needs a width-adaptive fit
+   const int nPar = 2 * n + (floatTau ? 1 : 0);
+   auto model = [this, n, tauTB, floatTau](double *x, double *p) {
+      double tau = floatTau ? p[2 * n] : tauTB;
       double y = 0;
       for (int i = 0; i < n; ++i)
-         y += p[2 * i] * Response(x[0], p[2 * i + 1], tauTB);
+         y += p[2 * i] * Response(x[0], p[2 * i + 1], tau);
       return y;
    };
-   TF1 tf("AtMFfit", model, lo, hi, 2 * n, 1, TF1::EAddToList::kNo);
+   TF1 tf("AtMFfit", model, lo, hi, nPar, 1, TF1::EAddToList::kNo);
    for (int i = 0; i < n; ++i) {
       double A0 = adc[seeds[i]] / fRespPeakVal;
       double t00 = seeds[i] - peakOff;
@@ -150,6 +153,10 @@ AtPSAMultiFit::HitVector AtPSAMultiFit::AnalyzePad(AtPad *pad)
       tf.SetParLimits(2 * i, 0, 5 * A0 + 10);
       tf.SetParameter(2 * i + 1, t00);
       tf.SetParLimits(2 * i + 1, t00 - tauTB, t00 + tauTB);
+   }
+   if (floatTau) {
+      tf.SetParameter(2 * n, tauTB);
+      tf.SetParLimits(2 * n, 0.4 * tauTB, 8 * tauTB); // generous: a real diffuse pulse just broadens tau
    }
 
    // fit a LOCAL, directory-detached histogram (no thread_local -> no teardown segfault)
@@ -181,6 +188,25 @@ AtPSAMultiFit::HitVector AtPSAMultiFit::AnalyzePad(AtPad *pad)
       if (good && errA > 0 && A / errA < fMinSignif) {
          LOG(debug) << "Reject pulse: A/sigma(A) = " << A / errA << " < " << fMinSignif;
          continue;
+      }
+      // SHAPE gate: local reduced chi2 of (data - fitted pulse model) in noise units, over this peak's
+      // window. A real pulse (any width, via floated tau) matches the GET shape -> chi2/ndf ~ 1; a noise
+      // hump (wrong shape) -> chi2/ndf >> 1. No hardcoded width -- the fit decides.
+      if (fFitChi2Cut > 0 && good) {
+         double chi2 = 0;
+         int nb = 0;
+         int b0 = std::max(0, (int)wLo), b1 = std::min(fNumTbs - 1, (int)(wHi + 0.5));
+         for (int b = b0; b <= b1; ++b) {
+            double resid = adc[b] - tf.Eval(b + 0.5);
+            chi2 += resid * resid;
+            nb++;
+         }
+         double ndf = nb - 2; // ~2 free params per peak (A, t0)
+         double redChi2 = (ndf > 0) ? chi2 / (noise * noise * ndf) : 0;
+         if (redChi2 > fFitChi2Cut) {
+            LOG(debug) << "Reject pulse: shape redChi2 = " << redChi2 << " > " << fFitChi2Cut;
+            continue;
+         }
       }
 
       pos.SetZ(CalibrateZ(peakTB, pad->GetPadNum())); // base: per-pad offset + Spyral/Geo z

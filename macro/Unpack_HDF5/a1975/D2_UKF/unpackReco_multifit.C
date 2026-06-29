@@ -8,7 +8,7 @@ void unpackReco_multifit(TString fileName = "run_0300", Long64_t nEvents = 0, Bo
                          TString outDir = "/mnt/f/a1975/reco_d2/", TString filepath = "/home/yassid/spyral_d2/h5/",
                          Bool_t doSC = false, Bool_t applyTimeCorr = true, TString psaType = "multifit",
                          Double_t primSigma = 0, Double_t thr = 20, TString praType = "tc", int hdMcs = 20,
-                         int hdMs = 8)
+                         int hdMs = 8, Double_t fitChi2 = 0)
 {
    gSystem->Load("libAtReconstruction.so");
    TStopwatch timer; timer.Start();
@@ -64,6 +64,10 @@ void unpackReco_multifit(TString fileName = "run_0300", Long64_t nEvents = 0, Bo
       p->SetPeakingTime(0.720);
       p->SetMaxPeaks(4);
       p->SetMinSeparation(4);
+      if (fitChi2 > 0) {
+         p->SetFitChi2Cut(fitChi2); // fit-shape gate (float-tau + local reduced-chi2) to drop noise humps
+         std::cout << "PSA   : fit-shape chi2 gate at " << fitChi2 << std::endl;
+      }
       // primSigma>0: GENTLE prominence on primary at that sigma (keeps diffused far-drift pulses,
       // drops only flat baseline humps). primSigma==0: prominence off (= AtPSAMax behavior).
       if (primSigma > 0) {
