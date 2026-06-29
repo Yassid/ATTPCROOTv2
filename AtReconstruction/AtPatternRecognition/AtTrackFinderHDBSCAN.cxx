@@ -388,6 +388,123 @@ void joinClusters(std::vector<std::vector<int>> &clusters, const std::vector<P3>
    }
 }
 
+// "motion" join: vertex-seeded smooth-trajectory following (lightweight equation-of-motion proxy).
+// Anchors at the vertex (low-transverse-radius region), then chains chunks whose ends connect with
+// CONTINUOUS tangent (direction of travel), allowing curvature to evolve (energy loss) -- unlike the
+// fixed-circle joins. gapTol = max end-to-end gap (mm); angleTolDeg = max tangent mismatch at junction.
+void motionJoin(std::vector<std::vector<int>> &clusters, const std::vector<P3> &P, double gapTol,
+                double angleTolDeg, int minSizeJoin)
+{
+   int m = clusters.size();
+   if (m < 2)
+      return;
+   const double cosTol = std::cos(angleTolDeg * M_PI / 180.0);
+   auto d3 = [](const P3 &a, const P3 &b) {
+      double dx = a[0] - b[0], dy = a[1] - b[1], dz = a[2] - b[2];
+      return std::sqrt(dx * dx + dy * dy + dz * dz);
+   };
+   auto dot = [](const P3 &a, const P3 &b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; };
+
+   // vertex proxy: centroid of the lowest-transverse-radius decile of all clustered hits
+   std::vector<double> rxy;
+   for (auto &cl : clusters)
+      for (int p : cl)
+         rxy.push_back(std::sqrt(P[p][0] * P[p][0] + P[p][1] * P[p][1]));
+   if (rxy.empty())
+      return;
+   std::vector<double> srt = rxy;
+   std::sort(srt.begin(), srt.end());
+   double rcut = srt[srt.size() / 10];
+   P3 V{0, 0, 0};
+   int vcnt = 0;
+   for (auto &cl : clusters)
+      for (int p : cl)
+         if (std::sqrt(P[p][0] * P[p][0] + P[p][1] * P[p][1]) <= rcut) {
+            V[0] += P[p][0]; V[1] += P[p][1]; V[2] += P[p][2]; vcnt++;
+         }
+   if (vcnt > 0) { V[0] /= vcnt; V[1] /= vcnt; V[2] /= vcnt; }
+
+   // per-chunk: near/far ends (near = closer to V) + travel tangent at each (oriented near->far)
+   struct Ends { P3 nearP, farP, nearT, farT; bool ok; };
+   std::vector<Ends> E(m);
+   for (int c = 0; c < m; ++c) {
+      E[c].ok = false;
+      auto &cl = clusters[c];
+      if ((int)cl.size() < minSizeJoin)
+         continue;
+      int e0 = cl[0], e1 = cl[0];
+      double best = -1;
+      for (size_t i = 0; i < cl.size(); ++i)
+         for (size_t j = i + 1; j < cl.size(); ++j) {
+            double dd = d3(P[cl[i]], P[cl[j]]);
+            if (dd > best) { best = dd; e0 = cl[i]; e1 = cl[j]; }
+         }
+      P3 p0 = P[e0], p1 = P[e1];
+      if (d3(p0, V) > d3(p1, V)) std::swap(p0, p1);
+      E[c].nearP = p0; E[c].farP = p1;
+      auto travelTangent = [&](P3 endP, bool outward) {
+         std::vector<std::pair<double, int>> dn;
+         for (int p : cl) dn.push_back({d3(P[p], endP), p});
+         std::sort(dn.begin(), dn.end());
+         int K = std::min((int)dn.size(), 8);
+         P3 cen{0, 0, 0};
+         for (int t = 0; t < K; ++t) { cen[0] += P[dn[t].second][0]; cen[1] += P[dn[t].second][1]; cen[2] += P[dn[t].second][2]; }
+         cen[0] /= K; cen[1] /= K; cen[2] /= K;
+         P3 dir = outward ? P3{endP[0] - cen[0], endP[1] - cen[1], endP[2] - cen[2]}
+                          : P3{cen[0] - endP[0], cen[1] - endP[1], cen[2] - endP[2]};
+         double nn = std::sqrt(dot(dir, dir));
+         if (nn > 1e-9) { dir[0] /= nn; dir[1] /= nn; dir[2] /= nn; }
+         return dir;
+      };
+      E[c].nearT = travelTangent(p0, false); // travel direction entering the near end
+      E[c].farT = travelTangent(p1, true);   // travel direction leaving the far end
+      E[c].ok = true;
+   }
+
+   // greedy: seed from the chunk nearest the vertex, chain outward by tangent continuity
+   std::vector<int> order(m);
+   std::iota(order.begin(), order.end(), 0);
+   std::sort(order.begin(), order.end(), [&](int a, int b) {
+      double da = E[a].ok ? d3(E[a].nearP, V) : 1e18, db = E[b].ok ? d3(E[b].nearP, V) : 1e18;
+      return da < db;
+   });
+   std::vector<int> group(m);
+   std::iota(group.begin(), group.end(), 0);
+   std::vector<char> used(m, 0);
+   for (int s : order) {
+      if (!E[s].ok || used[s])
+         continue;
+      used[s] = 1;
+      P3 leadP = E[s].farP, leadT = E[s].farT;
+      while (true) {
+         int bestC = -1;
+         double bestGap = gapTol;
+         for (int c = 0; c < m; ++c) {
+            if (!E[c].ok || used[c]) continue;
+            double gap = d3(leadP, E[c].nearP);
+            if (gap >= bestGap) continue;
+            if (dot(leadT, E[c].nearT) < cosTol) continue; // tangent continuity
+            P3 g{E[c].nearP[0] - leadP[0], E[c].nearP[1] - leadP[1], E[c].nearP[2] - leadP[2]};
+            double gn = std::sqrt(dot(g, g));
+            if (gn > 1e-6) { g[0] /= gn; g[1] /= gn; g[2] /= gn; if (dot(leadT, g) < cosTol) continue; } // gap points along travel
+            bestC = c; bestGap = gap;
+         }
+         if (bestC < 0) break;
+         used[bestC] = 1;
+         group[bestC] = s;
+         leadP = E[bestC].farP;
+         leadT = E[bestC].farT;
+      }
+   }
+   std::map<int, std::vector<int>> merged;
+   for (int c = 0; c < m; ++c)
+      for (int p : clusters[c])
+         merged[group[c]].push_back(p);
+   clusters.clear();
+   for (auto &kv : merged)
+      clusters.push_back(std::move(kv.second));
+}
+
 } // namespace
 
 std::unique_ptr<AtPatternEvent> AtPATTERN::AtTrackFinderHDBSCAN::FindTracks(AtEvent &event)
@@ -415,7 +532,14 @@ std::unique_ptr<AtPatternEvent> AtPATTERN::AtTrackFinderHDBSCAN::FindTracks(AtEv
       clusters.push_back(std::move(kv.second));
 
    // Spyral-style joining of over-segmented pieces. "both" = continuity (safe z-stitching) then overlap.
-   if (fJoinMethod == "both") {
+   // "motion" = vertex-seeded smooth-trajectory following (lightweight equation-of-motion).
+   if (fJoinMethod == "motion") {
+      motionJoin(clusters, pts, fMotionGapTol, fMotionAngleTol, fMinClusterSizeJoin);
+   } else if (fJoinMethod == "mover") { // motion (end-to-end energy-loss) then overlap (spiral splits)
+      motionJoin(clusters, pts, fMotionGapTol, fMotionAngleTol, fMinClusterSizeJoin);
+      joinClusters(clusters, pts, "overlap", fCircleOverlapRatio, fMinClusterSizeJoin, fJoinZFraction,
+                   fJoinRadiusFraction, fDirectionThreshold);
+   } else if (fJoinMethod == "both") {
       joinClusters(clusters, pts, "continuity", fCircleOverlapRatio, fMinClusterSizeJoin, fJoinZFraction,
                    fJoinRadiusFraction, fDirectionThreshold);
       joinClusters(clusters, pts, "overlap", fCircleOverlapRatio, fMinClusterSizeJoin, fJoinZFraction,

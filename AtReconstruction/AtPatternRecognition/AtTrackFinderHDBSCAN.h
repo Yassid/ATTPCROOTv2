@@ -43,6 +43,9 @@ private:
    double fJoinZFraction{0.2};       ///< continuity: z-gap < join_z_fraction * (total z extent)
    double fJoinRadiusFraction{0.3};  ///< continuity: rho diff < join_radius_fraction * avg radius
    double fDirectionThreshold{0.5};  ///< forward/backward decision; only same-direction clusters merge
+   // --- "motion" join: vertex-seeded smooth-trajectory following (lightweight equation-of-motion) ---
+   double fMotionGapTol{40.0};       ///< max position gap (mm) between chunk ends to chain
+   double fMotionAngleTol{35.0};     ///< max tangent-continuity angle (deg) at the junction
 
 public:
    AtTrackFinderHDBSCAN() = default;
@@ -62,6 +65,8 @@ public:
    void SetJoinZFraction(double f) { fJoinZFraction = f; }
    void SetJoinRadiusFraction(double f) { fJoinRadiusFraction = f; }
    void SetDirectionThreshold(double t) { fDirectionThreshold = t; }
+   void SetMotionGapTol(double g) { fMotionGapTol = g; }
+   void SetMotionAngleTol(double a) { fMotionAngleTol = a; }
 
    ClassDefOverride(AtTrackFinderHDBSCAN, 1);
 };
