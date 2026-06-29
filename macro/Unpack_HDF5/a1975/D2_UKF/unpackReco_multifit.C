@@ -7,7 +7,8 @@
 void unpackReco_multifit(TString fileName = "run_0300", Long64_t nEvents = 0, Bool_t persistRaw = true,
                          TString outDir = "/mnt/f/a1975/reco_d2/", TString filepath = "/home/yassid/spyral_d2/h5/",
                          Bool_t doSC = false, Bool_t applyTimeCorr = true, TString psaType = "multifit",
-                         Double_t primSigma = 0)
+                         Double_t primSigma = 0, Double_t thr = 20, TString praType = "tc", int hdMcs = 20,
+                         int hdMs = 8)
 {
    gSystem->Load("libAtReconstruction.so");
    TStopwatch timer; timer.Start();
@@ -54,12 +55,12 @@ void unpackReco_multifit(TString fileName = "run_0300", Long64_t nEvents = 0, Bo
    AtPSA *psa = nullptr;
    if (psaType == "max") {
       auto p = new AtPSAMax();
-      p->SetThreshold(20);
+      p->SetThreshold(thr);
       psa = p;
       std::cout << "PSA   : AtPSAMax" << std::endl;
    } else {
       auto p = new AtPSAMultiFit();
-      p->SetThreshold(20);
+      p->SetThreshold(thr);
       p->SetPeakingTime(0.720);
       p->SetMaxPeaks(4);
       p->SetMinSeparation(4);
@@ -86,9 +87,20 @@ void unpackReco_multifit(TString fileName = "run_0300", Long64_t nEvents = 0, Bo
    auto SCTask = new AtSpaceChargeCorrectionTask(std::move(SCModel));
    SCTask->SetInputBranch("AtEventH");
 
-   auto praAlgo = std::make_unique<AtPATTERN::AtTrackFinderTC>();
-   praAlgo->SetClusterRadius(15.0);
-   praAlgo->SetClusterDistance(7.5);
+   std::unique_ptr<AtPATTERN::AtPRA> praAlgo;
+   if (praType == "hdbscan") {
+      auto p = std::make_unique<AtPATTERN::AtTrackFinderHDBSCAN>();
+      p->SetMinClusterSize(hdMcs);
+      p->SetMinSamples(hdMs);
+      praAlgo = std::move(p);
+      std::cout << "PRA   : AtTrackFinderHDBSCAN (mcs " << hdMcs << ", ms " << hdMs << ")" << std::endl;
+   } else {
+      auto p = std::make_unique<AtPATTERN::AtTrackFinderTC>();
+      p->SetClusterRadius(15.0);
+      p->SetClusterDistance(7.5);
+      praAlgo = std::move(p);
+      std::cout << "PRA   : AtTrackFinderTC (triplclust)" << std::endl;
+   }
    AtPRAtask *praTask = new AtPRAtask(std::move(praAlgo));
    praTask->SetInputBranch(doSC ? "AtEventCorrected" : "AtEventH"); // skip SC to test z
    praTask->SetOutputBranch("AtPatternEvent");
