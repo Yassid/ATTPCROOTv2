@@ -168,6 +168,7 @@ AtPSAMultiFit::HitVector AtPSAMultiFit::AnalyzePad(AtPad *pad)
    }
    auto r = h.Fit(&tf, "SQNR");
    bool good = r.Get() && r->IsValid();
+   double tauFit = (floatTau && good) ? tf.GetParameter(2 * n) : tauTB; // fitted (shared) peaking time
 
    double ampCut = threshold; // keep gate matches AtPSAMax; prominence already vetted extra peaks
    HitVector hits;
@@ -189,22 +190,26 @@ AtPSAMultiFit::HitVector AtPSAMultiFit::AnalyzePad(AtPad *pad)
          LOG(debug) << "Reject pulse: A/sigma(A) = " << A / errA << " < " << fMinSignif;
          continue;
       }
-      // SHAPE gate: local reduced chi2 of (data - fitted pulse model) in noise units, over this peak's
-      // window. A real pulse (any width, via floated tau) matches the GET shape -> chi2/ndf ~ 1; a noise
-      // hump (wrong shape) -> chi2/ndf >> 1. No hardcoded width -- the fit decides.
-      if (fFitChi2Cut > 0 && good) {
+      // SHAPE gate (amplitude-relative): local reduced chi2 of (data - fitted pulse) over this peak's window,
+      // with effective sigma^2 = noise^2 + (relErr*model)^2. A real pulse of ANY width/amplitude matches the
+      // GET shape -> chi2 ~ 1; a wrong-shaped noise hump -> chi2 >> 1. The relErr term stops a BRIGHT pulse
+      // (beam) being penalized for the model's small shape approximation. No hardcoded width -- the fit decides.
+      double redChi2 = 0;
+      if (floatTau && good) {
          double chi2 = 0;
          int nb = 0;
          int b0 = std::max(0, (int)wLo), b1 = std::min(fNumTbs - 1, (int)(wHi + 0.5));
          for (int b = b0; b <= b1; ++b) {
-            double resid = adc[b] - tf.Eval(b + 0.5);
-            chi2 += resid * resid;
+            double model = tf.Eval(b + 0.5);
+            double resid = adc[b] - model;
+            double sig2 = noise * noise + (fFitRelErr * model) * (fFitRelErr * model);
+            chi2 += resid * resid / sig2;
             nb++;
          }
          double ndf = nb - 2; // ~2 free params per peak (A, t0)
-         double redChi2 = (ndf > 0) ? chi2 / (noise * noise * ndf) : 0;
-         if (redChi2 > fFitChi2Cut) {
-            LOG(debug) << "Reject pulse: shape redChi2 = " << redChi2 << " > " << fFitChi2Cut;
+         redChi2 = (ndf > 0) ? chi2 / ndf : 0;
+         if (fFitChi2Cut > 0 && redChi2 > fFitChi2Cut) {
+            LOG(debug) << "Reject pulse: rel shape redChi2 = " << redChi2 << " > " << fFitChi2Cut;
             continue;
          }
       }
@@ -214,6 +219,8 @@ AtPSAMultiFit::HitVector AtPSAMultiFit::AnalyzePad(AtPad *pad)
       hit->SetTimeStamp(peakTB);
       hit->SetTimeStampCorr(peakTB);
       hit->SetTraceIntegral(Q);
+      hit->SetChargeVariance(redChi2);         // fit-shape chi2, stashed for the distribution / diagnostics
+      hit->SetTimeStampCorrInter(tauFit);      // fitted peaking time, stashed for diagnostics
       hits.push_back(std::move(hit));
    }
    return hits;

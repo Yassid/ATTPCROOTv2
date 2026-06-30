@@ -8,7 +8,7 @@ void unpackReco_multifit(TString fileName = "run_0300", Long64_t nEvents = 0, Bo
                          TString outDir = "/mnt/f/a1975/reco_d2/", TString filepath = "/home/yassid/spyral_d2/h5/",
                          Bool_t doSC = false, Bool_t applyTimeCorr = true, TString psaType = "multifit",
                          Double_t primSigma = 0, Double_t thr = 20, TString praType = "tc", int hdMcs = 20,
-                         int hdMs = 8, Double_t fitChi2 = 0)
+                         int hdMs = 8, Double_t fitChi2 = 0, Double_t relErr = 0.1)
 {
    gSystem->Load("libAtReconstruction.so");
    TStopwatch timer; timer.Start();
@@ -64,9 +64,12 @@ void unpackReco_multifit(TString fileName = "run_0300", Long64_t nEvents = 0, Bo
       p->SetPeakingTime(0.720);
       p->SetMaxPeaks(4);
       p->SetMinSeparation(4);
-      if (fitChi2 > 0) {
-         p->SetFitChi2Cut(fitChi2); // fit-shape gate (float-tau + local reduced-chi2) to drop noise humps
-         std::cout << "PSA   : fit-shape chi2 gate at " << fitChi2 << std::endl;
+      if (fitChi2 != 0) {                // <0 = compute+store chi2 but DON'T gate (diagnostic distribution)
+         p->SetFloatPeakingTime(true);
+         p->SetFitRelErr(relErr);
+         if (fitChi2 > 0)
+            p->SetFitChi2Cut(fitChi2);   // fit-shape gate (amplitude-relative local reduced-chi2)
+         std::cout << "PSA   : float-tau, chi2 " << (fitChi2 > 0 ? "gate" : "diag(no gate)") << std::endl;
       }
       // primSigma>0: GENTLE prominence on primary at that sigma (keeps diffused far-drift pulses,
       // drops only flat baseline humps). primSigma==0: prominence off (= AtPSAMax behavior).
@@ -94,10 +97,16 @@ void unpackReco_multifit(TString fileName = "run_0300", Long64_t nEvents = 0, Bo
    std::unique_ptr<AtPATTERN::AtPRA> praAlgo;
    if (praType == "hdbscan") {
       auto p = std::make_unique<AtPATTERN::AtTrackFinderHDBSCAN>();
-      p->SetMinClusterSize(hdMcs);
-      p->SetMinSamples(hdMs);
+      p->SetMinClusterSize(hdMcs);            // 0 = adaptive (Spyral); validated mover config below
+      p->SetMinSamples(hdMs);                 // 3 = Spyral min_points
+      p->SetClusterSelectionEpsilon(10.0);
+      p->SetJoinMethod("mover");              // motion (energy-loss) + overlap (spiral splits)
+      p->SetMinClusterSizeJoin(15);
+      p->SetCircleOverlapRatio(0.25);
+      p->SetMotionGapTol(40);
+      p->SetMotionAngleTol(35);               // LOF cleaning stays at default 0.05 (gentle, marks haze noise)
       praAlgo = std::move(p);
-      std::cout << "PRA   : AtTrackFinderHDBSCAN (mcs " << hdMcs << ", ms " << hdMs << ")" << std::endl;
+      std::cout << "PRA   : AtTrackFinderHDBSCAN mover (mcs " << hdMcs << ", ms " << hdMs << ", cse 10)" << std::endl;
    } else {
       auto p = std::make_unique<AtPATTERN::AtTrackFinderTC>();
       p->SetClusterRadius(15.0);

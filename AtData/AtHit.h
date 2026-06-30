@@ -80,6 +80,7 @@ public:
    const XYZVector &GetPositionVariance() const { return fPositionVariance; }
    XYZVector GetPositionSigma() const;
    Double_t GetCharge() const { return fCharge; }
+   Double_t GetChargeVariance() const { return fChargeVariance; }
    Int_t GetPadNum() const { return fPadNum; }
    Double_t GetTraceIntegral() const { return fTraceIntegral; }
    Int_t GetHitMult() const { return fHitMult; }

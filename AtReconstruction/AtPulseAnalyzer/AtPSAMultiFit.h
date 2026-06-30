@@ -43,9 +43,13 @@ private:
                                  ///< far-drift pulses -> collapses track z. Only enable if noise pads are a problem.
                                  ///< (FWHM ~50-90 TB, low prominence) that a threshold-only primary would keep.
    Bool_t fFloatTau{false};      ///< let the peaking time float in the fit (else fixed)
-   Double_t fFitChi2Cut{0};      ///< if >0, reject a peak whose LOCAL reduced chi2 (data vs fitted GET pulse,
-                                 ///< in noise units) exceeds this -> the trace is not a real pulse SHAPE (noise
-                                 ///< hump). Pairs with fFloatTau so a real BROAD pulse fits and survives.
+   Double_t fFitChi2Cut{0};      ///< if >0, reject a peak whose LOCAL reduced chi2 (data vs fitted GET pulse)
+                                 ///< exceeds this -> trace is not a real pulse SHAPE (noise hump). >0 also turns
+                                 ///< on float-tau so a real BROAD pulse fits and survives. chi2 stored in
+                                 ///< AtHit::ChargeVariance (computed whenever float-tau is on, for diagnostics).
+   Double_t fFitRelErr{0.1};     ///< fractional model error: effective sigma^2 = noise^2 + (relErr*model)^2.
+                                 ///< Keeps the chi2 amplitude-relative so a BRIGHT well-fit pulse (e.g. beam)
+                                 ///< isn't penalized for the GET model's ~relErr shape approximation.
    // Spyral-style z calibration (SetSpyralZ) + per-pad time map are now provided by the base AtPSA.
 
    // response constants, precomputed in Init() (reduced-time units)
@@ -67,6 +71,7 @@ public:
    void SetProminenceOnPrimary(Bool_t v) { fPromPrimary = v; } ///< false = old behavior (primary=threshold only)
    void SetFloatPeakingTime(Bool_t v) { fFloatTau = v; }
    void SetFitChi2Cut(Double_t c) { fFitChi2Cut = c; } ///< local reduced-chi2 shape gate; 0 disables
+   void SetFitRelErr(Double_t e) { fFitRelErr = e; }   ///< fractional model error in the chi2 effective sigma
    // SetSpyralZ / LoadPadTimeOffsets are inherited from AtPSA.
 
 private:

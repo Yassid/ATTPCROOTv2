@@ -608,8 +608,16 @@ std::unique_ptr<AtPatternEvent> AtPATTERN::AtTrackFinderHDBSCAN::FindTracks(AtEv
       AtTrack track;
       for (int pi : cl) { track.AddHit(event.GetHit(pi)); claimed[pi] = 1; }
       track.SetTrackID(trackID++);
-      if (track.GetHitArray().size() > 0)
+      if (track.GetHitArray().size() > 0) {
          SetTrackInitialParameters(track);
+         // Clusterize raw hits into AtHitClusters: the genfit/UKF fitters consume the track's
+         // HitClusterArray (AtGenfitter reads GetHitClusterArray), NOT the raw HitArray. Without
+         // this the cluster array is empty and every fit fails (0 measurements). Mirrors triplclust.
+         track.ResetHitClusterArray();
+         fTrackTransformer->ClusterizeSmooth3D(track, fClusterRadius > 0 ? fClusterRadius : 15.0,
+                                               fClusterDistance > 0 ? fClusterDistance : 7.5);
+         OrderClustersAlongTrack(track);
+      }
       retEvent->AddTrack(std::move(track));
    }
    for (int i = 0; i < nHits; ++i)
