@@ -8,12 +8,13 @@ void unpackReco_multifit(TString fileName = "run_0300", Long64_t nEvents = 0, Bo
                          TString outDir = "/mnt/f/a1975/reco_d2/", TString filepath = "/home/yassid/spyral_d2/h5/",
                          Bool_t doSC = false, Bool_t applyTimeCorr = true, TString psaType = "multifit",
                          Double_t primSigma = 0, Double_t thr = 20, TString praType = "tc", int hdMcs = 20,
-                         int hdMs = 8, Double_t fitChi2 = 0, Double_t relErr = 0.1)
+                         int hdMs = 8, Double_t fitChi2 = 0, Double_t relErr = 0.1,
+                         TString parFile = "ATTPC.a1975_deuterium.par")
 {
    gSystem->Load("libAtReconstruction.so");
    TStopwatch timer; timer.Start();
 
-   TString parameterFile = "ATTPC.a1975_deuterium.par";
+   TString parameterFile = parFile; // deuterium: ATTPC.a1975_deuterium.par; 16C+p proton-target: ATTPC.a1954.par
    TString inputFile = filepath + fileName + ".h5";
    TString dir = getenv("VMCWORKDIR");
    TString mapDir = dir + "/scripts/ANL2023.xml";
