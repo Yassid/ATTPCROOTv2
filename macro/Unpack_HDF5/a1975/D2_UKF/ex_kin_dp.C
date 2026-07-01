@@ -72,7 +72,7 @@ void ex_kin_dp(double Ebeam = 192.0, double keMax = 50.0, const char *cache = "p
    }
 
    TH2F *hk =
-      new TH2F("hk", "^{16}C(d,p)^{17}C kinematics;#theta_{lab} [deg];proton KE [MeV]", 180, 0, 180, 150, 0, 25);
+      new TH2F("hk", "^{16}C(d,p)^{17}C kinematics;#theta_{lab} [deg];proton KE [MeV]", 360, 0, 180, 500, 0, 25);
    t->Draw("ke:theta>>hk", "chi2ndf<5", "goff");
 
    // theoretical curves for a few Ex

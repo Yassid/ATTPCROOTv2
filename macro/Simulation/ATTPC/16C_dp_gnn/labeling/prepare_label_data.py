@@ -1,0 +1,56 @@
+#!/usr/bin/env python
+"""Select real REACTION-candidate events for hand labeling.
+
+From a real event dump (data/real_events.csv: event,x,y,z,q) keep only events that
+look like a reaction (a dense off-axis track present), so the labeler spends time on
+useful events, not empty beam triggers. Writes data/label_input.parquet ordered by a
+"labelability" score (off-axis hits first) so the clearest events come up first.
+
+Run:  ~/gnn_env/bin/python prepare_label_data.py [--max N] [--in CSV]
+Regenerate other runs first with dumpRealH.C (see ../diagnostics/dumpRealH.C).
+"""
+import argparse, numpy as np, pandas as pd
+from scipy.spatial import cKDTree
+
+ap = argparse.ArgumentParser()
+ap.add_argument("--in",  dest="inp", default="data/real_events.csv")
+ap.add_argument("--out", default="data/label_input.parquet")
+ap.add_argument("--max", type=int, default=150, help="max events to keep for labeling")
+ap.add_argument("--r-offaxis",  type=float, default=35.0)
+ap.add_argument("--dens-r",     type=float, default=12.0)
+ap.add_argument("--dens-thresh", type=int,  default=7)
+ap.add_argument("--nhits-min", type=int, default=40,  help="drop near-empty events")
+ap.add_argument("--nhits-max", type=int, default=500, help="drop pileup/haze monsters")
+a = ap.parse_args()
+
+df = pd.read_csv(a.inp)
+df["r"] = np.hypot(df.x, df.y)
+scored = []
+for ev, g in df.groupby("event"):
+    if not (a.nhits_min <= len(g) <= a.nhits_max):
+        continue                      # keep clearly-labelable events (not empty, not haze-bombed)
+    off = g[g.r >= a.r_offaxis]
+    if len(off) < 5:
+        continue
+    Q = off[["x", "y", "z"]].to_numpy()
+    dens = cKDTree(Q).query_ball_point(Q, r=a.dens_r, return_length=True)
+    if dens.max() < a.dens_thresh:
+        continue                      # no dense off-axis track -> not a reaction candidate
+    scored.append((int(ev), len(g)))
+
+# simplest events first (fewest hits) so labeling warms up easy, then take a spread up to --max
+scored.sort(key=lambda t: t[1])
+if len(scored) > a.max:
+    idx = np.linspace(0, len(scored) - 1, a.max).round().astype(int)
+    scored = [scored[i] for i in idx]     # even spread across the size range
+keep_ids = [ev for ev, _ in scored]
+out = pd.concat([df[df.event == ev] for ev in keep_ids])[["event", "x", "y", "z", "q"]]
+# re-index events 0..K-1 in labeling order (stable, tool-friendly)
+remap = {ev: i for i, ev in enumerate(keep_ids)}
+out = out.assign(event=out.event.map(remap)).sort_values(["event"]).reset_index(drop=True)
+out.to_parquet(a.out, index=False)
+print(f"reaction candidates: {len(scored)} found, kept {len(keep_ids)} -> {a.out}")
+print(f"  {out.shape[0]} hits, median {out.groupby('event').size().median():.0f} hits/event")
+print(f"  (original event ids preserved in data/label_input_srcids.csv)")
+pd.DataFrame({"label_event": range(len(keep_ids)), "src_event": keep_ids}
+             ).to_csv("data/label_input_srcids.csv", index=False)
