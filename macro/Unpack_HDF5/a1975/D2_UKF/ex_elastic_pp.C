@@ -1,12 +1,12 @@
 /// @file ex_dp_a1975.C
-/// @brief 17C excitation-energy spectrum from PROTON-hypothesis genfit fits — the
-///        16C(d,p)17C neutron-stripping channel (a1975 D2-target runs 0016-0103).
+/// @brief 16C excitation-energy spectrum from PROTON-hypothesis genfit fits — the
+///        16C(p,p)17C neutron-stripping channel (a1975 D2-target runs 0016-0103).
 ///
 /// Inverse kinematics: 16C beam + d target -> p + 17C; the detected light ejectile
 /// is the PROTON (going largely BACKWARD in the lab, see project memory). The fit
 /// must have been run with the proton hypothesis (fitGenfitter_a1975_deuterium.C
 /// -> reco_d2/<run>_genfitter_p.root). Two-body kinematics with m1=16C, m2=d,
-/// m3=p, m4=17C reconstructs the 17C excitation energy. A genuine (d,p) stripping
+/// m3=p, m4=17C reconstructs the 16C excitation energy. A genuine (p,p) stripping
 /// populates the 17C bound states (g.s. 3/2+, 0.217 1/2+, 0.335 5/2+); junk fit as
 /// protons does NOT close kinematics there.
 ///
@@ -74,10 +74,10 @@ void ex_elastic_pp(TString runsCSV = "run_0016", TString inDir = "/mnt/f/a1975/r
 
    TFile *fcache = new TFile("proton_kin_pp.root", "RECREATE");
    TNtuple *ntk =
-      new TNtuple("pk", "candidate proton kinematics (d,p)", "ke:theta:vertexz:thcm:ex:chi2ndf:brho:dedx:sqrtdedx");
+      new TNtuple("pk", "candidate proton kinematics (p,p)", "ke:theta:vertexz:thcm:ex:chi2ndf:brho:dedx:sqrtdedx");
 
    TH1F *hex = new TH1F(
-      "hex", "^{16}C excitation energy (d,p), proton hyp;E_{x}(^{16}C) [MeV];proton candidates", 200, -10, 20);
+      "hex", "^{16}C excitation energy (p,p), proton hyp;E_{x}(^{16}C) [MeV];proton candidates", 200, -10, 20);
    TH2F *hexcm = new TH2F("hexcm", "E_{x}(^{16}C) vs #theta_{cm};#theta_{cm} [deg];E_{x} [MeV]", 180, 0, 180, 150, -10,
                           20);
    TH2F *hbt = new TH2F("hbt", "B#rho vs #theta_{lab} (proton cand.);#theta_{lab} [deg];B#rho [T m]", 180, 0, 180, 200,
@@ -149,7 +149,7 @@ void ex_elastic_pp(TString runsCSV = "run_0016", TString inDir = "/mnt/f/a1975/r
       fu->Close();
       printf("processed %s\n", run.Data());
    }
-   printf("\nvalid Spyral PID: %ld -> in proton gate: %ld -> proton candidates (d,p) -> 17C Ex: %ld\n", nValPID, nGated,
+   printf("\nvalid Spyral PID: %ld -> in proton gate: %ld -> proton candidates (p,p) -> 17C Ex: %ld\n", nValPID, nGated,
           nCand);
    fcache->cd();
    ntk->Write();
@@ -170,5 +170,5 @@ void ex_elastic_pp(TString runsCSV = "run_0016", TString inDir = "/mnt/f/a1975/r
    c->cd(4);
    hpid->Draw("colz");
    c->SaveAs("plots/ex_elastic_pp.png");
-   printf("saved plots/ex_elastic_pp.png  (red dashed line in panel 1 = 17C g.s. Ex=0)\n");
+   printf("saved plots/ex_elastic_pp.png  (red dashed line in panel 1 = 16C g.s. Ex=0)\n");
 }
