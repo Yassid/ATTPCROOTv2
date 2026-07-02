@@ -43,7 +43,9 @@ protected:
 
    ResponseFunc fResponse; //! Response function of the electronics
    bool fUseFastGain = true;
-   double fNoiseSigma = 0; //! Sigma of random gaussian noise to apply to trace
+   double fNoiseSigma = 0;      //! Sigma of additive gaussian baseline noise (ADC) applied per time bucket
+   bool fNoiseAllPads = false;  //! If true, also add baseline noise to pads with no signal (detector-wide spray)
+   double fNoiseKeepThreshold = 0; //! Drop noise-only pads whose trace max < this (0 = keep all). Saves disk; no hit change if < PSA threshold.
    bool fSaveCharge = true;
    bool fDoConvolution{true}; //< Whether we should set the ADC by doing a convolution of the charge with the response
 
@@ -61,6 +63,8 @@ public:
    AtMapPtr GetMap() { return fMap; }
    void UseFastGain(bool val) { fUseFastGain = val; }
    void SetNoiseSigma(double val) { fNoiseSigma = val; }
+   void SetNoiseAllPads(bool val) { fNoiseAllPads = val; }
+   void SetNoiseKeepThreshold(double val) { fNoiseKeepThreshold = val; }
    void SetSaveCharge(bool val) { fSaveCharge = val; }
    void SetDoConvolution(bool val) { fDoConvolution = val; }
    void SetLowGain(double val) { fLowGainFactor = val; }

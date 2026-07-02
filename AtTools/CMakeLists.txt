@@ -39,6 +39,7 @@ set(SRCS
 
   DataCleaning/AtDataCleaner.cxx
   DataCleaning/AtkNN.cxx
+  DataCleaning/AtDirDeDxCleaner.cxx
 
   AtPID/AtCut2D.cxx
   AtPID/AtParticleID.cxx

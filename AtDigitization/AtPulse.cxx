@@ -18,6 +18,8 @@
 #include <Rtypes.h>          // for Int_t
 #include <TAxis.h>
 #include <TMath.h> // for Gamma, Sqrt
+
+#include <array>
 #include <TRandom.h>
 #include <TString.h> // for TString
 
@@ -35,7 +37,8 @@ AtPulse::AtPulse(const AtPulse &other)
    : fMap(other.fMap), fEventID(other.fEventID), fGain(other.fGain), fLowGainFactor(other.fLowGainFactor),
      fGETGain(other.fGETGain), fPeakingTime(other.fPeakingTime), fTBTime(other.fTBTime), fNumTbs(other.fNumTbs),
      fTBEntrance(other.fTBEntrance), fTBPadPlane(other.fTBPadPlane), fResponse(other.fResponse),
-     fUseFastGain(other.fUseFastGain), fNoiseSigma(other.fNoiseSigma), fSaveCharge(other.fSaveCharge),
+     fUseFastGain(other.fUseFastGain), fNoiseSigma(other.fNoiseSigma), fNoiseAllPads(other.fNoiseAllPads),
+     fNoiseKeepThreshold(other.fNoiseKeepThreshold), fSaveCharge(other.fSaveCharge),
      fDoConvolution(other.fDoConvolution), fAvgGainDeviation(other.fAvgGainDeviation)
 {
 
@@ -75,6 +78,37 @@ AtRawEvent AtPulse::GenerateEvent(std::vector<AtSimulatedPoint *> &vec)
    for (auto padNum : fPadsWithCharge) {
       AtPad *pad = ret.AddPad(padNum);
       FillPad(*pad, *fPadCharge[padNum]);
+   }
+
+   // Detector-wide baseline noise: add pure-noise traces to instrumented pads that saw no
+   // signal, so noise fluctuations crossing the PSA threshold reproduce the background spray
+   // seen in real data. Gated so default behaviour (signal-only) is unchanged.
+   if (fNoiseSigma != 0 && fNoiseAllPads) {
+      int nPads = fMap->GetNumPads();
+      std::array<double, 512> tr{};
+      for (int padNum = 0; padNum < nPads; ++padNum) {
+         if (fPadsWithCharge.find(padNum) != fPadsWithCharge.end())
+            continue;
+         if (fMap->IsInhibited(padNum) == AtMap::InhibitType::kTotal)
+            continue;
+         // Generate a pure baseline-noise trace (ADC units, consistent with ApplyNoise).
+         double mx = -1e300;
+         for (int i = 0; i < fNumTbs; ++i) {
+            double v = gRandom->Gaus(0, fNoiseSigma);
+            tr[i] = v;
+            if (v > mx)
+               mx = v;
+         }
+         // Discard pads that cannot cross threshold (they'd yield no PSA hit anyway) to save disk.
+         if (fNoiseKeepThreshold > 0 && mx < fNoiseKeepThreshold)
+            continue;
+         AtPad *pad = ret.AddPad(padNum);
+         pad->SetValidPad(true);
+         pad->SetPadCoord(fMap->CalcPadCenter(padNum));
+         pad->SetPedestalSubtracted(true);
+         for (int i = 0; i < fNumTbs; ++i)
+            pad->SetADC(i, tr[i]);
+      }
    }
    return ret;
 }
@@ -117,10 +151,14 @@ void AtPulse::FillPad(AtPad &pad, TH1F &hist)
 
 void AtPulse::ApplyNoise(AtPad &pad)
 {
+   // Scale the signal to ADC units, then add zero-mean gaussian baseline noise (additive,
+   // not multiplicative). On empty (noise-only) pads the signal is 0, so this leaves a pure
+   // baseline-noise trace whose fluctuations can cross the PSA threshold -> spurious hits.
    for (int i = 0; i < fNumTbs; ++i) {
-      pad.SetADC(i, pad.GetADC(i) * fGETGain);
+      double adc = pad.GetADC(i) * fGETGain;
       if (fNoiseSigma != 0)
-         pad.SetADC(i, pad.GetADC(i) * gRandom->Gaus(0, fNoiseSigma));
+         adc += gRandom->Gaus(0, fNoiseSigma);
+      pad.SetADC(i, adc);
    }
 }
 

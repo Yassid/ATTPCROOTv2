@@ -72,6 +72,7 @@
 #pragma link C++ function AtTools::Kinematics::EtoA;
 
 #pragma link C++ class AtTools::DataCleaning::AtkNN + ;
+#pragma link C++ class AtTools::DataCleaning::AtDirDeDxCleaner + ;
 #pragma link C++ class AtTools::DataCleaning::AtDataCleaner + ;
 
 #pragma link C++ class AtTools::AtCut2D - !;
