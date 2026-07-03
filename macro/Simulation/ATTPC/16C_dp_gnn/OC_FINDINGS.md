@@ -54,6 +54,19 @@ condensation point (CP) is the max-beta hit; charge q^(t), position c^(t).
    Every config excels on sim and FAILS on real (57-64% merge). Higher latent helps in-domain,
    never transfers. (s_beta=1.0 hurt coords: beta term dominates -> lower recovery.)
 
+6b. TRAIN ON REAL GOLD LABELS (train_oc_gold.py, 5-fold CV on 73 events) does NOT rescue it:
+   eps0.02 merge0% ARI-0.02 (shatters), eps0.05 merge17.8% ARI0.16, eps0.12 merge60% ARI0.43.
+   No operating point with low merge AND good ARI (dircluster gets both: 1.4%/0.45). 73 hand-
+   labeled events too few to train a GNN to generalize. TESTING (real_pseudo): train OC on 2916
+   real events with dircluster pseudo-labels -> validate on gold, to separate data-quantity from
+   fundamental limitation. RESULT: real-pseudo-trained OC on gold = 0% merge at every eps but
+   ARI only 0.27 / homog 0.46 (eps0.12) < dircluster 0.45/0.73; in-domain recovery 0.0%. It
+   INHERITED dircluster's over-segmentation (the pseudo-labels ARE dircluster's fragments, 4.4
+   clus/ev), so OC learned to shatter not separate. => it is BOTH data-quantity (73 gold too few)
+   AND label-quality (abundant dircluster labels are fragmented). A learned method could work only
+   with MANY WHOLE-TRACK real labels (large hand-labeling, or dircluster+stitch / HDBSCAN-mover as
+   teacher) - not available today. Geometric dircluster remains best on real data.
+
 ## Verdict
 OC is elegant and DOMINATES on SIM (in-domain): recovery 65-74% vs dircluster 39%, 17C 51-68% vs
 49%, whole tracks. BUT it FAILS to transfer to real data for separation (33-74% merge on the gold
