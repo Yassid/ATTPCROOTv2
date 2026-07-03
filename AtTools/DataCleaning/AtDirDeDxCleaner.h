@@ -25,11 +25,15 @@ protected:
    double fQRatio; //<! min smoothed-charge ratio (dE/dx continuity)
    int fMinDeg;    //<! min continuous-neighbour count to keep a hit
    bool fSmoothQ;  //<! use median neighbourhood charge (rides Bragg profile)
+   double fQKeep;  //<! charge-magnitude override: always keep a hit with charge > this (protects
+                   //<! high-dE/dx signal, e.g. the 17C recoil, at ~zero noise cost since noise is
+                   //<! baseline-low). 17C kept 65%->84% at fQKeep=150 with no change in noise removal.
 
 public:
    AtDirDeDxCleaner(int k = 12, double cosSeg = 0.78, double cosTan = 0.72, double rMax = 32.0, double qRatio = 0.65,
-                    int minDeg = 1, bool smoothQ = true)
-      : fK(k), fCosSeg(cosSeg), fCosTan(cosTan), fRMax(rMax), fQRatio(qRatio), fMinDeg(minDeg), fSmoothQ(smoothQ)
+                    int minDeg = 1, bool smoothQ = true, double qKeep = 150.0)
+      : fK(k), fCosSeg(cosSeg), fCosTan(cosTan), fRMax(rMax), fQRatio(qRatio), fMinDeg(minDeg), fSmoothQ(smoothQ),
+        fQKeep(qKeep)
    {
    }
    HitCloud CleanData(const HitCloud &hits) override;

@@ -114,8 +114,10 @@ HitCloud AtDirDeDxCleaner::CleanData(const HitCloud &hits)
       }
    }
 
+   // keep a hit if it has enough continuous neighbours OR its charge exceeds the override
+   // (high-dE/dx signal is kept even when isolated; noise is baseline-low so this costs ~0 noise)
    for (int i = 0; i < n; ++i)
-      if (deg[i] >= fMinDeg)
+      if (deg[i] >= fMinDeg || Q[i] > fQKeep)
          ret.push_back(std::make_unique<AtHit>(*hits[i]));
    return ret;
 }
