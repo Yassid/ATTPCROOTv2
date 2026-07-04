@@ -43,6 +43,11 @@ private:
                                  ///< far-drift pulses -> collapses track z. Only enable if noise pads are a problem.
                                  ///< (FWHM ~50-90 TB, low prominence) that a threshold-only primary would keep.
    Bool_t fFloatTau{false};      ///< let the peaking time float in the fit (else fixed)
+   Bool_t fUseImpulseTime{false}; ///< z from the fitted IMPULSE time t0, not the response PEAK. The response peak
+                                  ///< lags the charge arrival by ~u_peak*tau (the shaping delay) — using the peak
+                                  ///< reproduces AtPSAMax's +peakingTime*vDrift z offset. The fit recovers t0
+                                  ///< directly, so z(t0) is the true drift depth with no shaping bias. Default
+                                  ///< false (peak, = AtPSAMax behaviour).
    Double_t fFitChi2Cut{0};      ///< if >0, reject a peak whose LOCAL reduced chi2 (data vs fitted GET pulse)
                                  ///< exceeds this -> trace is not a real pulse SHAPE (noise hump). >0 also turns
                                  ///< on float-tau so a real BROAD pulse fits and survives. chi2 stored in
@@ -70,6 +75,7 @@ public:
    void SetMinSignificance(Double_t s) { fMinSignif = s; }
    void SetProminenceOnPrimary(Bool_t v) { fPromPrimary = v; } ///< false = old behavior (primary=threshold only)
    void SetFloatPeakingTime(Bool_t v) { fFloatTau = v; }
+   void SetUseImpulseTime(Bool_t v) { fUseImpulseTime = v; } ///< z from fitted t0 (no shaping delay) vs peak
    void SetFitChi2Cut(Double_t c) { fFitChi2Cut = c; } ///< local reduced-chi2 shape gate; 0 disables
    void SetFitRelErr(Double_t e) { fFitRelErr = e; }   ///< fractional model error in the chi2 effective sigma
    // SetSpyralZ / LoadPadTimeOffsets are inherited from AtPSA.

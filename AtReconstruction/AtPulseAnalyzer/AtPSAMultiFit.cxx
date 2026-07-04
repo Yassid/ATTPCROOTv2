@@ -214,10 +214,15 @@ AtPSAMultiFit::HitVector AtPSAMultiFit::AnalyzePad(AtPad *pad)
          }
       }
 
-      pos.SetZ(CalibrateZ(peakTB, pad->GetPadNum())); // base: per-pad offset + Spyral/Geo z
+      // Time bucket for z: the fitted IMPULSE time t0 (param 2i+1) removes the
+      // response shaping delay (peak lags arrival by ~u_peak*tau); the peak
+      // reproduces AtPSAMax's z offset. Gates above stay on the observable peakTB.
+      double t0Fit = good ? tf.GetParameter(2 * i + 1) : (seeds[i] - peakOff);
+      double zTB = fUseImpulseTime ? t0Fit : peakTB;
+      pos.SetZ(CalibrateZ(zTB, pad->GetPadNum())); // base: per-pad offset + Spyral/Geo z
       auto hit = std::make_unique<AtHit>(pad->GetPadNum(), pos, amp);
-      hit->SetTimeStamp(peakTB);
-      hit->SetTimeStampCorr(peakTB);
+      hit->SetTimeStamp(zTB);
+      hit->SetTimeStampCorr(zTB);
       hit->SetTraceIntegral(Q);
       hit->SetChargeVariance(redChi2);         // fit-shape chi2, stashed for the distribution / diagnostics
       hit->SetTimeStampCorrInter(tauFit);      // fitted peaking time, stashed for diagnostics

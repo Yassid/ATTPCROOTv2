@@ -11,10 +11,18 @@
 /// Chain: clusterize -> pulse -> PSA -> PRA -> UKF(pi+/pi-) -> genfit(pi+/pi-).
 /// Reads ./data/attpcsim.root, writes ./data/output_digi_both8.root.
 ///
-/// Run: root -b -q 'run_digi_ukf_genfit_test8.C(1000)'
-///      root -b -q 'run_digi_ukf_genfit_test8.C(1000, 8.0, true)'   // flip genfit charge-sign map
+/// PSA default is "mfimpulse": AtPSAMultiFit fitting the same GET response the digi
+/// used, with z from the fitted impulse time t0 — this removes the +8.6 mm shaping-
+/// delay z bias AT THE SOURCE, so no SetVertexZBias correction is applied. Pass
+/// psaType="max" to use AtPSAMax (peak) instead, which re-enables the +8.6 mm bias
+/// correction for a back-to-back comparison.
+///
+/// Run: root -b -q 'run_digi_ukf_genfit_test8.C(1000)'                     // mfimpulse PSA
+///      root -b -q 'run_digi_ukf_genfit_test8.C(1000, 8.0, false, "max")'  // AtPSAMax PSA
+///      root -b -q 'run_digi_ukf_genfit_test8.C(1000, 8.0, true)'          // flip genfit charge-sign map
 
-void run_digi_ukf_genfit_test8(int nEvents = 1000, float tCluster = 8.0, bool genfitChargeFlip = false)
+void run_digi_ukf_genfit_test8(int nEvents = 1000, float tCluster = 8.0, bool genfitChargeFlip = false,
+                               TString psaType = "mfimpulse")
 {
    TString inOutDir = "./data/";
    TString outputFile = inOutDir + "output_digi_both8.root";
@@ -58,9 +66,23 @@ void run_digi_ukf_genfit_test8(int nEvents = 1000, float tCluster = 8.0, bool ge
    pulse->SetPersistence(kTRUE);
    pulse->SetSaveMCInfo();
 
-   auto psa = std::make_unique<AtPSAMax>();
-   psa->SetThreshold(0);
-   AtPSAtask *psaTask = new AtPSAtask(std::move(psa));
+   // PSA: "max" = AtPSAMax (peak; carries the +8.6 mm shaping-delay z bias, corrected
+   // downstream via SetVertexZBias). "mfimpulse" = AtPSAMultiFit fitting the SAME GET
+   // response the digi used, with z taken from the fitted IMPULSE time t0 -> removes the
+   // shaping-delay z offset AT THE SOURCE (no SetVertexZBias needed).
+   const bool useMFimpulse = (psaType == "mfimpulse");
+   AtPSAtask *psaTask = nullptr;
+   if (useMFimpulse) {
+      auto mf = std::make_unique<AtPSAMultiFit>();
+      mf->SetThreshold(0);
+      mf->SetPeakingTime(0.5);       // 500 ns, matches PUMA AtPulse shaping (AtNominalResponse)
+      mf->SetUseImpulseTime(true);   // z from fitted t0, not the response peak
+      psaTask = new AtPSAtask(std::move(mf));
+   } else {
+      auto psa = std::make_unique<AtPSAMax>();
+      psa->SetThreshold(0);
+      psaTask = new AtPSAtask(std::move(psa));
+   }
    psaTask->SetPersistence(kTRUE);
 
    AtPRAtask *praTask = new AtPRAtask();
@@ -107,7 +129,7 @@ void run_digi_ukf_genfit_test8(int nEvents = 1000, float tCluster = 8.0, bool ge
          ukf->SetAdaptiveDistBounds(4.0, 14.0);
          ukf->SetUseClusterDirSeed(true);
          ukf->SetUseArcWalk(true);
-         ukf->SetVertexZBias(8.6);
+         ukf->SetVertexZBias(useMFimpulse ? 0.0 : 8.6); // no shaping bias to correct in impulse mode
          multi->AddHypothesis(std::move(ukf), names[i], signs[i]);
       }
       auto *ukfTask = new AtFitterTask(std::move(multi));
@@ -143,7 +165,7 @@ void run_digi_ukf_genfit_test8(int nEvents = 1000, float tCluster = 8.0, bool ge
       // Branch-8 pions are in-plane (pz~0) so drift-z is degenerate for ordering;
       // pick the vertex end by beam-axis distance instead (fixes the vertex dr-tail).
       genfitter->SetVertexByXYRadius(true);
-      genfitter->SetVertexZBias(8.6);             // same AtPSA shaping-delay fix as the UKF
+      genfitter->SetVertexZBias(useMFimpulse ? 0.0 : 8.6); // no shaping bias to correct in impulse mode
       genfitter->SetMinClusters(3);
       genfitter->SetVertexAxisMaxDist(150.0);
       auto *genfitTask = new AtFitterTask(std::move(genfitter));

@@ -166,7 +166,8 @@ void compare_ukf_genfit_test8(TString digiFile = "./data/output_digi_both8.root"
    printf("events analysed: %lld   truth: |p|=%.1f MeV/c, theta=90 deg, vertex (0,0,75) mm\n", nE, p0);
    reportStats("UKF  (AtFitterUKF, CATIMA)", sU, p0);
    reportStats("GENFIT (KalmanRefTrack, Bethe-Bloch)", sG, p0);
-   printf("\n\033[2mNote: vertex for UKF is the back-extrapolated POCA (initialPositionXtr);\n"
-          "      for genfit it is the fitted first-point state — not yet extrapolated to the\n"
-          "      beam axis, so genfit vertex dr is expected larger by construction.\033[0m\n");
+   printf("\n\033[2mNote: both vertices are back-extrapolated to the beam-axis POCA\n"
+          "      (UKF helix back-extrap; genfit extrapolateToLine). initialPositionXtr\n"
+          "      is read for both; the residual genfit dr edge is the UKF's PUMA-tuned\n"
+          "      vertex calibration.\033[0m\n");
 }
