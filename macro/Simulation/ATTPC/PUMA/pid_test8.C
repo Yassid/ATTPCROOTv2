@@ -9,15 +9,20 @@
 /// colorMode: "confusion" (default) colours each point by whether the FIT charge
 /// matches truth (correct = grey, WRONG = red, so the mis-ID population pops).
 /// "truth" colours by truth species (pi+ green, pi- magenta).
-void pid_test8(TString colorMode = "confusion", TString digiFile = "./data/output_digi_both8.root",
+/// species: "pi" (branch 8) or "K"/"kaon" (branch 10) — sets the mass used for p
+/// (from KE) and the truth |Brho| guide line. testEnergy overrides per-particle E.
+void pid_test8(TString colorMode = "confusion", TString species = "pi", Double_t testEnergy = -1,
+               TString digiFile = "./data/output_digi_both8.root",
                TString simFile = "./data/attpcsim.root", TString outPng = "./data/pid_test8.png")
 {
    const bool confusion = (colorMode != "truth");
    gSystem->Load("libAtReconstruction.so");
    gStyle->SetOptStat(0);
-   const double m_pi = 139.57039;
-   const double p0 = std::sqrt(0.4 * 0.4 - (m_pi / 1000) * (m_pi / 1000)) * 1000; // 374.9 MeV/c
-   const double brho0 = (p0 / 1000.0) / 0.299792458;                              // 1.25 T*m
+   const bool isK = (species == "K" || species == "kaon");
+   const double m_pi = isK ? 493.677 : 139.57039;
+   const double E0 = (testEnergy > 0) ? testEnergy : (isK ? 0.777 : 0.4);
+   const double p0 = std::sqrt(E0 * E0 - (m_pi / 1000) * (m_pi / 1000)) * 1000; // MeV/c
+   const double brho0 = (p0 / 1000.0) / 0.299792458;                            // T*m
    const double kTol = 3.0;
 
    TFile fD(digiFile); TTree *tD = (TTree *)fD.Get("cbmsim");
@@ -107,7 +112,8 @@ void pid_test8(TString colorMode = "confusion", TString digiFile = "./data/outpu
       for (int s = 0; s < 2; ++s) for (int i = 0; i < g[f][s]->GetN(); ++i) dv.push_back(g[f][s]->GetY()[i]);
       std::sort(dv.begin(), dv.end());
       double dmax = dv.empty() ? 1 : dv[(size_t)(0.97 * dv.size())] * 1.15;
-      auto *fr = gPad->DrawFrame(-2.2, 0, 2.2, dmax,
+      double bAx = std::max(2.2, brho0 * 1.4);
+      auto *fr = gPad->DrawFrame(-bAx, 0, bAx, dmax,
                                  Form("%s  PID: signed B#rho vs dE/dx (%s);signed B#rho [T#upoint m];dE/dx [a.u./mm]", fname[f],
                                       confusion ? "red = WRONG charge" : "colour = truth charge"));
       (void)fr;
@@ -132,7 +138,8 @@ void pid_test8(TString colorMode = "confusion", TString digiFile = "./data/outpu
          leg->Draw();
       }
    }
-   if (confusion && outPng == "./data/pid_test8.png") outPng = "./data/pid_test8_confusion.png";
+   if (outPng == "./data/pid_test8.png") // build a species/mode-specific default name
+      outPng = Form("./data/pid_test%s%s.png", isK ? "10_K" : "8", confusion ? "_confusion" : "");
    c->SaveAs(outPng);
    printf("PID plot (%s) -> %s\n", colorMode.Data(), outPng.Data());
    for (int f = 0; f < 2; ++f) {

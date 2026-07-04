@@ -48,12 +48,17 @@ void reportStats(const char *name, Stats &s, double p0)
    printf("  vertex dr(xy) [mm]  : median %.2f   sigma_IQR %.2f\n", medianOf(s.dr), iqrSigma(s.dr));
 }
 
-void compare_ukf_genfit_test8(TString digiFile = "./data/output_digi_both8.root",
+/// species: "pi" (E0=0.4 GeV, m=139.57) or "K"/"kaon" (E0=0.777 GeV, m=493.677).
+/// testEnergy overrides the per-particle total energy used for the truth |p|.
+void compare_ukf_genfit_test8(TString species = "pi", Double_t testEnergy = -1,
+                              TString digiFile = "./data/output_digi_both8.root",
                               TString simFile = "./data/attpcsim.root")
 {
    gSystem->Load("libAtReconstruction.so");
-   const double m_pi = 139.57039;                                     // MeV
-   const double p0 = std::sqrt(0.4 * 0.4 - (m_pi / 1000) * (m_pi / 1000)) * 1000; // 374.9 MeV/c
+   const bool isK = (species == "K" || species == "kaon");
+   const double m_pi = isK ? 493.677 : 139.57039;                    // fit/truth mass [MeV]
+   const double E0 = (testEnergy > 0) ? testEnergy : (isK ? 0.777 : 0.4); // per-particle E [GeV]
+   const double p0 = std::sqrt(E0 * E0 - (m_pi / 1000) * (m_pi / 1000)) * 1000; // MeV/c
    const double vx0 = 0, vy0 = 0, vz0 = 75.0;                         // mm truth vertex
    const double kMatchTol = 3.0;                                      // mm (x,y) hit->MC match
 
@@ -162,7 +167,8 @@ void compare_ukf_genfit_test8(TString digiFile = "./data/output_digi_both8.root"
       analyse(gfArr, sG, trackArr, nMC, mcX, mcY, mcPdg);
    }
 
-   printf("\n\033[1;33m########  UKF vs GENFIT  —  PUMA branch 8 (pi+/pi-)  ########\033[0m\n");
+   printf("\n\033[1;33m########  UKF vs GENFIT  —  PUMA %s test channel  ########\033[0m\n",
+          isK ? "branch 10 (K+K+)" : "branch 8 (pi+/pi-)");
    printf("events analysed: %lld   truth: |p|=%.1f MeV/c, theta=90 deg, vertex (0,0,75) mm\n", nE, p0);
    reportStats("UKF  (AtFitterUKF, CATIMA)", sU, p0);
    reportStats("GENFIT (KalmanRefTrack, Bethe-Bloch)", sG, p0);

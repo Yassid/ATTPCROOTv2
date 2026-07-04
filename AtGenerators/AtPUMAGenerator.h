@@ -66,10 +66,18 @@ public:
    ///   9  (default) : ^3He + p-bar -> K+ K+ pi- hexaquark (phase space).
    ///   8            : test channel — a single pi+/pi- pair emitted
    ///                  back-to-back, each with fixed total energy
-   ///                  fTestEnergy, momentum in the xy-plane (pz=0, i.e.
-   ///                  perpendicular to a z-directed B field).
+   ///                  fTestEnergy (default 0.4 GeV), momentum in the
+   ///                  xy-plane (pz=0, i.e. perpendicular to a z-directed
+   ///                  B field).
+   ///   10           : test channel — a K+/K+ pair (same charge)
+   ///                  back-to-back, each with fixed total energy
+   ///                  fTestEnergy (set 0.777 GeV -> p=600 MeV/c, or
+   ///                  0.578 -> 300 MeV/c), pz=0. Heavier + same-charge, so
+   ///                  the two kaons trace mirror circles (both curve the
+   ///                  same way) and sit in the same +Brho band at higher
+   ///                  dE/dx than pions.
    void SetChannel(Int_t branch) { fChannel = branch; }
-   /// Per-particle total energy (GeV) for the branch-8 test channel.
+   /// Per-particle total energy (GeV) for the branch-8/10 test channels.
    void SetTestEnergy(Double_t E_GeV) { fTestEnergy = E_GeV; }
 
 private:
@@ -77,6 +85,10 @@ private:
    /// (cm) by ReadEvent. Returns kFALSE and skips the event if fTestEnergy
    /// is below the pion mass.
    Bool_t GenerateBranch8(FairPrimaryGenerator *primGen, Double_t vx_cm, Double_t vy_cm, Double_t vz_cm);
+
+   /// Branch-10 back-to-back K+/K+ test emitter (same charge). Skips the
+   /// event if fTestEnergy is at/below the kaon mass.
+   Bool_t GenerateBranch10(FairPrimaryGenerator *primGen, Double_t vx_cm, Double_t vy_cm, Double_t vz_cm);
 
    // Vertex
    Double_t fMeanX{0.}, fSigmaX{4.}, fMeanY{0.}, fSigmaY{4.};

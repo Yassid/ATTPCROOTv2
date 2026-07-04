@@ -21,9 +21,17 @@
 ///      root -b -q 'run_digi_ukf_genfit_test8.C(1000, 8.0, false, "max")'  // AtPSAMax PSA
 ///      root -b -q 'run_digi_ukf_genfit_test8.C(1000, 8.0, true)'          // flip genfit charge-sign map
 
+/// species: "pi" (branch 8) or "K"/"kaon" (branch 10). Sets the fit mass/PDG for
+/// both fitters. Both charge hypotheses are offered to the UKF; the PRA charge
+/// prior gates the sign, so a same-charge final state (branch 10 K+K+) is fine.
 void run_digi_ukf_genfit_test8(int nEvents = 1000, float tCluster = 8.0, bool genfitChargeFlip = false,
-                               TString psaType = "mfimpulse")
+                               TString psaType = "mfimpulse", TString species = "pi")
 {
+   const bool isK = (species == "K" || species == "kaon");
+   const double mMeV = isK ? 493.677 : 139.57039; // kaon / pion mass
+   const int pdgPos = isK ? 321 : 211;            // K+ / pi+
+   const std::string nm = isK ? "K" : "pi";
+
    TString inOutDir = "./data/";
    TString outputFile = inOutDir + "output_digi_both8.root";
    TString paramFile = "ATTPC.PUMA_sim.par";
@@ -103,21 +111,20 @@ void run_digi_ukf_genfit_test8(int nEvents = 1000, float tCluster = 8.0, bool ge
    {
       const double e_C = 1.602176634e-19;
       const double u_MeV = 931.49410372;
-      const double m_pi_MeV = 139.57039;
       const int signs[2] = {+1, -1};
-      const std::string names[2] = {"pi+", "pi-"};
+      const std::string names[2] = {nm + "+", nm + "-"};
 
       auto multi = std::make_unique<EventFit::AtFitterUKFMulti>();
       for (int i = 0; i < 2; ++i) {
          auto eloss = std::make_unique<AtTools::AtELossCATIMA>(1.654e-3);
-         eloss->SetProjectile(1, 1, m_pi_MeV / u_MeV);
+         eloss->SetProjectile(1, 1, mMeV / u_MeV);
          std::vector<std::tuple<int, int, int>> mat;
          mat.push_back(std::make_tuple(18, 40, 9)); // Ar
          mat.push_back(std::make_tuple(6, 12, 1));  // C (from CH4)
          mat.push_back(std::make_tuple(1, 1, 4));   // H
          eloss->SetMaterial(mat);
 
-         auto ukf = std::make_unique<EventFit::AtFitterUKF>(signs[i] * e_C, m_pi_MeV, std::move(eloss));
+         auto ukf = std::make_unique<EventFit::AtFitterUKF>(signs[i] * e_C, mMeV, std::move(eloss));
          ukf->SetBField(ROOT::Math::XYZVector(0, 0, 4.0));
          ukf->SetUKFParameters(1e-3, 2.0, 0.0);
          ukf->SetMeasurementSigma(0.5);
@@ -147,11 +154,10 @@ void run_digi_ukf_genfit_test8(int nEvents = 1000, float tCluster = 8.0, bool ge
    // ─── genfit: pion, native Bethe-Bloch, per-track charge from PRA curvature ───
    {
       const double u_MeV = 931.49410372;
-      const double m_pi_MeV = 139.57039;
-      const int pdgPi = 211; // pi+; sign flipped per track from PRA charge
+      // pdgPos (K+ / pi+); sign flipped per track from PRA charge.
       // matEffects ON: Bethe-Bloch forces effects on regardless of this flag, but
       // pass kFALSE so the intent (use material effects) is explicit.
-      auto genfitter = std::make_unique<EventFit::AtGenfitter>(/*B*/ 4.0, pdgPi, m_pi_MeV / u_MeV, /*Z*/ 1,
+      auto genfitter = std::make_unique<EventFit::AtGenfitter>(/*B*/ 4.0, pdgPos, mMeV / u_MeV, /*Z*/ 1,
                                                                /*eLossFile*/ "", /*noMatEffects*/ kFALSE, 2, 5);
       genfitter->SetEnergyLossBetheBloch(true);   // native Bethe-Bloch (pion-correct)
       genfitter->SetUseTrackChargeSign(true);     // pi+/pi- per PRA curvature

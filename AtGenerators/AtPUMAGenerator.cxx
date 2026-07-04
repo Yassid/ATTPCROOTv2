@@ -47,9 +47,11 @@ Bool_t AtPUMAGenerator::ReadEvent(FairPrimaryGenerator *primGen)
    const Double_t vy_cm = y0 * 0.1;
    const Double_t vz_cm = z0 * 0.1;
 
-   // ---- Branch-8 test channel: back-to-back pi+/pi- pair ---------------
+   // ---- Test channels: back-to-back pairs in the xy-plane --------------
    if (fChannel == 8)
       return GenerateBranch8(primGen, vx_cm, vy_cm, vz_cm);
+   if (fChannel == 10)
+      return GenerateBranch10(primGen, vx_cm, vy_cm, vz_cm);
 
    // ---- p-bar momentum (isotropic direction, Gaussian magnitude) -------
    const Double_t pmag = gRandom->Gaus(fMeanMomentum, fSigmaMomentum); // GeV/c
@@ -118,5 +120,27 @@ Bool_t AtPUMAGenerator::GenerateBranch8(FairPrimaryGenerator *primGen, Double_t 
    // FairPrimaryGenerator::AddTrack expects momentum in GeV/c.
    primGen->AddTrack(kPdgPiPlus, px, py, 0., vx_cm, vy_cm, vz_cm);
    primGen->AddTrack(kPdgPiMinus, -px, -py, 0., vx_cm, vy_cm, vz_cm);
+   return kTRUE;
+}
+
+Bool_t AtPUMAGenerator::GenerateBranch10(FairPrimaryGenerator *primGen, Double_t vx_cm, Double_t vy_cm, Double_t vz_cm)
+{
+   // Upstream PUMA branch 10: a K+/K+ pair (SAME charge) with fixed per-particle
+   // total energy, back-to-back with momentum in the xy-plane (pz=0). Default
+   // 0.777 GeV -> p=600 MeV/c (0.578 GeV -> 300 MeV/c). Being same-charge, the
+   // two kaons curve the same rotational sense -> mirror circles, both at +Brho.
+   const Double_t E = fTestEnergy; // GeV
+   if (E <= kMassKplus) {
+      LOG(warn) << "AtPUMAGenerator branch 10: test energy " << E << " GeV is at/below the kaon mass "
+                << kMassKplus << " GeV. Skipping event.";
+      return kFALSE;
+   }
+   const Double_t pmag = std::sqrt(E * E - kMassKplus * kMassKplus); // GeV/c
+   const Double_t phi = 2. * TMath::Pi() * gRandom->Uniform(0., 1.);
+   const Double_t px = pmag * std::cos(phi);
+   const Double_t py = pmag * std::sin(phi);
+
+   primGen->AddTrack(kPdgKplus, px, py, 0., vx_cm, vy_cm, vz_cm);
+   primGen->AddTrack(kPdgKplus, -px, -py, 0., vx_cm, vy_cm, vz_cm);
    return kTRUE;
 }
