@@ -62,7 +62,22 @@ public:
    void SetHexaquarkMass(Double_t mass_GeV) { fHexMass = mass_GeV; }
    void SetHexaquarkPdg(Int_t pdg) { fHexPdg = pdg; }
 
+   /// Select the reaction channel (upstream PUMA "branch" index).
+   ///   9  (default) : ^3He + p-bar -> K+ K+ pi- hexaquark (phase space).
+   ///   8            : test channel — a single pi+/pi- pair emitted
+   ///                  back-to-back, each with fixed total energy
+   ///                  fTestEnergy, momentum in the xy-plane (pz=0, i.e.
+   ///                  perpendicular to a z-directed B field).
+   void SetChannel(Int_t branch) { fChannel = branch; }
+   /// Per-particle total energy (GeV) for the branch-8 test channel.
+   void SetTestEnergy(Double_t E_GeV) { fTestEnergy = E_GeV; }
+
 private:
+   /// Branch-8 back-to-back pi+/pi- test emitter. Vertex already computed
+   /// (cm) by ReadEvent. Returns kFALSE and skips the event if fTestEnergy
+   /// is below the pion mass.
+   Bool_t GenerateBranch8(FairPrimaryGenerator *primGen, Double_t vx_cm, Double_t vy_cm, Double_t vz_cm);
+
    // Vertex
    Double_t fMeanX{0.}, fSigmaX{4.}, fMeanY{0.}, fSigmaY{4.};
    Double_t fDeltaZ{22.5};
@@ -79,7 +94,11 @@ private:
    Double_t fHexMass{2.0};
    Int_t fHexPdg{1600000};
 
-   ClassDefOverride(AtPUMAGenerator, 1);
+   // Channel selection
+   Int_t fChannel{9};          // upstream PUMA "branch" index
+   Double_t fTestEnergy{0.4};  // GeV per particle, branch-8 test channel
+
+   ClassDefOverride(AtPUMAGenerator, 2);
 };
 
 #endif

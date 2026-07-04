@@ -8,6 +8,7 @@
 #include "AtSpacePointMeasurement.h"
 #include "AtSpyralPID.h"
 #include "AtTrack.h"
+#include "AtTrackTransformer.h"
 #include "AtTrackingEvent.h"
 
 #include <FairLogger.h>
@@ -81,10 +82,20 @@ void AtGenfitter::Init()
    mat->setEnergyLossBrems(false);
    mat->setNoiseBrems(false);
    mat->setNoEffects(fNoMatEffects);
-   mat->useEnergyLossParam();
-   mat->init(new genfit::TGeoMaterialInterface());
-   if (!fELossFile.empty())
-      mat->setEnergyLossFile(fELossFile, fPDG);
+   if (fUseBetheBloch) {
+      // Native genfit Bethe-Bloch: correct for relativistic pions/kaons whose
+      // KE is outside the ion SRIM tables. Do NOT enable the SRIM param path.
+      mat->setEnergyLossBetheBloch(true);
+      mat->setNoiseBetheBloch(true);
+      mat->init(new genfit::TGeoMaterialInterface());
+      LOG(info) << "AtGenfitter: energy loss = native Bethe-Bloch (pion/kaon mode)";
+   } else {
+      // Legacy AT-TPC heavy-ion path: SRIM-table parameterization.
+      mat->useEnergyLossParam();
+      mat->init(new genfit::TGeoMaterialInterface());
+      if (!fELossFile.empty())
+         mat->setEnergyLossFile(fELossFile, fPDG);
+   }
 
    // PDG defs (genfit needs ion entries)
    TDatabasePDG *db = TDatabasePDG::Instance();
@@ -117,7 +128,22 @@ AtFittedTrack *AtGenfitter::GetFittedTrack(AtTrack *track, AtFitMetadata * /*fit
 {
    if (!fInit) // AtFitterTask does not call Init(); self-init on first use (geometry is loaded by now)
       Init();
-   auto *hc = track->GetHitClusterArray();
+
+   // Optional internal re-clustering (see SetReclusterArcWalk). PRA may leave only
+   // ~2 clusters per track, starving genfit; ArcWalk rebuilds ~fReclusterTarget
+   // clusters from the raw hits on a LOCAL COPY so the shared AtPatternEvent (and a
+   // parallel UKF task) are untouched. Geometry quantities (GeoRadius/Theta/charge)
+   // come from the original PRA track; only the cluster source changes.
+   AtTrack localTrack;
+   if (fReclusterArcWalk) {
+      localTrack = *track;
+      localTrack.ResetHitClusterArray();
+      AtTools::AtTrackTransformer transformer;
+      transformer.ClusterizeArcWalk(localTrack, fReclusterTarget, fReclusterMinHits, fReclusterKNN);
+   }
+   AtTrack *ct = fReclusterArcWalk ? &localTrack : track;
+
+   auto *hc = ct->GetHitClusterArray();
    if (hc == nullptr || (int)hc->size() < fMinClusters)
       return nullptr;
    const int n = hc->size();
@@ -133,7 +159,7 @@ AtFittedTrack *AtGenfitter::GetFittedTrack(AtTrack *track, AtFitMetadata * /*fit
    std::vector<XYZPoint> pos(n);
    for (int i = 0; i < n; ++i) {
       auto p = hc->at(i).GetPosition();
-      pos[i] = XYZPoint(p.X(), p.Y(), fZPadPlane - p.Z());
+      pos[i] = XYZPoint(p.X(), p.Y(), fZPadPlane + fZDriftSign * p.Z());
    }
 
    // --- order clusters by the drift coordinate z (the natural AT-TPC ordering) ---
@@ -142,7 +168,14 @@ AtFittedTrack *AtGenfitter::GetFittedTrack(AtTrack *track, AtFitMetadata * /*fit
    // the old vertex->outward index heuristic scrambled them and the fit diverged).
    std::vector<int> order(n);
    for (int i = 0; i < n; ++i) order[i] = i;
-   std::sort(order.begin(), order.end(), [&](int a, int b) { return pos[a].Z() < pos[b].Z(); });
+   if (fVertexByXYRadius) {
+      // In-plane tracks (pz ~ 0): z is degenerate, so order by distance from the beam
+      // axis instead — the near-axis end (the vertex) comes first, then outward.
+      auto r2 = [&](int i) { return pos[i].X() * pos[i].X() + pos[i].Y() * pos[i].Y(); };
+      std::sort(order.begin(), order.end(), [&](int a, int b) { return r2(a) < r2(b); });
+   } else {
+      std::sort(order.begin(), order.end(), [&](int a, int b) { return pos[a].Z() < pos[b].Z(); });
+   }
 
    // vertex = highest z_digi end (= lowest z_lab, i.e. order.front() after the ascending
    // z sort) -- the deterministic AT-TPC convention used by PRA/the validated UKF. Using
@@ -214,6 +247,16 @@ AtFittedTrack *AtGenfitter::GetFittedTrack(AtTrack *track, AtFitMetadata * /*fit
       trackCand.addHit(fTPCDetID, idx);
    }
 
+   // Effective PDG for this track. For mixed-charge final states (PUMA pi+/pi-)
+   // pick the signed PDG from the PRA curvature sign; otherwise use fPDG as-is.
+   int effPdg = fPDG;
+   if (fUseTrackChargeSign && track->GetChargeSign() != 0) {
+      int praSign = track->GetChargeSign();
+      if (fChargeSignFlip)
+         praSign = -praSign;
+      effPdg = (praSign > 0) ? std::abs(fPDG) : -std::abs(fPDG);
+   }
+
    TVector3 posSeed(vPos.X() / 10.0, vPos.Y() / 10.0, vPos.Z() / 10.0); // cm
    TVector3 momSeed;
    momSeed.SetMagThetaPhi(p_GeV, theta, phi);
@@ -224,9 +267,12 @@ AtFittedTrack *AtGenfitter::GetFittedTrack(AtTrack *track, AtFitMetadata * /*fit
    for (int d = 3; d < 6; ++d) covSeed(d, d) = std::pow(0.3 * p_GeV, 2) + 1e-6;
    trackCand.setCovSeed(covSeed);
    trackCand.setPosMomSeed(posSeed, momSeed, fZ);
-   trackCand.setPdgCode(fPDG);
+   trackCand.setPdgCode(effPdg);
 
-   TVector3 posRes, momRes;
+   TVector3 posRes, momRes;      // fitted state at the first (vertex-end) cluster
+   TVector3 posXtr, momXtr;      // fitted state back-extrapolated to the beam-axis POCA
+   bool xtrOk = false;           // did the POCA extrapolation succeed
+   double extrapLen = 0;         // path length of the POCA extrapolation (cm)
    TMatrixDSym covRes(6);
    double chi2 = -1, ndf = -1;
    bool converged = false;
@@ -243,7 +289,7 @@ AtFittedTrack *AtGenfitter::GetFittedTrack(AtTrack *track, AtFitMetadata * /*fit
       fGenfitTrackArray->Delete();
       auto *gfTrack = new ((*fGenfitTrackArray)[fGenfitTrackArray->GetEntriesFast()])
                          genfit::Track(trackCand, *fMeasurementFactory);
-      gfTrack->addTrackRep(new genfit::RKTrackRep(fPDG));
+      gfTrack->addTrackRep(new genfit::RKTrackRep(effPdg));
       auto *rep = dynamic_cast<genfit::RKTrackRep *>(gfTrack->getTrackRep(0));
       try {
          fKalmanFitter->processTrackWithRep(gfTrack, rep, false);
@@ -253,6 +299,31 @@ AtFittedTrack *AtGenfitter::GetFittedTrack(AtTrack *track, AtFitMetadata * /*fit
          ndf = st->getNdf();
          genfit::MeasuredStateOnPlane fitState = gfTrack->getFittedState();
          fitState.getPosMomCov(posRes, momRes, covRes);
+
+         // Back-extrapolate the vertex-end state to the POCA to the beam axis
+         // (z-axis line through origin). extrapolateToLine moves the state and
+         // returns the path length; if it throws we keep the first-cluster state.
+         // Material effects are DISABLED during this purely geometric step: the
+         // path runs inward through the annular gas's hollow centre (r < inner
+         // ring), where genfit's TGeo navigation has no gas to step through and
+         // throws. Energy loss over this short vertex extrapolation is negligible
+         // (the same reason the UKF back-extrap is a pure helix). Restored after.
+         xtrOk = false;
+         if (fBackExtrapPOCA) {
+            genfit::MaterialEffects *me = genfit::MaterialEffects::getInstance();
+            const bool fitNoEffects = fNoMatEffects && !fUseBetheBloch;
+            me->setNoEffects(true);
+            try {
+               genfit::MeasuredStateOnPlane xtrState = gfTrack->getFittedState(); // vertex-end (point 0)
+               extrapLen = rep->extrapolateToLine(xtrState, TVector3(0, 0, 0), TVector3(0, 0, 1));
+               posXtr = xtrState.getPos();
+               momXtr = xtrState.getMom();
+               xtrOk = std::isfinite(posXtr.Mag()) && std::isfinite(momXtr.Mag());
+            } catch (...) {
+               xtrOk = false;
+            }
+            me->setNoEffects(fitNoEffects);
+         }
          fittedPts.clear();
          int npts = gfTrack->getNumPointsWithMeasurement();
          for (int ip = 0; ip < npts; ++ip) {
@@ -295,13 +366,46 @@ AtFittedTrack *AtGenfitter::GetFittedTrack(AtTrack *track, AtFitMetadata * /*fit
    if (thetaFitDeg < fThetaMinDeg || thetaFitDeg > fThetaMaxDeg)
       return nullptr;
 
+   // First-cluster (pre-extrap) kinematics — always available.
+   XYZVector posFirst(posRes.X() * 10.0, posRes.Y() * 10.0, posRes.Z() * 10.0); // mm
+
+   // At-vertex (post-extrap) kinematics: the POCA state if the extrapolation ran,
+   // else fall back to the first-cluster state (unchanged legacy behaviour).
+   double KEvtx = KE, thetaVtx = momRes.Theta(), phiVtx = momRes.Phi();
+   XYZVector posVtx = posFirst;
+   if (fBackExtrapPOCA && xtrOk) {
+      double pX = momXtr.Mag() * 1000.0; // MeV
+      if (std::isfinite(pX) && pX > 0) {
+         KEvtx = std::sqrt(pX * pX + mass * mass) - mass;
+         thetaVtx = momXtr.Theta();
+         phiVtx = momXtr.Phi();
+      }
+      posVtx = XYZVector(posXtr.X() * 10.0, posXtr.Y() * 10.0, posXtr.Z() * 10.0 - fVertexZBias); // mm
+   }
+
    auto owner = std::make_unique<AtFittedTrack>();
    AtFittedTrack *ft = owner.get();
    ft->SetTrackID(track->GetTrackID());
-   ft->SetKinematics(KE, momRes.Theta(), momRes.Phi());
+   // Kinematics = at-vertex (post-extrap); KinematicsXtr = at first cluster (pre-extrap).
+   ft->SetKinematics(KEvtx, thetaVtx, phiVtx);
    ft->SetKinematicsXtr(KE, momRes.Theta(), momRes.Phi());
-   ft->SetVertex(XYZVector(posRes.X() * 10.0, posRes.Y() * 10.0, posRes.Z() * 10.0)); // cm -> mm
-   ft->SetParticleInfo(std::to_string(fZ), fZ, fMassAmu);
+   ft->SetVertex(posVtx); // POCA vertex (mm) when extrapolated, else first-cluster
+   // Publish the vertex in the TrackProperties too (only in POCA mode), so it reads
+   // uniformly with the UKF (comparison/display code reads initialPositionXtr for
+   // the vertex). Legacy heavy-ion output is untouched (no TrackProperties set).
+   if (fBackExtrapPOCA && xtrOk) {
+      double distPOCA = std::hypot(posVtx.X(), posVtx.Y());
+      ft->SetTrackPropertiesStruct(posFirst, posVtx, std::abs(extrapLen) * 10.0, distPOCA, -1, -1, 0, (Int_t)n);
+   }
+   if (fUseTrackChargeSign) {
+      // Mixed-charge mode: record the SIGNED PDG/charge actually fit so the
+      // per-track charge decision is inspectable downstream.
+      int effChargeSign = (effPdg < 0) ? -1 : 1;
+      ft->SetParticleInfo(std::to_string(effPdg), effChargeSign * fZ, fMassAmu);
+   } else {
+      // Legacy single-species behaviour (byte-for-byte preserved).
+      ft->SetParticleInfo(std::to_string(fZ), fZ, fMassAmu);
+   }
    ft->SetSmoothedPositions(std::move(fittedPts)); // fitted trajectory for display/QA
 
    auto meta = std::make_unique<AtFitTrackMetadata>();

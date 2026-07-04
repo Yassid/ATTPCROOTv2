@@ -77,6 +77,87 @@ public:
    }
    void SetVertexAxisMaxDist(Double_t mm) { fVertexAxisMaxDist = mm; }
 
+   /// Energy-loss model for genfit's MaterialEffects. Default (false) keeps the
+   /// legacy AT-TPC behaviour: force the SRIM-table parameterization
+   /// (useEnergyLossParam + setEnergyLossFile), which is accurate near the Bragg
+   /// peak for the heavy ions the AT-TPC normally tracks (p, d, fragments) — this
+   /// is what every validated heavy-ion pipeline (16C+p, (p,d), (d,p)) relies on.
+   /// When true, use genfit's NATIVE Bethe-Bloch instead (skip the SRIM path):
+   /// correct for minimum-ionizing / relativistic particles such as pions and
+   /// kaons, whose kinetic energy lies outside the ion SRIM tables (the SRIM path
+   /// throws "kinetic energy out of parameterization boundaries" on them). Use
+   /// this for the PUMA channels. Opt-in so heavy-ion fits are byte-for-byte
+   /// unchanged.
+   void SetEnergyLossBetheBloch(Bool_t on) { fUseBetheBloch = on; }
+
+   /// Per-track charge sign from the PRA curvature (AtTrack::GetChargeSign, the
+   /// same cross-product prior the UKF uses). When on, each track is fit with the
+   /// signed PDG matching its PRA charge: +|fPDG| if the PRA sign is >0, else
+   /// -|fPDG| (e.g. fPDG=211 fits pi+ tracks and -211 fits pi- tracks). Needed for
+   /// mixed-charge final states (PUMA branch 8 = pi+/pi-). Tracks with an unknown
+   /// PRA sign (0) fall back to fPDG. Default off (single-species heavy-ion fits
+   /// keep using fPDG unchanged). SetChargeSignFlip inverts the mapping if the
+   /// genfit lab-frame handedness turns out opposite to PRA's reco-frame
+   /// convention — determine empirically against truth, like the UKF did.
+   void SetUseTrackChargeSign(Bool_t on) { fUseTrackChargeSign = on; }
+   void SetChargeSignFlip(Bool_t on) { fChargeSignFlip = on; }
+
+   /// Sign of the drift-z -> lab-z transform: z_lab = ZPadPlane + sign * z_digi.
+   /// Default -1 is the experimental AT-TPC convention (z_lab = ZPadPlane - z_digi,
+   /// z_digi a drift-time coordinate measured DOWN from the pad plane). PUMA sim
+   /// digitizes hits already in a lab-like POSITIVE z frame (hits near the +75 mm
+   /// vertex), so the -1 flip would push them to negative z, OUTSIDE the gas volume
+   /// -> genfit material navigation fails and most fits die. Set +1 (with
+   /// ZPadPlane=0) to use the drift z as-is. Opt-in; heavy-ion pipelines keep -1.
+   void SetZDriftSign(Double_t s) { fZDriftSign = s; }
+
+   /// Internal re-clustering (parallel to the UKF). PRA can leave only ~2 clusters
+   /// per track on PUMA's fine annular pad plane, which starves genfit (needs
+   /// >= fMinClusters well-separated points for a curvature fit). When on, ArcWalk
+   /// re-clusters the raw hits into ~targetClusters clusters on a LOCAL COPY of the
+   /// track, so the shared AtPatternEvent and any parallel UKF task are untouched.
+   /// Same AtTrackTransformer::ClusterizeArcWalk the UKF uses. Default off (legacy
+   /// heavy-ion fits keep using PRA's clusters directly).
+   void SetReclusterArcWalk(Bool_t on, Int_t targetClusters = 8, Int_t minHitsPerCluster = 3, Int_t kNN = 10)
+   {
+      fReclusterArcWalk = on;
+      fReclusterTarget = targetClusters;
+      fReclusterMinHits = minHitsPerCluster;
+      fReclusterKNN = kNN;
+   }
+
+   /// Back-extrapolate the fitted vertex-end state to the point of closest approach
+   /// to the beam axis (the z-axis line through the origin), using genfit's
+   /// RKTrackRep::extrapolateToLine. When on, the AtFittedTrack reports:
+   ///   - initialPositionXtr / vertex  = position AT the POCA (extrapolated)
+   ///   - Kinematics (KE,theta,phi)    = momentum AT the POCA (post-extrap, at-vertex)
+   ///   - initialPosition              = fitted state at the first cluster
+   ///   - KinematicsXtr                = momentum at the first cluster (pre-extrap)
+   /// matching the UKF convention so vertices are directly comparable. Without it,
+   /// the vertex is just the fitted first-cluster state (~inner-ring radius from the
+   /// axis). Default off. Only applies when material effects / a valid geometry are
+   /// present (the extrapolation navigates the field); it silently keeps the
+   /// first-cluster state if the extrapolation throws.
+   void SetBackExtrapPOCA(Bool_t on) { fBackExtrapPOCA = on; }
+
+   /// Constant subtracted from the back-extrapolated vertex z (mm), matching the
+   /// UKF's SetVertexZBias. Compensates the hardwired +8.6 mm AtPSA shaping-delay
+   /// offset in the digi z-reconstruction (peakingTime * vDrift). Only applied when
+   /// SetBackExtrapPOCA is on. Default 0 (no correction) so other pipelines are
+   /// unaffected. PUMA uses 8.6.
+   void SetVertexZBias(Double_t mm) { fVertexZBias = mm; }
+
+   /// Order clusters (and pick the vertex end) by distance from the beam axis (xy
+   /// radius, ascending) instead of by drift z. The default z-ordering assumes the
+   /// track advances monotonically in z (beam-along-z AT-TPC tracks), but PUMA's
+   /// in-plane pions have pz ~ 0 -> z is nearly constant -> the z sort is degenerate
+   /// and picks the OUTER end as the vertex ~half the time, seeding the fit backwards
+   /// (it then diverges and the POCA lands far off-axis: the vertex dr-tail). Ordering
+   /// by xy radius puts the beam-axis end first — correct for tracks that fan OUT from
+   /// a near-axis vertex. Mirrors the UKF's SetUseClusterDirSeed xy sort. Default off
+   /// (beam-along-z pipelines keep z-ordering).
+   void SetVertexByXYRadius(Bool_t on) { fVertexByXYRadius = on; }
+
    /// Opt-in fix for BACKWARD-track seed reversal. The default seed always takes the
    /// lowest-z_lab end as the vertex and points the momentum toward +z_lab, which is
    /// correct for forward tracks but REVERSES backward ones (genfit reflects them into
@@ -201,6 +282,17 @@ private:
    Bool_t fInit{kFALSE};
 
    Bool_t fBackwardSeedFix{kFALSE};    // seed backward (GeoTheta>90) tracks from the far end (see setter)
+   Bool_t fUseBetheBloch{kFALSE};      // use genfit native Bethe-Bloch (pions/kaons) instead of SRIM tables
+   Bool_t fUseTrackChargeSign{kFALSE}; // pick signed PDG per track from PRA charge sign (mixed q final states)
+   Bool_t fChargeSignFlip{kFALSE};     // invert the PRA-sign -> PDG-sign mapping (empirical frame calibration)
+   Double_t fZDriftSign{-1.0};         // z_lab = ZPadPlane + fZDriftSign * z_digi (-1 legacy exp, +1 sim frame)
+   Bool_t fReclusterArcWalk{kFALSE};   // ArcWalk re-cluster raw hits on a copy before fitting (PUMA)
+   Int_t fReclusterTarget{8};          // target clusters for the ArcWalk re-clustering
+   Int_t fReclusterMinHits{3};         // min hits per cluster
+   Int_t fReclusterKNN{10};            // kNN adjacency for ArcWalk
+   Bool_t fBackExtrapPOCA{kFALSE};     // back-extrapolate fitted state to beam-axis POCA (UKF-comparable vertex)
+   Double_t fVertexZBias{0.0};         // constant subtracted from back-extrap vertex z (mm); AtPSA shaping-delay fix
+   Bool_t fVertexByXYRadius{kFALSE};   // order clusters / pick vertex by xy radius (in-plane tracks) not drift z
 
    Bool_t fMergeContinuity{kFALSE};    // merge PRA-split fragments of one track before fitting
    Double_t fMergeCenterDist{15.0};    // max PRA-circle centre distance to merge (mm) — "same circle" test
