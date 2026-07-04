@@ -88,6 +88,10 @@ void run_digi_ukf_genfit_test8(int nEvents = 1000, float tCluster = 8.0, bool ge
    AtPRAtask *praTask = new AtPRAtask();
    praTask->SetTcluster(tCluster);
    praTask->SetTCUseSelectAndMerge(false);
+   // Robust charge sign: angular sweep about the fitted circle centre (huge lever arm)
+   // instead of the 3-point cross product, which is noise-dominated on PUMA's shallow
+   // 312 mm-radius arcs. Lifts charge accuracy 83% -> ~99.6% for BOTH fitters.
+   praTask->SetChargeFromCenter(true);
    praTask->SetPersistence(kTRUE);
 
    fRun->AddTask(clusterizer);

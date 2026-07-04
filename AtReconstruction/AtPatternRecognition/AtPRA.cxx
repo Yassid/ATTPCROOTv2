@@ -194,8 +194,19 @@ std::cout << " Processing track with " << track.GetHitArray().size() << " points
          const auto &p0 = byR.front().second;
          const auto &pm = byR[byR.size() / 2].second;
          const auto &pN = byR.back().second;
-         double crossZ = (pm.first - p0.first) * (pN.second - p0.second)
-                        - (pm.second - p0.second) * (pN.first - p0.first);
+         double crossZ;
+         if (fChargeFromCenter) {
+            // Angular sweep about the FITTED circle centre: robust on shallow arcs
+            // because |p - C| ~ R gives a large lever arm (the 3 near-collinear
+            // points below give a tiny, noise-dominated cross product). Same sign
+            // convention as the 3-point rule.
+            double v0x = p0.first - center.X(), v0y = p0.second - center.Y();
+            double vNx = pN.first - center.X(), vNy = pN.second - center.Y();
+            crossZ = v0x * vNy - v0y * vNx;
+         } else {
+            crossZ = (pm.first - p0.first) * (pN.second - p0.second)
+                     - (pm.second - p0.second) * (pN.first - p0.first);
+         }
          track.SetChargeSign(crossZ > 0 ? -1 : +1);
       }
 

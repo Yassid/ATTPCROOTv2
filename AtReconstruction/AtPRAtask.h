@@ -78,6 +78,7 @@ private:
 
    // TC (fPRAlgorithm == 0) — primary/fragment heuristic switch (disable for annular geometries)
    bool fTCUseSelectAndMerge{true};
+   bool fChargeFromCenter{false};
 
    // Riemann parameters (fPRAlgorithm == 3)
    double fRiemannInlierDist{15.0};
@@ -156,6 +157,10 @@ public:
 
    /// TC (PRAlgorithm == 0): apply the AT-TPC primary/fragment heuristic. Disable for PUMA / annular geometries.
    void SetTCUseSelectAndMerge(bool use) { fTCUseSelectAndMerge = use; }
+
+   /// Charge sign from the angular sweep about the fitted circle centre (robust on
+   /// shallow arcs). Forwarded to AtPRA::SetChargeFromCenter. Default off.
+   void SetChargeFromCenter(bool use) { fChargeFromCenter = use; }
 
    /// Riemann (PRAlgorithm == 3): RANSAC inlier distance to plane in (x,y,x^2+y^2) space (mm)
    void SetRiemannInlierDist(double d) { fRiemannInlierDist = d; }

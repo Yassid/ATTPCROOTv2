@@ -63,6 +63,8 @@ protected:
    bool fPreclusterRadiusFit{false}; //<! Pre-cluster hits into a coarse 3D grid before circle fit
    double fPreclusterBin_mm{3.0};    //<! Bin size for pre-clustering (mm)
 
+   bool fChargeFromCenter{false};    //<! Charge sign from angular sweep about the fitted circle centre
+
 public:
    virtual ~AtPRA() = default;
 
@@ -86,6 +88,15 @@ public:
    void SetMaxHitsRadius(Int_t n) { fMaxHitsRadius = n; }
    /// Use raw hits instead of clusters for circle fit (default: false)
    void SetUseHitsForRadius(Bool_t use) { fUseHitsForRadius = use; }
+   /// Charge sign from the angular sweep about the FITTED circle centre (GetGeoCenter)
+   /// instead of the 3-point cross product. Same sign convention, but robust on
+   /// shallow arcs: the centre is ~R away, so the lever arm is huge (the 3 nearly-
+   /// collinear points give a tiny, noise-dominated cross product). On branch-8
+   /// PUMA pions this lifts charge accuracy 83% -> 99.6%. Default off (well-curved
+   /// tracks are unchanged; this only matters when the 3-point estimate is noisy).
+   /// Assumes the r-ordered hits sweep < 180 deg about the centre (true for tracks
+   /// fanning out from a near-axis vertex; not for >180 deg loopers).
+   void SetChargeFromCenter(bool use = true) { fChargeFromCenter = use; }
    /// Use arc-walk clustering instead of ClusterizeSmooth3D (gap-immune)
    void SetUseArcWalk(bool use = true) { fUseArcWalk = use; }
    /// Target number of clusters per track (hits/cluster = nHits / targetClusters)

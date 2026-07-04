@@ -118,6 +118,7 @@ InitStatus AtPRAtask::Init()
       dynamic_cast<AtPATTERN::AtTrackFinderTC *>(fPRA.get())->SetClusterRadius(fClusterRadius);
       dynamic_cast<AtPATTERN::AtTrackFinderTC *>(fPRA.get())->SetClusterDistance(fClusterDistance);
       dynamic_cast<AtPATTERN::AtTrackFinderTC *>(fPRA.get())->SetUseSelectAndMerge(fTCUseSelectAndMerge);
+      fPRA->SetChargeFromCenter(fChargeFromCenter); // base setter (robust charge sign on shallow arcs)
 
       std::cout << " Track finder - Parameters for clusterization "
                 << "\n";
