@@ -1,51 +1,97 @@
 #!/usr/bin/env python
-"""Manual point-cloud labeler for real a1975 16C(d,p) events (GNN gold set).
+"""Manual point-cloud labeler for real a1975 16C(d,p) events (GNN gold set / training labels).
 
-Lasso hits on either 2D projection and assign a class. Semantic labels match the
-overlay convention:  0 = proton , 1 = 17C recoil , 2 = beam/noise (default).
-Optional HDBSCAN "guide" coloring reveals track structure before you lasso.
+Label individual particle TRACKS as instances; beam + noise haze = background. Trains track
+SEPARATION (species ID left to genfit/PID). Labels: 0 = background, 1,2,3,... = tracks.
+
+** KEY FEATURE: each unreviewed event is PRE-SEEDED with dircluster (direction+dE/dx clustering) **
+so you CORRECT rather than label from scratch. dircluster rarely merges two tracks (so you almost
+never have to split) and only over-segments -> your job is mostly to MERGE fragments of the same
+track and confirm. Noise is pre-marked as background.
 
 Run (GUI, needs WSLg display + PySide6 in gnn_env):
-    ~/gnn_env/bin/python label_tool.py
-Smoke test (no GUI, renders event 0 to a PNG and exits):
+    ~/gnn_env/bin/python label_tool.py [--input data/label_input.parquet] [--limit N]
+Smoke test (no GUI, pre-seeds event 0 with dircluster and renders it):
     ~/gnn_env/bin/python label_tool.py --smoke
 
-Workflow per event: lasso the proton track -> press P ; (optional) lasso 17C -> R ;
-everything else stays beam/noise. Press N for next (autosaves). Output: data/labels.parquet
-(columns event,x,y,z,q,label,reviewed). Only reviewed=True events are meant for training.
+Workflow per event: it opens PRE-SEEDED (colored tracks + gray background). To merge fragments of
+one physical track: press its number (1..9), then lasso the other fragments -> they join it.
+To fix noise/beam grabbed into a track: press B, lasso it. Press D to confirm (reviewed), N next.
 
 Keys:
-  P proton | R 17C | B beam/noise   (class to paint the next lasso / last selection)
-  G toggle HDBSCAN guide colors      C reset event to all beam/noise
-  D toggle 'reviewed' flag           N / -> next event     M / <- prev event
-  S save now                         Q quit (autosaves)
+  (lasso)  paint hits with the CURRENT track id      T / Enter  start a NEW track (next id)
+  1..9     select an existing track id (merge/fix)   B / 0      paint selection = background
+  G        re-seed this event with dircluster        C          reset event to all background
+  Z        undo last lasso                            D          toggle 'reviewed' flag
+  S        save now      N/-> next (autosave)         M/<-       previous event      Q quit
 Mouse: drag to lasso on either panel. Point size scales with charge.
+Output: data/labels.parquet (event,x,y,z,q,label,reviewed) -- only reviewed=True events train.
 """
-import argparse, sys, numpy as np, pandas as pd
+import argparse, os, sys, numpy as np, pandas as pd
 from matplotlib.path import Path
 
-CLASS = {0: ("proton", "#2f7bff"), 1: ("17C", "#e0301e"), 2: ("beam/noise", "#b7b7b7")}
+BG_COLOR = "#c9c9c9"
 IN_PARQUET  = "data/label_input.parquet"
 OUT_PARQUET = "data/labels.parquet"
 
+# import dircluster from the parent dir (16C_dp_gnn/) for the pre-seed
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+try:
+    from dircluster import cluster as _dircluster
+except Exception:
+    _dircluster = None
 
-def load():
-    df = pd.read_parquet(IN_PARQUET)
+
+def track_palette():
+    import matplotlib.cm as cm
+    return cm.tab20(np.linspace(0, 1, 20))
+
+
+def color_for(lbls, pal):
+    out = np.empty((len(lbls), 4))
+    for i, l in enumerate(lbls):
+        out[i] = (0.79, 0.79, 0.79, 1.0) if l <= 0 else pal[(int(l) - 1) % 20]
+    return out
+
+
+def preseed(xyz, q):
+    """dircluster -> initial track labels (fragments 1,2,...; noise -> 0=background)."""
+    if _dircluster is None:
+        return np.zeros(len(q), np.int16)
+    lab = _dircluster(xyz, q, qratio=0.65, min_hits=4)   # noise=-1
+    out = np.zeros(len(lab), np.int16)
+    for newid, c in enumerate(sorted(set(lab[lab >= 0])), start=1):
+        out[lab == c] = newid
+    return out
+
+
+def compact(lbl):
+    """renumber positive track ids to 1..K contiguous (clean output)."""
+    out = np.zeros_like(lbl)
+    for newid, t in enumerate(sorted(set(lbl[lbl > 0].tolist())), start=1):
+        out[lbl == t] = newid
+    return out
+
+
+def load(in_parquet, limit=None):
+    df = pd.read_parquet(in_parquet)
     events = []
     for ev, g in df.groupby("event", sort=True):
         g = g.reset_index(drop=True)
-        xyz = g[["x", "y", "z"]].to_numpy(float)
-        q = g["q"].to_numpy(float)
-        events.append({"ev": int(ev), "xyz": xyz, "q": q,
-                       "label": np.full(len(g), 2, np.int8), "reviewed": False})
-    # resume from prior labels if present and consistent
+        events.append({"ev": int(ev), "xyz": g[["x", "y", "z"]].to_numpy(float),
+                       "q": g["q"].to_numpy(float),
+                       "label": np.zeros(len(g), np.int16), "reviewed": False, "seeded": False})
+        if limit and len(events) >= limit:
+            break
     try:
         prev = pd.read_parquet(OUT_PARQUET)
         for e in events:
             p = prev[prev.event == e["ev"]]
             if len(p) == len(e["label"]):
-                e["label"] = p["label"].to_numpy(np.int8)
-                e["reviewed"] = bool(p["reviewed"].iloc[0])
+                e["label"] = p["label"].to_numpy(np.int16); e["reviewed"] = bool(p["reviewed"].iloc[0])
+                # keep any event that already has work (reviewed OR any track label); only re-seed
+                # truly-untouched (all-background) events -> never wipes un-confirmed progress
+                e["seeded"] = e["reviewed"] or bool((e["label"] > 0).any())
         print(f"resumed: {int(prev.groupby('event').reviewed.first().sum())} events already reviewed")
     except FileNotFoundError:
         pass
@@ -53,15 +99,12 @@ def load():
 
 
 def save(events):
-    frames = []
-    for e in events:
-        frames.append(pd.DataFrame({
-            "event": e["ev"], "x": e["xyz"][:, 0], "y": e["xyz"][:, 1], "z": e["xyz"][:, 2],
-            "q": e["q"], "label": e["label"], "reviewed": e["reviewed"]}))
+    frames = [pd.DataFrame({"event": e["ev"], "x": e["xyz"][:, 0], "y": e["xyz"][:, 1],
+                            "z": e["xyz"][:, 2], "q": e["q"], "label": compact(e["label"]),
+                            "reviewed": e["reviewed"]}) for e in events]
     out = pd.concat(frames, ignore_index=True)
     out.to_parquet(OUT_PARQUET, index=False)
-    nrev = int(out.groupby("event").reviewed.first().sum())
-    return nrev
+    return int(out.groupby("event").reviewed.first().sum())
 
 
 def sizes(q):
@@ -69,24 +112,8 @@ def sizes(q):
     return 6 + 34 * (s - s.min()) / (np.ptp(s) + 1e-9)
 
 
-def guide_colors(xyz):
-    from sklearn.cluster import HDBSCAN
-    import matplotlib.cm as cm
-    X = xyz.copy()
-    X[:, :2] *= 1.0            # keep transverse & drift comparable-ish
-    lab = HDBSCAN(min_cluster_size=15, min_samples=6).fit_predict(X)
-    pal = cm.tab20(np.linspace(0, 1, 20))
-    cols = np.array([pal[l % 20] if l >= 0 else (0.85, 0.85, 0.85, 1.0) for l in lab])
-    return cols
-
-
-def render(e, ax_xy, ax_zy, guide=False):
-    xyz, q = e["xyz"], e["q"]
-    if guide:
-        cols = guide_colors(xyz)
-    else:
-        cols = np.array([CLASS[int(l)][1] for l in e["label"]])
-    sz = sizes(q)
+def render(e, ax_xy, ax_zy, pal):
+    xyz, q = e["xyz"], e["q"]; cols = color_for(e["label"], pal); sz = sizes(q)
     ax_xy.clear(); ax_zy.clear()
     ax_xy.scatter(xyz[:, 0], xyz[:, 1], s=sz, c=cols, edgecolors="none")
     ax_zy.scatter(xyz[:, 2], xyz[:, 1], s=sz, c=cols, edgecolors="none")
@@ -95,96 +122,94 @@ def render(e, ax_xy, ax_zy, guide=False):
     ax_zy.set_title("drift  Z vs Y"); ax_zy.set_xlabel("z [mm]"); ax_zy.set_ylabel("y [mm]")
 
 
-def counts(e):
-    u, c = np.unique(e["label"], return_counts=True)
-    d = dict(zip(u.tolist(), c.tolist()))
-    return f"p={d.get(0,0)} 17C={d.get(1,0)} bg={d.get(2,0)}"
+def nspirals(e):
+    return int((np.unique(e["label"]) > 0).sum())
 
 
-def smoke():
-    import matplotlib
-    matplotlib.use("Agg")
+def free_id(e):
+    return int(e["label"].max()) + 1 if e["label"].max() > 0 else 1
+
+
+def ensure_seeded(e):
+    if not e["seeded"]:
+        e["label"] = preseed(e["xyz"], e["q"]); e["seeded"] = True
+
+
+def smoke(in_parquet):
+    import matplotlib; matplotlib.use("Agg")
     import matplotlib.pyplot as plt
-    events = load()
-    fig, (a1, a2) = plt.subplots(1, 2, figsize=(13, 5.5))
-    # fake a proton lasso on event 0 to exercise the label path
-    e = events[0]
-    off = np.hypot(e["xyz"][:, 0], e["xyz"][:, 1]) >= 60
-    e["label"][off] = 0
-    render(e, a1, a2)
-    fig.suptitle(f"SMOKE event {e['ev']}  n={len(e['q'])}  {counts(e)}")
-    plt.tight_layout(); out = "data/smoke_event0.png"; plt.savefig(out, dpi=110)
-    print(f"smoke OK: {len(events)} events loaded, rendered {out}")
+    events = load(in_parquet); pal = track_palette()
+    e = next((ev for ev in events if not ev["reviewed"]), events[0])   # test pre-seed on an UNreviewed event
+    ensure_seeded(e)
+    fig, (a1, a2) = plt.subplots(1, 2, figsize=(13, 5.5)); render(e, a1, a2, pal)
+    fig.suptitle(f"SMOKE (dircluster pre-seed) event {e['ev']}  n={len(e['q'])}  tracks={nspirals(e)}")
+    plt.tight_layout(); plt.savefig("data/smoke_event0.png", dpi=110)
+    print(f"smoke OK: {len(events)} events, dircluster pre-seed -> {nspirals(e)} tracks, rendered data/smoke_event0.png")
 
 
-def gui():
-    import matplotlib
-    matplotlib.use("QtAgg")
+def gui(in_parquet, limit):
+    import matplotlib; matplotlib.use("QtAgg")
     import matplotlib.pyplot as plt
     from matplotlib.widgets import LassoSelector
-    events = load()
-    st = {"i": 0, "cls": 0, "guide": False}
-    fig, (ax_xy, ax_zy) = plt.subplots(1, 2, figsize=(14, 6.5))
-    fig.subplots_adjust(bottom=0.12, top=0.9)
+    events = load(in_parquet, limit); pal = track_palette()
+    st = {"i": 0, "cur": 1, "undo": None}
+    fig, (ax_xy, ax_zy) = plt.subplots(1, 2, figsize=(14, 6.5)); fig.subplots_adjust(bottom=0.1, top=0.9)
 
     def title():
-        e = events[st["i"]]
-        nrev = sum(x["reviewed"] for x in events)
-        fig.suptitle(f"event {st['i']+1}/{len(events)} (src {e['ev']})   "
-                     f"paint class = [{CLASS[st['cls']][0]}]   {counts(e)}   "
-                     f"reviewed {nrev}/{len(events)}   {'GUIDE' if st['guide'] else ''}")
+        e = events[st["i"]]; nrev = sum(x["reviewed"] for x in events)
+        cur = "background" if st["cur"] == 0 else f"track #{st['cur']}"
+        fig.suptitle(f"event {st['i']+1}/{len(events)} (src {e['ev']})   painting = [{cur}]   "
+                     f"tracks here: {nspirals(e)}   reviewed {nrev}/{len(events)}"
+                     f"   {'[reviewed]' if e['reviewed'] else ''}")
 
     def draw():
-        render(events[st["i"]], ax_xy, ax_zy, st["guide"])
-        title(); fig.canvas.draw_idle()
+        render(events[st["i"]], ax_xy, ax_zy, pal); title(); fig.canvas.draw_idle()
 
     def apply(mask):
-        e = events[st["i"]]
-        e["label"][mask] = st["cls"]
-        if st["cls"] in (0, 1):
-            e["reviewed"] = True
+        e = events[st["i"]]; st["undo"] = (st["i"], e["label"].copy())
+        e["label"][mask] = st["cur"]
+        if st["cur"] >= 1: e["reviewed"] = True
         draw()
 
-    def on_xy(verts):
-        e = events[st["i"]]
-        m = Path(verts).contains_points(e["xyz"][:, :2])
+    def on_xy(v):
+        e = events[st["i"]]; m = Path(v).contains_points(e["xyz"][:, :2])
         if m.any(): apply(m)
 
-    def on_zy(verts):
-        e = events[st["i"]]
-        m = Path(verts).contains_points(np.c_[e["xyz"][:, 2], e["xyz"][:, 1]])
+    def on_zy(v):
+        e = events[st["i"]]; m = Path(v).contains_points(np.c_[e["xyz"][:, 2], e["xyz"][:, 1]])
         if m.any(): apply(m)
 
-    ls1 = LassoSelector(ax_xy, on_xy)          # keep refs alive
-    ls2 = LassoSelector(ax_zy, on_zy)
+    ls1 = LassoSelector(ax_xy, on_xy); ls2 = LassoSelector(ax_zy, on_zy)  # keep refs
+
+    def goto(j):
+        save(events); st["i"] = min(max(j, 0), len(events)-1); ensure_seeded(events[st["i"]])
+        st["cur"] = free_id(events[st["i"]]); st["undo"] = None; draw()
 
     def key(evt):
-        k = (evt.key or "").lower()
-        if k == "p": st["cls"] = 0; title(); fig.canvas.draw_idle()
-        elif k == "r": st["cls"] = 1; title(); fig.canvas.draw_idle()
-        elif k == "b": st["cls"] = 2; title(); fig.canvas.draw_idle()
-        elif k == "g": st["guide"] = not st["guide"]; draw()
-        elif k == "c":
-            events[st["i"]]["label"][:] = 2; draw()
-        elif k == "d":
-            events[st["i"]]["reviewed"] = not events[st["i"]]["reviewed"]; title(); fig.canvas.draw_idle()
-        elif k in ("n", "right"):
-            save(events); st["i"] = min(st["i"] + 1, len(events) - 1); st["guide"] = False; draw()
-        elif k in ("m", "left"):
-            save(events); st["i"] = max(st["i"] - 1, 0); st["guide"] = False; draw()
-        elif k == "s":
-            print(f"saved, reviewed {save(events)}/{len(events)}")
-        elif k == "q":
-            print(f"quit, reviewed {save(events)}/{len(events)}"); plt.close(fig)
+        k = (evt.key or "").lower(); e = events[st["i"]]
+        if k in ("t", "enter"): st["cur"] = free_id(e); title(); fig.canvas.draw_idle()
+        elif k in ("b", "0"): st["cur"] = 0; title(); fig.canvas.draw_idle()
+        elif k in list("123456789"): st["cur"] = int(k); title(); fig.canvas.draw_idle()
+        elif k == "g": e["seeded"] = False; ensure_seeded(e); e["reviewed"] = False; draw()
+        elif k == "z" and st["undo"] and st["undo"][0] == st["i"]: e["label"] = st["undo"][1]; st["undo"] = None; draw()
+        elif k == "c": e["label"][:] = 0; e["seeded"] = True; st["cur"] = 1; draw()
+        elif k == "d": e["reviewed"] = not e["reviewed"]; title(); fig.canvas.draw_idle()
+        elif k in ("n", "right"): goto(st["i"]+1)
+        elif k in ("m", "left"): goto(st["i"]-1)
+        elif k == "s": print(f"saved, reviewed {save(events)}/{len(events)}")
+        elif k == "q": print(f"quit, reviewed {save(events)}/{len(events)}"); plt.close(fig)
 
     fig.canvas.mpl_connect("key_press_event", key)
-    draw()
-    print("labeler ready. Lasso a track, press P/R/B to paint. N next, S save, Q quit.")
+    ensure_seeded(events[0]); st["cur"] = free_id(events[0]); draw()
+    print("labeler ready (dircluster pre-seed). Merge fragments: press track#, lasso them. "
+          "T=new, B=bg, Z=undo, G=re-seed, D=confirm, N=next, Q=quit.")
     plt.show()
 
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--smoke", action="store_true")
+    ap.add_argument("--input", default=IN_PARQUET)
+    ap.add_argument("--limit", type=int, default=None)
     a = ap.parse_args()
-    smoke() if a.smoke else gui()
+    smoke(a.input) if a.smoke else gui(a.input, a.limit)
