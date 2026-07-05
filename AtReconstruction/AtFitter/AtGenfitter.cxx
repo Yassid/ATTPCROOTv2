@@ -135,13 +135,17 @@ AtFittedTrack *AtGenfitter::GetFittedTrack(AtTrack *track, AtFitMetadata * /*fit
    // parallel UKF task) are untouched. Geometry quantities (GeoRadius/Theta/charge)
    // come from the original PRA track; only the cluster source changes.
    AtTrack localTrack;
-   if (fReclusterArcWalk) {
+   const bool recluster = fReclusterArcWalk || fRingClustering;
+   if (recluster) {
       localTrack = *track;
       localTrack.ResetHitClusterArray();
       AtTools::AtTrackTransformer transformer;
-      transformer.ClusterizeArcWalk(localTrack, fReclusterTarget, fReclusterMinHits, fReclusterKNN);
+      if (fRingClustering) // resistive ring centroiding takes precedence
+         transformer.ClusterizeByRing(localTrack, fNPadsPerRing);
+      else
+         transformer.ClusterizeArcWalk(localTrack, fReclusterTarget, fReclusterMinHits, fReclusterKNN);
    }
-   AtTrack *ct = fReclusterArcWalk ? &localTrack : track;
+   AtTrack *ct = recluster ? &localTrack : track;
 
    auto *hc = ct->GetHitClusterArray();
    if (hc == nullptr || (int)hc->size() < fMinClusters)
@@ -203,6 +207,12 @@ AtFittedTrack *AtGenfitter::GetFittedTrack(AtTrack *track, AtFitMetadata * /*fit
       return nullptr;
    double theta = dir.Theta();
    double phi = dir.Phi();
+
+   // Near-straight guard: a track whose circle radius is unphysically large has an
+   // ill-determined (near-infinite) momentum and makes the RK stepper diverge/segfault
+   // (worst with precise ring-clustered centroids). Skip it BEFORE the fit.
+   if (fMaxSeedRadiusMM > 0 && track->GetGeoRadius() > fMaxSeedRadiusMM)
+      return nullptr;
 
    // momentum magnitude from Brho (circle radius from PRA)
    double radius_m = track->GetGeoRadius() / 1000.0; // mm -> m

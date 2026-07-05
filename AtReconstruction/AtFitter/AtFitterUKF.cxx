@@ -176,6 +176,13 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
          LOG(info) << "AtFitterUKF DROP[bad-geom-radius]: R=" << track->GetGeoRadius() << ". Skipping.";
          return nullptr;
       }
+      // Near-straight guard: an unphysically large radius (near-infinite momentum)
+      // makes the propagator diverge/segfault, worst with precise ring centroids.
+      // Skip BEFORE the fit rather than catch the segfault after.
+      if (fMaxSeedRadiusMM > 0 && track->GetGeoRadius() > fMaxSeedRadiusMM) {
+         LOG(info) << "AtFitterUKF DROP[near-straight]: R=" << track->GetGeoRadius() << " > " << fMaxSeedRadiusMM;
+         return nullptr;
+      }
       // PRA sometimes returns NaN GeoTheta with a valid radius (degenerate
       // (arc, z) regression). Recover theta from the cluster sequence so the
       // track isn't discarded.
@@ -312,7 +319,11 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
       // The digi→lab Z conversion is applied after this block.
       track->ResetHitClusterArray();
       AtTools::AtTrackTransformer transformer;
-      if (fUseArcWalk) {
+      if (fRingClustering) {
+         // Resistive-pad ring centroiding: one charge-weighted sub-pad point per
+         // annular ring (exploits AtPulse charge dispersion). Beats pad quantization.
+         transformer.ClusterizeByRing(*track, fNPadsPerRing);
+      } else if (fUseArcWalk) {
          // Geometry-based arc ordering, gap-immune. Target = fTargetClusters
          // when set (PUMA path); otherwise fall back to the ArcWalk default.
          const int target = (fTargetClusters > 0) ? fTargetClusters : 25;

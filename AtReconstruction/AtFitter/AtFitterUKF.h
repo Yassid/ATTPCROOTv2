@@ -116,6 +116,18 @@ public:
    /// the legacy 25 default if not set), `fArcWalkMinHits` is the floor on
    /// hits-per-cluster, and `fArcWalkKNN` controls graph adjacency.
    void SetUseArcWalk(bool use) { fUseArcWalk = use; }
+   /// Resistive-pad ring centroiding (charge-weighted centroid per annular ring),
+   /// exploiting AtPulse charge dispersion to beat pad quantization. Takes precedence
+   /// over ArcWalk/Smooth3D. nPadsPerRing = azimuthal subdivision of the PUMA map.
+   void SetUseRingClustering(bool use, int nPadsPerRing = 256)
+   {
+      fRingClustering = use;
+      fNPadsPerRing = nPadsPerRing;
+   }
+   /// Skip near-straight tracks (PRA circle radius > this, mm) BEFORE the fit — an
+   /// unphysically large radius diverges the propagator/segfaults (worst with precise
+   /// ring centroids). Default 0 (off). PUMA: ~1500 mm (p>1.8 GeV for a 0.4 GeV pion).
+   void SetMaxSeedRadius(double mm) { fMaxSeedRadiusMM = mm; }
    /// Force the back-extrapolated vertex to land at xy = (0, 0) instead of
    /// the POCA on the PRA circle. The PRA circle is fit through the hits
    /// only and typically does NOT pass through the actual beam-axis
@@ -270,6 +282,9 @@ private:
    double fMinClusterSpacing{3.0}; // Minimum distance between clusters (mm)
    bool fUseClusterDirSeed{false}; // Override PRA Geo direction with cluster derivative
    bool fUseArcWalk{false};        // Use ClusterizeArcWalk instead of ClusterizeSmooth3D
+   bool fRingClustering{false};    // Resistive ring centroiding (charge-weighted per ring)
+   int fNPadsPerRing{256};         // Azimuthal subdivision for ring clustering
+   double fMaxSeedRadiusMM{0.0};   // Skip near-straight tracks (radius > this) before fit; 0=off
    bool fForceVertexOnBeamAxis{false}; // Extrapolate to xy=(0,0), not POCA on PRA circle
    bool fUpdateAnglesOnBackExtrap{false}; // Rotate φ_s by arc/R so Kinematics.phi is at the vertex
    double fBackExtrapTargetX{std::numeric_limits<double>::quiet_NaN()}; // Straight-line tail target x (mm)

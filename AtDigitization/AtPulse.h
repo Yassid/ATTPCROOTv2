@@ -36,6 +36,7 @@ protected:
    double fLowGainFactor = 0; //! If pad is AtMap::kLowGain multiply gain by this factor
    double fGETGain = 0;       //! GET Gain (ADC ch/electron).
    double fPeakingTime = 0;   //! Electronic peaking time in us
+   double fPRFSigma = 0;      //! resistive charge-dispersion (PRF) sigma [mm]; 0 = charge to a single pad
    double fTBTime = 0;        //! Time bucket size in us
    int fNumTbs{512};          //! Number of time buckers
    int fTBEntrance = 0;       //! Window location in timebuckets (from config)
@@ -68,6 +69,12 @@ public:
    void SetSaveCharge(bool val) { fSaveCharge = val; }
    void SetDoConvolution(bool val) { fDoConvolution = val; }
    void SetLowGain(double val) { fLowGainFactor = val; }
+   /// Resistive-pad-plane charge sharing: spread each electron's charge over the
+   /// neighbouring pads with a 2D-Gaussian pad response function of width sigma
+   /// [mm] (a parametrization of the resistive-layer dispersal), so the PSA/PRA
+   /// can charge-centroid to SUB-PAD resolution. 0 (default) = legacy single-pad
+   /// (pad-quantization-limited). Tune sigma to the measured detector PRF.
+   void SetChargeDispersion(double sigma_mm) { fPRFSigma = sigma_mm; }
 
    AtRawEvent GenerateEvent(std::vector<SimPointPtr> &vec);
    virtual AtRawEvent GenerateEvent(std::vector<AtSimulatedPoint *> &vec);

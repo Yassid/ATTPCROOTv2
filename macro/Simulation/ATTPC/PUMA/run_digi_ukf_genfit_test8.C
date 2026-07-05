@@ -25,7 +25,8 @@
 /// both fitters. Both charge hypotheses are offered to the UKF; the PRA charge
 /// prior gates the sign, so a same-charge final state (branch 10 K+K+) is fine.
 void run_digi_ukf_genfit_test8(int nEvents = 1000, float tCluster = 8.0, bool genfitChargeFlip = false,
-                               TString psaType = "mfimpulse", TString species = "pi")
+                               TString psaType = "mfimpulse", TString species = "pi", int clusterTarget = 8,
+                               int nRings = 16, int nPads = 256, double prfSigma = 0.0, bool ringClustering = false)
 {
    const bool isK = (species == "K" || species == "kaon");
    const double mMeV = isK ? 493.677 : 139.57039; // kaon / pion mass
@@ -64,13 +65,16 @@ void run_digi_ukf_genfit_test8(int nEvents = 1000, float tCluster = 8.0, bool ge
    }
 
    // PUMA annular pad plane: 16 equal-area rings x 256 pads (4096), R=62.9-121.1 mm.
-   auto mapping = std::make_shared<AtTpcPUMAMap>(62.9, 121.1, 16, 256);
+   auto mapping = std::make_shared<AtTpcPUMAMap>(62.9, 121.1, nRings, nPads);
    mapping->GeneratePadPlane();
 
    AtClusterizeTask *clusterizer = new AtClusterizeTask();
    clusterizer->SetPersistence(kFALSE);
 
-   AtPulseTask *pulse = new AtPulseTask(std::make_shared<AtPulse>(mapping));
+   auto atPulse = std::make_shared<AtPulse>(mapping);
+   if (prfSigma > 0)
+      atPulse->SetChargeDispersion(prfSigma); // resistive-pad PRF (mm) — enables sub-pad centroiding
+   AtPulseTask *pulse = new AtPulseTask(atPulse);
    pulse->SetPersistence(kTRUE);
    pulse->SetSaveMCInfo();
 
@@ -136,10 +140,14 @@ void run_digi_ukf_genfit_test8(int nEvents = 1000, float tCluster = 8.0, bool ge
          ukf->SetBackExtrapMaxPath(250.0);
          ukf->SetUseHelixBackExtrap(true);
          ukf->SetMinClusterSpacing(1.0);
-         ukf->SetTargetClusters(8);
+         ukf->SetTargetClusters(clusterTarget);
          ukf->SetAdaptiveDistBounds(4.0, 14.0);
          ukf->SetUseClusterDirSeed(true);
          ukf->SetUseArcWalk(true);
+         if (ringClustering) { // resistive ring centroiding + near-straight guard
+            ukf->SetUseRingClustering(true, nPads);
+            ukf->SetMaxSeedRadius(1500.0);
+         }
          ukf->SetVertexZBias(useMFimpulse ? 0.0 : 8.6); // no shaping bias to correct in impulse mode
          multi->AddHypothesis(std::move(ukf), names[i], signs[i]);
       }
@@ -168,7 +176,11 @@ void run_digi_ukf_genfit_test8(int nEvents = 1000, float tCluster = 8.0, bool ge
       genfitter->SetMeasSigma(1.0);               // near the digi resolution floor
       // PRA leaves ~2 clusters/track on PUMA's fine pad plane; re-cluster raw hits
       // into ~8 (same as the UKF) so genfit has enough points for a curvature fit.
-      genfitter->SetReclusterArcWalk(true, 8, 3, 10);
+      genfitter->SetReclusterArcWalk(true, clusterTarget, 3, 10);
+      if (ringClustering) { // resistive ring centroiding + near-straight guard (no RK crash)
+         genfitter->SetUseRingClustering(true, nPads);
+         genfitter->SetMaxSeedRadius(1500.0); // skip near-straight tracks (p>1.8 GeV) before the fit
+      }
       // Back-extrapolate the fitted state to the beam-axis POCA so the genfit vertex
       // is directly comparable to the UKF's (both report the at-vertex state).
       genfitter->SetBackExtrapPOCA(true);

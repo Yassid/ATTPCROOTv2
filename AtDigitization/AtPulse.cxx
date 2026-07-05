@@ -227,6 +227,44 @@ bool AtPulse::AssignElectronsToPad(AtSimulatedPoint *point)
    auto charge = point->GetCharge();               // number of electrons
    auto pos = XYPoint(coord.X(), coord.Y());
 
+   // Resistive charge sharing (PRF): spread the charge over the pads within a few
+   // sigma of the arrival position, weighted by a 2D Gaussian. Each fired pad then
+   // yields its own PSA hit, and the clustering/fit charge-centroids them to
+   // sub-pad resolution — the physics a resistive pad plane provides. Sampled on a
+   // grid (step ~sigma/2, extent +-3 sigma) so it works for any pad geometry.
+   if (fPRFSigma > 0) {
+      const double s = fPRFSigma;
+      const double step = s / 2.0;
+      const int NG = 6; // +-3 sigma
+      std::map<int, double> padW; // padNum -> summed weight
+      double wsum = 0;
+      for (int gi = -NG; gi <= NG; ++gi) {
+         for (int gj = -NG; gj <= NG; ++gj) {
+            double dx = gi * step, dy = gj * step;
+            double w = std::exp(-(dx * dx + dy * dy) / (2 * s * s));
+            wsum += w;
+            int pn = fMap->GetPadNum(XYPoint(pos.X() + dx, pos.Y() + dy));
+            if (pn < 0 || pn >= fMap->GetNumPads())
+               continue; // charge dispersed off the active area is lost
+            padW[pn] += w;
+         }
+      }
+      if (padW.empty() || wsum <= 0)
+         return false;
+      bool any = false;
+      for (auto &kv : padW) {
+         int pn = kv.first;
+         double frac = kv.second / wsum; // fraction of the charge on this pad
+         double g = GetGain(pn, charge);
+         if (g == 0)
+            continue;
+         fPadCharge[pn]->Fill(eTime, g * charge * frac);
+         fPadsWithCharge.insert(pn);
+         any = true;
+      }
+      return any;
+   }
+
    int padNum = fMap->GetPadNum(pos);
    if (padNum < 0 || padNum >= fMap->GetNumPads())
       return false;

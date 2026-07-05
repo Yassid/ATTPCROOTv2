@@ -126,6 +126,25 @@ public:
       fReclusterKNN = kNN;
    }
 
+   /// Resistive-pad ring centroiding: re-cluster the raw hits by annular RING
+   /// (charge-weighted centroid per ring, one sub-pad point per ring) on a local
+   /// copy, instead of ArcWalk. Exploits the resistive charge sharing (SetChargeDispersion
+   /// in AtPulse) to beat pad quantization. Takes precedence over SetReclusterArcWalk.
+   /// nPadsPerRing = azimuthal subdivision of the PUMA map (e.g. 256). Default off.
+   void SetUseRingClustering(Bool_t on, Int_t nPadsPerRing = 256)
+   {
+      fRingClustering = on;
+      fNPadsPerRing = nPadsPerRing;
+   }
+
+   /// Skip tracks whose PRA circle radius exceeds this (mm) BEFORE fitting — a
+   /// near-straight track (radius -> inf) has unphysical momentum and makes genfit's
+   /// RK stepper diverge/segfault (especially with precise ring-clustered centroids).
+   /// The guard runs before the fit so it prevents the crash rather than catching it.
+   /// e.g. 1500 mm => p > 1.8 GeV for |q|=1 at B=4 T, well above a 0.4 GeV pion.
+   /// Default 0 (off).
+   void SetMaxSeedRadius(Double_t mm) { fMaxSeedRadiusMM = mm; }
+
    /// Back-extrapolate the fitted vertex-end state to the point of closest approach
    /// to the beam axis (the z-axis line through the origin), using genfit's
    /// RKTrackRep::extrapolateToLine. When on, the AtFittedTrack reports:
@@ -287,6 +306,9 @@ private:
    Bool_t fChargeSignFlip{kFALSE};     // invert the PRA-sign -> PDG-sign mapping (empirical frame calibration)
    Double_t fZDriftSign{-1.0};         // z_lab = ZPadPlane + fZDriftSign * z_digi (-1 legacy exp, +1 sim frame)
    Bool_t fReclusterArcWalk{kFALSE};   // ArcWalk re-cluster raw hits on a copy before fitting (PUMA)
+   Bool_t fRingClustering{kFALSE};     // resistive ring centroiding (charge-weighted per ring)
+   Int_t fNPadsPerRing{256};           // azimuthal subdivision for ring clustering
+   Double_t fMaxSeedRadiusMM{0.0};     // skip near-straight tracks (radius > this) before fit; 0=off
    Int_t fReclusterTarget{8};          // target clusters for the ArcWalk re-clustering
    Int_t fReclusterMinHits{3};         // min hits per cluster
    Int_t fReclusterKNN{10};            // kNN adjacency for ArcWalk

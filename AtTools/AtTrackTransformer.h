@@ -57,6 +57,18 @@ public:
    /// @param kNN Number of nearest neighbors for adjacency graph (default 10)
    void ClusterizeArcWalk(AtTrack &track, int targetClusters = 25, int minHitsPerCluster = 3, int kNN = 10);
 
+   /// @brief Resistive-pad-plane ring centroiding: group the track's hits by ANNULAR
+   /// RING (ring = padNum / nPadsPerRing) and build one charge-weighted-centroid
+   /// cluster per ring. On a resistive readout the avalanche charge is shared across
+   /// the azimuthal pads of the ring the track crosses; the charge centroid of those
+   /// pads recovers a SUB-PAD azimuthal position, so one clean point per ring beats
+   /// the raw pad-quantized hits. Rings are visited inner->outer (= vertex->outward
+   /// for tracks fanning from the beam axis). Requires the PUMA annular pad numbering
+   /// (pad = ring*nPadsPerRing + sector).
+   /// @param track Track with raw hits (clusters written to its cluster array)
+   /// @param nPadsPerRing Azimuthal subdivision of the annular map (e.g. 256)
+   void ClusterizeByRing(AtTrack &track, int nPadsPerRing);
+
    const std::tuple<Double_t, Double_t> GetPIDFromHits(AtTrack &track, Double_t theta);
 
    Bool_t FindVertexTrack(AtTrack *trA, AtTrack *trB);
