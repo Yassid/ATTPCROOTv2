@@ -416,8 +416,13 @@ AtFittedTrack *AtGenfitter::GetFittedTrack(AtTrack *track, AtFitMetadata * /*fit
          return beta > 0 ? AtTools::AtBetheBlochPID::BetheBlochShape(pp, mass) / beta : 0.0;
       };
       double s0 = sfun(fMatCorrRefP);
-      if (s0 > 0)
-         pVtx += fMatCorrRefDp * sfun(pVtx) / s0;
+      if (s0 > 0) {
+         // Evaluate the loss at the CORRECTED momentum (one iteration): the measured
+         // in-gas p is already degraded, where Bethe-Bloch Δp is larger, so a single
+         // pass over-adds at low momentum. One iteration removes that self-reference.
+         double d1 = fMatCorrRefDp * sfun(pVtx) / s0;
+         pVtx += fMatCorrRefDp * sfun(pVtx + d1) / s0;
+      }
    }
    KEvtx = std::sqrt(pVtx * pVtx + mass * mass) - mass;
 
