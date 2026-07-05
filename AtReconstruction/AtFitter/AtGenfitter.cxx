@@ -26,6 +26,7 @@
 #include "FieldManager.h"
 #include "FitStatus.h"
 #include "KalmanFitterRefTrack.h"
+#include "AtBetheBlochPID.h" // Bethe-Bloch shape for the vertex material correction
 #include "MaterialEffects.h"
 #include "MeasuredStateOnPlane.h"
 #include "MeasurementFactory.h"
@@ -395,15 +396,30 @@ AtFittedTrack *AtGenfitter::GetFittedTrack(AtTrack *track, AtFitMetadata * /*fit
    // else fall back to the first-cluster state (unchanged legacy behaviour).
    double KEvtx = KE, thetaVtx = momRes.Theta(), phiVtx = momRes.Phi();
    XYZVector posVtx = posFirst;
+   double pVtx = p; // MeV, at-vertex momentum magnitude (default = first-cluster fit)
    if (fBackExtrapPOCA && xtrOk) {
       double pX = momXtr.Mag() * 1000.0; // MeV
       if (std::isfinite(pX) && pX > 0) {
-         KEvtx = std::sqrt(pX * pX + mass * mass) - mass;
+         pVtx = pX;
          thetaVtx = momXtr.Theta();
          phiVtx = momXtr.Phi();
       }
       posVtx = XYZVector(posXtr.X() * 10.0, posXtr.Y() * 10.0, posXtr.Z() * 10.0 - fVertexZBias); // mm
    }
+   // Deterministic material correction: add back the momentum lost reaching the gas
+   // (e.g. the Cu trap + Al cryostat), scaled from one reference (fMatCorrRefDp at
+   // fMatCorrRefP) by the Bethe-Bloch dE/dx·(1/β) shape so the p-dependence is physical.
+   // The circle measures the in-gas momentum; this recovers the vertex momentum.
+   if (fMatCorr && pVtx > 0 && fMatCorrRefP > 0) {
+      auto sfun = [&](double pp) {
+         double beta = pp / std::sqrt(pp * pp + mass * mass);
+         return beta > 0 ? AtTools::AtBetheBlochPID::BetheBlochShape(pp, mass) / beta : 0.0;
+      };
+      double s0 = sfun(fMatCorrRefP);
+      if (s0 > 0)
+         pVtx += fMatCorrRefDp * sfun(pVtx) / s0;
+   }
+   KEvtx = std::sqrt(pVtx * pVtx + mass * mass) - mass;
 
    auto owner = std::make_unique<AtFittedTrack>();
    AtFittedTrack *ft = owner.get();

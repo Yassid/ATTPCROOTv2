@@ -164,6 +164,17 @@ public:
    /// energy the particle lost reaching the gas. Falls back to the geometric (no-
    /// material) extrapolation if the material propagation throws. Default off.
    void SetBackExtrapMaterial(Bool_t on) { fBackExtrapMaterial = on; }
+   /// Deterministic vertex material correction: add back the momentum lost reaching the
+   /// gas (Cu trap + cryostat), so the at-vertex momentum is unbiased. Calibrated by one
+   /// reference — at @p refP_MeV the added-back momentum is @p refDeltaP_MeV — and scaled
+   /// to other momenta by the Bethe-Bloch dE/dx·(1/β) shape. Cleaner (no variance cost)
+   /// than propagating the degraded circle back through the shells. Default off.
+   void SetVertexMaterialCorrection(Double_t refP_MeV, Double_t refDeltaP_MeV)
+   {
+      fMatCorr = kTRUE;
+      fMatCorrRefP = refP_MeV;
+      fMatCorrRefDp = refDeltaP_MeV;
+   }
 
    /// Constant subtracted from the back-extrapolated vertex z (mm), matching the
    /// UKF's SetVertexZBias. Compensates the hardwired +8.6 mm AtPSA shaping-delay
@@ -320,6 +331,9 @@ private:
    Int_t fReclusterKNN{10};            // kNN adjacency for ArcWalk
    Bool_t fBackExtrapPOCA{kFALSE};     // back-extrapolate fitted state to beam-axis POCA (UKF-comparable vertex)
    Bool_t fBackExtrapMaterial{kFALSE}; // keep material effects on in the back-extrap (recover Cu/Al energy loss)
+   Bool_t fMatCorr{kFALSE};            // deterministic vertex material correction (add back Δp lost to the gas)
+   Double_t fMatCorrRefP{0.0};         // reference momentum for the material correction [MeV/c]
+   Double_t fMatCorrRefDp{0.0};        // added-back momentum at the reference [MeV/c]
    Double_t fVertexZBias{0.0};         // constant subtracted from back-extrap vertex z (mm); AtPSA shaping-delay fix
    Bool_t fVertexByXYRadius{kFALSE};   // order clusters / pick vertex by xy radius (in-plane tracks) not drift z
 
