@@ -322,17 +322,29 @@ AtFittedTrack *AtGenfitter::GetFittedTrack(AtTrack *track, AtFitMetadata * /*fit
          if (fBackExtrapPOCA) {
             genfit::MaterialEffects *me = genfit::MaterialEffects::getInstance();
             const bool fitNoEffects = fNoMatEffects && !fUseBetheBloch;
-            me->setNoEffects(true);
-            try {
-               genfit::MeasuredStateOnPlane xtrState = gfTrack->getFittedState(); // vertex-end (point 0)
-               extrapLen = rep->extrapolateToLine(xtrState, TVector3(0, 0, 0), TVector3(0, 0, 1));
-               posXtr = xtrState.getPos();
-               momXtr = xtrState.getMom();
-               xtrOk = std::isfinite(posXtr.Mag()) && std::isfinite(momXtr.Mag());
-            } catch (...) {
-               xtrOk = false;
-            }
-            me->setNoEffects(fitNoEffects);
+            // Extrapolate the vertex-end state to the beam-axis POCA. With material
+            // effects ON (fBackExtrapMaterial) genfit steps through the real geometry
+            // (Cu trap + Al cryostat shells inside the gas) so the at-vertex momentum
+            // recovers the energy lost reaching the gas. With effects OFF it is a
+            // purely geometric move. The material path can throw where TGeo nav has no
+            // volume (the hollow centre gaps), so material mode falls back to geometric.
+            auto tryExtrap = [&](bool noEffects) -> bool {
+               me->setNoEffects(noEffects);
+               try {
+                  genfit::MeasuredStateOnPlane xtrState = gfTrack->getFittedState(); // vertex-end (point 0)
+                  extrapLen = rep->extrapolateToLine(xtrState, TVector3(0, 0, 0), TVector3(0, 0, 1));
+                  posXtr = xtrState.getPos();
+                  momXtr = xtrState.getMom();
+                  return std::isfinite(posXtr.Mag()) && std::isfinite(momXtr.Mag());
+               } catch (...) {
+                  return false;
+               }
+            };
+            if (fBackExtrapMaterial)
+               xtrOk = tryExtrap(fitNoEffects); // material effects on -> recover Cu/Al loss
+            if (!xtrOk)
+               xtrOk = tryExtrap(true); // geometric fallback (also the default path)
+            me->setNoEffects(fitNoEffects); // restore for the next track
          }
          fittedPts.clear();
          int npts = gfTrack->getNumPointsWithMeasurement();

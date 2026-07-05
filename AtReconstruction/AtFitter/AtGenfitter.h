@@ -158,6 +158,12 @@ public:
    /// present (the extrapolation navigates the field); it silently keeps the
    /// first-cluster state if the extrapolation throws.
    void SetBackExtrapPOCA(Bool_t on) { fBackExtrapPOCA = on; }
+   /// Keep genfit material effects ON during the POCA back-extrapolation, so the
+   /// state is propagated through the real geometry (e.g. Cu trap + Al cryostat
+   /// shells between the gas and the vertex) and the at-vertex momentum RECOVERS the
+   /// energy the particle lost reaching the gas. Falls back to the geometric (no-
+   /// material) extrapolation if the material propagation throws. Default off.
+   void SetBackExtrapMaterial(Bool_t on) { fBackExtrapMaterial = on; }
 
    /// Constant subtracted from the back-extrapolated vertex z (mm), matching the
    /// UKF's SetVertexZBias. Compensates the hardwired +8.6 mm AtPSA shaping-delay
@@ -313,6 +319,7 @@ private:
    Int_t fReclusterMinHits{3};         // min hits per cluster
    Int_t fReclusterKNN{10};            // kNN adjacency for ArcWalk
    Bool_t fBackExtrapPOCA{kFALSE};     // back-extrapolate fitted state to beam-axis POCA (UKF-comparable vertex)
+   Bool_t fBackExtrapMaterial{kFALSE}; // keep material effects on in the back-extrap (recover Cu/Al energy loss)
    Double_t fVertexZBias{0.0};         // constant subtracted from back-extrap vertex z (mm); AtPSA shaping-delay fix
    Bool_t fVertexByXYRadius{kFALSE};   // order clusters / pick vertex by xy radius (in-plane tracks) not drift z
 

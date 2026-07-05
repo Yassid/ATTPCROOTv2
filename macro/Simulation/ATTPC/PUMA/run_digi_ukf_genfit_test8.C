@@ -27,7 +27,8 @@
 void run_digi_ukf_genfit_test8(int nEvents = 1000, float tCluster = 8.0, bool genfitChargeFlip = false,
                                TString psaType = "mfimpulse", TString species = "pi", int clusterTarget = 8,
                                int nRings = 16, int nPads = 256, double prfSigma = 0.0, bool ringClustering = false,
-                               bool primaryOnly = false, bool useMerge = false, int minHits = 0)
+                               bool primaryOnly = false, bool useMerge = false, int minHits = 0,
+                               bool backExtrapMat = false)
 {
    const bool isK = (species == "K" || species == "kaon");
    // "both" registers K+/K-/pi+/pi- UKF hypotheses for a chi2-PID baseline vs the
@@ -212,6 +213,9 @@ void run_digi_ukf_genfit_test8(int nEvents = 1000, float tCluster = 8.0, bool ge
       // Back-extrapolate the fitted state to the beam-axis POCA so the genfit vertex
       // is directly comparable to the UKF's (both report the at-vertex state).
       genfitter->SetBackExtrapPOCA(true);
+      // Optionally keep material effects on in that extrap so the at-vertex momentum
+      // recovers the ~20 MeV/c the pion lost in the Cu trap + Al cryostat before the gas.
+      genfitter->SetBackExtrapMaterial(backExtrapMat);
       // Branch-8 pions are in-plane (pz~0) so drift-z is degenerate for ordering;
       // pick the vertex end by beam-axis distance instead (fixes the vertex dr-tail).
       genfitter->SetVertexByXYRadius(true);
