@@ -43,6 +43,7 @@ set(SRCS
 
   AtPID/AtCut2D.cxx
   AtPID/AtParticleID.cxx
+  AtPID/AtBetheBlochPID.cxx
   AtPID/AtPIDEstimator.cxx
   AtPID/AtSpyralPID.cxx
   )

@@ -96,5 +96,6 @@
 #pragma link C++ class std::vector < AtTools::AtSpyralResult> + ;
 #pragma link C++ class AtPIDEvent + ;
 #pragma link C++ class AtPIDTask + ;
+#pragma link C++ class AtPIDStampTask + ;
 
 #endif

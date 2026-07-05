@@ -77,6 +77,7 @@
 
 #pragma link C++ class AtTools::AtCut2D - !;
 #pragma link C++ class AtTools::AtParticleID - !;
+#pragma link C++ class AtTools::AtBetheBlochPID - !;
 #pragma link C++ class AtTools::AtPIDEstimator - !;
 #pragma link C++ struct AtTools::AtPIDResult + ;
 #pragma link C++ class AtTools::AtSmoothingSpline - !;

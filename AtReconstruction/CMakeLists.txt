@@ -46,6 +46,7 @@ set(SRCS
 
   AtPIDEvent.cxx
   AtPIDTask.cxx
+  AtPIDStampTask.cxx
   AtPulseAnalyzer/AtPSA.cxx
   AtPulseAnalyzer/AtPSASimple2.cxx
   AtPulseAnalyzer/AtPSASpectrum.cxx
