@@ -29,7 +29,10 @@ void run_digi_ukf_genfit_test8(int nEvents = 1000, float tCluster = 8.0, bool ge
                                int nRings = 16, int nPads = 256, double prfSigma = 0.0, bool ringClustering = false)
 {
    const bool isK = (species == "K" || species == "kaon");
-   const double mMeV = isK ? 493.677 : 139.57039; // kaon / pion mass
+   // "both" registers K+/K-/pi+/pi- UKF hypotheses for a chi2-PID baseline vs the
+   // dE/dx PID (pid_dedx.C). genfit + p0-mass fall back to pion in that mode.
+   const bool isBoth = (species == "both");
+   const double mMeV = isK ? 493.677 : 139.57039; // kaon / pion mass (pion for "both")
    const int pdgPos = isK ? 321 : 211;            // K+ / pi+
    const std::string nm = isK ? "K" : "pi";
 
@@ -42,7 +45,10 @@ void run_digi_ukf_genfit_test8(int nEvents = 1000, float tCluster = 8.0, bool ge
    TString paramFile = "ATTPC.PUMA_sim.par";
 
    TString dir = getenv("VMCWORKDIR");
-   TString mcFile = inOutDir + "attpcsim.root";
+   // Input file override (PUMA_IN env): point the digi at a specific sim file
+   // (e.g. attpcsim_K.root) without editing the macro. Default ./data/attpcsim.root.
+   TString mcFile = gSystem->Getenv("PUMA_IN");
+   if (mcFile.IsNull()) mcFile = inOutDir + "attpcsim.root";
    TString digiParFile = dir + "/parameters/" + paramFile;
 
    // genfit's TGeoMaterialInterface needs gGeoManager (FAIRGeom) in memory.
@@ -119,20 +125,27 @@ void run_digi_ukf_genfit_test8(int nEvents = 1000, float tCluster = 8.0, bool ge
    {
       const double e_C = 1.602176634e-19;
       const double u_MeV = 931.49410372;
-      const int signs[2] = {+1, -1};
-      const std::string names[2] = {nm + "+", nm + "-"};
+      // hypothesis list: 2 (single species) or 4 (species="both": pi+/pi-/K+/K-)
+      struct Hyp { std::string name; int sign; double mass; };
+      std::vector<Hyp> hyps;
+      if (isBoth) {
+         hyps = {{"pi+", +1, 139.57039}, {"pi-", -1, 139.57039},
+                 {"K+", +1, 493.677},    {"K-", -1, 493.677}};
+      } else {
+         hyps = {{nm + "+", +1, mMeV}, {nm + "-", -1, mMeV}};
+      }
 
       auto multi = std::make_unique<EventFit::AtFitterUKFMulti>();
-      for (int i = 0; i < 2; ++i) {
+      for (const auto &hyp : hyps) {
          auto eloss = std::make_unique<AtTools::AtELossCATIMA>(1.654e-3);
-         eloss->SetProjectile(1, 1, mMeV / u_MeV);
+         eloss->SetProjectile(1, 1, hyp.mass / u_MeV);
          std::vector<std::tuple<int, int, int>> mat;
          mat.push_back(std::make_tuple(18, 40, 9)); // Ar
          mat.push_back(std::make_tuple(6, 12, 1));  // C (from CH4)
          mat.push_back(std::make_tuple(1, 1, 4));   // H
          eloss->SetMaterial(mat);
 
-         auto ukf = std::make_unique<EventFit::AtFitterUKF>(signs[i] * e_C, mMeV, std::move(eloss));
+         auto ukf = std::make_unique<EventFit::AtFitterUKF>(hyp.sign * e_C, hyp.mass, std::move(eloss));
          ukf->SetBField(ROOT::Math::XYZVector(0, 0, 4.0));
          ukf->SetUKFParameters(1e-3, 2.0, 0.0);
          ukf->SetMeasurementSigma(0.5);
@@ -153,7 +166,7 @@ void run_digi_ukf_genfit_test8(int nEvents = 1000, float tCluster = 8.0, bool ge
             ukf->SetMaxSeedRadius(1500.0);
          }
          ukf->SetVertexZBias(useMFimpulse ? 0.0 : 8.6); // no shaping bias to correct in impulse mode
-         multi->AddHypothesis(std::move(ukf), names[i], signs[i]);
+         multi->AddHypothesis(std::move(ukf), hyp.name, hyp.sign);
       }
       auto *ukfTask = new AtFitterTask(std::move(multi));
       ukfTask->SetInputBranch("AtPatternEvent");
