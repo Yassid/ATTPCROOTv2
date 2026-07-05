@@ -78,6 +78,9 @@ private:
 
    // TC (fPRAlgorithm == 0) — primary/fragment heuristic switch (disable for annular geometries)
    bool fTCUseSelectAndMerge{true};
+   bool fTCUseCircleMerge{false};
+   double fTCCircleMergeRadiusTol{0.2};
+   double fTCCircleMergeCenterTol{25.0};
    bool fChargeFromCenter{false};
 
    // Riemann parameters (fPRAlgorithm == 3)
@@ -157,6 +160,12 @@ public:
 
    /// TC (PRAlgorithm == 0): apply the AT-TPC primary/fragment heuristic. Disable for PUMA / annular geometries.
    void SetTCUseSelectAndMerge(bool use) { fTCUseSelectAndMerge = use; }
+   void SetTCUseCircleMerge(bool use) { fTCUseCircleMerge = use; }
+   void SetTCCircleMergeTol(double radiusTolFrac, double centerTolMM)
+   {
+      fTCCircleMergeRadiusTol = radiusTolFrac;
+      fTCCircleMergeCenterTol = centerTolMM;
+   }
 
    /// Charge sign from the angular sweep about the fitted circle centre (robust on
    /// shallow arcs). Forwarded to AtPRA::SetChargeFromCenter. Default off.

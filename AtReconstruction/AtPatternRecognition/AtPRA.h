@@ -144,6 +144,12 @@ public:
    /// @param vertexRadiusXY Max XY distance from beam axis for vertex endpoint (mm)
    /// @param mergeDist Max distance between endpoints to merge a fragment (mm)
    /// @param minLabTheta Min lab angle (degrees) to reject beam tracks
+   /// Merge track fragments that lie on the SAME fitted circle (centre within
+   /// centerTolMM AND radius within radiusTolFrac). Keeps distinct particles apart
+   /// (different circle centres) — the correct merge for annular geometries where one
+   /// particle's arc is split by dead-region excursions. Opt-in via AtTrackFinderTC.
+   void MergeTracksByCircle(std::vector<AtTrack> &tracks, double radiusTolFrac = 0.2, double centerTolMM = 25.0);
+
    void SelectAndMergeTracks(std::vector<AtTrack> &tracks, double vertexRadiusXY = 80.0, double mergeDist = 30.0,
                              double minLabTheta = 10.0);
 

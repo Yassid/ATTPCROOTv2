@@ -34,11 +34,16 @@ protected:
    double fCoefL{};       //!< Longitudinal diffusion coefficient. [cm^2/us]
    double fDetPadPlane{}; //!< Position of the pad plane with respect to the entrance [mm]
 
+   bool fPrimaryOnly{false}; //!< If true, only digitize primary tracks (trackID >= 0),
+                             //!< dropping the trackID<0 secondary/delta-ray sentinel points.
+
    static thread_local XYZPoint fPrevPoint; //!< The previous point we recorded charge.
    static thread_local int fTrackID;        //!< The current track ID
 
 public:
    std::vector<SimPointPtr> ProcessEvent(const TClonesArray &fMCPointArray);
+   /// Drop secondary/delta-ray points (trackID < 0), keeping only primary tracks.
+   void SetPrimaryOnly(bool v) { fPrimaryOnly = v; }
    virtual void GetParameters(const AtDigiPar *fPar);
    virtual std::string GetSavedClassName() const { return "AtSimulatedPoint"; }
    virtual void FillTClonesArray(TClonesArray &array, std::vector<SimPointPtr> &vec);

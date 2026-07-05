@@ -554,6 +554,58 @@ void AtPATTERN::AtPRA::SelectAndMergeTracks(std::vector<AtTrack> &tracks, double
    LOG(info) << "SelectAndMerge: " << tracks.size() << " tracks after selection";
 }
 
+void AtPATTERN::AtPRA::MergeTracksByCircle(std::vector<AtTrack> &tracks, double radiusTolFrac, double centerTolMM)
+{
+   if (tracks.size() < 2)
+      return;
+
+   // Ensure every track carries its fitted circle (center, radius).
+   for (auto &t : tracks)
+      if (!t.GetHitArray().empty())
+         SetTrackInitialParameters(t);
+
+   // Two fragments on the SAME circle (same centre within centerTolMM AND radius within
+   // radiusTolFrac) belong to the same particle — merge them. Distinct particles have
+   // distinct circle centres, so they are left apart (unlike SelectAndMergeTracks, which
+   // merges by end-point proximity and wrongly fuses two same-vertex tracks in annular
+   // geometries). Iterate to a fixed point, re-fitting the circle after each merge.
+   bool mergedAny = true;
+   while (mergedAny) {
+      mergedAny = false;
+      for (size_t i = 0; i < tracks.size() && !mergedAny; ++i) {
+         double Ri = tracks[i].GetGeoRadius();
+         auto ci = tracks[i].GetGeoCenter();
+         if (!(Ri > 0 && Ri < 1e5))
+            continue;
+         for (size_t j = i + 1; j < tracks.size() && !mergedAny; ++j) {
+            double Rj = tracks[j].GetGeoRadius();
+            auto cj = tracks[j].GetGeoCenter();
+            if (!(Rj > 0 && Rj < 1e5))
+               continue;
+            double dR = std::abs(Ri - Rj) / std::max(Ri, Rj);
+            double dC = std::hypot(ci.first - cj.first, ci.second - cj.second);
+            if (dR < radiusTolFrac && dC < centerTolMM) {
+               for (auto &hit : tracks[j].GetHitArray())
+                  tracks[i].AddHit(hit->Clone());
+               tracks.erase(tracks.begin() + j);
+               tracks[i].ResetHitClusterArray();
+               if (fUseArcWalk)
+                  fTrackTransformer->ClusterizeArcWalk(tracks[i], fTargetClusters, fMinHitsPerCluster, fArcWalkKNN);
+               else
+                  fTrackTransformer->ClusterizeSmooth3D(tracks[i], fClusterRadius > 0 ? fClusterRadius : 10.0,
+                                                        fClusterDistance > 0 ? fClusterDistance : 20.0);
+               OrderClustersAlongTrack(tracks[i]);
+               SetTrackInitialParameters(tracks[i]); // re-fit the merged circle
+               mergedAny = true;
+               LOG(info) << "CircleMerge: dR=" << dR << " dC=" << dC << "mm -> "
+                         << tracks[i].GetHitArray().size() << " hits";
+            }
+         }
+      }
+   }
+   LOG(info) << "CircleMerge: " << tracks.size() << " tracks after circle merge";
+}
+
 void AtPATTERN::AtPRA::PruneTrack(AtTrack &track)
 {
    auto &hitArray = track.GetHitArray();

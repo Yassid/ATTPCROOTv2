@@ -166,6 +166,13 @@ AtPATTERN::AtTrackFinderTC::clustersToTrack(PointCloud &cloud, const std::vector
       std::cout << cGREEN << " After selection: " << tracks.size() << " tracks" << cNORMAL << std::endl;
    }
 
+   if (fUseCircleMerge) {
+      // Merge fragments lying on the same fitted circle (annular-safe: keeps distinct
+      // particles apart). Fixes one-particle-split-into-arcs without fusing two tracks.
+      MergeTracksByCircle(tracks, fCircleMergeRadiusTol, fCircleMergeCenterTol);
+      std::cout << cGREEN << " After circle merge: " << tracks.size() << " tracks" << cNORMAL << std::endl;
+   }
+
    // Compute initial parameters on selected/merged tracks
    for (auto &track : tracks) {
       if (track.GetHitArray().size() > 0)

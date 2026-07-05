@@ -26,7 +26,8 @@
 /// prior gates the sign, so a same-charge final state (branch 10 K+K+) is fine.
 void run_digi_ukf_genfit_test8(int nEvents = 1000, float tCluster = 8.0, bool genfitChargeFlip = false,
                                TString psaType = "mfimpulse", TString species = "pi", int clusterTarget = 8,
-                               int nRings = 16, int nPads = 256, double prfSigma = 0.0, bool ringClustering = false)
+                               int nRings = 16, int nPads = 256, double prfSigma = 0.0, bool ringClustering = false,
+                               bool primaryOnly = false, bool useMerge = false, int minHits = 0)
 {
    const bool isK = (species == "K" || species == "kaon");
    // "both" registers K+/K-/pi+/pi- UKF hypotheses for a chi2-PID baseline vs the
@@ -78,7 +79,11 @@ void run_digi_ukf_genfit_test8(int nEvents = 1000, float tCluster = 8.0, bool ge
    auto mapping = std::make_shared<AtTpcPUMAMap>(62.9, 121.1, nRings, nPads);
    mapping->GeneratePadPlane();
 
-   AtClusterizeTask *clusterizer = new AtClusterizeTask();
+   // primaryOnly: drop trackID<0 secondary/delta-ray deposits at clusterization so only
+   // the primary tracks are digitized (clean pi arcs, no delta-ray junk tracks in PRA).
+   auto clusterizeAlgo = std::make_shared<AtClusterize>();
+   clusterizeAlgo->SetPrimaryOnly(primaryOnly);
+   AtClusterizeTask *clusterizer = new AtClusterizeTask(clusterizeAlgo);
    clusterizer->SetPersistence(kFALSE);
 
    auto atPulse = std::make_shared<AtPulse>(mapping);
@@ -109,7 +114,10 @@ void run_digi_ukf_genfit_test8(int nEvents = 1000, float tCluster = 8.0, bool ge
 
    AtPRAtask *praTask = new AtPRAtask();
    praTask->SetTcluster(tCluster);
-   praTask->SetTCUseSelectAndMerge(false);
+   praTask->SetTCUseSelectAndMerge(false);     // blunt end-proximity merge over-fuses 2 tracks at 375
+   praTask->SetTCUseCircleMerge(useMerge);     // annular-safe: merge only SAME-circle arc fragments
+   if (minHits > 0)
+      praTask->SetMinNumHits(minHits);         // reject short fragments (wild radius -> momentum tail)
    // Robust charge sign: angular sweep about the fitted circle centre (huge lever arm)
    // instead of the 3-point cross product, which is noise-dominated on PUMA's shallow
    // 312 mm-radius arcs. Lifts charge accuracy 83% -> ~99.6% for BOTH fitters.

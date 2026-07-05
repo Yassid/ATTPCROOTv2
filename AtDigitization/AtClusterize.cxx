@@ -51,6 +51,10 @@ std::vector<AtClusterize::SimPointPtr> AtClusterize::ProcessEvent(const TClonesA
    for (int i = 0; i < fMCPointArray.GetEntries(); ++i) {
       auto mcPoint = dynamic_cast<AtMCPoint *>(fMCPointArray.At(i));
 
+      // Drop secondary/delta-ray deposits (sentinel trackID < 0) when primary-only.
+      if (fPrimaryOnly && mcPoint != nullptr && mcPoint->GetTrackID() < 0)
+         continue;
+
       for (auto &point : processPoint(*mcPoint, i))
          ret.push_back(std::move(point));
    }
