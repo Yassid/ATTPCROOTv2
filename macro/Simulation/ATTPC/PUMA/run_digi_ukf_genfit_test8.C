@@ -34,7 +34,11 @@ void run_digi_ukf_genfit_test8(int nEvents = 1000, float tCluster = 8.0, bool ge
    const std::string nm = isK ? "K" : "pi";
 
    TString inOutDir = "./data/";
-   TString outputFile = inOutDir + "output_digi_both8.root";
+   // Output dir override (PUMA_OUT env): lets the sweep write ~GB digi files straight
+   // to a big drive (e.g. F:) instead of growing the WSL vhdx on C:. Input still ./data.
+   TString outDir = gSystem->Getenv("PUMA_OUT");
+   if (outDir.IsNull()) outDir = inOutDir;
+   TString outputFile = outDir + "output_digi_both8.root";
    TString paramFile = "ATTPC.PUMA_sim.par";
 
    TString dir = getenv("VMCWORKDIR");
@@ -173,7 +177,10 @@ void run_digi_ukf_genfit_test8(int nEvents = 1000, float tCluster = 8.0, bool ge
       genfitter->SetZPadPlane(0.0);               // match the PUMA UKF frame
       genfitter->SetZDriftSign(+1.0);             // PUMA sim hits are already lab-positive z
                                                   // (in the gas volume z=[0,300] mm); do NOT flip
-      genfitter->SetMeasSigma(1.0);               // near the digi resolution floor
+      // Ring centroids are sub-pad (charge-weighted over ~several azimuthal pads),
+      // so the measurement error is well below one pad; raw arc-walk clusters are
+      // ~1 pad. Tell genfit the truth so it doesn't over-inflate the measurement cov.
+      genfitter->SetMeasSigma(ringClustering ? 0.3 : 1.0);
       // PRA leaves ~2 clusters/track on PUMA's fine pad plane; re-cluster raw hits
       // into ~8 (same as the UKF) so genfit has enough points for a curvature fit.
       genfitter->SetReclusterArcWalk(true, clusterTarget, 3, 10);
