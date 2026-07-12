@@ -8,6 +8,7 @@
 #include <TF1.h> //Needed for unique_ptr<TF1>
 #include <TH1.h> //Needed for unique_ptr<TH1F>
 
+#include <cmath>      // for std::sqrt
 #include <functional> // for function
 #include <memory>     // for unique_ptr, shared_ptr
 #include <set>
@@ -75,6 +76,21 @@ public:
    /// can charge-centroid to SUB-PAD resolution. 0 (default) = legacy single-pad
    /// (pad-quantization-limited). Tune sigma to the measured detector PRF.
    void SetChargeDispersion(double sigma_mm) { fPRFSigma = sigma_mm; }
+
+   /// Set the resistive charge-dispersion sigma from the physical DLC properties
+   /// instead of a hand-tuned value. On a resistive anode the avalanche charge
+   /// spreads (Dixit/telegraph) as sigma = sqrt(2 t / (R C)):
+   ///   R_ohm_per_sq  - DLC sheet resistance [Ohm/square] (PUMA measured 1.2-1.5e6)
+   ///   C_F_per_mm2   - areal capacitance DLC<->pads [F/mm^2]
+   ///   t_us          - charge spreading time [us] (~ electronics shaping/peaking time)
+   /// Gas transverse diffusion is applied upstream (clusterizer); this is only the
+   /// resistive term (dominant at PUMA's 4 T, where gas diffusion is suppressed).
+   /// Feeds the same fPRFSigma machinery as SetChargeDispersion.
+   void SetChargeDispersionFromDLC(double R_ohm_per_sq, double C_F_per_mm2, double t_us)
+   {
+      const double RC = R_ohm_per_sq * C_F_per_mm2; // [s/mm^2]
+      fPRFSigma = (RC > 0 && t_us > 0) ? std::sqrt(2.0 * (t_us * 1.0e-6) / RC) : 0.0;
+   }
 
    AtRawEvent GenerateEvent(std::vector<SimPointPtr> &vec);
    virtual AtRawEvent GenerateEvent(std::vector<AtSimulatedPoint *> &vec);
