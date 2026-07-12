@@ -11,6 +11,7 @@
 
 #include <Rtypes.h>
 
+#include <array>
 #include <memory>
 #include <stdexcept> // for runtime_error
 #include <vector>
@@ -22,7 +23,10 @@ class TClass;
 class TMemberInspector;
 
 using vecBool = std::vector<bool>;
-using vecFPN = std::vector<Int_t[4][4][4][512]>;
+// A std::vector of a raw multidimensional C-array (Int_t[4][4][4][512]) is
+// ill-formed under libc++ (allocator::destroy forms a pseudo-destructor on the
+// array type). Use nested std::array, which keeps identical [][][][][] indexing.
+using vecFPN = std::vector<std::array<std::array<std::array<std::array<Int_t, 512>, 4>, 4>, 4>>;
 using pedestalPtr = std::unique_ptr<AtPedestal>;
 
 class AtROOTUnpacker : public AtUnpacker {
