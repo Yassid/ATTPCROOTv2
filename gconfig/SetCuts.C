@@ -39,19 +39,23 @@ void SetCuts()
    // gMC->SetProcess("LOSS",1); /**energy loss*/
    // gMC->SetProcess("MULS",1); /**multiple scattering*/
 
-   // Double_t cut1 = 1.0E-3;         // GeV --> 1 MeV
+   // NOTE: cuts must be set here (PreInit). Setting them post-Init (via
+   // gMC->SetCut in a run macro) is rejected by VMC and leaves the per-material
+   // production cuts at DBL_MAX, which Geant4 11.2 cannot build the eIoni table
+   // from (G4PhysicsLogVector Emin=inf abort). Finite 1 MeV cuts fix that.
+   Double_t cut1 = 1.0E-3;         // GeV --> 1 MeV
    // Double_t cutb = 1.0E4;          // GeV --> 10 TeV
    // Double_t tofmax = 1.E10;        // seconds
-   // cout << "SetCuts Macro: Setting cuts.." <<endl;
+   cout << "SetCuts Macro: Setting cuts.." <<endl;
 
-   // gMC->SetCut("CUTGAM",cut1);   /** gammas (GeV)*/
-   // gMC->SetCut("CUTELE",cut1);   /** electrons (GeV)*/
-   // gMC->SetCut("CUTNEU",cut1);   /** neutral hadrons (GeV)*/
-   // gMC->SetCut("CUTHAD",cut1);   /** charged hadrons (GeV)*/
-   // gMC->SetCut("CUTMUO",cut1);   /** muons (GeV)*/
-   // gMC->SetCut("BCUTE",cut1);    /** electron bremsstrahlung (GeV)*/
+   gMC->SetCut("CUTGAM",cut1);   /** gammas (GeV)*/
+   gMC->SetCut("CUTELE",cut1);   /** electrons (GeV)*/
+   gMC->SetCut("CUTNEU",cut1);   /** neutral hadrons (GeV)*/
+   gMC->SetCut("CUTHAD",cut1);   /** charged hadrons (GeV)*/
+   gMC->SetCut("CUTMUO",cut1);   /** muons (GeV)*/
+   gMC->SetCut("BCUTE",cut1);    /** electron bremsstrahlung (GeV)*/
    // gMC->SetCut("BCUTM",cut1);    /** muon and hadron bremsstrahlung(GeV)*/
-   // gMC->SetCut("DCUTE",cut1);    /** delta-rays by electrons (GeV)*/
+   gMC->SetCut("DCUTE",cut1);    /** delta-rays by electrons (GeV)*/
    // gMC->SetCut("DCUTM",cut1);    /** delta-rays by muons (GeV)*/
    // gMC->SetCut("PPCUTM",cut1);   /** direct pair production by muons (GeV)*/
    // gMC->SetCut("TOFMAX",tofmax); /**time of flight cut in seconds*/
