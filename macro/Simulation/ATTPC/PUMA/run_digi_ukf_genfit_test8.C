@@ -28,7 +28,8 @@ void run_digi_ukf_genfit_test8(int nEvents = 1000, float tCluster = 8.0, bool ge
                                TString psaType = "mfimpulse", TString species = "pi", int clusterTarget = 8,
                                int nRings = 16, int nPads = 256, double prfSigma = 0.0, bool ringClustering = false,
                                bool primaryOnly = false, bool useMerge = false, int minHits = 0,
-                               bool backExtrapMat = false, double matCorrRefDp = 0.0)
+                               bool backExtrapMat = false, double matCorrRefDp = 0.0,
+                               double rDLC = 0.0, double cDLC = 6.0e-13)
 {
    const bool isK = (species == "K" || species == "kaon");
    // "both" registers K+/K-/pi+/pi- UKF hypotheses for a chi2-PID baseline vs the
@@ -88,8 +89,15 @@ void run_digi_ukf_genfit_test8(int nEvents = 1000, float tCluster = 8.0, bool ge
    clusterizer->SetPersistence(kFALSE);
 
    auto atPulse = std::make_shared<AtPulse>(mapping);
-   if (prfSigma > 0)
+   if (rDLC > 0) {
+      // DLC-physical path: derive the PRF sigma from the measured DLC sheet
+      // resistance rDLC [Ohm/sq] (PUMA 1.2-1.5e6) and areal capacitance cDLC
+      // [F/mm^2]; t=0.5 us ~ shaping time. Overrides prfSigma when set.
+      atPulse->SetChargeDispersionFromDLC(rDLC, cDLC, 0.5);
+      std::cout << "[digi] DLC dispersion from R=" << rDLC / 1e6 << " MOhm/sq" << std::endl;
+   } else if (prfSigma > 0) {
       atPulse->SetChargeDispersion(prfSigma); // resistive-pad PRF (mm) — enables sub-pad centroiding
+   }
    AtPulseTask *pulse = new AtPulseTask(atPulse);
    pulse->SetPersistence(kTRUE);
    pulse->SetSaveMCInfo();
