@@ -153,13 +153,15 @@ function(fairroot_generate_config_sh file)
 
   if(ARGS_BUILD)
     add_custom_target(update_root_include_path_build_interface ALL
-      sed -i '/^export ROOT_INCLUDE_PATH=/d' ${file}
+      sed -i.bak '/^export ROOT_INCLUDE_PATH=/d' ${file}
       COMMAND cat ${rgenfile} >> ${file}
+      COMMAND ${CMAKE_COMMAND} -E rm -f ${file}.bak
       DEPENDS ${file} ${rgenfile})
   else()
     add_custom_target(update_root_include_path_install_interface ALL
-      sed -i '/^export ROOT_INCLUDE_PATH=/d' ${file}
+      sed -i.bak '/^export ROOT_INCLUDE_PATH=/d' ${file}
       COMMAND cat ${rgenfile} >> ${file}
+      COMMAND ${CMAKE_COMMAND} -E rm -f ${file}.bak
       DEPENDS ${file} ${rgenfile})
   endif()    
   

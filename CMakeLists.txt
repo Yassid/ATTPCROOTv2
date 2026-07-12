@@ -8,6 +8,16 @@ project(ATTPCROOT VERSION 0.3.0)
 set(PROJECT_MINIMUM_CXX_STANDARD 14)
 set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/modules")
 
+# macOS (Mach-O) requires shared libraries to resolve every symbol at link time,
+# whereas Linux resolves undefined symbols lazily at load time. ATTPCROOT is
+# Linux-developed and relies on some ROOT/FairLogger symbols being available at
+# load time without being explicitly linked per module. On Apple platforms defer
+# those symbols like Linux does. No-op on Linux, so the build there is unchanged.
+if(APPLE)
+  string(APPEND CMAKE_SHARED_LINKER_FLAGS " -Wl,-undefined,dynamic_lookup")
+  string(APPEND CMAKE_MODULE_LINKER_FLAGS " -Wl,-undefined,dynamic_lookup")
+endif()
+
 include(ATTPCRootChecks)
 include(FairSoftCheckCompiler)
 attpcroot_sanity_checks()
@@ -113,6 +123,16 @@ if(TARGET hdf5_cpp-shared AND NOT TARGET hdf5::hdf5_cpp-shared)
     set_target_properties(hdf5_cpp-shared PROPERTIES IMPORTED_GLOBAL TRUE)
   endif()
   add_library(hdf5::hdf5_cpp-shared ALIAS hdf5_cpp-shared)
+endif()
+
+# ATTPCROOT's HDF5 code targets the 1.10 API. Modern HDF5 (>=1.12, incl. 2.x)
+# defaults the H5O/H5L macros to newer signatures (e.g. H5Oget_info_by_name3
+# needs a 'fields' arg). Pin the compatibility API so the code builds unchanged.
+# Applied to the hdf5 imported target so every consumer inherits it.
+if(TARGET hdf5-shared)
+  set_property(TARGET hdf5-shared APPEND PROPERTY INTERFACE_COMPILE_DEFINITIONS H5_USE_110_API)
+elseif(TARGET hdf5::hdf5-shared)
+  set_property(TARGET hdf5::hdf5-shared APPEND PROPERTY INTERFACE_COMPILE_DEFINITIONS H5_USE_110_API)
 endif()
 
 

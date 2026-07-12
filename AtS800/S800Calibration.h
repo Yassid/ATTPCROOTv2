@@ -6,7 +6,6 @@
 #include "S800Calc.h"
 
 #include <algorithm>
-#include <ext/alloc_traits.h>
 #include <memory>
 #include <vector>
 
