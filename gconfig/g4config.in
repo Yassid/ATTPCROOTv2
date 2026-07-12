@@ -15,7 +15,11 @@
 /cuts/setLowEdge  100 eV
 /cuts/setHighEdge   10 GeV
 
-/mcPhysics/rangeCutForElectron    100 km
+# A 100 km electron range cut overflows Geant4 11.2's EM table build
+# (range->energy conversion gives Emax=inf, esp. in the near-vacuum media),
+# aborting the run. Delta-ray suppression is already handled by the 1 MeV
+# CUTELE energy cut set in PUMA_sim.C, so disable this range cut.
+#/mcPhysics/rangeCutForElectron    100 km
 #/mcphysics/rangeCutForPositron    1 mm
 #/run/setCut 1 um
 #/run/dumpCutValues
