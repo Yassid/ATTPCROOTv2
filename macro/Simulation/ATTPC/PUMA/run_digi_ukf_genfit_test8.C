@@ -103,16 +103,21 @@ void run_digi_ukf_genfit_test8(int nEvents = 1000, float tCluster = 8.0, bool ge
    pulse->SetSaveMCInfo();
 
    // PSA: "max" = AtPSAMax (peak; carries the +8.6 mm shaping-delay z bias, corrected
-   // downstream via SetVertexZBias). "mfimpulse" = AtPSAMultiFit fitting the SAME GET
-   // response the digi used, with z taken from the fitted IMPULSE time t0 -> removes the
-   // shaping-delay z offset AT THE SOURCE (no SetVertexZBias needed).
+   // downstream via SetVertexZBias). "mfimpulse" = AtPSAMultiFit with z from the fitted
+   // IMPULSE time t0 -> removes the shaping-delay z offset AT THE SOURCE. NOTE: the fitted
+   // t0 is poorly constrained for these fast pulses -> hit z-RMS ~15 mm (vs 1.3 mm for
+   // AtPSAMax) -> PRA 3D clustering merges/fragments the back-to-back tracks -> momentum
+   // resolution DOUBLES (20%->46%). "mfpeak" = same AtPSAMultiFit multi-peak deconvolution
+   // but z from the fitted-curve PEAK (robust, like AtPSAMax) -> keeps multi-peak splitting
+   // for overlapping pulses WITHOUT the noisy-z penalty.
    const bool useMFimpulse = (psaType == "mfimpulse");
+   const bool useMFpeak = (psaType == "mfpeak");
    AtPSAtask *psaTask = nullptr;
-   if (useMFimpulse) {
+   if (useMFimpulse || useMFpeak) {
       auto mf = std::make_unique<AtPSAMultiFit>();
       mf->SetThreshold(0);
-      mf->SetPeakingTime(0.5);       // 500 ns, matches PUMA AtPulse shaping (AtNominalResponse)
-      mf->SetUseImpulseTime(true);   // z from fitted t0, not the response peak
+      mf->SetPeakingTime(0.5);              // 500 ns, matches PUMA AtPulse shaping (AtNominalResponse)
+      mf->SetUseImpulseTime(useMFimpulse);  // impulse t0 (noisy) vs fitted peak (robust)
       psaTask = new AtPSAtask(std::move(mf));
    } else {
       auto psa = std::make_unique<AtPSAMax>();
