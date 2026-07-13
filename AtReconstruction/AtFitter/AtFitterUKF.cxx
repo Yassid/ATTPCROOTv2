@@ -1,5 +1,6 @@
 #include "AtFitterUKF.h"
 
+#include "AtBetheBlochPID.h" // Bethe-Bloch shape for the vertex material correction
 #include "AtFitMetadata.h"
 #include "AtFitTrackMetadata.h"
 #include "AtFittedTrack.h"
@@ -877,6 +878,23 @@ AtFitterUKF::GetFittedTrack(AtTrack *track, AtFitMetadata *fitMetadata, AtRawEve
             double p_at_vertex = std::sqrt(KE_at_vertex * KE_at_vertex + 2 * KE_at_vertex * fMass_MeV);
             p_s = p_at_vertex;
          }
+      }
+   }
+
+   // Deterministic vertex material correction (PUMA Cu trap + Al cryostat) — mirrors
+   // AtGenfitter::SetVertexMaterialCorrection. The (in-gas) circle momentum p_s is
+   // corrected back to the at-vertex momentum by adding fMatCorrRefDp (at fMatCorrRefP)
+   // scaled with the Bethe-Bloch dE/dx·(1/β) shape, so the p-dependence is physical
+   // (larger at low p). One self-reference iteration, as in genfit.
+   if (fMatCorr && fitConverged && p_s > 0 && fMatCorrRefP > 0) {
+      auto sfun = [&](double pp) {
+         double beta = pp / std::sqrt(pp * pp + fMass_MeV * fMass_MeV);
+         return beta > 0 ? AtTools::AtBetheBlochPID::BetheBlochShape(pp, fMass_MeV) / beta : 0.0;
+      };
+      double s0 = sfun(fMatCorrRefP);
+      if (s0 > 0) {
+         double d1 = fMatCorrRefDp * sfun(p_s) / s0;
+         p_s += fMatCorrRefDp * sfun(p_s + d1) / s0;
       }
    }
 

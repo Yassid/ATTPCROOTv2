@@ -188,6 +188,10 @@ void run_digi_ukf_genfit_test8(int nEvents = 1000, float tCluster = 8.0, bool ge
             ukf->SetMaxSeedRadius(1500.0);
          }
          ukf->SetVertexZBias(useMFimpulse ? 0.0 : 8.6); // no shaping bias to correct in impulse mode
+         // Deterministic vertex material correction (Cu trap + Al cryostat) — same knob
+         // as genfit, so BOTH fitters report the at-vertex (not in-gas) momentum.
+         if (matCorrRefDp > 0)
+            ukf->SetVertexMaterialCorrection(375.0, matCorrRefDp);
          multi->AddHypothesis(std::move(ukf), hyp.name, hyp.sign);
       }
       auto *ukfTask = new AtFitterTask(std::move(multi));

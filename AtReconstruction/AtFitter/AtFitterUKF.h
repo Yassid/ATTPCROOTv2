@@ -70,6 +70,17 @@ public:
    /// (default 1.0 = no scaling). Diagnostic knob to test whether energy-loss
    /// model bias is responsible for residual KE bias; values <1 reduce dE/dx.
    void SetELossScaleFactor(double f) { fELossScaleFactor = f; }
+   /// Deterministic vertex material correction: add back the momentum lost before
+   /// the gas (PUMA Cu trap + Al cryostat). At @p refP_MeV the added-back momentum
+   /// is @p refDeltaP_MeV; scaled to other momenta by the Bethe-Bloch dE/dx·(1/β)
+   /// shape (larger at low p). Mirrors AtGenfitter::SetVertexMaterialCorrection so
+   /// both fitters report the at-vertex momentum. Default off.
+   void SetVertexMaterialCorrection(double refP_MeV, double refDeltaP_MeV)
+   {
+      fMatCorr = true;
+      fMatCorrRefP = refP_MeV;
+      fMatCorrRefDp = refDeltaP_MeV;
+   }
    /// Set fractional momentum uncertainty for the initial covariance (default 0.1).
    void SetMomentumSigmaFrac(double frac) { fMomSigmaFrac = frac; }
    /// Minimum number of clusters required to attempt a fit (default 3).
@@ -268,6 +279,9 @@ private:
    bool fEnableMultScattering{false}; // Highland multiple-scattering angular process noise (opt-in)
    double fRadLength_mm{7.6e6};        // Radiation length of the medium (mm); default ~H2 gas at 1 bar
    double fELossScaleFactor{1.0};
+   bool fMatCorr{false};        // deterministic vertex material correction (Cu trap + Al cryostat)
+   double fMatCorrRefP{0.0};    // reference momentum [MeV/c]
+   double fMatCorrRefDp{0.0};   // momentum added back at fMatCorrRefP [MeV/c]
    bool fUsePerClusterCov{false};
    double fZPadPlane{-1};      // If >0, convert digi→lab: Z_lab = fZPadPlane - Z_digi
    int fMaxFitTime_ms{2000};   // Maximum time per track fit in milliseconds
