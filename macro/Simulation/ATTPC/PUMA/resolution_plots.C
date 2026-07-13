@@ -128,8 +128,8 @@ void resolution_plots(TString species = "pi", Double_t testEnergy = -1,
    printf("RES %s: UKF n=%zu  GENFIT n=%zu  (truth |p|=%.1f MeV/c)\n", species.Data(), rU.dpFrac.size(),
           rG.dpFrac.size(), p0);
 
-   // pion momentum is measurable (~20%); kaon momentum is not (straight tracks) -> wide range
-   double dpRange = isK ? 200 : 80;
+   // pion momentum ~20%; kaon momentum ~45% WITH ring clustering (near-straight tracks rejected)
+   double dpRange = isK ? 150 : 80;
    fitDraw(rU.dpFrac, rG.dpFrac, 40, -dpRange, dpRange, "(p_{fit}-p_{truth})/p_{truth} [%]",
            outdir + "/res_" + species + "_dp.png", Form("%s momentum resolution", sp), "%");
    fitDraw(rU.theta, rG.theta, 40, -12, 12, "#theta_{fit}-#theta_{truth} [deg]",
