@@ -128,11 +128,13 @@ void resolution_plots(TString species = "pi", Double_t testEnergy = -1,
    printf("RES %s: UKF n=%zu  GENFIT n=%zu  (truth |p|=%.1f MeV/c)\n", species.Data(), rU.dpFrac.size(),
           rG.dpFrac.size(), p0);
 
-   fitDraw(rU.dpFrac, rG.dpFrac, 40, -120, 120, "(p_{fit}-p_{truth})/p_{truth} [%]",
+   // pion momentum is measurable (~20%); kaon momentum is not (straight tracks) -> wide range
+   double dpRange = isK ? 200 : 80;
+   fitDraw(rU.dpFrac, rG.dpFrac, 40, -dpRange, dpRange, "(p_{fit}-p_{truth})/p_{truth} [%]",
            outdir + "/res_" + species + "_dp.png", Form("%s momentum resolution", sp), "%");
-   fitDraw(rU.theta, rG.theta, 40, -45, 45, "#theta_{fit}-#theta_{truth} [deg]",
+   fitDraw(rU.theta, rG.theta, 40, -12, 12, "#theta_{fit}-#theta_{truth} [deg]",
            outdir + "/res_" + species + "_theta.png", Form("%s polar-angle residual", sp), "deg");
-   fitDraw(rU.dz, rG.dz, 40, -10, 10, "z_{fit}-z_{truth} [mm]", outdir + "/res_" + species + "_vz.png",
+   fitDraw(rU.dz, rG.dz, 40, -8, 8, "z_{fit}-z_{truth} [mm]", outdir + "/res_" + species + "_vz.png",
            Form("%s vertex-z residual", sp), "mm");
 
    printf("RES_DONE %s\n", species.Data());
