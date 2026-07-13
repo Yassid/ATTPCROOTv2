@@ -5,8 +5,10 @@
 ///        (gap-immune arc-walk clustering), or "riemann" (Riemann circle fit).
 ///        Writes AtPatternEvent to the output file for pra_efficiency.C.
 /// Run: root -b -q 'reco_pra_algo.C("smooth3d","data/attpcsim.root","data/pra_smooth3d.root")'
+/// tCluster: TriplClust cluster distance (over-seg <-> merge lever). extraPar:
+///   TriplClust -> Scluster override (if >0);  hdbscan -> ClusterSelectionEpsilon.
 void reco_pra_algo(TString algo = "smooth3d", TString mcFile = "data/attpcsim.root",
-                   TString out = "data/pra_algo.root", float tCluster = 8.0)
+                   TString out = "data/pra_algo.root", float tCluster = 8.0, double extraPar = -1.0)
 {
    TString dir = getenv("VMCWORKDIR");
    auto *run = new FairRunAna();
@@ -36,7 +38,17 @@ void reco_pra_algo(TString algo = "smooth3d", TString mcFile = "data/attpcsim.ro
 
    // ---- selectable pattern recognition ----
    FairTask *praTask = nullptr;
-   if (algo == "ransac") {
+   if (algo == "hdbscan") {
+      // density-based clustering (HDBSCAN) — injected so AtPRAtask skips the TriplClust switch
+      auto finder = std::make_unique<AtPATTERN::AtTrackFinderHDBSCAN>();
+      finder->SetChargeFromCenter(true);
+      if (extraPar > 0) finder->SetClusterSelectionEpsilon(extraPar); // over-seg lever [mm]
+      auto *pra = new AtPRAtask(std::move(finder));
+      pra->SetInputBranch("AtEventH");
+      pra->SetMinNumHits(6);
+      pra->SetPersistence(kTRUE);
+      praTask = pra;
+   } else if (algo == "ransac") {
       // standalone sample-consensus (RANSAC) with a 2D-circle model for the curved tracks
       auto method = std::make_unique<SampleConsensus::AtSampleConsensus>(
          SampleConsensus::Estimators::kRANSAC, AtPatterns::PatternType::kCircle2D, RandomSample::SampleMethod::kUniform);
@@ -51,6 +63,7 @@ void reco_pra_algo(TString algo = "smooth3d", TString mcFile = "data/attpcsim.ro
    } else {
       auto *pra = new AtPRAtask();
       pra->SetTcluster(tCluster);
+      if (extraPar > 0) pra->SetScluster(extraPar); // TriplClust scale override for the parameter scan
       pra->SetTCUseSelectAndMerge(false); // annular geometry: primary/fragment heuristic off
       pra->SetChargeFromCenter(true);     // robust charge sign (angular sweep about the circle centre)
       pra->SetMinNumHits(6);

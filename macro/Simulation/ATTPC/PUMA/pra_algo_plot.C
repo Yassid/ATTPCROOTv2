@@ -9,7 +9,7 @@ void pra_algo_plot(TString out = "/Users/quantumlab/fair_install/puma_slides/fig
    gStyle->SetOptStat(0); gStyle->SetTextFont(62); gStyle->SetLabelFont(62, "xyz"); gStyle->SetTitleFont(62, "xyz");
    gStyle->SetPadTickY(1);
    const int NA = 3;
-   const char *alg[NA] = {"HC clustering", "Riemann", "RANSAC circle"};
+   const char *alg[NA] = {"TriplClust", "Riemann", "RANSAC circle"};
    double eff[NA]  = {99.3, 48.0, 51.5};
    double good[NA] = {86, 8, 11};
    double pur[NA]  = {99.2, 61.9, 55.4};

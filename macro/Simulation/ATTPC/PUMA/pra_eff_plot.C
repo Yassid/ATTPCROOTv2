@@ -41,7 +41,7 @@ void pra_eff_plot(TString out = "/Users/quantumlab/fair_install/puma_slides/figs
    tx->SetTextColor(kRed + 1); tx->DrawLatex(760, 60, "merging #rightarrow");
    tx->SetTextColor(kBlack); tx->SetTextSize(0.036); tx->DrawLatex(360, 101, "sweet spot");
    auto *tt = new TLatex(); tt->SetNDC(); tt->SetTextFont(62); tt->SetTextSize(0.045);
-   tt->DrawLatex(0.13, 0.93, "PUMA PRA (smooth-3D) efficiency vs momentum");
+   tt->DrawLatex(0.13, 0.93, "PUMA PRA (TriplClust) efficiency vs momentum");
    c->SaveAs(out);
    printf("PRAEFF_PLOT_DONE\n");
 }
