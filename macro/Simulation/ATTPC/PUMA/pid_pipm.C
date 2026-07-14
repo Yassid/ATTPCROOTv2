@@ -11,7 +11,7 @@ double iqrS(std::vector<double> v){ if(v.size()<4)return 0; std::sort(v.begin(),
 
 void pid_pipm(TString fitFile = "data/output_digi_pi8_ring.root", TString simFile = "data/attpcsim.root",
               TString fitter = "UKF", double Bfield = 4.0,
-              TString outdir = "/Users/quantumlab/fair_install/puma_slides/figs")
+              TString outdir = "/Users/quantumlab/fair_install/puma_slides/figs", TString tag = "")
 {
    gSystem->Load("libAtReconstruction.so");
    gStyle->SetOptStat(0); gStyle->SetTextFont(62); gStyle->SetLabelFont(62,"xyz"); gStyle->SetTitleFont(62,"xyz");
@@ -87,6 +87,6 @@ void pid_pipm(TString fitFile = "data/output_digi_pi8_ring.root", TString simFil
    lg->Draw();
    auto *tx=new TLatex(); tx->SetNDC(); tx->SetTextFont(62); tx->SetTextSize(0.045);
    tx->DrawLatex(0.15,0.84,Form("charge-ID %.1f%%",(nPlus+nMinus)?100.*(plusRight+minusRight)/(nPlus+nMinus):0));
-   c->SaveAs(outdir+"/pid_pipm.png");
+   c->SaveAs(outdir+"/pid_pipm"+tag+".png");
    printf("PIDPIPM_DONE\n");
 }
