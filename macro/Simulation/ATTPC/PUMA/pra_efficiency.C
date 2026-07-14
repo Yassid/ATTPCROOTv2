@@ -9,7 +9,7 @@
 ///  A true pion is "found" if some reco track has >= fMinFrac of its hits AND purity >= 0.7.
 /// Run: root -b -q 'pra_efficiency.C("data/mm_pk.root","data/attpcsim.root","arc-walk")'
 void pra_efficiency(TString recoFile, TString simFile, TString tag = "PRA", double matchTol = 3.0,
-                    int minHitsAbs = 6, double minPurity = 0.7)
+                    int minHitsAbs = 6, double minPurity = 0.7, int targetPDG = 211)
 {
    gSystem->Load("libAtReconstruction.so");
    TFile fD(recoFile); auto *tD = (TTree *)fD.Get("cbmsim");
@@ -33,7 +33,7 @@ void pra_efficiency(TString recoFile, TString simFile, TString tag = "PRA", doub
       for (int k = 0; k < nMC; ++k) { auto *mp = (AtMCPoint *)mcPts->At(k);
          mcX[k] = mp->GetX() * 10; mcY[k] = mp->GetY() * 10; int tid = mp->GetTrackID();
          auto *mt = (tid >= 0 && tid < mcTrks->GetEntries()) ? (AtMCTrack *)mcTrks->At(tid) : nullptr;
-         mcTid[k] = (mt && std::abs(mt->GetPdgCode()) == 211) ? tid : -1;
+         mcTid[k] = (mt && std::abs(mt->GetPdgCode()) == targetPDG) ? tid : -1;
          if (mcTid[k] >= 0) trueHits[tid]++;
       }
       if (trueHits.empty()) continue;
