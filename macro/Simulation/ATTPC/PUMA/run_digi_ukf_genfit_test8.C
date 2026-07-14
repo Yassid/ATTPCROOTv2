@@ -29,7 +29,8 @@ void run_digi_ukf_genfit_test8(int nEvents = 1000, float tCluster = 8.0, bool ge
                                int nRings = 16, int nPads = 256, double prfSigma = 0.0, bool ringClustering = false,
                                bool primaryOnly = false, bool useMerge = false, int minHits = 0,
                                bool backExtrapMat = false, double matCorrRefDp = 0.0,
-                               double rDLC = 0.0, double cDLC = 6.0e-13)
+                               double rDLC = 0.0, double cDLC = 6.0e-13, double psaThreshold = 0.0,
+                               TString praFinder = "triplclust")
 {
    const bool isK = (species == "K" || species == "kaon");
    // "both" registers K+/K-/pi+/pi- UKF hypotheses for a chi2-PID baseline vs the
@@ -115,27 +116,33 @@ void run_digi_ukf_genfit_test8(int nEvents = 1000, float tCluster = 8.0, bool ge
    AtPSAtask *psaTask = nullptr;
    if (useMFimpulse || useMFpeak) {
       auto mf = std::make_unique<AtPSAMultiFit>();
-      mf->SetThreshold(0);
+      mf->SetThreshold(psaThreshold);
       mf->SetPeakingTime(0.5);              // 500 ns, matches PUMA AtPulse shaping (AtNominalResponse)
       mf->SetUseImpulseTime(useMFimpulse);  // impulse t0 (noisy) vs fitted peak (robust)
       psaTask = new AtPSAtask(std::move(mf));
    } else {
       auto psa = std::make_unique<AtPSAMax>();
-      psa->SetThreshold(0);
+      psa->SetThreshold(psaThreshold);
       psaTask = new AtPSAtask(std::move(psa));
    }
    psaTask->SetPersistence(kTRUE);
 
-   AtPRAtask *praTask = new AtPRAtask();
-   praTask->SetTcluster(tCluster);
-   praTask->SetTCUseSelectAndMerge(false);     // blunt end-proximity merge over-fuses 2 tracks at 375
-   praTask->SetTCUseCircleMerge(useMerge);     // annular-safe: merge only SAME-circle arc fragments
-   if (minHits > 0)
-      praTask->SetMinNumHits(minHits);         // reject short fragments (wild radius -> momentum tail)
-   // Robust charge sign: angular sweep about the fitted circle centre (huge lever arm)
-   // instead of the 3-point cross product, which is noise-dominated on PUMA's shallow
-   // 312 mm-radius arcs. Lifts charge accuracy 83% -> ~99.6% for BOTH fitters.
-   praTask->SetChargeFromCenter(true);
+   AtPRAtask *praTask = nullptr;
+   if (praFinder == "hdbscan") {
+      // density clustering — separates dense DLC bands / same-charge pairs better
+      auto finder = std::make_unique<AtPATTERN::AtTrackFinderHDBSCAN>();
+      finder->SetChargeFromCenter(true);
+      praTask = new AtPRAtask(std::move(finder));
+      praTask->SetMinNumHits(minHits > 0 ? minHits : 6);
+   } else {
+      praTask = new AtPRAtask(); // TriplClust (AtTrackFinderTC)
+      praTask->SetTcluster(tCluster);
+      praTask->SetTCUseSelectAndMerge(false); // blunt end-proximity merge over-fuses 2 tracks at 375
+      praTask->SetTCUseCircleMerge(useMerge); // annular-safe: merge only SAME-circle arc fragments
+      if (minHits > 0)
+         praTask->SetMinNumHits(minHits);
+      praTask->SetChargeFromCenter(true); // robust charge sign (angular sweep about the circle centre)
+   }
    praTask->SetPersistence(kTRUE);
 
    fRun->AddTask(clusterizer);
