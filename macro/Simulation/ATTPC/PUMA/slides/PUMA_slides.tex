@@ -135,6 +135,20 @@ GENFIT & 99.6\% & 99.4\% & 18\% & 4.9\(^\circ\) & 3.4 mm\\\bottomrule
 \end{tabular}\\ charge-sign \textbf{99.5\%} (both); tracking + fitting efficiency \textbf{$\sim$99.5\%} at 375 MeV/c. UKF wins on angle \& vertex.}
 \end{frame}
 
+\begin{frame}{Resolution vs momentum --- the U-shape}
+\begin{columns}
+\column{0.6\textwidth}
+\centering\includegraphics[width=\linewidth]{figs/res_vs_p.png}
+\column{0.4\textwidth}
+The momentum resolution is best in the middle (375--500 MeV/c) and degrades at both ends:
+\begin{itemize}
+\item \textbf{Low $p$:} \textbf{multiple scattering} ($\propto 1/p\beta$) perturbs the curvature --- an \emph{irreducible} floor. Both fitters converge, and tight curls also over-segment.
+\item \textbf{High $p$:} tracks are \textbf{near-straight}, with little curvature/sagitta to measure.
+\end{itemize}
+Only in the measurement-limited middle does the sub-pad information help --- where GENFIT pulls ahead.
+\end{columns}
+\end{frame}
+
 \begin{frame}{The momentum bias --- and its fix}
 \begin{columns}
 \column{0.56\textwidth}
