@@ -16,6 +16,7 @@ directory (see each macro's header).
 | `PUMA_slides.tex/.pdf`         | 16-pp curated main deck: detector → event displays → PSA → pattern recognition → fitting/performance → examples → gallery |
 | `PUMA_dlc_findings.tex/.pdf`   | 11-pp focused deck: the DLC resistive anode from liability to advantage (MultiFit + HDBSCAN + per-ring + GENFIT → σ 7%) |
 | `PUMA_DLC_slides.tex/.pdf`     | older DLC / π-K / GENFIT-vs-UKF deck |
+| `PUMA_short.tex/.pdf`          | 8-pp concise, figure-driven deck (standard setup; minimal text) |
 
 ## Reproduce the optimal DLC reconstruction
 ```
