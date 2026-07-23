@@ -230,7 +230,10 @@ AtSpyralResult AtSpyralPID::Estimate(AtTrack &track) const
          if (!h)
             continue;
          auto p = h->GetPosition();
-         pts.push_back({p.X(), p.Y(), p.Z(), h->GetCharge()});
+         // Spyral integrates the pulse; AtHit::GetCharge() is the peak amplitude. Using the
+         // trace integral matches Spyral's dE/dx scale (~x4). Opt-in via SetUseTraceIntegral.
+         double q = (fUseTraceIntegral && h->GetTraceIntegral() > 0) ? h->GetTraceIntegral() : h->GetCharge();
+         pts.push_back({p.X(), p.Y(), p.Z(), q});
       }
    } else {
       auto *clusters = track.GetHitClusterArray();

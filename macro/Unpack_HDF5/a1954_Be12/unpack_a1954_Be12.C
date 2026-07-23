@@ -19,7 +19,7 @@ void unpack_a1954_Be12(TString fileName = "run_0142")
 
    TString parameterFile = "ATTPC.a1954_Be12.par";
    TString mappath = "";
-   TString filepath = "/media/yassid/bdcb3c81-adb9-4a9d-9172-0bd5935c1dd5/data/a1954/";
+   TString filepath = "/media/yassid/NSCL_e15250/data/a1954_remerged/h5/";
    TString fileExt = ".h5";
    TString inputFile = filepath + fileName + fileExt;
    TString scriptfile = "ANL2023.xml";

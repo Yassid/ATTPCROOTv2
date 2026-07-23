@@ -86,6 +86,9 @@ public:
    /// ~100 pts/track); clusters = AtPRA's merged hit-clusters (~30 pts, coarser).
    void SetUseHits(bool h) { fUseHits = h; }
    void SetUseClusters(bool c) { fUseHits = !c; }
+   /// Use the integrated pulse charge (AtHit::GetTraceIntegral) instead of the peak
+   /// amplitude (GetCharge) for dE/dx. Matches Spyral's dE/dx scale (~x4). Default off.
+   void SetUseTraceIntegral(bool u) { fUseTraceIntegral = u; }
 
 private:
    // analytic least-squares circle fit (Spyral geometry.circle.least_squares_circle)
@@ -101,6 +104,7 @@ private:
    int fMinPoints{30};             // min_total_trajectory_points
    double fSmallPadRadius{152.0};  // mm, inner-pad boundary for dE integration
    bool fUseHits{true};            // true = AtHit point cloud (faithful), false = hit clusters
+   bool fUseTraceIntegral{false};  // true = integrated charge (Spyral scale), false = peak amplitude
 };
 
 } // namespace AtTools
