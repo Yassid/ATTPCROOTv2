@@ -102,5 +102,5 @@ void make_explorer_html(TString cache = "", TString outHtml = "", TString tag = 
    FileStat_t st;
    gSystem->GetPathInfo(outHtml, st);
    printf("\nwrote %s  (%lld tracks, %.1f MB)\n", outHtml.Data(), N, st.fSize / 1048576.);
-   printf("open it with:  explorer.exe %s\n\n", outHtml.Data());
+   printf("open it with:  pp/open_explorer.sh   (or the Windows browser on %s)\n\n", outHtml.Data());
 }
