@@ -1,9 +1,9 @@
 # UKF vs GENFIT on a1954 12Be — is the difference the covariance?
 
 Test of the hypothesis that the UKF/GENFIT disagreement comes from the covariance
-treatment. Data: the (p,p') proton-gated tracks, 73 clean runs; the swapped-sigma and
-material-effects refits use the first 8 runs (~3 300 protons) from the *same* gated input,
-so every configuration fits identical tracks.
+treatment. Data: the (p,p') proton-gated tracks, **all 73 clean runs** (~32 000 protons) for
+the production and swapped-sigma configurations, refit from the *same* gated input so every
+configuration fits identical tracks. The material-effects check is 8 runs (~3 300 protons).
 
 ## What the two fitters were actually assuming
 
@@ -27,17 +27,18 @@ With **no** chi2 cut the two fitters return the same number of tracks (32 120 vs
 1.7 % apart) — GENFIT is *not* failing to converge. The shared `chi2/ndf < 5` cut keeps
 83 % of UKF but only 40 % of GENFIT, and that single cut is the whole 26 604 vs 12 532 gap.
 
-Swapping the sigmas moves the chi2 scale exactly as 1/sigma^2:
+Swapping the sigmas moves the chi2 scale exactly as 1/sigma^2 — **all 73 runs**:
 
-| configuration | N | median chi2/ndf | N(chi2<5) |
-|---|---|---|---|
-| GENFIT sigma=4.0 | 3 297 | 6.48 | 1 340 (41 %) |
-| GENFIT sigma=0.5 | 3 302 | 415.15 | 159 (5 %) |
-| UKF sigma=0.5 | 3 367 | 0.078 | 2 813 (84 %) |
-| UKF sigma=4.0 | 3 372 | 0.0020 | 3 349 (99 %) |
+| configuration | N | median chi2/ndf | N(chi2<5) | kept |
+|---|---|---|---|---|
+| UKF sigma=0.5 (production) | 32 120 | 0.0945 | 26 604 | 82.8 % |
+| UKF sigma=4.0 (swapped) | 32 173 | 0.0024 | 32 002 | 99.5 % |
+| GENFIT sigma=4.0 (production) | 31 578 | 6.639 | 12 533 | 39.7 % |
+| GENFIT sigma=0.5 (swapped) | 31 573 | 424.1 | 1 315 | 4.2 % |
 
-GENFIT's ratio is **64.0**, i.e. exactly (4.0/0.5)^2. UKF's is 38, not 64, because its
-measSigma also enters the filter gain, so the estimate itself shifts slightly.
+GENFIT's chi2 ratio is **63.9** against the predicted (4.0/0.5)^2 = 64 — the measurement
+covariance rescales chi2 and nothing else. UKF's is 40.1, not 64, because its measSigma
+also enters the filter gain, so the estimate itself shifts slightly.
 
 > **A `chi2/ndf` cut is not portable between fitters, or even between sigma settings of one
 > fitter.** Set it per fitter from a percentile of that fitter's own chi2 distribution.
@@ -45,18 +46,20 @@ measSigma also enters the filter gain, so the estimate itself shifts slightly.
 
 ## Result 2 — the energy-scale bias is NOT covariance. Hypothesis refuted.
 
-g.s. centroid, same 8 runs, no chi2 cut:
+g.s. centroid, no chi2 cut. All 73 runs, except the matEffects row (8 runs):
 
 | configuration | N | mu [MeV] | sigma [MeV] |
 |---|---|---|---|
-| UKF sigma=0.5 | 3 367 | +0.025 | 0.248 |
-| UKF sigma=4.0 | 3 372 | +0.043 | 0.234 |
-| GENFIT sigma=4.0 | 3 297 | **+0.438** | 0.257 |
-| GENFIT sigma=0.5 | 3 302 | **+0.437** | 0.258 |
-| GENFIT sigma=4.0, matEffects=ON | 3 385 | +0.637 | 0.757 |
+| UKF sigma=0.5 | 32 120 | +0.037 | 0.255 |
+| UKF sigma=4.0 | 32 173 | +0.061 | 0.252 |
+| GENFIT sigma=4.0 | 31 578 | **+0.451** | 0.262 |
+| GENFIT sigma=0.5 | 31 573 | **+0.451** | 0.262 |
+| GENFIT sigma=4.0, matEffects=ON (8 runs) | 3 385 | +0.637 | 0.757 |
 
-GENFIT's centroid is **identical to 1 keV** at sigma = 0.5 and 4.0. An 8x change in assumed
-covariance does not move it at all, so the +0.4 MeV offset has a different cause.
+Changing GENFIT's assumed covariance by 8x moves its g.s. centroid by **+0.000 MeV** — the
+two agree to every digit fitted, on 31 500 tracks each. The +0.45 MeV offset therefore has
+a different cause entirely. (UKF moves by +0.025 MeV over the same 8x change, again because
+its measSigma feeds the gain as well as the chi2.)
 
 `matEffects=kTRUE` does not fix it — it makes the centroid worse and the fits degenerate
 (chi2 median 1e9 = ndf <= 0), so material effects are not usable in this configuration.
