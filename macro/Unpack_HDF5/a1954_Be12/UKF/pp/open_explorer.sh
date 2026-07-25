@@ -1,34 +1,38 @@
 #!/usr/bin/env bash
-# Rebuild the standalone browser explorer from a kinematics cache and open it in the
+# Rebuild a standalone browser explorer from the kinematics caches and open it in the
 # WINDOWS browser. Use this when WSLg/X11 will not show ROOT GUI windows: Chrome runs
 # natively on Windows, so nothing here depends on the X server.
 #
-#   ./open_explorer.sh                              # clean155 cache, 155 MeV
-#   ./open_explorer.sh plots/proton_kin_pd.root      # another cache
+#   ./open_explorer.sh          # 12Be(p,p')  -- default
+#   ./open_explorer.sh pd       # 12Be(p,d)11Be
 #
+# Each page carries BOTH fitters (UKF + GENFIT) and switches between them in-page.
 # NOTE: `explorer.exe <file>` silently does nothing on this box -- launch the browser
 # binary directly, as below.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CACHE="${1:-}"
-OUT="$HOME/a1954_Be12_explorer.html"
-WINDIR="/mnt/c/Users/$(basename "$(ls -d /mnt/c/Users/* | grep -viE 'public|default|all users' | head -1)")"
+CHAN="${1:-pp}"
+WINHOME="/mnt/c/Users/$(ls /mnt/c/Users | grep -viE 'public|default|all users' | head -1)"
 BROWSER="/mnt/c/Program Files/Google/Chrome/Application/chrome.exe"
 [[ -x "$BROWSER" ]] || BROWSER="/mnt/c/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"
+
+case "$CHAN" in
+  pp) OUT="$HOME/a1954_Be12_pp_explorer.html"; TAG="12Be(p,p')";      MEJ=1.007825; MRES=12.026921 ;;
+  pd) OUT="$HOME/a1954_Be12_pd_explorer.html"; TAG="12Be(p,d)11Be";   MEJ=2.014102; MRES=11.021658 ;;
+  *)  echo "usage: $0 [pp|pd]"; exit 1 ;;
+esac
 
 set +u   # thisroot.sh reads unset vars
 source "$HOME/fair_install/FairSoft/install/bin/thisroot.sh"
 set -u
-if [[ -n "$CACHE" ]]; then
-   root -b -l -q "$HERE/make_explorer_html.C(\"$CACHE\",\"$OUT\")"
-else
-   root -b -l -q "$HERE/make_explorer_html.C()"
-fi
+
+root -b -l -q "$HERE/make_explorer_html.C(\"$HERE/plots/proton_kin_${CHAN}_ukf.root\",\"$OUT\",\"$TAG\",155,12.026921,1.007825,$MEJ,$MRES,12,\"\",\"$HERE/plots/proton_kin_${CHAN}_genfit.root\")"
 
 # the browser cannot read \\wsl$ paths reliably -> stage on the Windows side
-STAGE="$WINDIR/a1954_Be12_explorer.html"
+STAGE="$WINHOME/$(basename "$OUT")"
 cp "$OUT" "$STAGE"
+[[ -d "$WINHOME/Desktop" ]] && cp "$OUT" "$WINHOME/Desktop/"
 WINPATH="$(wslpath -w "$STAGE" | sed 's|\\|/|g')"
 echo "opening file:///$WINPATH"
 nohup "$BROWSER" "file:///$WINPATH" >/dev/null 2>&1 &

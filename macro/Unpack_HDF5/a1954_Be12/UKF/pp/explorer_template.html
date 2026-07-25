@@ -14,7 +14,7 @@
   --ink:#161b20; --ink-2:#4c5761; --ink-3:#7c8792;
   --accent:#a95c29; --accent-ink:#8d4c21; --accent-soft:#f4e6da;
   --data:#1d5f78; --data-fill:rgba(29,95,120,.13);
-  --fit:#c03f2b; --ref2:#2c7a58; --refdim:#8f9aa4;
+  --fit:#c03f2b; --ref2:#2c7a58; --refdim:#8f9aa4; --alt:#6a52a3;
   --plot:#ffffff;
   --good:#2c7a58; --warn:#a9761f;
   --shadow:0 1px 2px rgba(20,26,32,.05),0 6px 18px rgba(20,26,32,.05);
@@ -26,7 +26,7 @@
     --ink:#e7ebef; --ink-2:#a6b1bb; --ink-3:#78838d;
     --accent:#d9843f; --accent-ink:#e79a5c; --accent-soft:#2e2318;
     --data:#68b8d6; --data-fill:rgba(104,184,214,.15);
-    --fit:#ef6a52; --ref2:#4fb98a; --refdim:#7d8892;
+    --fit:#ef6a52; --ref2:#4fb98a; --refdim:#7d8892; --alt:#b49ae0;
     --plot:#10151a;
     --good:#4fb98a; --warn:#d9a441;
     --shadow:0 1px 2px rgba(0,0,0,.4),0 6px 18px rgba(0,0,0,.3);
@@ -38,7 +38,7 @@
   --ink:#161b20; --ink-2:#4c5761; --ink-3:#7c8792;
   --accent:#a95c29; --accent-ink:#8d4c21; --accent-soft:#f4e6da;
   --data:#1d5f78; --data-fill:rgba(29,95,120,.13);
-  --fit:#c03f2b; --ref2:#2c7a58; --refdim:#8f9aa4;
+  --fit:#c03f2b; --ref2:#2c7a58; --refdim:#8f9aa4; --alt:#6a52a3;
   --plot:#ffffff; --good:#2c7a58; --warn:#a9761f;
   --shadow:0 1px 2px rgba(20,26,32,.05),0 6px 18px rgba(20,26,32,.05);
 }
@@ -48,7 +48,7 @@
   --ink:#e7ebef; --ink-2:#a6b1bb; --ink-3:#78838d;
   --accent:#d9843f; --accent-ink:#e79a5c; --accent-soft:#2e2318;
   --data:#68b8d6; --data-fill:rgba(104,184,214,.15);
-  --fit:#ef6a52; --ref2:#4fb98a; --refdim:#7d8892;
+  --fit:#ef6a52; --ref2:#4fb98a; --refdim:#7d8892; --alt:#b49ae0;
   --plot:#10151a; --good:#4fb98a; --warn:#d9a441;
   --shadow:0 1px 2px rgba(0,0,0,.4),0 6px 18px rgba(0,0,0,.3);
 }
@@ -119,6 +119,16 @@ button.primary{background:var(--accent); border-color:var(--accent); color:#fff}
 button.primary:hover{filter:brightness(1.07); color:#fff}
 .check{display:flex; align-items:center; gap:7px; font-size:12.5px; color:var(--ink-2); cursor:pointer}
 .check input{accent-color:var(--accent)}
+.seg{display:flex}
+.seg button{
+  flex:1; border-radius:0; margin-left:-1px; text-transform:uppercase;
+  letter-spacing:.08em; font-size:11px; padding:6px 4px;
+  font-family:ui-monospace,SFMono-Regular,"JetBrains Mono","DejaVu Sans Mono",Menlo,monospace;
+}
+.seg button:first-child{border-radius:6px 0 0 6px; margin-left:0}
+.seg button:last-child{border-radius:0 6px 6px 0}
+.seg button[aria-pressed="true"]{background:var(--accent); border-color:var(--accent); color:#fff}
+.seg button[disabled]{opacity:.4; cursor:not-allowed}
 
 /* ---- stat tiles ---- */
 .tiles{display:grid; grid-template-columns:repeat(auto-fit,minmax(148px,1fr)); gap:12px; margin-bottom:14px}
@@ -180,6 +190,12 @@ footer{
 
 <main class="layout">
   <aside class="rail">
+    <div class="grp" id="grpFitter">
+      <div class="eyebrow">fitter</div>
+      <div class="seg" id="segFitter"></div>
+      <label class="check"><input type="checkbox" id="cmpFit"> overlay the other fitter</label>
+    </div>
+
     <div class="grp">
       <div class="eyebrow">beam</div>
       <div class="row"><label for="ebeam">E<sub>beam</sub> [MeV]</label><input type="number" id="ebeam" step="0.25"></div>
@@ -238,7 +254,7 @@ footer{
     <div class="grid">
       <div class="card">
         <h2 id="ttlEx">excitation energy</h2>
-        <div class="legend">
+        <div class="legend" id="legEx">
           <span><i class="swatch" style="background:var(--data)"></i>data</span>
           <span><i class="swatch" style="background:var(--fit)"></i>gaussian fit</span>
           <span><i class="swatch" style="background:var(--accent);opacity:.35;height:9px;width:9px;border-radius:2px"></i>fit window</span>
@@ -278,7 +294,14 @@ footer{
    injected by pp/make_explorer_html.C
    ======================================================================== */
 const CFG  = /*__CFG__*/ null;
-const DATA = /*__DATA__*/ null;
+const RAW  = /*__DATA__*/ null;
+
+/* RAW is {ukf:{ke,th,c2}, genfit:{...}} -- older single-fitter files are wrapped here */
+const SETS = RAW.ke ? {ukf: RAW} : RAW;
+const FITTERS = ['ukf', 'genfit'].filter(f => SETS[f] && SETS[f].ke && SETS[f].ke.length);
+let ACTIVE = FITTERS[0];
+const DATA = () => SETS[ACTIVE];
+const other = () => FITTERS.find(f => f !== ACTIVE);
 
 /* ---------------------------------------------------------------------------
    physics - identical expressions to pp/ex_Be12.C / pp/explore_Be12.C
@@ -286,6 +309,12 @@ const DATA = /*__DATA__*/ null;
 const U = 931.49401;
 const M1 = CFG.mBeamAmu * U, M2 = CFG.mTargAmu * U,
       M3 = CFG.mEjectAmu * U, M4 = CFG.mResidAmu * U;
+
+/** reference excitation energies drawn as kinematic loci (per channel, from CFG) */
+const REF_EX = (CFG.refEx && CFG.refEx.length) ? CFG.refEx
+  : [{ex:0, label:'E_x = 0 (g.s.)'}, {ex:2.10, label:'E_x = 2.10'},
+     {ex:4, label:'E_x = 4'}, {ex:6, label:'E_x = 6'}];
+const refColor = i => css(i === 0 ? '--accent' : i === 1 ? '--ref2' : '--refdim');
 
 function omega2(x, y, z) { return Math.sqrt(x*x + y*y + z*z - 2*x*y - 2*y*z - 2*x*z); }
 
@@ -347,10 +376,25 @@ function readState() {
 /* ---------------------------------------------------------------------------
    histogramming
    ------------------------------------------------------------------------ */
-function pass(i, s) {
-  return DATA.c2[i] <= s.chi2
-      && DATA.th[i] >= s.thLo && DATA.th[i] <= s.thHi
-      && DATA.ke[i] >= s.keLo && DATA.ke[i] <= s.keHi;
+function pass(d, i, s) {
+  return d.c2[i] <= s.chi2
+      && d.th[i] >= s.thLo && d.th[i] <= s.thHi
+      && d.ke[i] >= s.keLo && d.ke[i] <= s.keHi;
+}
+
+/** Ex histogram only, for a named fitter -- used for the comparison overlay */
+function exOnly(name, s) {
+  const d = SETS[name], nEx = s.exBins, exW = (s.exHi - s.exLo)/nEx;
+  const h = new Float64Array(nEx);
+  if (!d) return h;
+  for (let i = 0; i < d.ke.length; ++i) {
+    if (!pass(d, i, s)) continue;
+    const [ex] = kine2b(s.ebeam, d.th[i]*Math.PI/180, d.ke[i]);
+    if (!isFinite(ex)) continue;
+    const b = Math.floor((ex - s.exLo)/exW);
+    if (b >= 0 && b < nEx) h[b]++;
+  }
+  return h;
 }
 
 function compute(s) {
@@ -359,10 +403,10 @@ function compute(s) {
   const hKT = new Float64Array(s.thBins*s.keBins);
   const hEt = new Float64Array(s.cmBins*nEx);
   let n = 0;
-  const N = DATA.ke.length;
+  const d = DATA(), N = d.ke.length;
   for (let i = 0; i < N; ++i) {
-    if (!pass(i, s)) continue;
-    const ke = DATA.ke[i], th = DATA.th[i];
+    if (!pass(d, i, s)) continue;
+    const ke = d.ke[i], th = d.th[i];
     // KE vs theta_lab map (0..95 deg)
     const bx = Math.floor(th/95*s.thBins), by = Math.floor(ke/s.keMax*s.keBins);
     if (bx >= 0 && bx < s.thBins && by >= 0 && by < s.keBins) hKT[by*s.thBins + bx]++;
@@ -542,6 +586,7 @@ function drawHist(cv, hist, s, opts) {
   const c = setup(cv); const {g, pw, ph} = c;
   let max = 0;
   for (const v of hist) if (v > max) max = v;
+  if (opts.overlay) for (const v of opts.overlay) if (v > max) max = v;  // keep both on scale
   const logY = s.logY && max > 0;
   const ylo = logY ? 0.5 : 0, yhi = logY ? max*1.6 : (max*1.1 || 1);
   const ymap = v => {
@@ -569,6 +614,16 @@ function drawHist(cv, hist, s, opts) {
   g.save(); g.clip(); g.fillStyle = css('--data-fill'); g.fillRect(PAD.l, PAD.t, pw, ph); g.restore();
   g.strokeStyle = css('--data'); g.lineWidth = 1.4; g.stroke();
 
+  // the other fitter, same cuts, for comparison
+  if (opts.overlay) {
+    g.strokeStyle = css('--alt'); g.lineWidth = 1.4; g.setLineDash([4,3]);
+    g.beginPath(); g.moveTo(PAD.l, ymap(0));
+    for (let b = 0; b < s.exBins; ++b) {
+      const x = PAD.l + b*xw, y = ymap(opts.overlay[b]);
+      g.lineTo(x, y); g.lineTo(x + xw, y);
+    }
+    g.stroke(); g.setLineDash([]);
+  }
   // gaussian overlay
   if (opts.showFit && opts.fit) {
     const {mu, sig, amp} = opts.fit;
@@ -623,15 +678,20 @@ function render() {
   $('ttlEx').innerHTML = 'excitation energy &middot; E<sub>beam</sub> = ' + s.ebeam.toFixed(2) + ' MeV';
   $('ttlSlice').innerHTML = 'E<sub>x</sub> for ' + s.cmLo + '&deg; &lt; &theta;<sub>cm</sub> &lt; ' + s.cmHi + '&deg;';
 
-  views.cEx = drawHist($('cEx'), r.hEx, s, {showFit:true, fit});
+  const cmp = ($('cmpFit').checked && other()) ? exOnly(other(), s) : null;
+  views.cEx = drawHist($('cEx'), r.hEx, s, {showFit:true, fit, overlay:cmp});
   views.cSl = drawHist($('cSl'), r.hSl, s, {showFit:false});
+  $('legEx').innerHTML =
+      `<span><i class="swatch" style="background:var(--data)"></i>${ACTIVE.toUpperCase()}</span>`
+    + `<span><i class="swatch" style="background:var(--fit)"></i>gaussian fit</span>`
+    + `<span><i class="swatch" style="background:var(--accent);opacity:.35;height:9px;width:9px;border-radius:2px"></i>fit window</span>`
+    + (cmp ? `<span><i class="swatch" style="background:var(--alt)"></i>${other().toUpperCase()} (same cuts)</span>` : '');
 
   views.cKT = drawHeat($('cKT'), r.hKT, s.thBins, s.keBins, 0, 95, 0, s.keMax,
                        'theta_lab [deg]', 'KE [MeV]', s, c => {
     if (!s.kinLines) return;
     const {g, pw, ph} = c;
-    const loci = [[0, css('--accent'), []], [2.10, css('--ref2'), []],
-                  [4, css('--refdim'), [5,4]], [6, css('--refdim'), [5,4]]];
+    const loci = REF_EX.map((r, i) => [r.ex, refColor(i), i < 2 ? [] : [5,4]]);
     for (const [ex, col, dash] of loci) {
       const pts = kinLocus(s.ebeam, ex);
       if (!pts.length) continue;
@@ -658,7 +718,7 @@ function render() {
     g.setLineDash([]);
   });
 
-  $('foot').textContent = CFG.tag + '  |  ' + DATA.ke.length.toLocaleString()
+  $('foot').textContent = CFG.tag + '  |  ' + ACTIVE.toUpperCase() + '  |  ' + DATA().ke.length.toLocaleString()
     + ' fitted tracks in cache  |  ' + r.n.toLocaleString() + ' pass cuts  |  '
     + 'chi2/ndf<' + s.chi2 + ', theta_lab ' + s.thLo + '-' + s.thHi + ' deg, KE '
     + s.keLo + '-' + s.keHi + ' MeV';
@@ -730,6 +790,28 @@ function savePng() {
 
 /* ---- wiring ---- */
 function init() {
+  const seg = $('segFitter');
+  for (const f of ['ukf','genfit']) {
+    const b = document.createElement('button');
+    b.textContent = f; b.dataset.f = f;
+    b.disabled = !FITTERS.includes(f);
+    b.setAttribute('aria-pressed', String(f === ACTIVE));
+    b.addEventListener('click', () => {
+      if (b.disabled || ACTIVE === f) return;
+      ACTIVE = f;
+      for (const o of seg.children) o.setAttribute('aria-pressed', String(o.dataset.f === ACTIVE));
+      render();
+    });
+    seg.appendChild(b);
+  }
+  if (FITTERS.length < 2) {
+    $('cmpFit').disabled = true;
+    $('cmpFit').parentElement.title = 'only one fitter is baked into this file';
+  }
+  $('cmpFit').addEventListener('change', render);
+
+  $('legKin').innerHTML = REF_EX.map((r, i) =>
+    `<span><i class="swatch" style="background:${refColor(i)}"></i>${r.label}</span>`).join('');
   $('hdrTitle').textContent = CFG.title || 'excitation-energy explorer';
   $('hdrEyebrow').textContent = CFG.eyebrow || '';
   $('hdrCache').textContent = CFG.cache || '';

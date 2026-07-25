@@ -46,8 +46,11 @@ static std::tuple<double, double> kine_2b(double m1, double m2, double m3, doubl
    return {Ex, theta_cm * TMath::RadToDeg()};
 }
 
+/// Ejectile/residual masses default to (p,p'); for 12Be(p,d)11Be pass
+///   mEjectAmu = 2.014102 (deuteron), mResidAmu = 11.021658 (11Be).
 void ex_Be12(TString runsCSV = "run_0142", TString inDir = "/home/yassid/a1954_Be12_reco/", double Ebeam = 100.0,
-             double chi2Cut = 5.0, TString outTag = "")
+             double chi2Cut = 5.0, TString outTag = "", double mEjectAmu = 1.007825, double mResidAmu = 12.026921,
+             TString chanLabel = "", TString fitter = "ukf")
 {
    gSystem->Load("libAtReconstruction.so");
    gSystem->Load("libAtTools.so");
@@ -59,7 +62,12 @@ void ex_Be12(TString runsCSV = "run_0142", TString inDir = "/home/yassid/a1954_B
              << " MeV -- CONFIRM the a1954 12Be beam energy (placeholder default is 100).\033[0m" << std::endl;
 
    const double u = 931.49401;
-   const double m_Be12 = 12.026921 * u, m_p = 1.007825 * u; // 12Be(p,p'): m1=m4=12Be, m2=m3=p
+   const double m_Be12 = 12.026921 * u, m_p = 1.007825 * u;  // beam 12Be, target p
+   const double m_eject = mEjectAmu * u, m_resid = mResidAmu * u;
+   if (chanLabel.IsNull())
+      chanLabel = (mEjectAmu > 1.5) ? "12Be(p,d)11Be" : "12Be(p,p')";
+   printf("channel: %s   fitter: %s   (m3 = %.6f u, m4 = %.6f u)\n", chanLabel.Data(), fitter.Data(),
+          mEjectAmu, mResidAmu);
 
    TString dir = getenv("VMCWORKDIR");
    TString plotDir = dir + "/macro/Unpack_HDF5/a1954_Be12/UKF/pp/plots/";
@@ -68,7 +76,7 @@ void ex_Be12(TString runsCSV = "run_0142", TString inDir = "/home/yassid/a1954_B
    TFile *fcache = new TFile((plotDir + "proton_kin" + outTag + ".root").Data(), "RECREATE");
    TNtuple *ntk = new TNtuple("pk", "proton kinematics", "ke:theta:vertexz:thcm:ex:chi2ndf");
 
-   TH1F *hex = new TH1F("hex", "12Be excitation energy (p,p');E_{x} [MeV];protons", 200, -5, 25);
+   TH1F *hex = new TH1F("hex", Form("%s excitation energy;E_{x} [MeV];ejectiles", chanLabel.Data()), 200, -5, 25);
    TH2F *hexcm = new TH2F("hexcm", "E_{x} vs #theta_{cm};#theta_{cm} [deg];E_{x} [MeV]", 180, 0, 180, 150, -5, 25);
    TH2F *hket = new TH2F("hket", "proton KE vs #theta_{lab} (handedness check);#theta_{lab} [deg];KE [MeV]", 180, 0,
                          180, 200, 0, 40);
@@ -77,7 +85,7 @@ void ex_Be12(TString runsCSV = "run_0142", TString inDir = "/home/yassid/a1954_B
    long nProton = 0, nEvtWithTrk = 0;
    for (int ri = 0; ri < runs->GetEntries(); ++ri) {
       TString run = ((TObjString *)runs->At(ri))->GetString().Strip(TString::kBoth);
-      TString uf = inDir + run + "_ukf.root";
+      TString uf = inDir + run + "_" + fitter + ".root";
       if (gSystem->AccessPathName(uf)) {
          printf("skip %s (no %s)\n", run.Data(), uf.Data());
          continue;
@@ -110,7 +118,7 @@ void ex_Be12(TString runsCSV = "run_0142", TString inDir = "/home/yassid/a1954_B
             }
             double thDeg = thRad * TMath::RadToDeg();
             hket->Fill(thDeg, ke);
-            auto [ex, thcm] = kine_2b(m_Be12, m_p, m_p, m_Be12, Ebeam, thRad, ke);
+            auto [ex, thcm] = kine_2b(m_Be12, m_p, m_eject, m_resid, Ebeam, thRad, ke);
             if (std::isnan(ex))
                continue;
             ++nProton;

@@ -1,22 +1,53 @@
 /// @file make_explorer_html.C
-/// @brief Bake a kinematics cache (proton_kin*.root from pp/ex_Be12.C) into a single
+/// @brief Bake kinematics caches (proton_kin*.root from pp/ex_Be12.C) into a single
 /// self-contained HTML file: the same explorer as pp/explore_Be12.C, but running in a
 /// browser instead of X11 -- useful when WSLg/X forwarding is not cooperating.
 ///
 /// The page recomputes Ex and theta_cm from (KE, theta_lab) in JavaScript with the very
 /// same two-body expressions, so the beam energy, the cuts and every binning stay live.
+/// Pass BOTH a UKF and a GENFIT cache to get the in-page fitter switch (and the
+/// "overlay the other fitter" comparison); one cache alone still works.
 ///
-///   root -b -q 'pp/make_explorer_html.C()'                       // clean155 cache, 155 MeV
-///   root -b -q 'pp/make_explorer_html.C("plots/proton_kin_pd.root","/home/yassid/pd.html",\
-///                "12Be(p,d)11Be",155,12.026921,1.007825,2.014102,11.021658,12)'
+///   root -b -q 'pp/make_explorer_html.C()'      // clean155 UKF cache, 155 MeV
+///   root -b -q 'pp/make_explorer_html.C("plots/proton_kin_clean155.root","/home/yassid/pp.html",\
+///                "12Be(p,p'\'')",155,12.026921,1.007825,1.007825,12.026921,12,"",\
+///                "plots/proton_kin_clean155_genfit.root")'
 ///
-/// Then just open the file (WSL -> Windows browser):   explorer.exe <file>.html
+/// Then open it: pp/open_explorer.sh, or the Windows browser on the written file.
 
 #include <string>
 
+/// stream one cache's (ke, theta, chi2/ndf) columns as a compact JSON object
+static Long64_t dump_pk(TTree *t, FILE *o)
+{
+   float ke = 0, th = 0, c2 = 0;
+   t->SetBranchAddress("ke", &ke);
+   t->SetBranchAddress("theta", &th);
+   t->SetBranchAddress("chi2ndf", &c2);
+   const Long64_t N = t->GetEntries();
+   fprintf(o, "{\"ke\":[");
+   for (Long64_t i = 0; i < N; ++i) {
+      t->GetEntry(i);
+      fprintf(o, "%s%.3f", i ? "," : "", ke);
+   }
+   fprintf(o, "],\"th\":[");
+   for (Long64_t i = 0; i < N; ++i) {
+      t->GetEntry(i);
+      fprintf(o, "%s%.3f", i ? "," : "", th);
+   }
+   fprintf(o, "],\"c2\":[");
+   for (Long64_t i = 0; i < N; ++i) {
+      t->GetEntry(i);
+      fprintf(o, "%s%.2f", i ? "," : "", c2);
+   }
+   fprintf(o, "]}");
+   return N;
+}
+
 void make_explorer_html(TString cache = "", TString outHtml = "", TString tag = "12Be(p,p')",
                         double ebeam0 = 155.0, double mBeamAmu = 12.026921, double mTargAmu = 1.007825,
-                        double mEjectAmu = 1.007825, double mResidAmu = 12.026921, int beamA = 12)
+                        double mEjectAmu = 1.007825, double mResidAmu = 12.026921, int beamA = 12,
+                        TString refExCSV = "", TString cacheGenfit = "")
 {
    TString here = gSystem->DirName(gInterpreter->GetCurrentMacroName());
    if (cache.IsNull())
@@ -34,30 +65,51 @@ void make_explorer_html(TString cache = "", TString outHtml = "", TString tag = 
    std::string tpl((std::istreambuf_iterator<char>(tf)), std::istreambuf_iterator<char>());
    tf.close();
 
-   // ---- cache -------------------------------------------------------------
-   TFile *f = TFile::Open(cache);
-   if (!f || f->IsZombie()) {
-      std::cerr << "cannot open cache " << cache << "\n";
+   // ---- caches ------------------------------------------------------------
+   TFile *fU = TFile::Open(cache);
+   TTree *tU = (fU && !fU->IsZombie()) ? (TTree *)fU->Get("pk") : nullptr;
+   if (!tU) {
+      std::cerr << "cannot read ntuple 'pk' from " << cache << "\n";
       return;
    }
-   TTree *t = (TTree *)f->Get("pk");
-   if (!t) {
-      std::cerr << "no ntuple 'pk' in " << cache << "\n";
-      return;
+   TFile *fG = cacheGenfit.Length() ? TFile::Open(cacheGenfit) : nullptr;
+   TTree *tG = (fG && !fG->IsZombie()) ? (TTree *)fG->Get("pk") : nullptr;
+   if (cacheGenfit.Length() && !tG)
+      std::cerr << "WARNING: genfit cache unusable (" << cacheGenfit << ") -- writing UKF only\n";
+
+   // ---- reference levels drawn as kinematic loci (per channel) ------------
+   //  "Ex:label" pairs; default set chosen from the residual nucleus
+   if (refExCSV.IsNull())
+      refExCSV = (mResidAmu > 11.5) ? "0:g.s.,2.10:2+_1,4:,6:"            // 12Be
+                                    : "0:g.s.,0.32:1/2-,1.78:5/2+,3.41:"; // 11Be
+   TString refJson = "[";
+   TObjArray *toks = refExCSV.Tokenize(",");
+   for (int i = 0; i < toks->GetEntries(); ++i) {
+      TString tk = ((TObjString *)toks->At(i))->GetString();
+      TString exs = tk, lab = "";
+      if (tk.Contains(":")) {
+         exs = tk(0, tk.First(':'));
+         lab = tk(tk.First(':') + 1, tk.Length());
+      }
+      double exv = exs.Atof();
+      TString label = TString::Format("E_x = %g", exv);
+      if (lab.Length())
+         label += " (" + lab + ")";
+      refJson += TString::Format("%s{\"ex\":%g,\"label\":\"%s\"}", i ? "," : "", exv, label.Data());
    }
-   float ke = 0, th = 0, c2 = 0;
-   t->SetBranchAddress("ke", &ke);
-   t->SetBranchAddress("theta", &th);
-   t->SetBranchAddress("chi2ndf", &c2);
-   const Long64_t N = t->GetEntries();
+   refJson += "]";
 
    // ---- config block ------------------------------------------------------
+   TString cacheNames = gSystem->BaseName(cache);
+   if (tG)
+      cacheNames += TString(" + ") + gSystem->BaseName(cacheGenfit);
    TString cfg = TString::Format(
-      "{\"tag\":\"%s\",\"title\":\"%s excitation explorer\",\"eyebrow\":\"a1954 . AT-TPC . UKF\","
+      "{\"tag\":\"%s\",\"title\":\"%s excitation explorer\",\"eyebrow\":\"a1954 . AT-TPC\","
       "\"cache\":\"%s\",\"pngName\":\"explorer_%s\",\"ebeam0\":%.4f,\"beamA\":%d,"
-      "\"mBeamAmu\":%.6f,\"mTargAmu\":%.6f,\"mEjectAmu\":%.6f,\"mResidAmu\":%.6f}",
-      tag.Data(), tag.Data(), gSystem->BaseName(cache), gSystem->BaseName(outHtml), ebeam0, beamA, mBeamAmu, mTargAmu,
-      mEjectAmu, mResidAmu);
+      "\"mBeamAmu\":%.6f,\"mTargAmu\":%.6f,\"mEjectAmu\":%.6f,\"mResidAmu\":%.6f,"
+      "\"refEx\":%s}",
+      tag.Data(), tag.Data(), cacheNames.Data(), gSystem->BaseName(outHtml), ebeam0, beamA, mBeamAmu, mTargAmu,
+      mEjectAmu, mResidAmu, refJson.Data());
 
    const std::string cfgKey = "/*__CFG__*/ null", datKey = "/*__DATA__*/ null";
    size_t pc = tpl.find(cfgKey);
@@ -79,28 +131,26 @@ void make_explorer_html(TString cache = "", TString outHtml = "", TString tag = 
       return;
    }
    fwrite(tpl.data(), 1, pd, o);
-   fprintf(o, "{\"ke\":[");
-   for (Long64_t i = 0; i < N; ++i) {
-      t->GetEntry(i);
-      fprintf(o, "%s%.3f", i ? "," : "", ke);
+   fprintf(o, "{\"ukf\":");
+   Long64_t nU = dump_pk(tU, o), nG = 0;
+   if (tG) {
+      fprintf(o, ",\"genfit\":");
+      nG = dump_pk(tG, o);
    }
-   fprintf(o, "],\"th\":[");
-   for (Long64_t i = 0; i < N; ++i) {
-      t->GetEntry(i);
-      fprintf(o, "%s%.3f", i ? "," : "", th);
-   }
-   fprintf(o, "],\"c2\":[");
-   for (Long64_t i = 0; i < N; ++i) {
-      t->GetEntry(i);
-      fprintf(o, "%s%.2f", i ? "," : "", c2);
-   }
-   fprintf(o, "]}");
+   fprintf(o, "}");
    fwrite(tpl.data() + pd + datKey.size(), 1, tpl.size() - pd - datKey.size(), o);
    fclose(o);
-   f->Close();
+   fU->Close();
+   if (fG)
+      fG->Close();
 
    FileStat_t st;
    gSystem->GetPathInfo(outHtml, st);
-   printf("\nwrote %s  (%lld tracks, %.1f MB)\n", outHtml.Data(), N, st.fSize / 1048576.);
+   printf("\nwrote %s  (%.1f MB)\n", outHtml.Data(), st.fSize / 1048576.);
+   printf("  UKF    : %lld tracks\n", nU);
+   if (tG)
+      printf("  GENFIT : %lld tracks   (fitter switch enabled in the page)\n", nG);
+   else
+      printf("  GENFIT : not supplied -- the page's GENFIT button stays disabled\n");
    printf("open it with:  pp/open_explorer.sh   (or the Windows browser on %s)\n\n", outHtml.Data());
 }
