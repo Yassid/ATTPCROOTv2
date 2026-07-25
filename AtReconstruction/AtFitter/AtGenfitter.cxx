@@ -81,10 +81,21 @@ void AtGenfitter::Init()
    mat->setEnergyLossBrems(false);
    mat->setNoiseBrems(false);
    mat->setNoEffects(fNoMatEffects);
-   mat->useEnergyLossParam();
    mat->init(new genfit::TGeoMaterialInterface());
-   if (!fELossFile.empty())
+
+   // Energy-loss mode. genfit's parameterization-only mode (useEnergyLossParam) is ONLY
+   // valid when a dE/dx curve has been loaded: MaterialEffects::maxKinEnergy_ starts at 0
+   // and is set solely by setEnergyLossFile(), and dEdx() throws a FATAL exception for
+   // E_kin > maxKinEnergy_. Calling it without a table therefore threw on every single
+   // step, which silently truncated genfit's reference track after ~2 measurements
+   // (ndf <= 0) for ~87 % of tracks -- the "material effects are unusable" instability.
+   // Without a table we leave genfit in Param+Bethe-Bloch mode, which is valid down to
+   // beta*gamma = 0.05 (~1.2 MeV protons) and falls back to a 0 parameterization term
+   // below that.
+   if (!fELossFile.empty()) {
       mat->setEnergyLossFile(fELossFile, fPDG);
+      mat->useEnergyLossParam();
+   }
 
    // PDG defs (genfit needs ion entries)
    TDatabasePDG *db = TDatabasePDG::Instance();

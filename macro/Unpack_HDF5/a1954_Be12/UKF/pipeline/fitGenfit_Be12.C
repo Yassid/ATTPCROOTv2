@@ -19,7 +19,8 @@ void fitGenfit_Be12(TString fileName = "run_0142", Long64_t nEvents = -1,
                     TString ioDir = "/home/yassid/a1954_Be12_reco/", TString outSuffix = "", TString outDir = "",
                     Double_t bField = -2.85, Int_t minIter = 2, Int_t maxIter = 5, TString pidGate = "",
                     Double_t measSigma = 4.0, Double_t thetaMinDeg = 10.0, Double_t thetaMaxDeg = 170.0,
-                    Bool_t matEffects = kFALSE, Bool_t backwardSeedFix = kFALSE, TString particle = "proton")
+                    Bool_t matEffects = kFALSE, Bool_t backwardSeedFix = kFALSE, TString particle = "proton",
+                    TString geoName = "ATTPC_H600torr")
 {
    gSystem->Load("libAtReconstruction.so");
    FairLogger::GetLogger()->SetLogScreenLevel("WARNING");
@@ -41,7 +42,9 @@ void fitGenfit_Be12(TString fileName = "run_0142", Long64_t nEvents = -1,
 
    TString dir = getenv("VMCWORKDIR");
    gSystem->Setenv("GEOMPATH", (dir + "/geometry/").Data());
-   TString geoManFile = dir + "/geometry/ATTPC_H1bar_geomanager.root";
+   // a1954 ran H2 at 600 torr; ATTPC_H1bar is 27% too dense, which makes any genfit
+   // material-effects correction wrong (see pp/FITTER_COVARIANCE_TEST.md).
+   TString geoManFile = dir + "/geometry/" + geoName + "_geomanager.root";
    TString digiParFile = dir + "/parameters/ATTPC.a1954_Be12.par";
    TString inputFile = ioDir + fileName + "_reco.root";
    TString outBase = (outDir.Length() ? outDir : ioDir);
