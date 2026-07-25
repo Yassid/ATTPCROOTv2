@@ -1,0 +1,776 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Excitation-energy explorer</title>
+<style>
+/* ============================================================================
+   tokens - graphite ground, copper accent (Be metal / Cu pad plane)
+   ========================================================================= */
+:root{
+  --bg:#f2f4f6; --panel:#ffffff; --panel-2:#f8f9fb; --rail:#ffffff;
+  --line:#dadfe5; --line-2:#eaeef2; --grid:#e7ebef;
+  --ink:#161b20; --ink-2:#4c5761; --ink-3:#7c8792;
+  --accent:#a95c29; --accent-ink:#8d4c21; --accent-soft:#f4e6da;
+  --data:#1d5f78; --data-fill:rgba(29,95,120,.13);
+  --fit:#c03f2b; --ref2:#2c7a58; --refdim:#8f9aa4;
+  --plot:#ffffff;
+  --good:#2c7a58; --warn:#a9761f;
+  --shadow:0 1px 2px rgba(20,26,32,.05),0 6px 18px rgba(20,26,32,.05);
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#0d1115; --panel:#161b21; --panel-2:#1a2027; --rail:#141920;
+    --line:#2a323a; --line-2:#222932; --grid:#232b33;
+    --ink:#e7ebef; --ink-2:#a6b1bb; --ink-3:#78838d;
+    --accent:#d9843f; --accent-ink:#e79a5c; --accent-soft:#2e2318;
+    --data:#68b8d6; --data-fill:rgba(104,184,214,.15);
+    --fit:#ef6a52; --ref2:#4fb98a; --refdim:#7d8892;
+    --plot:#10151a;
+    --good:#4fb98a; --warn:#d9a441;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 6px 18px rgba(0,0,0,.3);
+  }
+}
+:root[data-theme="light"]{
+  --bg:#f2f4f6; --panel:#ffffff; --panel-2:#f8f9fb; --rail:#ffffff;
+  --line:#dadfe5; --line-2:#eaeef2; --grid:#e7ebef;
+  --ink:#161b20; --ink-2:#4c5761; --ink-3:#7c8792;
+  --accent:#a95c29; --accent-ink:#8d4c21; --accent-soft:#f4e6da;
+  --data:#1d5f78; --data-fill:rgba(29,95,120,.13);
+  --fit:#c03f2b; --ref2:#2c7a58; --refdim:#8f9aa4;
+  --plot:#ffffff; --good:#2c7a58; --warn:#a9761f;
+  --shadow:0 1px 2px rgba(20,26,32,.05),0 6px 18px rgba(20,26,32,.05);
+}
+:root[data-theme="dark"]{
+  --bg:#0d1115; --panel:#161b21; --panel-2:#1a2027; --rail:#141920;
+  --line:#2a323a; --line-2:#222932; --grid:#232b33;
+  --ink:#e7ebef; --ink-2:#a6b1bb; --ink-3:#78838d;
+  --accent:#d9843f; --accent-ink:#e79a5c; --accent-soft:#2e2318;
+  --data:#68b8d6; --data-fill:rgba(104,184,214,.15);
+  --fit:#ef6a52; --ref2:#4fb98a; --refdim:#7d8892;
+  --plot:#10151a; --good:#4fb98a; --warn:#d9a441;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 6px 18px rgba(0,0,0,.3);
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg); color:var(--ink);
+  font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+.mono{font-family:ui-monospace,SFMono-Regular,"JetBrains Mono","DejaVu Sans Mono",Menlo,monospace}
+.num{font-variant-numeric:tabular-nums}
+
+/* ---- header ---- */
+header{
+  display:flex; align-items:baseline; gap:16px; flex-wrap:wrap;
+  padding:16px 22px; background:var(--panel); border-bottom:1px solid var(--line);
+}
+header h1{
+  margin:0; font-size:17px; font-weight:640; letter-spacing:-.01em;
+}
+header .sub{
+  font-family:ui-monospace,SFMono-Regular,"JetBrains Mono","DejaVu Sans Mono",Menlo,monospace;
+  font-size:11.5px; color:var(--ink-3); letter-spacing:.02em;
+}
+header .spacer{flex:1}
+.eyebrow{
+  font-family:ui-monospace,SFMono-Regular,"JetBrains Mono","DejaVu Sans Mono",Menlo,monospace;
+  font-size:10px; text-transform:uppercase; letter-spacing:.13em; color:var(--ink-3);
+}
+
+/* ---- layout ---- */
+.layout{display:grid; grid-template-columns:246px minmax(0,1fr); gap:18px; padding:18px 22px 34px}
+@media (max-width:900px){ .layout{grid-template-columns:1fr} }
+
+/* ---- control rail ---- */
+.rail{
+  background:var(--rail); border:1px solid var(--line); border-radius:10px;
+  padding:14px; box-shadow:var(--shadow); align-self:start;
+  position:sticky; top:14px; max-height:calc(100vh - 28px); overflow-y:auto;
+  display:flex; flex-direction:column; gap:14px;
+}
+.grp{display:flex; flex-direction:column; gap:7px}
+.grp > .eyebrow{padding-bottom:3px; border-bottom:1px solid var(--line-2)}
+.row{display:flex; align-items:center; gap:8px}
+.row label{flex:1; font-size:12.5px; color:var(--ink-2)}
+input[type=number]{
+  width:74px; padding:4px 6px; text-align:right;
+  font-family:ui-monospace,SFMono-Regular,"JetBrains Mono","DejaVu Sans Mono",Menlo,monospace;
+  font-size:12px; font-variant-numeric:tabular-nums;
+  color:var(--ink); background:var(--panel-2);
+  border:1px solid var(--line); border-radius:5px;
+}
+input[type=number]:focus-visible,button:focus-visible,input[type=range]:focus-visible{
+  outline:2px solid var(--accent); outline-offset:1px;
+}
+input[type=range]{width:100%; accent-color:var(--accent)}
+.pair{display:flex; gap:6px}
+.pair input{width:100%}
+button{
+  font:inherit; font-size:12.5px; padding:6px 10px; cursor:pointer;
+  color:var(--ink); background:var(--panel-2);
+  border:1px solid var(--line); border-radius:6px;
+}
+button:hover{border-color:var(--accent); color:var(--accent-ink)}
+button.primary{background:var(--accent); border-color:var(--accent); color:#fff}
+button.primary:hover{filter:brightness(1.07); color:#fff}
+.check{display:flex; align-items:center; gap:7px; font-size:12.5px; color:var(--ink-2); cursor:pointer}
+.check input{accent-color:var(--accent)}
+
+/* ---- stat tiles ---- */
+.tiles{display:grid; grid-template-columns:repeat(auto-fit,minmax(148px,1fr)); gap:12px; margin-bottom:14px}
+.tile{
+  background:var(--panel); border:1px solid var(--line); border-radius:10px;
+  padding:11px 13px; box-shadow:var(--shadow);
+}
+.tile .k{font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--ink-3);
+  font-family:ui-monospace,SFMono-Regular,"JetBrains Mono","DejaVu Sans Mono",Menlo,monospace}
+.tile .v{
+  margin-top:3px; font-size:21px; font-weight:600; letter-spacing:-.02em;
+  font-variant-numeric:tabular-nums;
+  font-family:ui-monospace,SFMono-Regular,"JetBrains Mono","DejaVu Sans Mono",Menlo,monospace;
+}
+.tile .u{font-size:11.5px; color:var(--ink-3); font-weight:400; margin-left:3px}
+
+/* ---- plot cards ---- */
+.grid{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px}
+@media (max-width:1150px){ .grid{grid-template-columns:1fr} }
+.card{
+  background:var(--panel); border:1px solid var(--line); border-radius:10px;
+  padding:11px 12px 8px; box-shadow:var(--shadow); position:relative; min-width:0;
+}
+.card h2{margin:0 0 2px; font-size:13px; font-weight:600; letter-spacing:-.005em}
+.card .legend{
+  display:flex; gap:12px; flex-wrap:wrap; margin:5px 0 6px;
+  font-size:11px; color:var(--ink-2);
+  font-family:ui-monospace,SFMono-Regular,"JetBrains Mono","DejaVu Sans Mono",Menlo,monospace;
+}
+.card .legend span{display:inline-flex; align-items:center; gap:5px}
+.swatch{width:13px; height:2.5px; border-radius:2px; display:inline-block}
+.canvas-wrap{position:relative; width:100%; aspect-ratio:16/10}
+canvas{width:100%; height:100%; display:block; border-radius:5px; background:var(--plot)}
+.tip{
+  position:absolute; pointer-events:none; opacity:0; transition:opacity .09s;
+  background:var(--panel); color:var(--ink); border:1px solid var(--line);
+  border-radius:6px; padding:5px 8px; font-size:11.5px; white-space:pre;
+  font-family:ui-monospace,SFMono-Regular,"JetBrains Mono","DejaVu Sans Mono",Menlo,monospace;
+  font-variant-numeric:tabular-nums; box-shadow:var(--shadow); z-index:5;
+}
+footer{
+  padding:0 22px 28px; color:var(--ink-3); font-size:11.5px;
+  font-family:ui-monospace,SFMono-Regular,"JetBrains Mono","DejaVu Sans Mono",Menlo,monospace;
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="eyebrow" id="hdrEyebrow">a1954 &middot; AT-TPC</div>
+    <h1 id="hdrTitle">excitation-energy explorer</h1>
+  </div>
+  <div class="sub" id="hdrCache"></div>
+  <div class="spacer"></div>
+  <button id="themeBtn" title="switch light / dark">theme</button>
+  <button id="pngBtn">save PNG</button>
+</header>
+
+<main class="layout">
+  <aside class="rail">
+    <div class="grp">
+      <div class="eyebrow">beam</div>
+      <div class="row"><label for="ebeam">E<sub>beam</sub> [MeV]</label><input type="number" id="ebeam" step="0.25"></div>
+      <input type="range" id="ebeamR" min="80" max="260" step="0.25">
+      <div class="row"><span class="mono num" id="ebeamPerU" style="font-size:11.5px;color:var(--ink-3)"></span></div>
+      <button class="primary" id="zeroBtn">solve E<sub>beam</sub> for g.s. = 0</button>
+    </div>
+
+    <div class="grp">
+      <div class="eyebrow">cuts</div>
+      <div class="row"><label for="chi2">&chi;&sup2;/ndf &lt;</label><input type="number" id="chi2" step="0.5" value="5"></div>
+      <div class="row"><label>&theta;<sub>lab</sub> [deg]</label></div>
+      <div class="pair"><input type="number" id="thLo" step="1" value="0"><input type="number" id="thHi" step="1" value="180"></div>
+      <div class="row"><label>KE [MeV]</label></div>
+      <div class="pair"><input type="number" id="keLo" step="0.5" value="0"><input type="number" id="keHi" step="0.5" value="1000"></div>
+    </div>
+
+    <div class="grp">
+      <div class="eyebrow">E<sub>x</sub> axis &amp; fit</div>
+      <div class="row"><label for="exBins">bins</label><input type="number" id="exBins" step="10" value="200"></div>
+      <div class="row"><label>range [MeV]</label></div>
+      <div class="pair"><input type="number" id="exLo" step="1" value="-5"><input type="number" id="exHi" step="1" value="25"></div>
+      <div class="row"><label>g.s. fit window</label></div>
+      <div class="pair"><input type="number" id="fitLo" step="0.1" value="-1"><input type="number" id="fitHi" step="0.1" value="1"></div>
+      <label class="check"><input type="checkbox" id="logY"> log counts</label>
+    </div>
+
+    <div class="grp">
+      <div class="eyebrow">maps</div>
+      <div class="row"><label for="thBins">&theta;<sub>lab</sub> bins</label><input type="number" id="thBins" step="10" value="100"></div>
+      <div class="row"><label for="keBins">KE bins</label><input type="number" id="keBins" step="10" value="150"></div>
+      <div class="row"><label for="keMax">KE max</label><input type="number" id="keMax" step="1" value="40"></div>
+      <div class="row"><label for="cmBins">&theta;<sub>cm</sub> bins</label><input type="number" id="cmBins" step="10" value="90"></div>
+      <label class="check"><input type="checkbox" id="kinLines" checked> kinematic loci</label>
+      <label class="check"><input type="checkbox" id="logZ" checked> log density</label>
+    </div>
+
+    <div class="grp">
+      <div class="eyebrow">&theta;<sub>cm</sub> slice</div>
+      <div class="pair"><input type="number" id="cmLo" step="5" value="0"><input type="number" id="cmHi" step="5" value="180"></div>
+    </div>
+
+    <div class="grp">
+      <button id="resetBtn">reset all</button>
+    </div>
+  </aside>
+
+  <section class="stage">
+    <div class="tiles">
+      <div class="tile"><div class="k">passing cuts</div><div class="v" id="tN">&mdash;</div></div>
+      <div class="tile"><div class="k">g.s. centroid</div><div class="v" id="tMu">&mdash;<span class="u">MeV</span></div></div>
+      <div class="tile"><div class="k">g.s. &sigma;</div><div class="v" id="tSig">&mdash;<span class="u">MeV</span></div></div>
+      <div class="tile"><div class="k">g.s. FWHM</div><div class="v" id="tFw">&mdash;<span class="u">MeV</span></div></div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h2 id="ttlEx">excitation energy</h2>
+        <div class="legend">
+          <span><i class="swatch" style="background:var(--data)"></i>data</span>
+          <span><i class="swatch" style="background:var(--fit)"></i>gaussian fit</span>
+          <span><i class="swatch" style="background:var(--accent);opacity:.35;height:9px;width:9px;border-radius:2px"></i>fit window</span>
+        </div>
+        <div class="canvas-wrap"><canvas id="cEx"></canvas><div class="tip" id="tipEx"></div></div>
+      </div>
+
+      <div class="card">
+        <h2>ejectile KE vs &theta;<sub>lab</sub></h2>
+        <div class="legend" id="legKin">
+          <span><i class="swatch" style="background:var(--accent)"></i>E<sub>x</sub>=0 (g.s.)</span>
+          <span><i class="swatch" style="background:var(--ref2)"></i>E<sub>x</sub>=2.10 (2<sup>+</sup><sub>1</sub>)</span>
+          <span><i class="swatch" style="background:var(--refdim)"></i>E<sub>x</sub>=4, 6 MeV</span>
+        </div>
+        <div class="canvas-wrap"><canvas id="cKT"></canvas><div class="tip" id="tipKT"></div></div>
+      </div>
+
+      <div class="card">
+        <h2>E<sub>x</sub> vs &theta;<sub>cm</sub></h2>
+        <div class="legend"><span id="cmSliceNote">slice shown in the panel to the right</span></div>
+        <div class="canvas-wrap"><canvas id="cEt"></canvas><div class="tip" id="tipEt"></div></div>
+      </div>
+
+      <div class="card">
+        <h2 id="ttlSlice">E<sub>x</sub> in &theta;<sub>cm</sub> slice</h2>
+        <div class="legend"><span><i class="swatch" style="background:var(--data)"></i>data in slice</span></div>
+        <div class="canvas-wrap"><canvas id="cSl"></canvas><div class="tip" id="tipSl"></div></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer id="foot"></footer>
+
+<script>
+/* ===========================================================================
+   injected by pp/make_explorer_html.C
+   ======================================================================== */
+const CFG  = /*__CFG__*/ null;
+const DATA = /*__DATA__*/ null;
+
+/* ---------------------------------------------------------------------------
+   physics - identical expressions to pp/ex_Be12.C / pp/explore_Be12.C
+   ------------------------------------------------------------------------ */
+const U = 931.49401;
+const M1 = CFG.mBeamAmu * U, M2 = CFG.mTargAmu * U,
+      M3 = CFG.mEjectAmu * U, M4 = CFG.mResidAmu * U;
+
+function omega2(x, y, z) { return Math.sqrt(x*x + y*y + z*z - 2*x*y - 2*y*z - 2*x*z); }
+
+/** two-body kinematics -> [Ex (MeV), theta_cm (deg)]; NaN below threshold */
+function kine2b(Kp, thl, Ke) {
+  const Et1 = Kp + M1, Et3 = Ke + M3, Et4 = Et1 + M2 - Et3;
+  const s = M1*M1 + M2*M2 + 2*M2*Et1;
+  const uu = M2*M2 + M3*M3 - 2*M2*Et3;
+  const a = (Math.cos(thl)*omega2(s, M1*M1, M2*M2)*omega2(uu, M2*M2, M3*M3)
+             - (s - M1*M1 - M2*M2)*(M2*M2 + M3*M3 - uu)) / (2*M2*M2) + s + uu - M2*M2;
+  if (a < 0) return [NaN, NaN];
+  const m4x = Math.sqrt(a), ex = m4x - M4;
+  const t = M2*M2 + m4x*m4x - 2*M2*Et4;
+  const arg = (s*s + s*(2*t - M1*M1 - M2*M2 - M3*M3 - m4x*m4x)
+               + (M1*M1 - M2*M2)*(M3*M3 - m4x*m4x))
+              / (omega2(s, M1*M1, M2*M2)*omega2(s, M3*M3, m4x*m4x));
+  const tcm = Math.PI - Math.acos(Math.max(-1, Math.min(1, arg)));
+  return [ex, tcm*180/Math.PI];
+}
+
+/** ejectile KE vs lab angle locus at excitation Ex, for the current beam energy */
+function kinLocus(Eb, Ex) {
+  const m4 = M4 + Ex, E1 = Eb + M1;
+  const P = Math.sqrt(E1*E1 - M1*M1), W = E1 + M2, s = W*W - P*P;
+  const pts = [];
+  if (s <= (M3 + m4)*(M3 + m4)) return pts;
+  const rs = Math.sqrt(s), E3cm = (s + M3*M3 - m4*m4)/(2*rs);
+  const p3cm = Math.sqrt(Math.max(0, E3cm*E3cm - M3*M3));
+  const beta = P/W, gamma = W/rs;
+  for (let tc = 0; tc <= 180; tc += 0.5) {
+    const c = Math.cos(tc*Math.PI/180), sn = Math.sin(tc*Math.PI/180);
+    const Elab = gamma*(E3cm + beta*p3cm*c), pz = gamma*(p3cm*c + beta*E3cm), pp = p3cm*sn;
+    const th = Math.atan2(pp, pz)*180/Math.PI, ke = Elab - M3;
+    if (ke > 0 && th >= 0) pts.push([th, ke]);
+  }
+  return pts;
+}
+
+/* ---------------------------------------------------------------------------
+   controls
+   ------------------------------------------------------------------------ */
+const $ = id => document.getElementById(id);
+const IDS = ['ebeam','chi2','thLo','thHi','keLo','keHi','exBins','exLo','exHi','fitLo','fitHi',
+             'thBins','keBins','keMax','cmBins','cmLo','cmHi'];
+const FLAGS = ['logY','logZ','kinLines'];
+const DEFAULTS = {};
+
+function readState() {
+  const s = {};
+  for (const id of IDS) s[id] = parseFloat($(id).value);
+  for (const id of FLAGS) s[id] = $(id).checked;
+  s.exBins = Math.max(10, Math.min(5000, Math.round(s.exBins)));
+  s.thBins = Math.max(10, Math.round(s.thBins));
+  s.keBins = Math.max(10, Math.round(s.keBins));
+  s.cmBins = Math.max(10, Math.round(s.cmBins));
+  return s;
+}
+
+/* ---------------------------------------------------------------------------
+   histogramming
+   ------------------------------------------------------------------------ */
+function pass(i, s) {
+  return DATA.c2[i] <= s.chi2
+      && DATA.th[i] >= s.thLo && DATA.th[i] <= s.thHi
+      && DATA.ke[i] >= s.keLo && DATA.ke[i] <= s.keHi;
+}
+
+function compute(s) {
+  const nEx = s.exBins, exW = (s.exHi - s.exLo)/nEx;
+  const hEx = new Float64Array(nEx), hSl = new Float64Array(nEx);
+  const hKT = new Float64Array(s.thBins*s.keBins);
+  const hEt = new Float64Array(s.cmBins*nEx);
+  let n = 0;
+  const N = DATA.ke.length;
+  for (let i = 0; i < N; ++i) {
+    if (!pass(i, s)) continue;
+    const ke = DATA.ke[i], th = DATA.th[i];
+    // KE vs theta_lab map (0..95 deg)
+    const bx = Math.floor(th/95*s.thBins), by = Math.floor(ke/s.keMax*s.keBins);
+    if (bx >= 0 && bx < s.thBins && by >= 0 && by < s.keBins) hKT[by*s.thBins + bx]++;
+    const [ex, tcm] = kine2b(s.ebeam, th*Math.PI/180, ke);
+    if (!isFinite(ex)) continue;
+    ++n;
+    const b = Math.floor((ex - s.exLo)/exW);
+    if (b >= 0 && b < nEx) {
+      hEx[b]++;
+      if (tcm >= s.cmLo && tcm <= s.cmHi) hSl[b]++;
+    }
+    const cx = Math.floor(tcm/180*s.cmBins);
+    if (cx >= 0 && cx < s.cmBins && b >= 0 && b < nEx) hEt[b*s.cmBins + cx]++;
+  }
+  return {n, hEx, hSl, hKT, hEt, exW};
+}
+
+/** solve a small dense system in place (gaussian elimination, partial pivot) */
+function solve(A, b) {
+  const n = b.length;
+  for (let i = 0; i < n; ++i) {
+    let p = i;
+    for (let r = i + 1; r < n; ++r) if (Math.abs(A[r][i]) > Math.abs(A[p][i])) p = r;
+    [A[i], A[p]] = [A[p], A[i]]; [b[i], b[p]] = [b[p], b[i]];
+    if (Math.abs(A[i][i]) < 1e-14) return null;
+    for (let r = i + 1; r < n; ++r) {
+      const f = A[r][i]/A[i][i];
+      for (let c = i; c < n; ++c) A[r][c] -= f*A[i][c];
+      b[r] -= f*b[i];
+    }
+  }
+  const x = new Array(n).fill(0);
+  for (let i = n - 1; i >= 0; --i) {
+    let v = b[i];
+    for (let j = i + 1; j < n; ++j) v -= A[i][j]*x[j];
+    x[i] = v/A[i][i];
+  }
+  return x;
+}
+
+/** gaussian peak fit, chi2 with poisson errors -- matches ROOT's TH1::Fit("gaus").
+    Seeded by the Caruana ln-parabola, then refined by Gauss-Newton. */
+function fitGauss(h, s) {
+  const seed = fitGaussSeed(h, s);
+  if (!seed) return null;
+  const exW = (s.exHi - s.exLo)/s.exBins;
+  const pts = [];
+  for (let b = 0; b < s.exBins; ++b) {
+    const y = h[b];
+    if (y < 1) continue;
+    const x = s.exLo + (b + 0.5)*exW;
+    if (x < s.fitLo || x > s.fitHi) continue;
+    pts.push([x, y]);
+  }
+  if (pts.length < 4) return null;
+  let {amp:A, mu, sig} = seed;
+  for (let it = 0; it < 50; ++it) {
+    const N = [[0,0,0],[0,0,0],[0,0,0]], g = [0,0,0];
+    for (const [x, y] of pts) {
+      const e = Math.exp(-(x - mu)*(x - mu)/(2*sig*sig)), f = A*e, sd = Math.sqrt(y);
+      const r = (y - f)/sd;
+      const J = [e/sd, f*(x - mu)/(sig*sig)/sd, f*(x - mu)*(x - mu)/(sig*sig*sig)/sd];
+      for (let i = 0; i < 3; ++i) {
+        g[i] += J[i]*r;
+        for (let j = 0; j < 3; ++j) N[i][j] += J[i]*J[j];
+      }
+    }
+    for (let i = 0; i < 3; ++i) N[i][i] *= 1.001;      // light damping
+    const d = solve(N, g);
+    if (!d) break;
+    A += d[0]; mu += d[1]; sig = Math.abs(sig + d[2]);
+    if (!isFinite(A) || !isFinite(mu) || !isFinite(sig) || sig <= 0) return seed;
+    if (Math.abs(d[1]) < 1e-6 && Math.abs(d[2]) < 1e-6) break;
+  }
+  return {mu, sig, amp:A};
+}
+
+/** starting values: weighted parabola through ln(counts) (Caruana/Guo) */
+function fitGaussSeed(h, s) {
+  const exW = (s.exHi - s.exLo)/s.exBins;
+  let S0=0,S1=0,S2=0,S3=0,S4=0, T0=0,T1=0,T2=0, used=0;
+  for (let b = 0; b < s.exBins; ++b) {
+    const y = h[b];
+    if (y < 1) continue;
+    const x = s.exLo + (b + 0.5)*exW;
+    if (x < s.fitLo || x > s.fitHi) continue;
+    const w = y, ly = Math.log(y);        // weight by counts -> proper poisson-ish
+    S0+=w; S1+=w*x; S2+=w*x*x; S3+=w*x*x*x; S4+=w*x*x*x*x;
+    T0+=w*ly; T1+=w*x*ly; T2+=w*x*x*ly; ++used;
+  }
+  if (used < 4) return null;
+  // solve 3x3 normal equations for ln y = c0 + c1 x + c2 x^2
+  const A = [[S0,S1,S2],[S1,S2,S3],[S2,S3,S4]], B = [T0,T1,T2];
+  const c = solve(A, B);
+  if (!c || c[2] >= 0) return null;                 // singular, or not a peak
+  const mu = -c[1]/(2*c[2]), sig = Math.sqrt(-1/(2*c[2]));
+  const amp = Math.exp(c[0] - c[1]*c[1]/(4*c[2]));
+  if (!isFinite(mu) || !isFinite(sig) || sig <= 0) return null;
+  return {mu, sig, amp};
+}
+
+/* ---------------------------------------------------------------------------
+   canvas helpers
+   ------------------------------------------------------------------------ */
+const PAD = {l:52, r:12, t:10, b:34};
+const css = k => getComputedStyle(document.documentElement).getPropertyValue(k).trim();
+
+function setup(cv) {
+  const dpr = window.devicePixelRatio || 1;
+  const w = cv.clientWidth, h = cv.clientHeight;
+  if (cv.width !== Math.round(w*dpr) || cv.height !== Math.round(h*dpr)) {
+    cv.width = Math.round(w*dpr); cv.height = Math.round(h*dpr);
+  }
+  const g = cv.getContext('2d');
+  g.setTransform(dpr,0,0,dpr,0,0);
+  g.clearRect(0,0,w,h);
+  g.fillStyle = css('--plot'); g.fillRect(0,0,w,h);
+  return {g, w, h, pw: w - PAD.l - PAD.r, ph: h - PAD.t - PAD.b};
+}
+
+function ticks(lo, hi, target) {
+  const raw = (hi - lo)/target, mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const norm = raw/mag;
+  const step = (norm < 1.5 ? 1 : norm < 3 ? 2 : norm < 7 ? 5 : 10)*mag;
+  const out = [];
+  for (let v = Math.ceil(lo/step)*step; v <= hi + 1e-9; v += step) out.push(+v.toFixed(10));
+  return out;
+}
+
+function axes(c, xlo, xhi, ylo, yhi, xlab, ylab, logY) {
+  const {g, w, h, pw, ph} = c;
+  g.font = '10px ui-monospace,SFMono-Regular,"DejaVu Sans Mono",monospace';
+  g.strokeStyle = css('--grid'); g.lineWidth = 1;
+  g.fillStyle = css('--ink-3'); g.textAlign = 'center'; g.textBaseline = 'top';
+  for (const t of ticks(xlo, xhi, 7)) {
+    const x = PAD.l + (t - xlo)/(xhi - xlo)*pw;
+    g.beginPath(); g.moveTo(x, PAD.t); g.lineTo(x, PAD.t + ph); g.stroke();
+    g.fillText(String(t), x, PAD.t + ph + 6);
+  }
+  g.textAlign = 'right'; g.textBaseline = 'middle';
+  if (logY) {
+    const l0 = Math.floor(Math.log10(Math.max(ylo, 0.5))), l1 = Math.ceil(Math.log10(Math.max(yhi, 1)));
+    for (let e = l0; e <= l1; ++e) {
+      const v = Math.pow(10, e);
+      const y = PAD.t + ph - (Math.log10(v) - Math.log10(Math.max(ylo, 0.5)))
+                / (Math.log10(Math.max(yhi,1)) - Math.log10(Math.max(ylo,0.5)))*ph;
+      if (y < PAD.t - 1 || y > PAD.t + ph + 1) continue;
+      g.beginPath(); g.moveTo(PAD.l, y); g.lineTo(PAD.l + pw, y); g.stroke();
+      g.fillText('1e' + e, PAD.l - 6, y);
+    }
+  } else {
+    for (const t of ticks(ylo, yhi, 5)) {
+      const y = PAD.t + ph - (t - ylo)/(yhi - ylo)*ph;
+      g.beginPath(); g.moveTo(PAD.l, y); g.lineTo(PAD.l + pw, y); g.stroke();
+      g.fillText(Math.abs(t) >= 1e4 ? t.toExponential(0) : String(t), PAD.l - 6, y);
+    }
+  }
+  g.strokeStyle = css('--line'); g.lineWidth = 1;
+  g.strokeRect(PAD.l, PAD.t, pw, ph);
+  g.fillStyle = css('--ink-2'); g.textAlign = 'right'; g.textBaseline = 'bottom';
+  g.fillText(xlab, PAD.l + pw, h - 2);
+  g.save(); g.translate(11, PAD.t); g.rotate(-Math.PI/2);
+  g.textAlign = 'right'; g.textBaseline = 'top'; g.fillText(ylab, 0, 0); g.restore();
+}
+
+/* viridis - perceptually uniform, colourblind-safe sequential ramp */
+const VIRIDIS = [[68,1,84],[72,40,120],[62,74,137],[49,104,142],[38,130,142],
+                 [31,158,137],[53,183,121],[109,205,89],[180,222,44],[253,231,37]];
+function viridis(t) {
+  t = Math.max(0, Math.min(1, t));
+  const x = t*(VIRIDIS.length - 1), i = Math.min(VIRIDIS.length - 2, Math.floor(x)), f = x - i;
+  const a = VIRIDIS[i], b = VIRIDIS[i+1];
+  return `rgb(${Math.round(a[0]+(b[0]-a[0])*f)},${Math.round(a[1]+(b[1]-a[1])*f)},${Math.round(a[2]+(b[2]-a[2])*f)})`;
+}
+
+function drawHist(cv, hist, s, opts) {
+  const c = setup(cv); const {g, pw, ph} = c;
+  let max = 0;
+  for (const v of hist) if (v > max) max = v;
+  const logY = s.logY && max > 0;
+  const ylo = logY ? 0.5 : 0, yhi = logY ? max*1.6 : (max*1.1 || 1);
+  const ymap = v => {
+    if (!logY) return PAD.t + ph - (v - ylo)/(yhi - ylo)*ph;
+    const lv = Math.log10(Math.max(v, 0.5));
+    return PAD.t + ph - (lv - Math.log10(ylo))/(Math.log10(yhi) - Math.log10(ylo))*ph;
+  };
+  axes(c, s.exLo, s.exHi, ylo, yhi, 'E_x [MeV]', 'counts', logY);
+
+  // fit window shading
+  if (opts.showFit) {
+    const x0 = PAD.l + (s.fitLo - s.exLo)/(s.exHi - s.exLo)*pw;
+    const x1 = PAD.l + (s.fitHi - s.exLo)/(s.exHi - s.exLo)*pw;
+    g.fillStyle = css('--accent'); g.globalAlpha = .10;
+    g.fillRect(Math.min(x0,x1), PAD.t, Math.abs(x1-x0), ph); g.globalAlpha = 1;
+  }
+  // step histogram + soft fill
+  const xw = pw/s.exBins;
+  g.beginPath(); g.moveTo(PAD.l, ymap(0));
+  for (let b = 0; b < s.exBins; ++b) {
+    const x = PAD.l + b*xw, y = ymap(hist[b]);
+    g.lineTo(x, y); g.lineTo(x + xw, y);
+  }
+  g.lineTo(PAD.l + pw, ymap(0));
+  g.save(); g.clip(); g.fillStyle = css('--data-fill'); g.fillRect(PAD.l, PAD.t, pw, ph); g.restore();
+  g.strokeStyle = css('--data'); g.lineWidth = 1.4; g.stroke();
+
+  // gaussian overlay
+  if (opts.showFit && opts.fit) {
+    const {mu, sig, amp} = opts.fit;
+    g.strokeStyle = css('--fit'); g.lineWidth = 2; g.beginPath();
+    for (let px = 0; px <= pw; ++px) {
+      const x = s.exLo + px/pw*(s.exHi - s.exLo);
+      const y = amp*Math.exp(-(x - mu)*(x - mu)/(2*sig*sig));
+      const yy = ymap(y);
+      px ? g.lineTo(PAD.l + px, yy) : g.moveTo(PAD.l + px, yy);
+    }
+    g.stroke();
+  }
+  return {kind:'hist', hist, ylo, yhi, logY, ...c};
+}
+
+function drawHeat(cv, h2, nx, ny, xlo, xhi, ylo, yhi, xlab, ylab, s, overlay) {
+  const c = setup(cv); const {g, pw, ph} = c;
+  let max = 0;
+  for (const v of h2) if (v > max) max = v;
+  axes(c, xlo, xhi, ylo, yhi, xlab, ylab, false);
+  const bw = pw/nx, bh = ph/ny;
+  const norm = v => s.logZ ? Math.log10(1 + v)/Math.log10(1 + max) : v/max;
+  for (let iy = 0; iy < ny; ++iy) {
+    for (let ix = 0; ix < nx; ++ix) {
+      const v = h2[iy*nx + ix];
+      if (v <= 0) continue;
+      g.fillStyle = viridis(norm(v));
+      g.fillRect(PAD.l + ix*bw, PAD.t + ph - (iy + 1)*bh, Math.ceil(bw), Math.ceil(bh));
+    }
+  }
+  if (overlay) overlay(c);
+  g.strokeStyle = css('--line'); g.lineWidth = 1; g.strokeRect(PAD.l, PAD.t, pw, ph);
+  return {kind:'heat', h2, nx, ny, xlo, xhi, ylo, yhi, max, ...c};
+}
+
+/* ---------------------------------------------------------------------------
+   render
+   ------------------------------------------------------------------------ */
+const views = {};
+
+function render() {
+  const s = readState();
+  const r = compute(s);
+  const fit = fitGauss(r.hEx, s);
+
+  $('tN').textContent = r.n.toLocaleString();
+  const fmt = (v, d) => (v >= 0 ? '+' : '') + v.toFixed(d);
+  $('tMu').innerHTML = (fit ? fmt(fit.mu, 3) : '&mdash;') + '<span class="u">MeV</span>';
+  $('tSig').innerHTML = (fit ? fit.sig.toFixed(3) : '&mdash;') + '<span class="u">MeV</span>';
+  $('tFw').innerHTML = (fit ? (2.3548*fit.sig).toFixed(3) : '&mdash;') + '<span class="u">MeV</span>';
+  $('ebeamPerU').textContent = (s.ebeam/CFG.beamA).toFixed(3) + ' MeV/u  (A=' + CFG.beamA + ')';
+  $('ttlEx').innerHTML = 'excitation energy &middot; E<sub>beam</sub> = ' + s.ebeam.toFixed(2) + ' MeV';
+  $('ttlSlice').innerHTML = 'E<sub>x</sub> for ' + s.cmLo + '&deg; &lt; &theta;<sub>cm</sub> &lt; ' + s.cmHi + '&deg;';
+
+  views.cEx = drawHist($('cEx'), r.hEx, s, {showFit:true, fit});
+  views.cSl = drawHist($('cSl'), r.hSl, s, {showFit:false});
+
+  views.cKT = drawHeat($('cKT'), r.hKT, s.thBins, s.keBins, 0, 95, 0, s.keMax,
+                       'theta_lab [deg]', 'KE [MeV]', s, c => {
+    if (!s.kinLines) return;
+    const {g, pw, ph} = c;
+    const loci = [[0, css('--accent'), []], [2.10, css('--ref2'), []],
+                  [4, css('--refdim'), [5,4]], [6, css('--refdim'), [5,4]]];
+    for (const [ex, col, dash] of loci) {
+      const pts = kinLocus(s.ebeam, ex);
+      if (!pts.length) continue;
+      g.strokeStyle = col; g.lineWidth = 2; g.setLineDash(dash); g.beginPath();
+      let started = false;
+      for (const [th, ke] of pts) {
+        if (th < 0 || th > 95 || ke > s.keMax) { started = false; continue; }
+        const x = PAD.l + th/95*pw, y = PAD.t + ph - ke/s.keMax*ph;
+        started ? g.lineTo(x, y) : g.moveTo(x, y); started = true;
+      }
+      g.stroke(); g.setLineDash([]);
+    }
+  });
+
+  views.cEt = drawHeat($('cEt'), r.hEt, s.cmBins, s.exBins, 0, 180, s.exLo, s.exHi,
+                       'theta_cm [deg]', 'E_x [MeV]', s, c => {
+    const {g, pw, ph} = c;   // slice markers
+    g.strokeStyle = css('--accent'); g.lineWidth = 1.5; g.setLineDash([4,4]);
+    for (const v of [s.cmLo, s.cmHi]) {
+      if (v <= 0 || v >= 180) continue;
+      const x = PAD.l + v/180*pw;
+      g.beginPath(); g.moveTo(x, PAD.t); g.lineTo(x, PAD.t + ph); g.stroke();
+    }
+    g.setLineDash([]);
+  });
+
+  $('foot').textContent = CFG.tag + '  |  ' + DATA.ke.length.toLocaleString()
+    + ' fitted tracks in cache  |  ' + r.n.toLocaleString() + ' pass cuts  |  '
+    + 'chi2/ndf<' + s.chi2 + ', theta_lab ' + s.thLo + '-' + s.thHi + ' deg, KE '
+    + s.keLo + '-' + s.keHi + ' MeV';
+}
+
+/* ---- beam-energy solver: secant on the fitted g.s. centroid ---- */
+function gsMean(eb) {
+  const s = readState(); s.ebeam = eb;
+  const f = fitGauss(compute(s).hEx, s);
+  return f ? f.mu : NaN;
+}
+function zeroGs() {
+  let e1 = readState().ebeam, m1 = gsMean(e1), e2 = e1 + 2, m2 = gsMean(e2);
+  for (let it = 0; it < 12 && isFinite(m1) && isFinite(m2); ++it) {
+    if (Math.abs(m2 - m1) < 1e-9) break;
+    const e3 = e2 - m2*(e2 - e1)/(m2 - m1);
+    if (!isFinite(e3) || e3 < 10 || e3 > 2000) break;
+    e1 = e2; m1 = m2; e2 = e3; m2 = gsMean(e2);
+    if (Math.abs(m2) < 1e-4) break;
+  }
+  setEbeam(+e2.toFixed(3));
+  render();
+}
+
+function setEbeam(v) { $('ebeam').value = v; $('ebeamR').value = v; }
+
+/* ---- hover readout ---- */
+function hookTip(cvId, tipId, fmt) {
+  const cv = $(cvId), tip = $(tipId);
+  cv.addEventListener('mousemove', e => {
+    const v = views[cvId];
+    if (!v) return;
+    const r = cv.getBoundingClientRect();
+    const px = e.clientX - r.left, py = e.clientY - r.top;
+    if (px < PAD.l || px > PAD.l + v.pw || py < PAD.t || py > PAD.t + v.ph) { tip.style.opacity = 0; return; }
+    const txt = fmt(v, px, py, readState());
+    if (!txt) { tip.style.opacity = 0; return; }
+    tip.textContent = txt; tip.style.opacity = 1;
+    tip.style.left = Math.min(px + 12, r.width - tip.offsetWidth - 6) + 'px';
+    tip.style.top  = Math.max(py - tip.offsetHeight - 8, 2) + 'px';
+  });
+  cv.addEventListener('mouseleave', () => { tip.style.opacity = 0; });
+}
+const histTip = (v, px, py, s) => {
+  const b = Math.floor((px - PAD.l)/v.pw*s.exBins);
+  if (b < 0 || b >= s.exBins) return null;
+  const x0 = s.exLo + b*(s.exHi - s.exLo)/s.exBins, w = (s.exHi - s.exLo)/s.exBins;
+  return `E_x  ${x0.toFixed(3)} .. ${(x0 + w).toFixed(3)} MeV\ncounts  ${v.hist[b]}`;
+};
+const heatTip = (v, px, py) => {
+  const ix = Math.floor((px - PAD.l)/v.pw*v.nx), iy = Math.floor((PAD.t + v.ph - py)/v.ph*v.ny);
+  if (ix < 0 || ix >= v.nx || iy < 0 || iy >= v.ny) return null;
+  const x = v.xlo + (ix + 0.5)*(v.xhi - v.xlo)/v.nx, y = v.ylo + (iy + 0.5)*(v.yhi - v.ylo)/v.ny;
+  return `x  ${x.toFixed(2)}\ny  ${y.toFixed(2)}\ncounts  ${v.h2[iy*v.nx + ix]}`;
+};
+
+/* ---- PNG export : stitch the four panels ---- */
+function savePng() {
+  const ids = ['cEx','cKT','cEt','cSl'], cs = ids.map($);
+  const w = cs[0].width, h = cs[0].height, out = document.createElement('canvas');
+  out.width = w*2; out.height = h*2;
+  const g = out.getContext('2d');
+  g.fillStyle = css('--plot'); g.fillRect(0,0,out.width,out.height);
+  cs.forEach((cv, i) => g.drawImage(cv, (i%2)*w, Math.floor(i/2)*h, w, h));
+  const a = document.createElement('a');
+  a.download = (CFG.pngName || 'explorer') + '.png';
+  a.href = out.toDataURL('image/png'); a.click();
+}
+
+/* ---- wiring ---- */
+function init() {
+  $('hdrTitle').textContent = CFG.title || 'excitation-energy explorer';
+  $('hdrEyebrow').textContent = CFG.eyebrow || '';
+  $('hdrCache').textContent = CFG.cache || '';
+  document.title = CFG.title || document.title;
+
+  setEbeam(CFG.ebeam0);
+  $("keHi").value = 1000; $("thHi").value = 180;
+  for (const id of IDS) DEFAULTS[id] = $(id).value;
+  for (const id of FLAGS) DEFAULTS[id] = $(id).checked;
+
+  for (const id of IDS) $(id).addEventListener('input', () => {
+    if (id === 'ebeam') $('ebeamR').value = $('ebeam').value;
+    render();
+  });
+  for (const id of FLAGS) $(id).addEventListener('change', render);
+  $('ebeamR').addEventListener('input', () => { $('ebeam').value = $('ebeamR').value; render(); });
+  $('zeroBtn').addEventListener('click', zeroGs);
+  $('pngBtn').addEventListener('click', savePng);
+  $('resetBtn').addEventListener('click', () => {
+    for (const id of IDS) $(id).value = DEFAULTS[id];
+    for (const id of FLAGS) $(id).checked = DEFAULTS[id];
+    setEbeam(CFG.ebeam0); render();
+  });
+  $('themeBtn').addEventListener('click', () => {
+    const cur = document.documentElement.getAttribute('data-theme')
+             || (matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light');
+    document.documentElement.setAttribute('data-theme', cur === 'dark' ? 'light' : 'dark');
+    render();
+  });
+  matchMedia('(prefers-color-scheme:dark)').addEventListener('change', render);
+
+  hookTip('cEx','tipEx',histTip); hookTip('cSl','tipSl',histTip);
+  hookTip('cKT','tipKT',heatTip); hookTip('cEt','tipEt',heatTip);
+
+  let raf = 0;
+  new ResizeObserver(() => { cancelAnimationFrame(raf); raf = requestAnimationFrame(render); })
+    .observe(document.querySelector('.grid'));
+
+  render();
+}
+init();
+</script>
+</body>
+</html>

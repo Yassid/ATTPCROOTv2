@@ -308,7 +308,7 @@ private:
       fEbeam = mkNum(bar, "Ebeam [MeV]", Ebeam0, 10, 2000, 1);
       fChi2 = mkNum(bar, "chi2/ndf <", 5, 0, 1000, 1);
       fThLo = mkNum(bar, "#theta_{lab} lo", 0, 0, 180, 1);
-      fThHi = mkNum(bar, "#theta_{lab} hi", 95, 0, 180, 1);
+      fThHi = mkNum(bar, "#theta_{lab} hi", 180, 0, 180, 1);
       fKeLo = mkNum(bar, "KE lo", 0, 0, 500, 1);
       fKeHi = mkNum(bar, "KE hi", 1000, 0, 2000, 1);
       main->AddFrame(bar, new TGLayoutHints(kLHintsTop | kLHintsExpandX));

@@ -25,6 +25,19 @@ macros from this folder.
 | `pp/ex_Be12.C(runsCSV, inDir, Ebeam)` | two-body kinematics → 12Be excitation spectrum + KE-vs-θ | `pp/plots/ex_Be12.png` + `pp/plots/proton_kin<tag>.root` (cache) |
 | `pp/explore_Be12.C(cache, ...)` | **interactive GUI** on that cache: Ebeam / cuts / all binnings, Ex recomputed live, `Zero g.s.` solves Ebeam | `pp/plots/explore_Be12.png` |
 
+| `pp/make_explorer_html.C(cache, out, ...)` | bakes a cache into a standalone **browser** explorer (same controls, no X11) | `~/a1954_Be12_explorer.html` |
+
+Browser explorer — for when WSLg/X11 misbehaves. Self-contained HTML, recomputes
+E<sub>x</sub>/θ<sub>cm</sub> in JavaScript with the same two-body expressions:
+```bash
+root -b -q '<...>/pp/make_explorer_html.C()'      # bake cache -> ~/a1954_Be12_explorer.html
+explorer.exe ~/a1954_Be12_explorer.html           # opens in the Windows browser
+```
+The g.s. fit is a Gauss-Newton χ² fit (Poisson errors) — verified equal to ROOT's
+`TH1::Fit("gaus")`: μ +0.0195 vs +0.019, σ 0.2337 vs 0.234.
+Note it defaults to θ<sub>lab</sub> ≥ 0, which drops 7 tracks with a negative fitted angle
+that `ex_Be12.C` kept (26,597 vs 26,604).
+
 Interactive explorer — plain ROOT is enough (no `config.sh`, no `VMCWORKDIR`; it finds
 `plots/proton_kin_clean155.root` next to itself). Must run **without** `-b`:
 ```bash
