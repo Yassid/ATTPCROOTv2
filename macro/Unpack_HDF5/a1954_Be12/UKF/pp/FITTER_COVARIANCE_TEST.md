@@ -89,3 +89,79 @@ not at the covariance. This matches the earlier UKF/GENFIT KE ratio observation
 # caches with the chi2 cut removed, per fitter
 root -b -q 'pp/ex_Be12.C("<runs>","<fitdir>",155,1e9,"_tag",1.007825,12.026921,"12Be(p,p&apos;)","<fitter>")'
 ```
+
+---
+
+# Part 2 — what the Ex bias actually IS (energy loss, not the reference point)
+
+Follow-up to Result 2/3 above. Two candidates were tested: the point at which KE is
+reported, and the energy-loss treatment inside the fit.
+
+## How each fitter reports KE
+
+| | KE is taken at | energy loss in the fit |
+|---|---|---|
+| UKF (`AtFitterUKF`) | smoothed state at the first cluster, then **back-extrapolated to the beam axis with the lost energy added back** (`KE_at_vertex = KE_at_cluster + dEdx*pathLength`, CATIMA) | **yes** — the propagator carries an `AtELossModel` |
+| GENFIT (`AtGenfitter`) | `gfTrack->getFittedState()` = the state at the **first track point**, no vertex extrapolation | **no** — production runs `matEffects=kFALSE` |
+
+UKF conveniently stores both: `GetKinematics()` = vertex, `GetKinematicsXtr()` = first
+cluster. That separates the two effects with no refitting.
+
+## The reference point is a SMALL effect (13 % of the bias)
+
+g.s. centroid, 73 runs, no chi2 cut:
+
+| | mu [MeV] |
+|---|---|
+| UKF, KE at vertex (production) | +0.037 |
+| UKF, KE at first cluster (vertex correction removed) | +0.092 |
+| GENFIT | +0.451 |
+
+Removing UKF's vertex correction moves the centroid by only **+0.055 MeV** — the energy UKF
+adds back is a median of **0.082 MeV** per track. GENFIT still sits **+0.359 MeV** away from
+UKF *at the same reference point*, so ~87 % of the bias is not the reference point.
+
+## It is the missing energy loss in the track model
+
+Per-track matching (same run+event, nearest theta within 3 deg): **25 397 matched pairs**.
+Both sides taken at the first cluster, so the reference point is factored out:
+
+| UKF KE bin [MeV] | n | median KE(UKF) − KE(GENFIT) | as a fraction of KE | median track length [mm] |
+|---|---|---|---|---|
+| 0–2 | 6 131 | +0.491 | **31 %** | 322 |
+| 2–4 | 9 701 | +0.970 | **35 %** | 774 |
+| 4–6 | 3 519 | +1.416 | **30 %** | 1 609 |
+| 6–10 | 2 037 | +0.678 | 9.5 % | 1 403 |
+| 10–15 | 807 | +0.159 | 1.3 % | 669 |
+| 15–25 | 1 986 | −0.333 | −1.7 % | 403 |
+| 25–40 | 1 179 | −0.479 | −1.7 % | 449 |
+
+GENFIT is ~**30 % low below 6 MeV**, converges to UKF by ~10–15 MeV, and is marginally high
+above that. That is the signature of fitting a **constant-momentum helix to a decelerating
+track**: with no energy loss in the model the curvature it returns is a track average, which
+sits well below the initial momentum when the particle loses a large fraction of its energy
+over the measured length. It explains everything seen so far:
+
+* the Ex bias grows toward 80–90 deg — those are the lowest-energy recoil protons;
+* (p,d) deuterons (forward, ~10–30 MeV) show UKF and GENFIT agreeing;
+* the bias is completely independent of the assumed covariance.
+
+## Why turning material effects on does not rescue it
+
+`matEffects=kTRUE` on 8 runs: only **468 / 3 385 tracks (13.8 %)** come back with ndf > 0,
+and even that good subset keeps the bias (mu = +0.469 vs +0.438 with effects off).
+Two reasons it cannot work as configured:
+
+1. the fit is unstable with material effects on (86 % of tracks end with ndf <= 0, and
+   `AtGenfitter` silently retries them with effects off);
+2. the geometry genfit would use is `geometry/ATTPC_H1bar_geomanager.root` — **H2 at 1 bar,
+   while a1954 ran at 600 torr**, i.e. ~27 % too dense. Even a working correction would be
+   miscalibrated.
+
+## Recommendation
+
+**Use UKF for this data set** — it is the only one of the two that models dE/dx during the
+fit and reports KE at the vertex. GENFIT is usable above ~10–15 MeV (where the two agree to
+~1 %), which is why it is fine for the forward (p,d) deuterons and not for the backward
+(p,p') recoils. Making GENFIT correct at low energy needs a 600 torr H2 geometry *and*
+whatever fixes the ndf <= 0 instability — until then its low-energy KE is not trustworthy.
