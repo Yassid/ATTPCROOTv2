@@ -5,9 +5,10 @@
 /// GUI controls; Ex and theta_cm are RECOMPUTED from (KE, theta_lab) on every redraw.
 /// 2D TCanvas only (works over X11 under WSLg; no Eve/OpenGL).
 ///
-/// Run interactively (NOT with -b):
-///   source build/config.sh && export ROOT_INCLUDE_PATH=$PWD/build/include
-///   root -l 'macro/Unpack_HDF5/a1954_Be12/UKF/pp/explore_Be12.C'
+/// Run interactively (NOT with -b). Plain ROOT is enough -- no config.sh, no ATTPCROOT
+/// libraries, no VMCWORKDIR: the macro only reads floats out of the cache ntuple, and it
+/// finds the default cache relative to its own location.
+///   root -l /home/yassid/fair_install/ATTPCROOTv2-OpenKF/macro/Unpack_HDF5/a1954_Be12/UKF/pp/explore_Be12.C
 ///
 /// Another cache / another channel, e.g. 12Be(p,d)11Be:
 ///   root -l 'pp/explore_Be12.C("plots/proton_kin_pd.root",2.014102,11.021658,"12Be(p,d)11Be")'
@@ -19,6 +20,16 @@
 /// [Zero g.s.] solves for the beam energy that puts the elastic peak at Ex = 0.
 
 #include <vector>
+
+/// directory holding this macro, however it was invoked (no VMCWORKDIR needed)
+static TString macroDir()
+{
+   TString self = gInterpreter ? gInterpreter->GetCurrentMacroName() : "";
+   if (self.IsNull())
+      self = __FILE__;
+   TString d = gSystem->DirName(self);
+   return d.IsNull() ? TString(".") : d;
+}
 
 static double omega2(double x, double y, double z)
 {
@@ -82,12 +93,14 @@ public:
 
       TFile *f = TFile::Open(cache);
       if (!f || f->IsZombie()) {
-         std::cerr << "cannot open " << cache << "\n";
+         std::cerr << "\n\033[1;31m[explore_Be12] cannot open cache file:\033[0m " << cache << "\n"
+                   << "  Build it first with pp/ex_Be12.C, or pass the path explicitly:\n"
+                   << "    root -l 'explore_Be12.C(\"/path/to/proton_kin_clean155.root\")'\n\n";
          return;
       }
       TTree *t = (TTree *)f->Get("pk");
       if (!t) {
-         std::cerr << "no ntuple 'pk' in " << cache << "\n";
+         std::cerr << "\n\033[1;31m[explore_Be12] no ntuple 'pk' in\033[0m " << cache << "\n\n";
          return;
       }
       float ke = 0, theta = 0, chi2ndf = 0;
@@ -238,8 +251,10 @@ public:
 
    void Save()
    {
-      TString dir = TString(gSystem->Getenv("VMCWORKDIR")) + "/macro/Unpack_HDF5/a1954_Be12/UKF/pp/plots/";
-      TString p = dir + "explore_Be12.png";
+      TString dir = macroDir() + "/plots";
+      if (gSystem->AccessPathName(dir))
+         dir = "/tmp";
+      TString p = dir + "/explore_Be12.png";
       fCanvas->SaveAs(p);
       std::cout << "saved " << p << "\n";
    }
@@ -362,12 +377,37 @@ private:
 void explore_Be12(TString cache = "", double mEjectAmu = 1.007825, double mResidAmu = 12.026921,
                   TString tag = "12Be(p,p')", double Ebeam0 = 155.0)
 {
-   gSystem->Load("libAtReconstruction.so");
    gStyle->SetOptStat(0);
    gStyle->SetPalette(kBird);
    gStyle->SetNumberContours(255);
-   if (cache.IsNull())
-      cache = TString(gSystem->Getenv("VMCWORKDIR")) +
-              "/macro/Unpack_HDF5/a1954_Be12/UKF/pp/plots/proton_kin_clean155.root";
+
+   if (gROOT->IsBatch()) {
+      std::cerr << "\n\033[1;31m[explore_Be12] ROOT is in BATCH mode -- no window can open.\033[0m\n"
+                << "  Start it WITHOUT -b:   root -l " << macroDir() << "/explore_Be12.C\n\n";
+      return;
+   }
+   if (!gSystem->Getenv("DISPLAY")) {
+      std::cerr << "\n\033[1;31m[explore_Be12] DISPLAY is not set -- no X server to draw on.\033[0m\n\n";
+      return;
+   }
+
+   if (cache.IsNull()) { // look next to this macro first, then in the usual workspace spot
+      const char *rel[] = {"/plots/proton_kin_clean155.root", "/plots/proton_kin.root"};
+      for (const char *r : rel) {
+         TString p = macroDir() + r;
+         if (!gSystem->AccessPathName(p)) {
+            cache = p;
+            break;
+         }
+      }
+      if (cache.IsNull() && gSystem->Getenv("VMCWORKDIR"))
+         cache = TString(gSystem->Getenv("VMCWORKDIR")) +
+                 "/macro/Unpack_HDF5/a1954_Be12/UKF/pp/plots/proton_kin_clean155.root";
+      if (cache.IsNull()) {
+         std::cerr << "\n\033[1;31m[explore_Be12] no default cache found next to the macro (" << macroDir()
+                   << "/plots/).\033[0m\n  Pass one explicitly: root -l 'explore_Be12.C(\"/path/to/cache.root\")'\n\n";
+         return;
+      }
+   }
    new Be12Explorer(cache, mEjectAmu, mResidAmu, tag, Ebeam0);
 }

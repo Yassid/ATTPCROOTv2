@@ -25,10 +25,10 @@ macros from this folder.
 | `pp/ex_Be12.C(runsCSV, inDir, Ebeam)` | two-body kinematics → 12Be excitation spectrum + KE-vs-θ | `pp/plots/ex_Be12.png` + `pp/plots/proton_kin<tag>.root` (cache) |
 | `pp/explore_Be12.C(cache, ...)` | **interactive GUI** on that cache: Ebeam / cuts / all binnings, Ex recomputed live, `Zero g.s.` solves Ebeam | `pp/plots/explore_Be12.png` |
 
-Interactive explorer (X11 GUI — run **without** `-b`):
+Interactive explorer — plain ROOT is enough (no `config.sh`, no `VMCWORKDIR`; it finds
+`plots/proton_kin_clean155.root` next to itself). Must run **without** `-b`:
 ```bash
-source build/config.sh && export ROOT_INCLUDE_PATH=$PWD/build/include
-root -l 'macro/Unpack_HDF5/a1954_Be12/UKF/pp/explore_Be12.C'      # defaults to proton_kin_clean155.root @ 155 MeV
+root -l ~/fair_install/ATTPCROOTv2-OpenKF/macro/Unpack_HDF5/a1954_Be12/UKF/pp/explore_Be12.C
 ```
 
 Batch drivers (resumable, skip existing outputs):
