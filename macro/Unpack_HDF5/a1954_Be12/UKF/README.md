@@ -22,7 +22,14 @@ macros from this folder.
 | `pipeline/unpackReco_Be12.C(run, nEv, ...)` | unpack + **AtPSAMultiFit** + **AtDirDeDxCleaner** + PRA(triplclust) | `<run>_reco.root` (AtEventH + AtPatternEvent) |
 | `pipeline/fitUKF_Be12.C(run, nEv, particles, bFieldSign)` | **new UKF** (AtFitterUKFMulti) — fast, reads `_reco.root` | `<run>_ukf.root` (AtTrackingEvent) |
 | `pipeline/fitGenfit_Be12.C(run, nEv, ioDir, ...)` | **updated GENFIT** (AtGenfitter) — needs the genfit build | `<run>_genfit.root` (AtTrackingEvent + AtPIDEvent) |
-| `pp/ex_Be12.C(runsCSV, inDir, Ebeam)` | two-body kinematics → 12Be excitation spectrum + KE-vs-θ | `pp/plots/ex_Be12.png` |
+| `pp/ex_Be12.C(runsCSV, inDir, Ebeam)` | two-body kinematics → 12Be excitation spectrum + KE-vs-θ | `pp/plots/ex_Be12.png` + `pp/plots/proton_kin<tag>.root` (cache) |
+| `pp/explore_Be12.C(cache, ...)` | **interactive GUI** on that cache: Ebeam / cuts / all binnings, Ex recomputed live, `Zero g.s.` solves Ebeam | `pp/plots/explore_Be12.png` |
+
+Interactive explorer (X11 GUI — run **without** `-b`):
+```bash
+source build/config.sh && export ROOT_INCLUDE_PATH=$PWD/build/include
+root -l 'macro/Unpack_HDF5/a1954_Be12/UKF/pp/explore_Be12.C'      # defaults to proton_kin_clean155.root @ 155 MeV
+```
 
 Batch drivers (resumable, skip existing outputs):
 - `./reco_batch.sh "run_0142 run_0147 ..." 2`   — reco (2-parallel; external drive I/O cap)
