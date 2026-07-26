@@ -1,0 +1,4 @@
+# large analysis data products (regenerable; kept on disk) and plots
+*.csv
+kine_data/
+plots/
