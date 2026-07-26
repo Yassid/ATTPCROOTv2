@@ -20,7 +20,7 @@ void fitGenfit_C14(TString fileName = "run_0055", Long64_t nEvents = -1,
                     Double_t bField = -2.85, Int_t minIter = 2, Int_t maxIter = 5, TString pidGate = "",
                     Double_t measSigma = 4.0, Double_t thetaMinDeg = 10.0, Double_t thetaMaxDeg = 170.0,
                     Bool_t matEffects = kFALSE, Bool_t backwardSeedFix = kFALSE, TString particle = "proton",
-                    TString geoName = "ATTPC_H600torr")
+                    TString geoName = "ATTPC_H300torr")
 {
    gSystem->Load("libAtReconstruction.so");
    FairLogger::GetLogger()->SetLogScreenLevel("WARNING");
@@ -42,8 +42,18 @@ void fitGenfit_C14(TString fileName = "run_0055", Long64_t nEvents = -1,
 
    TString dir = getenv("VMCWORKDIR");
    gSystem->Setenv("GEOMPATH", (dir + "/geometry/").Data());
-   // a1954 ran H2 at 600 torr; ATTPC_H1bar is 27% too dense, which makes any genfit
-   // material-effects correction wrong (see pp/FITTER_COVARIANCE_TEST.md).
+   // a1954 ran H2 at 300 torr -> ATTPC_H300torr (rho = 3.553e-5 g/cm3). The first production
+   // used ATTPC_H600torr (6.616e-5), ~1.9x too dense. With matEffects = kFALSE (the default)
+   // the geometry only drives navigation, so that mistake was a no-op for genfit -- verified:
+   // the 600- and 300-torr genfit caches are identical to the last digit. It matters only if
+   // material effects are switched on.
+   //
+   // matEffects = kFALSE is the DEFAULT ON PURPOSE. Turning it on does fix the absolute scale
+   // (g.s. +0.141 -> +0.019, agreeing with UKF to 0.071 MeV) but on a1954 14C it also costs
+   // 32% of the tracks, degrades FWHM 0.364 -> 0.487 and triples the angle drift, and it is
+   // ~20-45x slower because unstable tracks (ill-conditioned covariance / Cholesky failures)
+   // are silently REFIT WITHOUT material effects by AtGenfitter, mixing two populations into
+   // one output with no flag. Fix that instability before making it the default.
    TString geoManFile = dir + "/geometry/" + geoName + "_geomanager.root";
    TString digiParFile = dir + "/parameters/ATTPC.a1954_C14.par";
    TString inputFile = ioDir + fileName + "_reco.root";

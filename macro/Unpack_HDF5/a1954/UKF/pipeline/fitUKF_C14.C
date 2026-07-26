@@ -9,7 +9,10 @@
 /// so Bz is flipped for exp data. bFieldSign = -1 (EXPERIMENTAL, default), +1 = sim.
 /// If fits diverge / give unphysical KE, try the other sign first (validated on a1975).
 ///
-/// gasDensity default 6.5e-5 g/cm^3 = H2 at 600 torr, ~293 K (a1954 target).
+/// gasDensity default 3.553e-5 g/cm^3 = H2 at 300 torr, the a1954 target.
+/// WAS 6.5e-5 (600 torr) for the whole first production -- ~1.9x too much material. Refitting
+/// at 3.553e-5 moved the 14C(p,p') g.s. from -0.364 to -0.059 MeV at the NOMINAL 161 MeV beam
+/// and improved FWHM 0.555 -> 0.396, which is what showed the 600 torr value was wrong.
 /// (a1975 used 9.0e-5 for H2 at 1 bar; scaled by 600/760.)  << CONFIRM against run conditions.
 ///
 ///   root -b -q 'fitUKF_C14.C("run_0055", -1, "proton", -1)'
@@ -65,7 +68,8 @@ std::unique_ptr<EventFit::AtFitterUKF> MakeHypothesis(const TString &name, int b
 } // namespace
 
 void fitUKF_C14(TString fileName = "run_0055", Long64_t nEvents = -1, TString particles = "proton",
-                 Int_t bFieldSign = -1, Double_t bFieldMag = 2.85, Double_t gasDensity = 6.5e-5, TString outSuffix = "",
+                 Int_t bFieldSign = -1, Double_t bFieldMag = 2.85, Double_t gasDensity = 3.553e-5,
+                 TString outSuffix = "",
                  TString ioDir = "/home/yassid/a1954_C14_reco/", Double_t measSigma = 0.5, Double_t momSigmaFrac = 0.1,
                  Int_t nIter = 1, Int_t minClusters = 10, TString outDir = "", Bool_t refTrack = false,
                  Double_t refInflation = 4.0)
