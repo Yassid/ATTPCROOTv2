@@ -68,6 +68,11 @@ AtFITTER::AtGenfit::AtGenfit(Float_t magfield, Float_t minbrho, Float_t maxbrho,
    materialEffects->setNoEffects(noMatEffects);
    materialEffects->useEnergyLossParam();
    materialEffects->init(new genfit::TGeoMaterialInterface()); // NOLINT
+   // The AT-TPC active volume is a single homogeneous gas tube, so genfit's default
+   // "merge steps across boundaries between equal materials" walk has nothing to merge and
+   // runs to its 100-iteration cap every RK step. See AtGenfitter::Init() for the measured
+   // numbers; disabling it is a ~10x speedup with bit-identical fits.
+   materialEffects->ignoreBoundariesBetweenEqualMaterials(false);
    // Parameteres set after initialization
    materialEffects->setGasMediumDensity(gasMediumDensity);
    materialEffects->setEnergyLossFile(fEnergyLossFile, fPDGCode);

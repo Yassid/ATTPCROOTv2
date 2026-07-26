@@ -83,6 +83,18 @@ void AtGenfitter::Init()
    mat->setNoEffects(fNoMatEffects);
    mat->init(new genfit::TGeoMaterialInterface());
 
+   // genfit's default (true) makes MaterialEffects::stepper() walk forward across every
+   // boundary that separates volumes of the SAME material, merging them into one step. That
+   // is an optimization for sparse trackers whose material is split over many volumes. The
+   // AT-TPC active volume is a SINGLE homogeneous gas tube, so the "material after" test can
+   // never fire and the loop simply runs to its 100-iteration cap, calling findNextBoundary
+   // (itself up to 300 RKPropagate-from-origin iterations plus TGeo navigation) ~83 times per
+   // RK step for a step limit that is not even the binding one. Measured on a1954 run_0055:
+   // 113.1M findNextBoundary calls -> 1.37M, 196 s -> 19.5 s CPU per 300 events (10x), with
+   // bit-identical output (max |dKE| 4.1e-7 MeV, max |dTheta| 2.0e-6 deg, same track count,
+   // same genfit exception counts). Turning it off also stops the OOM kills on long runs.
+   mat->ignoreBoundariesBetweenEqualMaterials(false);
+
    // Energy-loss mode. genfit's parameterization-only mode (useEnergyLossParam) is ONLY
    // valid when a dE/dx curve has been loaded: MaterialEffects::maxKinEnergy_ starts at 0
    // and is set solely by setEnergyLossFile(), and dEdx() throws a FATAL exception for
