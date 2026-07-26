@@ -8,9 +8,14 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 BATCHLOG=/home/yassid/a1954_C14_reco_hdb/batch.log
 LOG=/home/yassid/a1954_C14_fit/follow.log
 mkdir -p /home/yassid/a1954_C14_fit
+# Only trust "done" lines appended AFTER we start. A killed batch leaves stale
+# "done run_XXXX exit 15" lines behind; without this offset the follower matches
+# them instantly, finds no reco file, and skips every run (hit 2026-07-26).
+OFF=$(wc -l < "$BATCHLOG" 2>/dev/null || echo 0)
+echo "$(date +%H:%M:%S) follow start, batch.log offset=$OFF, runs: $RUNS" >> "$LOG"
 for r in $RUNS; do
   # wait for reco to report this run done (and the file to stop growing)
-  while ! grep -q "done $r " "$BATCHLOG" 2>/dev/null; do sleep 30; done
+  while ! tail -n +$((OFF + 1)) "$BATCHLOG" 2>/dev/null | grep -q "done $r "; do sleep 30; done
   [ -f "/home/yassid/a1954_C14_reco_hdb/${r}_reco.root" ] || { echo "$(date +%H:%M:%S) $r: no reco file" >> "$LOG"; continue; }
   [ -f "/home/yassid/a1954_C14_fit/${r}_genfit.root" ] && { echo "$(date +%H:%M:%S) $r: already fitted" >> "$LOG"; continue; }
   echo "$(date +%H:%M:%S) $r: slim+fit start" >> "$LOG"
