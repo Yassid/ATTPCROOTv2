@@ -94,6 +94,8 @@ header .spacer{flex:1}
 }
 .grp{display:flex; flex-direction:column; gap:7px}
 .grp > .eyebrow{padding-bottom:3px; border-bottom:1px solid var(--line-2)}
+/* per-panel sub-heading inside a control group */
+.sublab{font-size:10.5px; color:var(--ink-3); margin:4px 0 -2px; letter-spacing:.02em}
 .row{display:flex; align-items:center; gap:8px}
 .row label{flex:1; font-size:12.5px; color:var(--ink-2)}
 input[type=number]{
@@ -148,6 +150,7 @@ button.primary:hover{filter:brightness(1.07); color:#fff}
 /* ---- plot cards ---- */
 .grid{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px}
 @media (max-width:1150px){ .grid{grid-template-columns:1fr} }
+.card.wide{grid-column:1/-1}
 .card{
   background:var(--panel); border:1px solid var(--line); border-radius:10px;
   padding:11px 12px 8px; box-shadow:var(--shadow); position:relative; min-width:0;
@@ -211,11 +214,13 @@ footer{
       <div class="pair"><input type="number" id="thLo" step="1" value="0"><input type="number" id="thHi" step="1" value="180"></div>
       <div class="row"><label>KE [MeV]</label></div>
       <div class="pair"><input type="number" id="keLo" step="0.5" value="0"><input type="number" id="keHi" step="0.5" value="1000"></div>
+      <div class="row" id="rowVzLab"><label>vertex z [mm]</label></div>
+      <div class="pair" id="rowVz"><input type="number" id="vzLo" step="10" value="-100"><input type="number" id="vzHi" step="10" value="1100"></div>
     </div>
 
     <div class="grp">
       <div class="eyebrow">E<sub>x</sub> axis &amp; fit</div>
-      <div class="row"><label for="exBins">bins</label><input type="number" id="exBins" step="10" value="200"></div>
+      <div class="row"><label for="exBins">spectrum bins</label><input type="number" id="exBins" step="10" value="200"></div>
       <div class="row"><label>range [MeV]</label></div>
       <div class="pair"><input type="number" id="exLo" step="1" value="-5"><input type="number" id="exHi" step="1" value="25"></div>
       <div class="row"><label>g.s. fit window</label></div>
@@ -225,10 +230,17 @@ footer{
 
     <div class="grp">
       <div class="eyebrow">maps</div>
+      <div class="sublab">KE vs &theta;<sub>lab</sub></div>
       <div class="row"><label for="thBins">&theta;<sub>lab</sub> bins</label><input type="number" id="thBins" step="10" value="100"></div>
+      <div class="row"><label for="thMax">&theta;<sub>lab</sub> max</label><input type="number" id="thMax" step="5" value="95"></div>
       <div class="row"><label for="keBins">KE bins</label><input type="number" id="keBins" step="10" value="150"></div>
       <div class="row"><label for="keMax">KE max</label><input type="number" id="keMax" step="1" value="40"></div>
+      <div class="sublab">E<sub>x</sub> vs &theta;<sub>cm</sub></div>
       <div class="row"><label for="cmBins">&theta;<sub>cm</sub> bins</label><input type="number" id="cmBins" step="10" value="90"></div>
+      <div class="row"><label for="etExBins">E<sub>x</sub> bins</label><input type="number" id="etExBins" step="10" value="200"></div>
+      <div class="sublab" id="lblVzMap">E<sub>x</sub> vs vertex z</div>
+      <div class="row" id="rowVzBins"><label for="vzBins">z bins</label><input type="number" id="vzBins" step="10" value="120"></div>
+      <div class="row" id="rowVzExBins"><label for="vzExBins">E<sub>x</sub> bins</label><input type="number" id="vzExBins" step="10" value="200"></div>
       <label class="check"><input type="checkbox" id="kinLines" checked> kinematic loci</label>
       <label class="check"><input type="checkbox" id="logZ" checked> log density</label>
     </div>
@@ -236,6 +248,7 @@ footer{
     <div class="grp">
       <div class="eyebrow">&theta;<sub>cm</sub> slice</div>
       <div class="pair"><input type="number" id="cmLo" step="5" value="0"><input type="number" id="cmHi" step="5" value="180"></div>
+      <div class="row"><label for="slBins">bins</label><input type="number" id="slBins" step="10" value="200"></div>
     </div>
 
     <div class="grp">
@@ -282,6 +295,15 @@ footer{
         <h2 id="ttlSlice">E<sub>x</sub> in &theta;<sub>cm</sub> slice</h2>
         <div class="legend"><span><i class="swatch" style="background:var(--data)"></i>data in slice</span></div>
         <div class="canvas-wrap"><canvas id="cSl"></canvas><div class="tip" id="tipSl"></div></div>
+      </div>
+
+      <div class="card wide" id="cardVz">
+        <h2>E<sub>x</sub> vs vertex z</h2>
+        <div class="legend" id="legVz">
+          <span><i class="swatch" style="background:var(--fit)"></i>mean E<sub>x</sub> per z slice</span>
+          <span id="vzNote"></span>
+        </div>
+        <div class="canvas-wrap"><canvas id="cVz"></canvas><div class="tip" id="tipVz"></div></div>
       </div>
     </div>
   </section>
@@ -358,7 +380,18 @@ function kinLocus(Eb, Ex) {
    ------------------------------------------------------------------------ */
 const $ = id => document.getElementById(id);
 const IDS = ['ebeam','chi2','thLo','thHi','keLo','keHi','exBins','exLo','exHi','fitLo','fitHi',
-             'thBins','keBins','keMax','cmBins','cmLo','cmHi'];
+             'thBins','thMax','keBins','keMax','cmBins','etExBins','cmLo','cmHi','slBins',
+             'vzLo','vzHi','vzBins','vzExBins'];
+
+/* vertex z is only meaningful if the cache actually carries it: ex_C14.C hardcoded 0
+   before 2026-07-26, and old caches have no column at all. Detect a flat/absent
+   column once and hide the whole z UI rather than drawing a misleading single stripe. */
+const HAS_VZ = FITTERS.some(f => {
+  const v = SETS[f] && SETS[f].vz;
+  if (!v || !v.length) return false;
+  for (let i = 1; i < v.length; ++i) if (v[i] !== v[0]) return true;
+  return false;
+});
 const FLAGS = ['logY','logZ','kinLines'];
 const DEFAULTS = {};
 
@@ -366,10 +399,19 @@ function readState() {
   const s = {};
   for (const id of IDS) s[id] = parseFloat($(id).value);
   for (const id of FLAGS) s[id] = $(id).checked;
-  s.exBins = Math.max(10, Math.min(5000, Math.round(s.exBins)));
-  s.thBins = Math.max(10, Math.round(s.thBins));
-  s.keBins = Math.max(10, Math.round(s.keBins));
-  s.cmBins = Math.max(10, Math.round(s.cmBins));
+  // every panel's bin count is independent; clamp each so a typo cannot lock the page up
+  const nb = (v, d) => Math.max(10, Math.min(5000, Math.round(isFinite(v) ? v : d)));
+  s.exBins   = nb(s.exBins, 200);
+  s.slBins   = nb(s.slBins, 200);
+  s.etExBins = nb(s.etExBins, 200);
+  s.vzExBins = nb(s.vzExBins, 200);
+  s.thBins   = nb(s.thBins, 100);
+  s.keBins   = nb(s.keBins, 150);
+  s.cmBins   = nb(s.cmBins, 90);
+  s.vzBins   = nb(s.vzBins, 120);
+  if (!(s.thMax > 0)) s.thMax = 95;
+  if (!(s.keMax > 0)) s.keMax = 40;
+  if (!(s.vzHi > s.vzLo)) { s.vzLo = -100; s.vzHi = 1100; }
   return s;
 }
 
@@ -379,7 +421,8 @@ function readState() {
 function pass(d, i, s) {
   return d.c2[i] <= s.chi2
       && d.th[i] >= s.thLo && d.th[i] <= s.thHi
-      && d.ke[i] >= s.keLo && d.ke[i] <= s.keHi;
+      && d.ke[i] >= s.keLo && d.ke[i] <= s.keHi
+      && (!HAS_VZ || !d.vz || (d.vz[i] >= s.vzLo && d.vz[i] <= s.vzHi));
 }
 
 /** Ex histogram only, for a named fitter -- used for the comparison overlay */
@@ -399,29 +442,45 @@ function exOnly(name, s) {
 
 function compute(s) {
   const nEx = s.exBins, exW = (s.exHi - s.exLo)/nEx;
-  const hEx = new Float64Array(nEx), hSl = new Float64Array(nEx);
+  const slW = (s.exHi - s.exLo)/s.slBins;          // slice panel: own binning
+  const etW = (s.exHi - s.exLo)/s.etExBins;        // Ex vs theta_cm map: own y binning
+  const vzExW = (s.exHi - s.exLo)/s.vzExBins;      // Ex vs vertex z map: own y binning
+  const hEx = new Float64Array(nEx), hSl = new Float64Array(s.slBins);
   const hKT = new Float64Array(s.thBins*s.keBins);
-  const hEt = new Float64Array(s.cmBins*nEx);
+  const hEt = new Float64Array(s.cmBins*s.etExBins);
+  const hVz = new Float64Array(s.vzBins*s.vzExBins);
+  // running mean of Ex per vertex-z column -> the profile drawn over the z map
+  const vzSum = new Float64Array(s.vzBins), vzCnt = new Float64Array(s.vzBins);
+  const vzW = (s.vzHi - s.vzLo)/s.vzBins;
   let n = 0;
   const d = DATA(), N = d.ke.length;
   for (let i = 0; i < N; ++i) {
     if (!pass(d, i, s)) continue;
     const ke = d.ke[i], th = d.th[i];
-    // KE vs theta_lab map (0..95 deg)
-    const bx = Math.floor(th/95*s.thBins), by = Math.floor(ke/s.keMax*s.keBins);
+    // KE vs theta_lab map (0..thMax deg)
+    const bx = Math.floor(th/s.thMax*s.thBins), by = Math.floor(ke/s.keMax*s.keBins);
     if (bx >= 0 && bx < s.thBins && by >= 0 && by < s.keBins) hKT[by*s.thBins + bx]++;
     const [ex, tcm] = kine2b(s.ebeam, th*Math.PI/180, ke);
     if (!isFinite(ex)) continue;
     ++n;
     const b = Math.floor((ex - s.exLo)/exW);
-    if (b >= 0 && b < nEx) {
-      hEx[b]++;
-      if (tcm >= s.cmLo && tcm <= s.cmHi) hSl[b]++;
+    if (b >= 0 && b < nEx) hEx[b]++;
+    const bs = Math.floor((ex - s.exLo)/slW);
+    if (bs >= 0 && bs < s.slBins && tcm >= s.cmLo && tcm <= s.cmHi) hSl[bs]++;
+    const cx = Math.floor(tcm/180*s.cmBins), be = Math.floor((ex - s.exLo)/etW);
+    if (cx >= 0 && cx < s.cmBins && be >= 0 && be < s.etExBins) hEt[be*s.cmBins + cx]++;
+    if (HAS_VZ && d.vz) {
+      const zx = Math.floor((d.vz[i] - s.vzLo)/vzW), bv = Math.floor((ex - s.exLo)/vzExW);
+      if (zx >= 0 && zx < s.vzBins) {
+        if (bv >= 0 && bv < s.vzExBins) hVz[bv*s.vzBins + zx]++;
+        // profile over the g.s. region only, so the excited band cannot drag the mean
+        if (ex > s.fitLo && ex < s.fitHi) { vzSum[zx] += ex; vzCnt[zx]++; }
+      }
     }
-    const cx = Math.floor(tcm/180*s.cmBins);
-    if (cx >= 0 && cx < s.cmBins && b >= 0 && b < nEx) hEt[b*s.cmBins + cx]++;
   }
-  return {n, hEx, hSl, hKT, hEt, exW};
+  const vzProf = new Float64Array(s.vzBins);
+  for (let i = 0; i < s.vzBins; ++i) vzProf[i] = vzCnt[i] > 20 ? vzSum[i]/vzCnt[i] : NaN;
+  return {n, hEx, hSl, hKT, hEt, hVz, vzProf, exW};
 }
 
 /** solve a small dense system in place (gaussian elimination, partial pivot) */
@@ -603,10 +662,11 @@ function drawHist(cv, hist, s, opts) {
     g.fillStyle = css('--accent'); g.globalAlpha = .10;
     g.fillRect(Math.min(x0,x1), PAD.t, Math.abs(x1-x0), ph); g.globalAlpha = 1;
   }
-  // step histogram + soft fill
-  const xw = pw/s.exBins;
+  // step histogram + soft fill  (nb: each 1D panel carries its own bin count)
+  const nb = opts.nb || s.exBins;
+  const xw = pw/nb;
   g.beginPath(); g.moveTo(PAD.l, ymap(0));
-  for (let b = 0; b < s.exBins; ++b) {
+  for (let b = 0; b < nb; ++b) {
     const x = PAD.l + b*xw, y = ymap(hist[b]);
     g.lineTo(x, y); g.lineTo(x + xw, y);
   }
@@ -618,7 +678,7 @@ function drawHist(cv, hist, s, opts) {
   if (opts.overlay) {
     g.strokeStyle = css('--alt'); g.lineWidth = 1.4; g.setLineDash([4,3]);
     g.beginPath(); g.moveTo(PAD.l, ymap(0));
-    for (let b = 0; b < s.exBins; ++b) {
+    for (let b = 0; b < nb; ++b) {
       const x = PAD.l + b*xw, y = ymap(opts.overlay[b]);
       g.lineTo(x, y); g.lineTo(x + xw, y);
     }
@@ -636,7 +696,7 @@ function drawHist(cv, hist, s, opts) {
     }
     g.stroke();
   }
-  return {kind:'hist', hist, ylo, yhi, logY, ...c};
+  return {kind:'hist', hist, nb, ylo, yhi, logY, ...c};
 }
 
 function drawHeat(cv, h2, nx, ny, xlo, xhi, ylo, yhi, xlab, ylab, s, overlay) {
@@ -679,15 +739,15 @@ function render() {
   $('ttlSlice').innerHTML = 'E<sub>x</sub> for ' + s.cmLo + '&deg; &lt; &theta;<sub>cm</sub> &lt; ' + s.cmHi + '&deg;';
 
   const cmp = ($('cmpFit').checked && other()) ? exOnly(other(), s) : null;
-  views.cEx = drawHist($('cEx'), r.hEx, s, {showFit:true, fit, overlay:cmp});
-  views.cSl = drawHist($('cSl'), r.hSl, s, {showFit:false});
+  views.cEx = drawHist($('cEx'), r.hEx, s, {showFit:true, fit, overlay:cmp, nb:s.exBins});
+  views.cSl = drawHist($('cSl'), r.hSl, s, {showFit:false, nb:s.slBins});
   $('legEx').innerHTML =
       `<span><i class="swatch" style="background:var(--data)"></i>${ACTIVE.toUpperCase()}</span>`
     + `<span><i class="swatch" style="background:var(--fit)"></i>gaussian fit</span>`
     + `<span><i class="swatch" style="background:var(--accent);opacity:.35;height:9px;width:9px;border-radius:2px"></i>fit window</span>`
     + (cmp ? `<span><i class="swatch" style="background:var(--alt)"></i>${other().toUpperCase()} (same cuts)</span>` : '');
 
-  views.cKT = drawHeat($('cKT'), r.hKT, s.thBins, s.keBins, 0, 95, 0, s.keMax,
+  views.cKT = drawHeat($('cKT'), r.hKT, s.thBins, s.keBins, 0, s.thMax, 0, s.keMax,
                        'theta_lab [deg]', 'KE [MeV]', s, c => {
     if (!s.kinLines) return;
     const {g, pw, ph} = c;
@@ -698,15 +758,15 @@ function render() {
       g.strokeStyle = col; g.lineWidth = 2; g.setLineDash(dash); g.beginPath();
       let started = false;
       for (const [th, ke] of pts) {
-        if (th < 0 || th > 95 || ke > s.keMax) { started = false; continue; }
-        const x = PAD.l + th/95*pw, y = PAD.t + ph - ke/s.keMax*ph;
+        if (th < 0 || th > s.thMax || ke > s.keMax) { started = false; continue; }
+        const x = PAD.l + th/s.thMax*pw, y = PAD.t + ph - ke/s.keMax*ph;
         started ? g.lineTo(x, y) : g.moveTo(x, y); started = true;
       }
       g.stroke(); g.setLineDash([]);
     }
   });
 
-  views.cEt = drawHeat($('cEt'), r.hEt, s.cmBins, s.exBins, 0, 180, s.exLo, s.exHi,
+  views.cEt = drawHeat($('cEt'), r.hEt, s.cmBins, s.etExBins, 0, 180, s.exLo, s.exHi,
                        'theta_cm [deg]', 'E_x [MeV]', s, c => {
     const {g, pw, ph} = c;   // slice markers
     g.strokeStyle = css('--accent'); g.lineWidth = 1.5; g.setLineDash([4,4]);
@@ -717,6 +777,31 @@ function render() {
     }
     g.setLineDash([]);
   });
+
+  if (HAS_VZ) {
+    views.cVz = drawHeat($('cVz'), r.hVz, s.vzBins, s.vzExBins, s.vzLo, s.vzHi, s.exLo, s.exHi,
+                         'vertex z [mm]', 'E_x [MeV]', s, c => {
+      const {g, pw, ph} = c;
+      g.strokeStyle = css('--fit'); g.lineWidth = 2; g.beginPath();
+      let started = false;
+      for (let i = 0; i < s.vzBins; ++i) {
+        const m = r.vzProf[i];
+        if (!isFinite(m)) { started = false; continue; }
+        const zc = s.vzLo + (i + 0.5)*(s.vzHi - s.vzLo)/s.vzBins;
+        const x = PAD.l + (zc - s.vzLo)/(s.vzHi - s.vzLo)*pw;
+        const y = PAD.t + ph - (m - s.exLo)/(s.exHi - s.exLo)*ph;
+        started ? g.lineTo(x, y) : g.moveTo(x, y); started = true;
+      }
+      g.stroke();
+    });
+    // report the drift of the g.s. across z -- the number the panel exists to expose
+    const fin = [];
+    for (let i = 0; i < s.vzBins; ++i) if (isFinite(r.vzProf[i])) fin.push(r.vzProf[i]);
+    $('vzNote').textContent = fin.length
+      ? `g.s. drift across z: ${(Math.max(...fin) - Math.min(...fin)).toFixed(3)} MeV`
+      + `  (profile over ${s.fitLo} .. ${s.fitHi} MeV)`
+      : 'no z slice has enough g.s. counts';
+  }
 
   $('foot').textContent = CFG.tag + '  |  ' + ACTIVE.toUpperCase() + '  |  ' + DATA().ke.length.toLocaleString()
     + ' fitted tracks in cache  |  ' + r.n.toLocaleString() + ' pass cuts  |  '
@@ -763,9 +848,10 @@ function hookTip(cvId, tipId, fmt) {
   cv.addEventListener('mouseleave', () => { tip.style.opacity = 0; });
 }
 const histTip = (v, px, py, s) => {
-  const b = Math.floor((px - PAD.l)/v.pw*s.exBins);
-  if (b < 0 || b >= s.exBins) return null;
-  const x0 = s.exLo + b*(s.exHi - s.exLo)/s.exBins, w = (s.exHi - s.exLo)/s.exBins;
+  const nb = v.nb || s.exBins;
+  const b = Math.floor((px - PAD.l)/v.pw*nb);
+  if (b < 0 || b >= nb) return null;
+  const x0 = s.exLo + b*(s.exHi - s.exLo)/nb, w = (s.exHi - s.exLo)/nb;
   return `E_x  ${x0.toFixed(3)} .. ${(x0 + w).toFixed(3)} MeV\ncounts  ${v.hist[b]}`;
 };
 const heatTip = (v, px, py) => {
@@ -777,12 +863,18 @@ const heatTip = (v, px, py) => {
 
 /* ---- PNG export : stitch the four panels ---- */
 function savePng() {
-  const ids = ['cEx','cKT','cEt','cSl'], cs = ids.map($);
+  const ids = HAS_VZ ? ['cEx','cKT','cEt','cSl','cVz'] : ['cEx','cKT','cEt','cSl'];
+  const cs = ids.map($);
   const w = cs[0].width, h = cs[0].height, out = document.createElement('canvas');
-  out.width = w*2; out.height = h*2;
+  const rows = Math.ceil(cs.length/2);
+  out.width = w*2; out.height = h*rows;
   const g = out.getContext('2d');
   g.fillStyle = css('--plot'); g.fillRect(0,0,out.width,out.height);
-  cs.forEach((cv, i) => g.drawImage(cv, (i%2)*w, Math.floor(i/2)*h, w, h));
+  // the z panel spans both columns in the page; keep it full width here too
+  cs.forEach((cv, i) => {
+    if (ids[i] === 'cVz') g.drawImage(cv, 0, Math.floor(i/2)*h, w*2, h);
+    else g.drawImage(cv, (i%2)*w, Math.floor(i/2)*h, w, h);
+  });
   const a = document.createElement('a');
   a.download = (CFG.pngName || 'explorer') + '.png';
   a.href = out.toDataURL('image/png'); a.click();
@@ -809,6 +901,12 @@ function init() {
     $('cmpFit').parentElement.title = 'only one fitter is baked into this file';
   }
   $('cmpFit').addEventListener('change', render);
+
+  // no usable vertex z in this cache -> drop the panel and its controls entirely
+  if (!HAS_VZ) {
+    for (const id of ['cardVz','rowVz','rowVzLab','rowVzBins','rowVzExBins','lblVzMap'])
+      { const e = $(id); if (e) e.style.display = 'none'; }
+  }
 
   $('legKin').innerHTML = REF_EX.map((r, i) =>
     `<span><i class="swatch" style="background:${refColor(i)}"></i>${r.label}</span>`).join('');
@@ -845,6 +943,7 @@ function init() {
 
   hookTip('cEx','tipEx',histTip); hookTip('cSl','tipSl',histTip);
   hookTip('cKT','tipKT',heatTip); hookTip('cEt','tipEt',heatTip);
+  if (HAS_VZ) hookTip('cVz','tipVz',heatTip);
 
   let raf = 0;
   new ResizeObserver(() => { cancelAnimationFrame(raf); raf = requestAnimationFrame(render); })
