@@ -2346,6 +2346,15 @@ H_300torr	   1  1.007   1.   3.553e-5
 	       	    1	  1    20.  0.001
 		      	 0
 
+// 300 torr H2 at 293 K, ideal-gas density. NOTE the entry above is LABELLED 293 K but its
+// 3.553e-5 g/cm3 is the 273.15 K value -- 7.4% too dense. That was harmless while genfit ran
+// with matEffects=kFALSE (the geometry then only drives navigation), but with material
+// effects ON the geometry IS the energy-loss model, so the 7.4% propagates straight into
+// the reconstructed energy. m(H2)=2.01588 g/mol, p=300/760 atm, T=293.15 K -> 3.308e-5.
+H_300torr_RT	   1  1.007   1.   3.308e-5
+	       	    1	  1    20.  0.001
+		      	 0
+
 // ------------- end e12014
 
 // ----- Caution with putting materials below that line -----
