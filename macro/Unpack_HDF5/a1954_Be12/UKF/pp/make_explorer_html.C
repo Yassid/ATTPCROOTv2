@@ -17,13 +17,18 @@
 
 #include <string>
 
-/// stream one cache's (ke, theta, chi2/ndf) columns as a compact JSON object
+/// stream one cache's (ke, theta, vertex z, chi2/ndf) columns as a compact JSON object
 static Long64_t dump_pk(TTree *t, FILE *o)
 {
-   float ke = 0, th = 0, c2 = 0;
+   float ke = 0, th = 0, c2 = 0, vz = 0;
    t->SetBranchAddress("ke", &ke);
    t->SetBranchAddress("theta", &th);
    t->SetBranchAddress("chi2ndf", &c2);
+   // vertexz is absent from very old caches, and was hardcoded to 0 in ex_Be12.C before
+   // this port -- the page hides the z panel when the column is flat.
+   const bool hasVz = t->GetBranch("vertexz") != nullptr;
+   if (hasVz)
+      t->SetBranchAddress("vertexz", &vz);
    const Long64_t N = t->GetEntries();
    fprintf(o, "{\"ke\":[");
    for (Long64_t i = 0; i < N; ++i) {
@@ -39,6 +44,11 @@ static Long64_t dump_pk(TTree *t, FILE *o)
    for (Long64_t i = 0; i < N; ++i) {
       t->GetEntry(i);
       fprintf(o, "%s%.2f", i ? "," : "", c2);
+   }
+   fprintf(o, "],\"vz\":[");
+   for (Long64_t i = 0; i < N; ++i) {
+      t->GetEntry(i);
+      fprintf(o, "%s%.1f", i ? "," : "", hasVz ? vz : 0.f);
    }
    fprintf(o, "]}");
    return N;

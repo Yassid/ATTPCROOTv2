@@ -80,6 +80,8 @@ void ex_Be12(TString runsCSV = "run_0142", TString inDir = "/home/yassid/a1954_B
    TH2F *hexcm = new TH2F("hexcm", "E_{x} vs #theta_{cm};#theta_{cm} [deg];E_{x} [MeV]", 180, 0, 180, 150, -5, 25);
    TH2F *hket = new TH2F("hket", "proton KE vs #theta_{lab} (handedness check);#theta_{lab} [deg];KE [MeV]", 180, 0,
                          180, 200, 0, 40);
+   TH2F *hexvz =
+      new TH2F("hexvz", "E_{x} vs vertex z;vertex z [mm];E_{x} [MeV]", 200, -100, 1100, 150, -5, 25);
 
    TObjArray *runs = runsCSV.Tokenize(",");
    long nProton = 0, nEvtWithTrk = 0;
@@ -122,9 +124,11 @@ void ex_Be12(TString runsCSV = "run_0142", TString inDir = "/home/yassid/a1954_B
             if (std::isnan(ex))
                continue;
             ++nProton;
+            double vz = ft->GetVertex(0).Z(); // reaction vertex z [mm] -- was hardcoded 0
             hex->Fill(ex);
             hexcm->Fill(thcm, ex);
-            ntk->Fill(ke, thDeg, 0, thcm, ex, c2n);
+            hexvz->Fill(vz, ex);
+            ntk->Fill(ke, thDeg, vz, thcm, ex, c2n);
          }
       }
       fu->Close();
