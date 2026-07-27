@@ -292,8 +292,13 @@ AtFittedTrack *AtGenfitter::GetFittedTrack(AtTrack *track, AtFitMetadata * /*fit
       }
    };
 
+   // Material-effects provenance of the result we end up keeping. Starts as "whatever was
+   // requested"; the fallback below flips it if the kept fit came from the no-material retry.
+   bool usedMatEffects = !fNoMatEffects;
+   bool matFallback = false;
+
    bool ok = doFit();
-   if (!ok && !fNoMatEffects) {
+   if (!ok && !fNoMatEffects && fMatEffectsFallback) {
       // material-effects fit failed (e.g. a stopping multi-turn spiral whose RK
       // extrapolation throws). Retry this track WITHOUT material effects so it still
       // gets a (flagged) fit instead of vanishing. Clean tracks keep the better fit.
@@ -301,6 +306,12 @@ AtFittedTrack *AtGenfitter::GetFittedTrack(AtTrack *track, AtFitMetadata * /*fit
       me->setNoEffects(true);
       ok = doFit();
       me->setNoEffects(false); // restore for the next (clean) track
+      if (ok) {
+         // This track is NOT from the same model as its neighbours. It must be flagged, or
+         // the two populations blend into one spectrum and inflate the width.
+         usedMatEffects = false;
+         matFallback = true;
+      }
    }
    if (!ok) {
       LOG(debug) << "AtGenfitter: fit failed on track " << track->GetTrackID();
@@ -335,6 +346,8 @@ AtFittedTrack *AtGenfitter::GetFittedTrack(AtTrack *track, AtFitMetadata * /*fit
    meta->SetGoodFit(converged && ndf > 0 && chi2ndf < fChi2NdfMax && KE > fKEMin && KE < fKEMax);
    meta->SetPValue(0);
    meta->SetFitConverged(converged);
+   meta->SetMatEffects(usedMatEffects);
+   meta->SetMatEffectsFallback(matFallback);
    ft->SetTrackMetadata(std::move(meta));
 
    return owner.release();

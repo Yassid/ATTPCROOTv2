@@ -129,6 +129,14 @@ public:
       fKEMax = keMax;
    }
 
+   /// When a material-effects fit throws, retry the track with material effects OFF so it
+   /// still gets a result instead of vanishing (default ON — the historical behaviour).
+   /// Such tracks come from a different model and are marked in AtFitTrackMetadata via
+   /// GetMatEffects()==false / GetMatEffectsFallback()==true; filter on that before quoting
+   /// a resolution. Turn this OFF for a clean material-effects-only production, where a
+   /// failed track is dropped rather than silently downgraded.
+   void SetMatEffectsFallback(Bool_t on) { fMatEffectsFallback = on; }
+
    /// Only fit tracks whose Spyral PID (sqrtdEdx, brho) falls inside the gate loaded
    /// from this AtParticleID JSON (e.g. pid/deuteron_band.json). The fitter computes
    /// the PID itself (same AtSpyralPID the AtPIDTask uses), so it needs no PID branch.
@@ -201,6 +209,7 @@ private:
    Bool_t fInit{kFALSE};
 
    Bool_t fBackwardSeedFix{kFALSE};    // seed backward (GeoTheta>90) tracks from the far end (see setter)
+   Bool_t fMatEffectsFallback{kTRUE};  // retry a failed matFX fit without material effects (flagged; see setter)
 
    Bool_t fMergeContinuity{kFALSE};    // merge PRA-split fragments of one track before fitting
    Double_t fMergeCenterDist{15.0};    // max PRA-circle centre distance to merge (mm) — "same circle" test

@@ -20,7 +20,7 @@ void fitGenfit_C14(TString fileName = "run_0055", Long64_t nEvents = -1,
                     Double_t bField = -2.85, Int_t minIter = 2, Int_t maxIter = 5, TString pidGate = "",
                     Double_t measSigma = 4.0, Double_t thetaMinDeg = 10.0, Double_t thetaMaxDeg = 170.0,
                     Bool_t matEffects = kFALSE, Bool_t backwardSeedFix = kFALSE, TString particle = "proton",
-                    TString geoName = "ATTPC_H300torr")
+                    TString geoName = "ATTPC_H300torr", Bool_t matFallback = kTRUE)
 {
    gSystem->Load("libAtReconstruction.so");
    FairLogger::GetLogger()->SetLogScreenLevel("WARNING");
@@ -90,6 +90,14 @@ void fitGenfit_C14(TString fileName = "run_0055", Long64_t nEvents = -1,
    fitter->SetMeasSigma(measSigma);
    fitter->SetThetaWindow(thetaMinDeg, thetaMaxDeg);
    fitter->SetBackwardSeedFix(backwardSeedFix);
+   // When a material-effects fit throws, the fitter retries it with material effects OFF.
+   // Those tracks come from a different model and are marked in AtFitTrackMetadata
+   // (GetMatEffects()==false, GetMatEffectsFallback()==true) so they can be filtered out.
+   // Pass matFallback=kFALSE to drop them instead, giving a clean matFX-only sample.
+   fitter->SetMatEffectsFallback(matFallback);
+   if (matEffects)
+      std::cout << "  matFX fallback: " << (matFallback ? "on (retries are flagged)" : "OFF (failures dropped)")
+                << "\n";
    if (pidGate.Length() && !gSystem->AccessPathName(pidGate.Data())) {
       fitter->SetPIDGate(pidGate.Data());
       std::cout << "  PID gate: " << pidGate << "\n";

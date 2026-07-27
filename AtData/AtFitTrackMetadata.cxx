@@ -13,4 +13,6 @@ void AtFitTrackMetadata::Print() const
    std::cout << "   Chi2      = " << fChi2 << std::endl;
    std::cout << "   NDF       = " << fNdf << std::endl;
    std::cout << "   Converged = " << fFitConverged << std::endl;
+   std::cout << "   MatEffects = " << fMatEffects << (fMatEffectsFallback ? "  (NO-MATERIAL FALLBACK)" : "")
+             << std::endl;
 }
