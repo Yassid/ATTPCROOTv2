@@ -1,0 +1,30 @@
+/// @file slim_cache_C15.C
+/// @brief Clone ONLY AtPatternEvent (+EventHeader) from a big reco.root on F into a
+///        tiny LOCAL file, so downstream PID/fit passes don't re-read 40 GB over drvfs.
+///        Reads only the AtPatternEvent baskets from the source (skips AtEventH).
+///
+///   root -b -q 'pipeline/slim_cache_C15.C("run_0138","/home/yassid/a2091_C15_reco/","/home/yassid/a2091_C15_reco_slim/")'
+void slim_cache_C15(TString run = "run_0138", TString inDir = "/home/yassid/a2091_C15_reco/",
+                     TString outDir = "/home/yassid/a2091_C15_reco_slim/")
+{
+   TString rf = inDir + run + "_reco.root";
+   if (gSystem->AccessPathName(rf)) {
+      printf("MISSING %s\n", rf.Data());
+      return;
+   }
+   gSystem->mkdir(outDir.Data(), kTRUE);
+   TString of = outDir + run + "_slim.root";
+
+   TFile *fin = TFile::Open(rf);
+   TTree *t = (TTree *)fin->Get("cbmsim");
+   t->SetBranchStatus("*", 0);
+   t->SetBranchStatus("AtPatternEvent*", 1);
+   t->SetBranchStatus("EventHeader*", 1);
+
+   TFile *fout = new TFile(of, "RECREATE", "", 1); // low compression: files are tiny, favor speed
+   TTree *nt = t->CloneTree(-1, "fast");
+   nt->Write();
+   printf("%s : %lld events -> %s (%.2f MB)\n", run.Data(), nt->GetEntries(), of.Data(), fout->GetSize() / 1e6);
+   fout->Close();
+   fin->Close();
+}
