@@ -19,7 +19,9 @@
 #pragma link C++ class AtPedestal + ;
 #pragma link C++ class AtUnpacker + ;
 #pragma link C++ class AtHDFUnpacker + ;
+#pragma link C++ class AtMergerHDFUnpacker + ;
 #pragma link C++ class AtFRIBHDFUnpacker + ;
+#pragma link C++ class AtMergerFRIBHDFUnpacker + ;
 #pragma link C++ class AtFRIBLinkedHDFUnpacker + ;
 #pragma link C++ class AtFRIBSiUnpacker + ;
 #pragma link C++ class AtROOTUnpacker + ;

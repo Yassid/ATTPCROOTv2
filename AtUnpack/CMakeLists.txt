@@ -29,7 +29,9 @@ set(SRCS
   AtUnpackTask.cxx
   AtUnpacker.cxx
   AtHDFUnpacker.cxx
+  AtMergerHDFUnpacker.cxx
   AtFRIBHDFUnpacker.cxx
+  AtMergerFRIBHDFUnpacker.cxx
   AtFRIBLinkedUnpacker.cxx
   AtFRIBSiUnpacker.cxx
   AtROOTUnpacker.cxx
