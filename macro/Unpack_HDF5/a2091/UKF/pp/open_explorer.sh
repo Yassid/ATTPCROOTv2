@@ -1,40 +1,64 @@
 #!/usr/bin/env bash
-# Rebuild a standalone browser explorer from the kinematics caches and open it in the
-# WINDOWS browser. Use this when WSLg/X11 will not show ROOT GUI windows: Chrome runs
-# natively on Windows, so nothing here depends on the X server.
+# Rebuild the standalone browser explorer from the kinematics caches and open it.
 #
-#   ./open_explorer.sh          # 15C(p,p')  -- default
+#   ./open_explorer.sh          # 15C(p,p')  -- default, gated caches
 #   ./open_explorer.sh pd       # 15C(p,d)14C
+#   ./open_explorer.sh pp 157   # override the beam energy
 #
-# Each page carries BOTH fitters (UKF + GENFIT) and switches between them in-page.
-# NOTE: `explorer.exe <file>` silently does nothing on this box -- launch the browser
-# binary directly, as below.
+# The page is a single self-contained HTML file with the data baked in: no server, no ROOT,
+# no X11 needed to view it. Each page carries BOTH fitters (UKF + GENFIT no-matFX) and
+# switches between them in-page.
+#
+# This used to be a WSL-only script (it looked for /mnt/c/Users, Windows Chrome, wslpath and
+# tasklist.exe) and could not run on this native-Linux box at all. It now uses xdg-open and
+# only falls back to the Windows staging dance when actually under WSL.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CHAN="${1:-pp}"
-WINHOME="/mnt/c/Users/$(ls /mnt/c/Users | grep -viE 'public|default|all users' | head -1)"
-BROWSER="/mnt/c/Program Files/Google/Chrome/Application/chrome.exe"
-[[ -x "$BROWSER" ]] || BROWSER="/mnt/c/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"
+EBEAM="${2:-170}"          # calibrated on the IC+PID-gated sample (was a stale 161 here)
 
 case "$CHAN" in
-  pp) OUT="$HOME/a2091_C15_pp_explorer.html"; TAG="15C(p,p')";      MEJ=1.007825; MRES=15.0105993 ;;
-  pd) OUT="$HOME/a2091_C15_pd_explorer.html"; TAG="15C(p,d)14C";   MEJ=2.014102; MRES=13.003355 ;;
-  *)  echo "usage: $0 [pp|pd]"; exit 1 ;;
+  pp) OUT="$HOME/a2091_C15_pp_explorer.html"; TAG="15C(p,p')";    MEJ=1.007825; MRES=15.0105993
+      # gated caches first, ungated as fallback
+      CU="$HERE/plots/proton_kin_g_ukf.root";          [[ -f "$CU" ]] || CU="$HERE/plots/proton_kin_gated.root"
+      CG="$HERE/plots/proton_kin_g_genfit_nomat.root"; [[ -f "$CG" ]] || CG=""
+      ;;
+  pd) OUT="$HOME/a2091_C15_pd_explorer.html"; TAG="15C(p,d)14C";  MEJ=2.014102; MRES=13.003355
+      CU="$HERE/plots/proton_kin_pd_ukf.root"
+      CG="$HERE/plots/proton_kin_pd_genfit.root";      [[ -f "$CG" ]] || CG=""
+      ;;
+  *)  echo "usage: $0 [pp|pd] [ebeam]"; exit 1 ;;
 esac
 
-set +u   # thisroot.sh reads unset vars
+if [[ ! -f "$CU" ]]; then
+  echo "ERROR: no UKF cache for '$CHAN'. Looked for:"; echo "  $CU"
+  echo "Run the Ex step first, e.g.  root -b -q 'pp/ex_C15.C(...)'  to write plots/proton_kin_*.root"
+  exit 1
+fi
+echo "UKF cache    : $CU"
+echo "GENFIT cache : ${CG:-<none, single-fitter page>}"
+
+set +u   # thisroot.sh reads unset vars and dies under `set -u`
 source "$HOME/fair_install/FairSoft/install/bin/thisroot.sh"
 set -u
 
-root -b -l -q "$HERE/make_explorer_html.C(\"$HERE/plots/proton_kin_${CHAN}_ukf.root\",\"$OUT\",\"$TAG\",161,15.0105993,1.007825,$MEJ,$MRES,14,\"\",\"$HERE/plots/proton_kin_${CHAN}_genfit.root\")"
+# beamA = 15 (was 14, left over from the a1954 port)
+root -b -l -q "$HERE/make_explorer_html.C(\"$CU\",\"$OUT\",\"$TAG\",$EBEAM,15.0105993,1.007825,$MEJ,$MRES,15,\"\",\"$CG\")"
 
-# the browser cannot read \\wsl$ paths reliably -> stage on the Windows side
-STAGE="$WINHOME/$(basename "$OUT")"
-cp "$OUT" "$STAGE"
-[[ -d "$WINHOME/Desktop" ]] && cp "$OUT" "$WINHOME/Desktop/"
-WINPATH="$(wslpath -w "$STAGE" | sed 's|\\|/|g')"
-echo "opening file:///$WINPATH"
-nohup "$BROWSER" "file:///$WINPATH" >/dev/null 2>&1 &
-sleep 2
-tasklist.exe /FI "IMAGENAME eq $(basename "$BROWSER")" 2>/dev/null | tail -2
+# ---- open it -------------------------------------------------------------------------
+if grep -qi microsoft /proc/version 2>/dev/null; then
+  # genuinely under WSL: the Windows browser cannot read \\wsl$ paths reliably, so stage it
+  WINHOME="/mnt/c/Users/$(ls /mnt/c/Users | grep -viE 'public|default|all users' | head -1)"
+  BROWSER="/mnt/c/Program Files/Google/Chrome/Application/chrome.exe"
+  [[ -x "$BROWSER" ]] || BROWSER="/mnt/c/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"
+  cp "$OUT" "$WINHOME/$(basename "$OUT")"
+  WINPATH="$(wslpath -w "$WINHOME/$(basename "$OUT")" | sed 's|\\|/|g')"
+  echo "opening file:///$WINPATH"
+  nohup "$BROWSER" "file:///$WINPATH" >/dev/null 2>&1 &
+else
+  echo "opening $OUT"
+  if command -v xdg-open >/dev/null 2>&1; then nohup xdg-open "$OUT" >/dev/null 2>&1 &
+  elif command -v firefox  >/dev/null 2>&1; then nohup firefox  "$OUT" >/dev/null 2>&1 &
+  else echo "No browser found. Open this file manually: $OUT"; fi
+fi

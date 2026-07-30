@@ -54,14 +54,26 @@ static Long64_t dump_pk(TTree *t, FILE *o)
    return N;
 }
 
+/// beamA is 15, not 14: it was left at the a1954 value by the port, which mislabels every
+/// nuclide the page typesets. ebeam0 defaults to the calibrated 170 MeV (elastic ridge +
+/// Ex-vs-theta tilt on the IC+PID-gated sample), not the old 195 placeholder.
 void make_explorer_html(TString cache = "", TString outHtml = "", TString tag = "15C(p,p')",
-                        double ebeam0 = 195.0, double mBeamAmu = 15.0105993, double mTargAmu = 1.007825,
-                        double mEjectAmu = 1.007825, double mResidAmu = 15.0105993, int beamA = 14,
+                        double ebeam0 = 170.0, double mBeamAmu = 15.0105993, double mTargAmu = 1.007825,
+                        double mEjectAmu = 1.007825, double mResidAmu = 15.0105993, int beamA = 15,
                         TString refExCSV = "", TString cacheGenfit = "")
 {
    TString here = gSystem->DirName(gInterpreter->GetCurrentMacroName());
-   if (cache.IsNull())
-      cache = here + "/plots/proton_kin_clean195.root";
+   // default to the GATED caches (IC 15C beam + proton PID gate); fall back to whatever
+   // ungated cache exists if the gated pass has not been run
+   if (cache.IsNull()) {
+      cache = here + "/plots/proton_kin_g_ukf.root";
+      if (gSystem->AccessPathName(cache)) cache = here + "/plots/proton_kin_gated.root";
+      if (gSystem->AccessPathName(cache)) cache = here + "/plots/proton_kin_ukf_E195.root";
+   }
+   if (cacheGenfit.IsNull()) {
+      TString g = here + "/plots/proton_kin_g_genfit_nomat.root";
+      if (!gSystem->AccessPathName(g)) cacheGenfit = g;
+   }
    if (outHtml.IsNull())
       outHtml = TString(gSystem->Getenv("HOME")) + "/a2091_C15_explorer.html";
    TString tplPath = here + "/explorer_template.html";
@@ -89,8 +101,14 @@ void make_explorer_html(TString cache = "", TString outHtml = "", TString tag = 
 
    // ---- reference levels drawn as kinematic loci (per channel) ------------
    //  "Ex:label" pairs; default set chosen from the residual nucleus
+   // 15C level scheme, NOT 14C's. The ported default listed 6.09 1-, 6.59 0+_2, 7.34 2+,
+   // which are 14C levels -- wrong nucleus, and they would have drawn loci at energies where
+   // 15C has no bound structure at all. 15C has exactly ONE bound excited state, the 5/2+ at
+   // 0.740 MeV, and is neutron-unbound above Sn = 1.218 MeV; the Sn marker is worth showing
+   // because everything above it is continuum rather than a level.
    if (refExCSV.IsNull())
-      refExCSV = (mResidAmu > 13.5) ? "0:g.s.,6.09:1-,6.59:0+_2,7.34:2+"   // 15C
+      refExCSV = (mResidAmu > 14.5) ? "0:g.s.,0.740:5/2+,1.218:Sn"            // 15C
+               : (mResidAmu > 13.5) ? "0:g.s.,6.09:1-,6.59:0+_2,7.01:2+"      // 14C
                                     : "0:g.s.,3.09:1/2+,3.68:3/2-,3.85:5/2+"; // 13C
    TString refJson = "[";
    TObjArray *toks = refExCSV.Tokenize(",");

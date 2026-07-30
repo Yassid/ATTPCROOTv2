@@ -188,7 +188,12 @@ footer{
   <div class="sub" id="hdrCache"></div>
   <div class="spacer"></div>
   <button id="themeBtn" title="switch light / dark">theme</button>
-  <button id="pngBtn">save PNG</button>
+  <button id="pngBtn" title="all panels stitched into one high-resolution PNG">save figure</button>
+  <button id="panelBtn" title="each panel as its own high-resolution PNG">save panels</button>
+  <button id="csvBtn" title="histogram contents as CSV, for replotting">save data</button>
+  <button id="parBtn" title="all control values as a .json file you can reload later">save params</button>
+  <button id="parLoadBtn" title="restore control values from a saved .json">load params</button>
+  <input type="file" id="parFile" accept=".json,application/json" style="display:none">
 </header>
 
 <main class="layout">
@@ -570,11 +575,13 @@ function fitGaussSeed(h, s) {
 /* ---------------------------------------------------------------------------
    canvas helpers
    ------------------------------------------------------------------------ */
-const PAD = {l:52, r:12, t:10, b:34};
+const PAD = {l:66, r:14, t:28, b:48};
+const LBLFONT = 'system-ui,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif';
+let EXPORT_SCALE = 0;   // >0 forces that device-pixel ratio (hi-res export)
 const css = k => getComputedStyle(document.documentElement).getPropertyValue(k).trim();
 
 function setup(cv) {
-  const dpr = window.devicePixelRatio || 1;
+  const dpr = EXPORT_SCALE || window.devicePixelRatio || 1;
   const w = cv.clientWidth, h = cv.clientHeight;
   if (cv.width !== Math.round(w*dpr) || cv.height !== Math.round(h*dpr)) {
     cv.width = Math.round(w*dpr); cv.height = Math.round(h*dpr);
@@ -595,7 +602,62 @@ function ticks(lo, hi, target) {
   return out;
 }
 
-function axes(c, xlo, xhi, ylo, yhi, xlab, ylab, logY) {
+
+/* ---- minimal rich text for canvas labels ----------------------------------
+   E_x            subscript single char        E_{beam}   braced subscript
+   ^{14}C         superscript (mass numbers)   \theta     greek by name
+   Used so exported figures carry real E_x / theta_cm rather than ASCII.      */
+const GREEK = {alpha:'α',beta:'β',gamma:'γ',delta:'δ',theta:'θ',
+               lambda:'λ',mu:'μ',nu:'ν',pi:'π',rho:'ρ',sigma:'σ',
+               tau:'τ',phi:'φ',chi:'χ',psi:'ψ',omega:'ω',
+               Delta:'Δ',Theta:'Θ',Sigma:'Σ',Omega:'Ω',prime:'′'};
+function parseRich(str) {
+  const out = []; let i = 0, plain = '';
+  const flush = () => { if (plain) { out.push({t:plain, k:0}); plain = ''; } };
+  while (i < str.length) {
+    const c = str[i];
+    if (c === '\\') {
+      const m = /^\\([A-Za-z]+)/.exec(str.slice(i));
+      if (m) { plain += (GREEK[m[1]] || m[1]); i += m[0].length; continue; }
+    }
+    if (c === '_' || c === '^') {
+      const k = c === '_' ? 1 : 2;
+      let j = i + 1, txt;
+      if (str[j] === '{') { const e = str.indexOf('}', j); txt = str.slice(j+1, e < 0 ? undefined : e); i = (e < 0 ? str.length : e + 1); }
+      else { txt = str[j] || ''; i = j + 1; }
+      txt = txt.replace(/\\([A-Za-z]+)/g, (_, n) => GREEK[n] || n);
+      flush(); out.push({t:txt, k}); continue;
+    }
+    plain += c; i++;
+  }
+  flush(); return out;
+}
+function richWidth(g, parts, size) {
+  let w = 0;
+  for (const p of parts) { g.font = `${p.k ? Math.round(size*0.72) : size}px ${LBLFONT}`; w += g.measureText(p.t).width; }
+  return w;
+}
+function drawRich(g, str, x, y, o) {
+  o = o || {};
+  const size = o.size || 13, align = o.align || 'left';
+  const parts = parseRich(str), w = richWidth(g, parts, size);
+  let cx = align === 'center' ? x - w/2 : align === 'right' ? x - w : x;
+  if (o.color) g.fillStyle = o.color;
+  const save = g.textAlign, saveB = g.textBaseline;
+  g.textAlign = 'left'; g.textBaseline = o.baseline || 'alphabetic';
+  for (const p of parts) {
+    const sz = p.k ? Math.round(size*0.72) : size;
+    g.font = `${sz}px ${LBLFONT}`;
+    g.fillText(p.t, cx, y + (p.k === 1 ? size*0.24 : p.k === 2 ? -size*0.42 : 0));
+    cx += g.measureText(p.t).width;
+  }
+  g.textAlign = save; g.textBaseline = saveB;
+  return w;
+}
+/* "14C" -> "^{14}C" so nuclide names typeset properly */
+const nucl = s => String(s).replace(/(^|[^A-Za-z0-9])(\d{1,3})([A-Z][a-z]?)/g, (m,a,n,e) => `${a}^{${n}}${e}`);
+
+function axes(c, xlo, xhi, ylo, yhi, xlab, ylab, logY, title) {
   const {g, w, h, pw, ph} = c;
   g.font = '10px ui-monospace,SFMono-Regular,"DejaVu Sans Mono",monospace';
   g.strokeStyle = css('--grid'); g.lineWidth = 1;
@@ -623,12 +685,14 @@ function axes(c, xlo, xhi, ylo, yhi, xlab, ylab, logY) {
       g.fillText(Math.abs(t) >= 1e4 ? t.toExponential(0) : String(t), PAD.l - 6, y);
     }
   }
-  g.strokeStyle = css('--line'); g.lineWidth = 1;
+  g.strokeStyle = css('--line'); g.lineWidth = 1.2;
   g.strokeRect(PAD.l, PAD.t, pw, ph);
-  g.fillStyle = css('--ink-2'); g.textAlign = 'right'; g.textBaseline = 'bottom';
-  g.fillText(xlab, PAD.l + pw, h - 2);
-  g.save(); g.translate(11, PAD.t); g.rotate(-Math.PI/2);
-  g.textAlign = 'right'; g.textBaseline = 'top'; g.fillText(ylab, 0, 0); g.restore();
+  // axis labels: centred on the axis, the publication convention
+  drawRich(g, xlab, PAD.l + pw/2, h - 12, {size:13, align:'center', baseline:'alphabetic', color:css('--ink-2')});
+  g.save(); g.translate(16, PAD.t + ph/2); g.rotate(-Math.PI/2);
+  drawRich(g, ylab, 0, 0, {size:13, align:'center', baseline:'alphabetic', color:css('--ink-2')});
+  g.restore();
+  if (title) drawRich(g, title, PAD.l + pw/2, PAD.t - 10, {size:14, align:'center', baseline:'alphabetic', color:css('--ink')});
 }
 
 /* viridis - perceptually uniform, colourblind-safe sequential ramp */
@@ -653,7 +717,7 @@ function drawHist(cv, hist, s, opts) {
     const lv = Math.log10(Math.max(v, 0.5));
     return PAD.t + ph - (lv - Math.log10(ylo))/(Math.log10(yhi) - Math.log10(ylo))*ph;
   };
-  axes(c, s.exLo, s.exHi, ylo, yhi, 'E_x [MeV]', 'counts', logY);
+  axes(c, s.exLo, s.exHi, ylo, yhi, 'E_x  (MeV)', 'counts / bin', logY, opts.title);
 
   // fit window shading
   if (opts.showFit) {
@@ -699,11 +763,11 @@ function drawHist(cv, hist, s, opts) {
   return {kind:'hist', hist, nb, ylo, yhi, logY, ...c};
 }
 
-function drawHeat(cv, h2, nx, ny, xlo, xhi, ylo, yhi, xlab, ylab, s, overlay) {
+function drawHeat(cv, h2, nx, ny, xlo, xhi, ylo, yhi, xlab, ylab, s, overlay, title) {
   const c = setup(cv); const {g, pw, ph} = c;
   let max = 0;
   for (const v of h2) if (v > max) max = v;
-  axes(c, xlo, xhi, ylo, yhi, xlab, ylab, false);
+  axes(c, xlo, xhi, ylo, yhi, xlab, ylab, false, title);
   const bw = pw/nx, bh = ph/ny;
   const norm = v => s.logZ ? Math.log10(1 + v)/Math.log10(1 + max) : v/max;
   for (let iy = 0; iy < ny; ++iy) {
@@ -739,8 +803,10 @@ function render() {
   $('ttlSlice').innerHTML = 'E<sub>x</sub> for ' + s.cmLo + '&deg; &lt; &theta;<sub>cm</sub> &lt; ' + s.cmHi + '&deg;';
 
   const cmp = ($('cmpFit').checked && other()) ? exOnly(other(), s) : null;
-  views.cEx = drawHist($('cEx'), r.hEx, s, {showFit:true, fit, overlay:cmp, nb:s.exBins});
-  views.cSl = drawHist($('cSl'), r.hSl, s, {showFit:false, nb:s.slBins});
+  views.cEx = drawHist($('cEx'), r.hEx, s, {showFit:true, fit, overlay:cmp, nb:s.exBins,
+    title: nucl(CFG.tag||'') + '   excitation energy'});
+  views.cSl = drawHist($('cSl'), r.hSl, s, {showFit:false, nb:s.slBins,
+    title: `${s.cmLo}\u00B0 < \\theta_{cm} < ${s.cmHi}\u00B0`});
   $('legEx').innerHTML =
       `<span><i class="swatch" style="background:var(--data)"></i>${ACTIVE.toUpperCase()}</span>`
     + `<span><i class="swatch" style="background:var(--fit)"></i>gaussian fit</span>`
@@ -748,7 +814,7 @@ function render() {
     + (cmp ? `<span><i class="swatch" style="background:var(--alt)"></i>${other().toUpperCase()} (same cuts)</span>` : '');
 
   views.cKT = drawHeat($('cKT'), r.hKT, s.thBins, s.keBins, 0, s.thMax, 0, s.keMax,
-                       'theta_lab [deg]', 'KE [MeV]', s, c => {
+                       '\\theta_{lab}  (deg)', 'ejectile KE  (MeV)', s, c => {
     if (!s.kinLines) return;
     const {g, pw, ph} = c;
     const loci = REF_EX.map((r, i) => [r.ex, refColor(i), i < 2 ? [] : [5,4]]);
@@ -764,10 +830,10 @@ function render() {
       }
       g.stroke(); g.setLineDash([]);
     }
-  });
+  }, 'ejectile KE vs \\theta_{lab}');
 
   views.cEt = drawHeat($('cEt'), r.hEt, s.cmBins, s.etExBins, 0, 180, s.exLo, s.exHi,
-                       'theta_cm [deg]', 'E_x [MeV]', s, c => {
+                       '\\theta_{cm}  (deg)', 'E_x  (MeV)', s, c => {
     const {g, pw, ph} = c;   // slice markers
     g.strokeStyle = css('--accent'); g.lineWidth = 1.5; g.setLineDash([4,4]);
     for (const v of [s.cmLo, s.cmHi]) {
@@ -776,11 +842,11 @@ function render() {
       g.beginPath(); g.moveTo(x, PAD.t); g.lineTo(x, PAD.t + ph); g.stroke();
     }
     g.setLineDash([]);
-  });
+  }, 'E_x vs \\theta_{cm}');
 
   if (HAS_VZ) {
     views.cVz = drawHeat($('cVz'), r.hVz, s.vzBins, s.vzExBins, s.vzLo, s.vzHi, s.exLo, s.exHi,
-                         'vertex z [mm]', 'E_x [MeV]', s, c => {
+                         'vertex z  (mm)', 'E_x  (MeV)', s, c => {
       const {g, pw, ph} = c;
       g.strokeStyle = css('--fit'); g.lineWidth = 2; g.beginPath();
       let started = false;
@@ -793,7 +859,7 @@ function render() {
         started ? g.lineTo(x, y) : g.moveTo(x, y); started = true;
       }
       g.stroke();
-    });
+    }, 'E_x vs vertex z');
     // report the drift of the g.s. across z -- the number the panel exists to expose
     const fin = [];
     for (let i = 0; i < s.vzBins; ++i) if (isFinite(r.vzProf[i])) fin.push(r.vzProf[i]);
@@ -861,23 +927,159 @@ const heatTip = (v, px, py) => {
   return `x  ${x.toFixed(2)}\ny  ${y.toFixed(2)}\ncounts  ${v.h2[iy*v.nx + ix]}`;
 };
 
-/* ---- PNG export : stitch the four panels ---- */
-function savePng() {
-  const ids = HAS_VZ ? ['cEx','cKT','cEt','cSl','cVz'] : ['cEx','cKT','cEt','cSl'];
-  const cs = ids.map($);
-  const w = cs[0].width, h = cs[0].height, out = document.createElement('canvas');
-  const rows = Math.ceil(cs.length/2);
-  out.width = w*2; out.height = h*rows;
-  const g = out.getContext('2d');
-  g.fillStyle = css('--plot'); g.fillRect(0,0,out.width,out.height);
-  // the z panel spans both columns in the page; keep it full width here too
-  cs.forEach((cv, i) => {
-    if (ids[i] === 'cVz') g.drawImage(cv, 0, Math.floor(i/2)*h, w*2, h);
-    else g.drawImage(cv, (i%2)*w, Math.floor(i/2)*h, w, h);
-  });
+/* ---- export ---------------------------------------------------------------
+   Panels are redrawn at EXPORT_DPR before capture, so saved figures are at
+   publication resolution rather than whatever the screen happens to be.     */
+const EXPORT_DPR = 3;
+const panelIds = () => ['cEx','cKT','cEt','cSl','cVz'].filter(id => $(id) && views[id]);
+const stem = () => (CFG.pngName || 'explorer') + '_' + ACTIVE;
+
+function download(href, name) {
   const a = document.createElement('a');
-  a.download = (CFG.pngName || 'explorer') + '.png';
-  a.href = out.toDataURL('image/png'); a.click();
+  a.download = name; a.href = href;
+  document.body.appendChild(a); a.click(); a.remove();
+}
+/* ---- save / restore the control panel -------------------------------------------------
+   Writes every IDS value and FLAGS checkbox to a small .json, together with the fitter in
+   use and the masses baked into the page, so a set of cuts can be reproduced later or handed
+   to someone else. The masses and tag are recorded for provenance only -- loading never
+   overwrites them, because they belong to the data baked into the page, not to the controls. */
+function saveParams() {
+  const p = { _what: 'a2091 15C explorer parameters', _saved: new Date().toISOString(),
+              tag: CFG.tag || '', fitter: ACTIVE,
+              provenance: { cache: CFG.cache || '', beamA: CFG.beamA,
+                            mBeamAmu: CFG.mBeamAmu, mTargAmu: CFG.mTargAmu,
+                            mEjectAmu: CFG.mEjectAmu, mResidAmu: CFG.mResidAmu },
+              controls: {}, flags: {} };
+  for (const id of IDS)   p.controls[id] = $(id).value;
+  for (const id of FLAGS) p.flags[id]    = $(id).checked;
+  // cmpFit ("overlay the other fitter") is a real control but is in neither IDS nor FLAGS,
+  // so it has to be handled explicitly or it silently would not round-trip
+  if ($('cmpFit')) p.flags.cmpFit = $('cmpFit').checked;
+  const name = 'explorer_params_' + (CFG.tag || 'run').replace(/[^A-Za-z0-9]+/g, '_')
+             + '_' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.json';
+  download('data:application/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(p, null, 2)), name);
+  note('saved ' + name);
+}
+
+function applyParams(p) {
+  if (!p || typeof p !== 'object') { note('not a parameter file'); return; }
+  const c = p.controls || {}, f = p.flags || {};
+  let n = 0, skipped = [];
+  for (const id of IDS)   if (c[id] !== undefined) { $(id).value = c[id]; n++; }
+  for (const id of FLAGS) if (f[id] !== undefined) { $(id).checked = !!f[id]; n++; }
+  if (f.cmpFit !== undefined && $('cmpFit')) { $('cmpFit').checked = !!f.cmpFit; n++; }
+  // restore the selected fitter too, but only if this page actually has that cache
+  if (p.fitter && typeof FITTERS !== 'undefined') {
+    if (FITTERS.includes(p.fitter)) {
+      ACTIVE = p.fitter;
+      // keep the segmented button in step with ACTIVE, exactly as its click handler does --
+      // otherwise the highlight keeps pointing at the previous fitter
+      const seg = $('segFitter');
+      if (seg) for (const o of seg.children) o.setAttribute('aria-pressed', String(o.dataset.f === ACTIVE));
+      n++;
+    } else skipped.push('fitter=' + p.fitter + ' (not in this page)');
+  }
+  // controls present in the file but not in this page (older/newer template)
+  for (const k of Object.keys(c)) if (!IDS.includes(k)) skipped.push(k);
+  for (const k of Object.keys(f)) if (!FLAGS.includes(k) && k !== 'cmpFit') skipped.push(k);
+  if ($('ebeam')) $('ebeamR').value = $('ebeam').value;
+  render();
+  let msg = 'restored ' + n + ' control' + (n === 1 ? '' : 's');
+  if (p.tag && CFG.tag && p.tag !== CFG.tag) msg += ' -- WARNING: saved for "' + p.tag + '", page is "' + CFG.tag + '"';
+  if (skipped.length) msg += ' -- ignored unknown: ' + skipped.join(', ');
+  note(msg);
+}
+
+function loadParams(file) {
+  const r = new FileReader();
+  r.onload = () => { try { applyParams(JSON.parse(r.result)); }
+                     catch (e) { note('could not parse that file: ' + e.message); } };
+  r.onerror = () => note('could not read that file');
+  r.readAsText(file);
+}
+
+/* transient status line; falls back to the console if the page has no status element */
+function note(msg) {
+  const el = $('hdrCache');
+  if (!el) { console.log(msg); return; }
+  if (note._t) { clearTimeout(note._t); }
+  if (note._orig === undefined) note._orig = el.textContent;
+  el.textContent = msg;
+  note._t = setTimeout(() => { el.textContent = note._orig; note._t = null; }, 6000);
+}
+
+/* render everything at high DPR, run fn(), then restore the screen rendering */
+function atHiRes(fn) {
+  EXPORT_SCALE = EXPORT_DPR;
+  render();
+  try { fn(); } finally { EXPORT_SCALE = 0; render(); }
+}
+
+/* all panels stitched into one figure */
+function savePng() {
+  atHiRes(() => {
+    const cs = panelIds().map($);
+    const w = cs[0].width, h = cs[0].height, rows = Math.ceil(cs.length/2);
+    const out = document.createElement('canvas');
+    out.width = w*2; out.height = h*rows;
+    const g = out.getContext('2d');
+    g.fillStyle = css('--plot'); g.fillRect(0,0,out.width,out.height);
+    cs.forEach((cv, i) => {
+      if (cv.id === 'cVz') g.drawImage(cv, 0, Math.floor(i/2)*h, w*2, h);
+      else g.drawImage(cv, (i%2)*w, Math.floor(i/2)*h, w, h);
+    });
+    download(out.toDataURL('image/png'), stem() + '.png');
+  });
+}
+
+/* each panel as its own file */
+function savePanels() {
+  const names = {cEx:'Ex', cKT:'KE_vs_thetalab', cEt:'Ex_vs_thetacm', cSl:'Ex_slice', cVz:'Ex_vs_vertexz'};
+  atHiRes(() => {
+    panelIds().forEach((id, k) => {
+      const cv = $(id);
+      // opaque background: a transparent PNG looks wrong dropped into a document
+      const out = document.createElement('canvas');
+      out.width = cv.width; out.height = cv.height;
+      const g = out.getContext('2d');
+      g.fillStyle = css('--plot'); g.fillRect(0,0,out.width,out.height);
+      g.drawImage(cv, 0, 0);
+      setTimeout(() => download(out.toDataURL('image/png'), `${stem()}_${names[id]||id}.png`), k*250);
+    });
+  });
+}
+
+/* histogram contents, so the panels can be replotted in ROOT/matplotlib */
+function saveCsv() {
+  const st = readState();
+  const lines = [];
+  const meta = [`# ${CFG.title||''}`, `# fitter=${ACTIVE}`,
+                `# Ebeam=${st.ebeam} MeV`,
+                `# generated ${new Date().toISOString()}`];
+  for (const id of panelIds()) {
+    const v = views[id];
+    if (!v) continue;
+    lines.push('', `# ---- panel ${id} (${v.kind}) ----`);
+    if (v.kind === 'hist') {
+      const lo = st.exLo, hi = st.exHi;
+      const w = (hi - lo)/v.nb;
+      lines.push('bin_centre_MeV,counts');
+      for (let b = 0; b < v.nb; ++b) lines.push(`${(lo + (b+0.5)*w).toFixed(6)},${v.hist[b]}`);
+    } else {
+      const dx = (v.xhi - v.xlo)/v.nx, dy = (v.yhi - v.ylo)/v.ny;
+      lines.push('x_centre,y_centre,counts');
+      for (let iy = 0; iy < v.ny; ++iy)
+        for (let ix = 0; ix < v.nx; ++ix) {
+          const c = v.h2[iy*v.nx + ix];
+          if (c > 0) lines.push(`${(v.xlo+(ix+0.5)*dx).toFixed(4)},${(v.ylo+(iy+0.5)*dy).toFixed(4)},${c}`);
+        }
+    }
+  }
+  const blob = new Blob([meta.concat(lines).join('\n')], {type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  download(url, stem() + '_hist.csv');
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
 
 /* ---- wiring ---- */
@@ -928,6 +1130,17 @@ function init() {
   $('ebeamR').addEventListener('input', () => { $('ebeam').value = $('ebeamR').value; render(); });
   $('zeroBtn').addEventListener('click', zeroGs);
   $('pngBtn').addEventListener('click', savePng);
+  $('panelBtn').addEventListener('click', savePanels);
+  $('csvBtn').addEventListener('click', saveCsv);
+  $('parBtn').addEventListener('click', saveParams);
+  // the file input is hidden: the visible button forwards the click to it, and the value is
+  // cleared afterwards so reloading the SAME file again still fires a change event
+  $('parLoadBtn').addEventListener('click', () => $('parFile').click());
+  $('parFile').addEventListener('change', e => {
+    const f = e.target.files && e.target.files[0];
+    if (f) loadParams(f);
+    e.target.value = '';
+  });
   $('resetBtn').addEventListener('click', () => {
     for (const id of IDS) $(id).value = DEFAULTS[id];
     for (const id of FLAGS) $(id).checked = DEFAULTS[id];
