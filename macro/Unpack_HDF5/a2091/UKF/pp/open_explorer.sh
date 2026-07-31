@@ -24,7 +24,9 @@ case "$CHAN" in
       CU="$HERE/plots/proton_kin_g_ukf.root";          [[ -f "$CU" ]] || CU="$HERE/plots/proton_kin_gated.root"
       CG="$HERE/plots/proton_kin_g_genfit_nomat.root"; [[ -f "$CG" ]] || CG=""
       ;;
-  pd) OUT="$HOME/a2091_C15_pd_explorer.html"; TAG="15C(p,d)14C";  MEJ=2.014102; MRES=13.003355
+  # MRES is 14C (14.003242), NOT 13C. The original script passed 13.003355 here, which is 13C:
+  # Ex = m4_ex - m4, so the wrong residual offsets the whole spectrum by ~931 MeV.
+  pd) OUT="$HOME/a2091_C15_pd_explorer.html"; TAG="15C(p,d)14C";  MEJ=2.014102; MRES=14.003242
       CU="$HERE/plots/proton_kin_pd_ukf.root"
       CG="$HERE/plots/proton_kin_pd_genfit.root";      [[ -f "$CG" ]] || CG=""
       ;;

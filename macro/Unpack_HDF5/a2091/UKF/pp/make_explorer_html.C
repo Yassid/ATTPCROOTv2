@@ -70,9 +70,18 @@ void make_explorer_html(TString cache = "", TString outHtml = "", TString tag = 
       if (gSystem->AccessPathName(cache)) cache = here + "/plots/proton_kin_gated.root";
       if (gSystem->AccessPathName(cache)) cache = here + "/plots/proton_kin_ukf_E195.root";
    }
-   if (cacheGenfit.IsNull()) {
-      TString g = here + "/plots/proton_kin_g_genfit_nomat.root";
-      if (!gSystem->AccessPathName(g)) cacheGenfit = g;
+   // Derive the GENFIT sibling FROM THE UKF CACHE NAME -- never from a fixed path. Hardcoding
+   // proton_kin_g_genfit_nomat.root here silently paired the (p,p') GENFIT protons with the
+   // (p,d) UKF deuterons: the page offered a "fitter switch" between two different reactions,
+   // both interpreted with the (p,d) masses. Deriving the name keeps the pair in one channel.
+   // NB: an empty TString is IsNull(), so passing "" explicitly also lands here -- hence the
+   // sibling must be channel-correct rather than merely present on disk.
+   if (cacheGenfit.IsNull() && cache.Contains("_ukf")) {
+      for (const char *suffix : {"_genfit_nomat", "_genfit"}) {
+         TString g = cache;
+         g.ReplaceAll("_ukf", suffix);
+         if (g != cache && !gSystem->AccessPathName(g)) { cacheGenfit = g; break; }
+      }
    }
    if (outHtml.IsNull())
       outHtml = TString(gSystem->Getenv("HOME")) + "/a2091_C15_explorer.html";
@@ -106,10 +115,12 @@ void make_explorer_html(TString cache = "", TString outHtml = "", TString tag = 
    // 15C has no bound structure at all. 15C has exactly ONE bound excited state, the 5/2+ at
    // 0.740 MeV, and is neutron-unbound above Sn = 1.218 MeV; the Sn marker is worth showing
    // because everything above it is continuum rather than a level.
+   // 14C set includes the 6.73 3- so the whole 6-7 MeV cluster seen in 15C(p,d)14C is marked,
+   // and Sn = 8.18 because the structure above it (the ~9.3 MeV bump) is continuum, not a level.
    if (refExCSV.IsNull())
-      refExCSV = (mResidAmu > 14.5) ? "0:g.s.,0.740:5/2+,1.218:Sn"            // 15C
-               : (mResidAmu > 13.5) ? "0:g.s.,6.09:1-,6.59:0+_2,7.01:2+"      // 14C
-                                    : "0:g.s.,3.09:1/2+,3.68:3/2-,3.85:5/2+"; // 13C
+      refExCSV = (mResidAmu > 14.5) ? "0:g.s.,0.740:5/2+,1.218:Sn"                      // 15C
+               : (mResidAmu > 13.5) ? "0:g.s.,6.09:1-,6.59:0+,6.73:3-,7.01:2+,8.18:Sn"  // 14C
+                                    : "0:g.s.,3.09:1/2+,3.68:3/2-,3.85:5/2+";           // 13C
    TString refJson = "[";
    TObjArray *toks = refExCSV.Tokenize(",");
    for (int i = 0; i < toks->GetEntries(); ++i) {
