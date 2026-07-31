@@ -902,11 +902,10 @@ function render() {
   {
     const sl = kcSlopeDeg(s);
     $('kcLive').innerHTML =
-        '&theta; &minus; (2&pi;/<b>' + (isFinite(s.kcDenom) ? s.kcDenom : '?') + '</b>)(KE &minus; <b>'
-      + (isFinite(s.kcPivot) ? s.kcPivot.toFixed(1) : '?') + '</b>)'
-      + ' &nbsp;=&nbsp; ' + sl.toFixed(4) + ' deg/MeV'
-      + ' &middot; at KE 40 MeV the shift is ' + (sl*(40 - (s.kcPivot||0))).toFixed(2) + '&deg;'
-      + (s.kcOn ? ' &middot; <b>propagated</b> to E<sub>x</sub>' : ' &middot; not propagated (tick the box)');
+        'N=<b>' + (isFinite(s.kcDenom) ? s.kcDenom : '?') + '</b>, kethe=<b>'
+      + (isFinite(s.kcPivot) ? s.kcPivot.toFixed(1) : '?') + '</b> MeV'
+      + ' &rarr; ' + sl.toFixed(4) + '&deg;/MeV, shift ' + (sl*(40 - (s.kcPivot||0))).toFixed(2) + '&deg; at 40 MeV'
+      + (s.kcOn ? ' &middot; <b>propagated to E<sub>x</sub></b>' : ' &middot; not propagated');
   }
 
   views.cEt = drawHeat($('cEt'), r.hEt, s.cmBins, s.etExBins, 0, 180, s.exLo, s.exHi,
