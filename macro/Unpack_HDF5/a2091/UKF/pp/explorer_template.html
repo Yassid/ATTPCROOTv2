@@ -215,8 +215,8 @@ footer{
     <div class="grp">
       <div class="eyebrow">kinematics correction</div>
       <div class="row"><label class="check"><input type="checkbox" id="kcOn"> apply &theta; correction</label></div>
-      <div class="row"><label for="kcSlope">slope [deg/MeV]</label><input type="number" id="kcSlope" step="0.005" value="0.09"></div>
-      <div class="row"><label for="kcPivot">pivot KE [MeV]</label><input type="number" id="kcPivot" step="0.5" value="13"></div>
+      <div class="row"><label for="kcDenom">N in 2&pi;/N [rad/MeV]</label><input type="number" id="kcDenom" step="50" value="4000"></div>
+      <div class="row"><label for="kcPivot">kethe [MeV]</label><input type="number" id="kcPivot" step="0.5" value="13"></div>
       <div class="row"><span class="mono num" id="kcNote" style="font-size:11.5px;color:var(--ink-3)"></span></div>
     </div>
 
@@ -296,6 +296,12 @@ footer{
           <span><i class="swatch" style="background:var(--refdim)"></i>E<sub>x</sub>=6.59, 7.34 MeV</span>
         </div>
         <div class="canvas-wrap"><canvas id="cKT"></canvas><div class="tip" id="tipKT"></div></div>
+      </div>
+
+      <div class="card">
+        <h2>corrected KE vs &theta;<sub>lab</sub> &mdash; tune kethe</h2>
+        <div class="legend"><span id="kcLive">&nbsp;</span></div>
+        <div class="canvas-wrap"><canvas id="cKc"></canvas><div class="tip" id="tipKc"></div></div>
       </div>
 
       <div class="card">
@@ -395,7 +401,7 @@ const $ = id => document.getElementById(id);
 const IDS = ['ebeam','chi2','thLo','thHi','keLo','keHi','exBins','exLo','exHi','fitLo','fitHi',
              'thBins','thMax','keBins','keMax','cmBins','etExBins','cmLo','cmHi','slBins',
              'vzLo','vzHi','vzBins','vzExBins',
-             'kcSlope','kcPivot'];
+             'kcDenom','kcPivot'];
 
 /* vertex z is only meaningful if the cache actually carries it: ex_C15.C hardcoded 0
    before 2026-07-26, and old caches have no column at all. Detect a flat/absent
@@ -458,7 +464,18 @@ function readState() {
    KE-vs-theta panel.
 --------------------------------------------------------------------------- */
 function thCorr(s, th, ke) {
-  return s.kcOn ? th - s.kcSlope*(ke - s.kcPivot) : th;
+  return s.kcOn ? thCorrForce(s, th, ke) : th;
+}
+/** the correction regardless of the checkbox -- the tuning panel is always corrected so the
+    raw panel beside it stays as a reference while kethe and the slope are swept */
+function thCorrForce(s, th, ke) {
+  return th - kcSlopeDeg(s)*(ke - (isFinite(s.kcPivot) ? s.kcPivot : 0));
+}
+/** the notebook writes the slope as 2*pi/N rad/MeV; in degrees that is exactly 360/N deg/MeV
+    (N = 4000 -> 0.09 deg/MeV). N is the control, so the formula stays recognisable. */
+function kcSlopeDeg(s) {
+  const N = s.kcDenom;
+  return (isFinite(N) && Math.abs(N) > 1e-9) ? 360/N : 0;
 }
 
 function pass(d, i, s) {
@@ -490,6 +507,7 @@ function compute(s) {
   const vzExW = (s.exHi - s.exLo)/s.vzExBins;      // Ex vs vertex z map: own y binning
   const hEx = new Float64Array(nEx), hSl = new Float64Array(s.slBins);
   const hKT = new Float64Array(s.thBins*s.keBins);
+  const hKTc = new Float64Array(s.thBins*s.keBins);   // same map, corrected theta
   const hEt = new Float64Array(s.cmBins*s.etExBins);
   const hVz = new Float64Array(s.vzBins*s.vzExBins);
   // running mean of Ex per vertex-z column -> the profile drawn over the z map
@@ -503,6 +521,10 @@ function compute(s) {
     // KE vs theta_lab map (0..thMax deg)
     const bx = Math.floor(th/s.thMax*s.thBins), by = Math.floor(ke/s.keMax*s.keBins);
     if (bx >= 0 && bx < s.thBins && by >= 0 && by < s.keBins) hKT[by*s.thBins + bx]++;
+    // the tuning panel: same events, theta corrected, always applied
+    const thc = thCorrForce(s, d.th[i], ke);
+    const bxc = Math.floor(thc/s.thMax*s.thBins);
+    if (bxc >= 0 && bxc < s.thBins && by >= 0 && by < s.keBins) hKTc[by*s.thBins + bxc]++;
     const [ex, tcm] = kine2b(s.ebeam, th*Math.PI/180, ke);
     if (!isFinite(ex)) continue;
     ++n;
@@ -523,7 +545,7 @@ function compute(s) {
   }
   const vzProf = new Float64Array(s.vzBins);
   for (let i = 0; i < s.vzBins; ++i) vzProf[i] = vzCnt[i] > 20 ? vzSum[i]/vzCnt[i] : NaN;
-  return {n, hEx, hSl, hKT, hEt, hVz, vzProf, exW};
+  return {n, hEx, hSl, hKT, hKTc, hEt, hVz, vzProf, exW};
 }
 
 /** solve a small dense system in place (gaussian elimination, partial pivot) */
@@ -851,8 +873,8 @@ function render() {
     + `<span><i class="swatch" style="background:var(--accent);opacity:.35;height:9px;width:9px;border-radius:2px"></i>fit window</span>`
     + (cmp ? `<span><i class="swatch" style="background:var(--alt)"></i>${other().toUpperCase()} (same cuts)</span>` : '');
 
-  views.cKT = drawHeat($('cKT'), r.hKT, s.thBins, s.keBins, 0, s.thMax, 0, s.keMax,
-                       '\\theta_{lab}  (deg)', 'ejectile KE  (MeV)', s, c => {
+  // the Ex loci, shared by the raw and the corrected KE-vs-theta panels so the two are comparable
+  const lociOverlay = c => {
     if (!s.kinLines) return;
     const {g, pw, ph} = c;
     const loci = REF_EX.map((r, i) => [r.ex, refColor(i), i < 2 ? [] : [5,4]]);
@@ -868,7 +890,24 @@ function render() {
       }
       g.stroke(); g.setLineDash([]);
     }
-  }, 'ejectile KE vs \\theta_{lab}');
+  };
+  views.cKT = drawHeat($('cKT'), r.hKT, s.thBins, s.keBins, 0, s.thMax, 0, s.keMax,
+                       '\\theta_{lab}  (deg)', 'ejectile KE  (MeV)', s, lociOverlay,
+                       'ejectile KE vs \\theta_{lab}  (raw)');
+
+  // the tuning panel: identical events and identical loci, theta corrected
+  views.cKc = drawHeat($('cKc'), r.hKTc, s.thBins, s.keBins, 0, s.thMax, 0, s.keMax,
+                       '\\theta_{lab} corrected  (deg)', 'ejectile KE  (MeV)', s, lociOverlay,
+                       'corrected: \\theta - slope(KE - kethe)');
+  {
+    const sl = kcSlopeDeg(s);
+    $('kcLive').innerHTML =
+        '&theta; &minus; (2&pi;/<b>' + (isFinite(s.kcDenom) ? s.kcDenom : '?') + '</b>)(KE &minus; <b>'
+      + (isFinite(s.kcPivot) ? s.kcPivot.toFixed(1) : '?') + '</b>)'
+      + ' &nbsp;=&nbsp; ' + sl.toFixed(4) + ' deg/MeV'
+      + ' &middot; at KE 40 MeV the shift is ' + (sl*(40 - (s.kcPivot||0))).toFixed(2) + '&deg;'
+      + (s.kcOn ? ' &middot; <b>propagated</b> to E<sub>x</sub>' : ' &middot; not propagated (tick the box)');
+  }
 
   views.cEt = drawHeat($('cEt'), r.hEt, s.cmBins, s.etExBins, 0, 180, s.exLo, s.exHi,
                        '\\theta_{cm}  (deg)', 'E_x  (MeV)', s, c => {
