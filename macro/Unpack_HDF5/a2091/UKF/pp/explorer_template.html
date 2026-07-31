@@ -291,27 +291,6 @@ footer{
       </div>
 
       <div class="card">
-        <h2>KE corrected onto the g.s. line</h2>
-        <div class="legend">
-          <span><i class="swatch" style="background:var(--accent)"></i>theoretical g.s. line</span>
-          <span id="dNote">&nbsp;</span>
-        </div>
-        <div class="canvas-wrap"><canvas id="cKc"></canvas><div class="tip" id="tipKc"></div></div>
-      </div>
-
-      <div class="card">
-        <h2>&delta; = observed &minus; theoretical g.s. KE</h2>
-        <div class="legend"><span id="dStat">&nbsp;</span></div>
-        <div class="canvas-wrap"><canvas id="cDk"></canvas><div class="tip" id="tipDk"></div></div>
-      </div>
-
-      <div class="card">
-        <h2>E<sub>x</sub> from the corrected KE</h2>
-        <div class="legend"><span id="exCNote">&nbsp;</span></div>
-        <div class="canvas-wrap"><canvas id="cExC"></canvas><div class="tip" id="tipExC"></div></div>
-      </div>
-
-      <div class="card">
         <h2>E<sub>x</sub> vs &theta;<sub>cm</sub></h2>
         <div class="legend"><span id="cmSliceNote">slice shown in the panel to the right</span></div>
         <div class="canvas-wrap"><canvas id="cEt"></canvas><div class="tip" id="tipEt"></div></div>
@@ -399,97 +378,6 @@ function kinLocus(Eb, Ex) {
     if (ke > 0 && th >= 0) pts.push([th, ke]);
   }
   return pts;
-}
-
-/* ---------------------------------------------------------------------------
-   ground-state KE calibration
-
-   The g.s. is a known line: at every theta_lab two-body kinematics fixes the ejectile KE for
-   Ex = 0. Where the observed g.s. ridge sits away from that line, the KE reconstruction is
-   biased, so the offset delta(theta) measured on the g.s. can be subtracted from EVERY event and
-   Ex recomputed from the corrected KE. This works in KE and theta_lab, both measured, so unlike a
-   theta_cm correction it cannot feed an event's own Ex back into itself.
-
-   Everything below depends on Ebeam through the reference line, so it is rebuilt on every render
-   and follows the slider.
-
-   WHERE THE BEAM ENERGY SENSITIVITY LIVES: delta(theta) is ONE curve, not a free parameter per
-   event, so it cannot absorb an arbitrary Ebeam. The g.s. peak does end up near zero -- its median
-   is what was matched -- but at the CORRECT beam energy the observed ridge already lies on the
-   theoretical line, so delta comes out small and FLAT. At a wrong energy the reference line has
-   the wrong cos^2(theta) shape, and delta has to acquire size and structure to compensate. So read
-   Ebeam off delta(theta): its magnitude and its flatness, plus whether the other known levels land
-   where they should. The g.s. peak POSITION is the one thing that is not informative here.
---------------------------------------------------------------------------- */
-
-/** theta(deg) -> g.s. KE table on a 0.5 deg grid; the larger-KE branch where kinematics is
-    double valued, NaN where the g.s. is unreachable at that angle */
-function gsKeTable(Eb) {
-  const n = 361, tab = new Float64Array(n).fill(NaN);
-  for (const [th, ke] of kinLocus(Eb, 0)) {
-    const i = Math.round(th*2);
-    if (i >= 0 && i < n && (!isFinite(tab[i]) || ke > tab[i])) tab[i] = ke;
-  }
-  return tab;
-}
-/** linear interpolation into that table */
-function keGs(tab, thDeg) {
-  const x = thDeg*2, i = Math.floor(x);
-  if (i < 0 || i + 1 >= tab.length) return NaN;
-  const a = tab[i], b = tab[i+1];
-  if (!isFinite(a)) return isFinite(b) ? b : NaN;
-  if (!isFinite(b)) return a;
-  return a + (b - a)*(x - i);
-}
-/** median without sorting the whole array twice */
-function median(a) {
-  if (!a.length) return NaN;
-  const c = Float64Array.from(a).sort();
-  const m = c.length >> 1;
-  return c.length & 1 ? c[m] : 0.5*(c[m-1] + c[m]);
-}
-/** delta = observed g.s. ridge KE - theoretical g.s. KE, binned in KE (NOT in theta).
-    The bias grows with ejectile energy, so it is a function of KE: at one theta the g.s. and an
-    excited level have very different KE (at 25 deg the 15C(p,d) g.s. needs ~44 MeV while the 6-7
-    MeV cluster sits near 20), and a delta(theta) fitted on the g.s. would apply the g.s. value to
-    the cluster. Along the g.s. line KE and theta are one-to-one, so measuring in KE costs nothing
-    and makes the correction transferable to every other level.
-    Median rather than a fit, and gap-filled so it is defined across the whole KE range. */
-const DKE = 1.0, NDK = 100;                       // 1 MeV bins, 0..100 MeV
-function gsDelta(s, tab) {
-  const bins = Array.from({length: NDK}, () => []);
-  const d = DATA(), N = d.ke.length;
-  for (let i = 0; i < N; ++i) {
-    if (!pass(d, i, s)) continue;
-    const th = d.th[i], ke = d.ke[i];
-    const [ex] = kine2b(s.ebeam, th*Math.PI/180, ke);
-    // select the g.s. band with the same window the Ex fit uses
-    if (!isFinite(ex) || ex < s.fitLo || ex > s.fitHi) continue;
-    const kg = keGs(tab, th);
-    if (!isFinite(kg)) continue;
-    const b = Math.floor(ke/DKE);
-    if (b >= 0 && b < NDK) bins[b].push(ke - kg);
-  }
-  const del = new Float64Array(NDK).fill(NaN);
-  for (let b = 0; b < NDK; ++b) if (bins[b].length >= 25) del[b] = median(bins[b]);
-  // fill gaps from the nearest populated bins so the correction is defined everywhere
-  const out = Float64Array.from(del);
-  for (let b = 0; b < NDK; ++b) {
-    if (isFinite(out[b])) continue;
-    let lo = b, hi = b;
-    while (lo >= 0 && !isFinite(del[lo])) --lo;
-    while (hi < NDK && !isFinite(del[hi])) ++hi;
-    const okLo = lo >= 0, okHi = hi < NDK;
-    if (okLo && okHi) out[b] = del[lo] + (del[hi] - del[lo])*(b - lo)/(hi - lo);
-    else if (okLo) out[b] = del[lo];
-    else if (okHi) out[b] = del[hi];
-  }
-  return {del, filled: out, nUsed: del.reduce((k, v) => k + (isFinite(v) ? 1 : 0), 0)};
-}
-/** the correction to apply to an event of measured KE */
-function deltaAt(filled, ke) {
-  const b = Math.floor(ke/DKE);
-  return (b >= 0 && b < NDK) ? filled[b] : NaN;
 }
 
 /* ---------------------------------------------------------------------------
@@ -597,37 +485,7 @@ function compute(s) {
   }
   const vzProf = new Float64Array(s.vzBins);
   for (let i = 0; i < s.vzBins; ++i) vzProf[i] = vzCnt[i] > 20 ? vzSum[i]/vzCnt[i] : NaN;
-
-  /* ---- g.s.-anchored KE calibration, rebuilt here so it follows the Ebeam slider ---- */
-  const tab = gsKeTable(s.ebeam);
-  const dl  = gsDelta(s, tab);
-  const hKTc = new Float64Array(s.thBins*s.keBins);   // corrected KE vs theta
-  const hExC = new Float64Array(nEx);                 // Ex from the corrected KE
-  let nC = 0;
-  for (let i = 0; i < N; ++i) {
-    if (!pass(d, i, s)) continue;
-    const th = d.th[i];
-    const dk = deltaAt(dl.filled, d.ke[i]);   // indexed by the event's own KE
-    if (!isFinite(dk)) continue;
-    const keC = d.ke[i] - dk;
-    if (keC <= 0) continue;
-    const bx = Math.floor(th/s.thMax*s.thBins), by = Math.floor(keC/s.keMax*s.keBins);
-    if (bx >= 0 && bx < s.thBins && by >= 0 && by < s.keBins) hKTc[by*s.thBins + bx]++;
-    const [exC] = kine2b(s.ebeam, th*Math.PI/180, keC);
-    if (!isFinite(exC)) continue;
-    ++nC;
-    const be = Math.floor((exC - s.exLo)/exW);
-    if (be >= 0 && be < nEx) hExC[be]++;
-  }
-  // summary of the correction itself -- this is the Ebeam diagnostic
-  let dSum = 0, dSum2 = 0, dCnt = 0, dMin = Infinity, dMax = -Infinity;
-  for (const v of dl.del) if (isFinite(v)) { dSum += v; dSum2 += v*v; ++dCnt; dMin = Math.min(dMin, v); dMax = Math.max(dMax, v); }
-  const dMean = dCnt ? dSum/dCnt : NaN;
-  const dRms  = dCnt ? Math.sqrt(Math.max(0, dSum2/dCnt - dMean*dMean)) : NaN;
-
-  return {n, hEx, hSl, hKT, hEt, hVz, vzProf, exW,
-          hKTc, hExC, nC, delta: dl.del, deltaFilled: dl.filled,
-          dMean, dRms, dSpan: (isFinite(dMin) ? dMax - dMin : NaN), dBins: dl.nUsed};
+  return {n, hEx, hSl, hKT, hEt, hVz, vzProf, exW};
 }
 
 /** solve a small dense system in place (gaussian elimination, partial pivot) */
@@ -847,35 +705,6 @@ function viridis(t) {
   return `rgb(${Math.round(a[0]+(b[0]-a[0])*f)},${Math.round(a[1]+(b[1]-a[1])*f)},${Math.round(a[2]+(b[2]-a[2])*f)})`;
 }
 
-/** line profile of a Float64Array that may contain NaN gaps, with a zero reference.
-    Used for delta(KE): a flat line on zero means the observed g.s. ridge already lies on the
-    theoretical one, i.e. the assumed beam energy is right. */
-function drawProfile(cv, y, xlo, xhi, xlab, ylab, title) {
-  const c = setup(cv); const {g, pw, ph} = c;
-  let lo = Infinity, hi = -Infinity;
-  for (const v of y) if (isFinite(v)) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
-  if (!isFinite(lo)) { axes(c, xlo, xhi, -1, 1, xlab, ylab, false, title); return {}; }
-  const pad = Math.max(0.15, 0.15*(hi - lo));
-  lo = Math.min(lo, 0) - pad; hi = Math.max(hi, 0) + pad;
-  axes(c, xlo, xhi, lo, hi, xlab, ylab, false, title);
-  const X = i => PAD.l + (i + 0.5)/y.length*pw;
-  const Y = v => PAD.t + ph - (v - lo)/(hi - lo)*ph;
-  // zero reference
-  g.strokeStyle = css('--ink-3'); g.lineWidth = 1; g.setLineDash([4,4]);
-  g.beginPath(); g.moveTo(PAD.l, Y(0)); g.lineTo(PAD.l + pw, Y(0)); g.stroke(); g.setLineDash([]);
-  // the profile, broken across gaps
-  g.strokeStyle = css('--data'); g.lineWidth = 2; g.beginPath();
-  let started = false;
-  for (let i = 0; i < y.length; ++i) {
-    if (!isFinite(y[i])) { started = false; continue; }
-    started ? g.lineTo(X(i), Y(y[i])) : g.moveTo(X(i), Y(y[i])); started = true;
-  }
-  g.stroke();
-  g.fillStyle = css('--data');
-  for (let i = 0; i < y.length; ++i) if (isFinite(y[i])) { g.beginPath(); g.arc(X(i), Y(y[i]), 2, 0, 7); g.fill(); }
-  return {};
-}
-
 function drawHist(cv, hist, s, opts) {
   const c = setup(cv); const {g, pw, ph} = c;
   let max = 0;
@@ -1002,41 +831,6 @@ function render() {
       g.stroke(); g.setLineDash([]);
     }
   }, 'ejectile KE vs \\theta_{lab}');
-
-  /* ---- g.s.-anchored KE calibration panels ---- */
-  // corrected KE vs theta, with the theoretical g.s. line the correction was matched to
-  views.cKc = drawHeat($('cKc'), r.hKTc, s.thBins, s.keBins, 0, s.thMax, 0, s.keMax,
-                       '\\theta_{lab}  (deg)', 'corrected KE  (MeV)', s, c => {
-    const {g, pw, ph} = c;
-    const pts = kinLocus(s.ebeam, 0);
-    g.strokeStyle = css('--accent'); g.lineWidth = 2.5; g.beginPath();
-    let started = false;
-    for (const [th, ke] of pts) {
-      if (th < 0 || th > s.thMax || ke > s.keMax) { started = false; continue; }
-      const x = PAD.l + th/s.thMax*pw, y = PAD.t + ph - ke/s.keMax*ph;
-      started ? g.lineTo(x, y) : g.moveTo(x, y); started = true;
-    }
-    g.stroke();
-  }, 'corrected KE vs \\theta_{lab}');
-  $('dNote').textContent = r.nC.toLocaleString() + ' events corrected';
-
-  // delta(KE) itself -- this is where the Ebeam sensitivity shows: small and flat when right
-  views.cDk = drawProfile($('cDk'), r.delta, 0, NDK*DKE,
-                          'ejectile KE  (MeV)', '\\delta  (MeV)', '\\delta vs KE');
-  $('dStat').innerHTML = isFinite(r.dMean)
-    ? `mean ${r.dMean >= 0 ? '+' : ''}${r.dMean.toFixed(3)} MeV &middot; rms ${r.dRms.toFixed(3)} `
-      + `&middot; span ${r.dSpan.toFixed(3)} &middot; ${r.dBins} KE bins used `
-      + `&mdash; smallest and flattest at the correct E<sub>beam</sub>`
-    : 'not enough g.s. events in the fit window to measure &delta;';
-
-  // Ex recomputed from the corrected KE
-  const fitC = fitGauss(r.hExC, s);
-  views.cExC = drawHist($('cExC'), r.hExC, s, {showFit:true, fit:fitC, nb:s.exBins,
-    title: 'E_x from corrected KE'});
-  $('exCNote').innerHTML = fitC
-    ? `g.s. &mu; ${fitC.mu >= 0 ? '+' : ''}${fitC.mu.toFixed(3)} &middot; &sigma; ${fitC.sig.toFixed(3)} MeV`
-      + (fit ? ` &nbsp;(uncorrected &sigma; ${fit.sig.toFixed(3)})` : '')
-    : '&nbsp;';
 
   views.cEt = drawHeat($('cEt'), r.hEt, s.cmBins, s.etExBins, 0, 180, s.exLo, s.exHi,
                        '\\theta_{cm}  (deg)', 'E_x  (MeV)', s, c => {
