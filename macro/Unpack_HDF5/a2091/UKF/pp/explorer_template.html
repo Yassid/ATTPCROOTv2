@@ -213,6 +213,14 @@ footer{
     </div>
 
     <div class="grp">
+      <div class="eyebrow">kinematics correction</div>
+      <div class="row"><label class="check"><input type="checkbox" id="kcOn"> apply &theta; correction</label></div>
+      <div class="row"><label for="kcSlope">slope [deg/MeV]</label><input type="number" id="kcSlope" step="0.005" value="0.09"></div>
+      <div class="row"><label for="kcPivot">pivot KE [MeV]</label><input type="number" id="kcPivot" step="0.5" value="13"></div>
+      <div class="row"><span class="mono num" id="kcNote" style="font-size:11.5px;color:var(--ink-3)"></span></div>
+    </div>
+
+    <div class="grp">
       <div class="eyebrow">cuts</div>
       <div class="row"><label for="chi2">&chi;&sup2;/ndf &lt;</label><input type="number" id="chi2" step="0.5" value="5"></div>
       <div class="row"><label>&theta;<sub>lab</sub> [deg]</label></div>
@@ -386,7 +394,8 @@ function kinLocus(Eb, Ex) {
 const $ = id => document.getElementById(id);
 const IDS = ['ebeam','chi2','thLo','thHi','keLo','keHi','exBins','exLo','exHi','fitLo','fitHi',
              'thBins','thMax','keBins','keMax','cmBins','etExBins','cmLo','cmHi','slBins',
-             'vzLo','vzHi','vzBins','vzExBins'];
+             'vzLo','vzHi','vzBins','vzExBins',
+             'kcSlope','kcPivot'];
 
 /* vertex z is only meaningful if the cache actually carries it: ex_C15.C hardcoded 0
    before 2026-07-26, and old caches have no column at all. Detect a flat/absent
@@ -397,7 +406,7 @@ const HAS_VZ = FITTERS.some(f => {
   for (let i = 1; i < v.length; ++i) if (v[i] !== v[0]) return true;
   return false;
 });
-const FLAGS = ['logY','logZ','kinLines'];
+const FLAGS = ['logY','logZ','kinLines','kcOn'];
 const DEFAULTS = {};
 
 function readState() {
@@ -423,9 +432,38 @@ function readState() {
 /* ---------------------------------------------------------------------------
    histogramming
    ------------------------------------------------------------------------ */
+/* ---------------------------------------------------------------------------
+   kinematics correction
+
+   The reconstructed polar angle carries a bias that grows with the ejectile energy, so it is
+   straightened with a shift LINEAR IN KE about a pivot energy:
+
+       theta -> theta - slope * (KE - pivot)
+
+   The reference implementation (Spyral notebook, 16C(p,d), TB 20-510) uses
+       polar = polar - (2*pi/4000)*(kinetic_energy - kethe),  kethe = 13
+   and 2*pi/4000 rad/MeV is exactly 0.09 deg/MeV. BOTH numbers are specific to THAT experiment:
+   the slope starts from 0.09 only as a first guess and must be re-tuned here, and the 13 MeV pivot
+   does not carry over at all -- the pivot defaults instead to the median KE of whatever data is
+   loaded, so the correction begins as a rotation about this dataset's own centre. The correction
+   is OFF until the checkbox is ticked.
+
+   NOTE the two parameters are not independent: theta - slope*(KE - pivot) = theta - slope*KE +
+   slope*pivot, so the pivot only sets a constant theta offset. Tune the slope for the SHAPE and
+   the pivot for the overall placement.
+
+   This is a correction to theta, not to KE, and that matters: it is the whole FAMILY of Ex loci
+   that has to line up at once, so one two-parameter correction is strongly constrained rather than
+   free to absorb anything. Sweep the slope and pivot until every band sits on its curve in the
+   KE-vs-theta panel.
+--------------------------------------------------------------------------- */
+function thCorr(s, th, ke) {
+  return s.kcOn ? th - s.kcSlope*(ke - s.kcPivot) : th;
+}
+
 function pass(d, i, s) {
   return d.c2[i] <= s.chi2
-      && d.th[i] >= s.thLo && d.th[i] <= s.thHi
+      && thCorr(s, d.th[i], d.ke[i]) >= s.thLo && thCorr(s, d.th[i], d.ke[i]) <= s.thHi
       && d.ke[i] >= s.keLo && d.ke[i] <= s.keHi
       && (!HAS_VZ || !d.vz || (d.vz[i] >= s.vzLo && d.vz[i] <= s.vzHi));
 }
@@ -437,7 +475,7 @@ function exOnly(name, s) {
   if (!d) return h;
   for (let i = 0; i < d.ke.length; ++i) {
     if (!pass(d, i, s)) continue;
-    const [ex] = kine2b(s.ebeam, d.th[i]*Math.PI/180, d.ke[i]);
+    const [ex] = kine2b(s.ebeam, thCorr(s, d.th[i], d.ke[i])*Math.PI/180, d.ke[i]);
     if (!isFinite(ex)) continue;
     const b = Math.floor((ex - s.exLo)/exW);
     if (b >= 0 && b < nEx) h[b]++;
@@ -461,7 +499,7 @@ function compute(s) {
   const d = DATA(), N = d.ke.length;
   for (let i = 0; i < N; ++i) {
     if (!pass(d, i, s)) continue;
-    const ke = d.ke[i], th = d.th[i];
+    const ke = d.ke[i], th = thCorr(s, d.th[i], ke);
     // KE vs theta_lab map (0..thMax deg)
     const bx = Math.floor(th/s.thMax*s.thBins), by = Math.floor(ke/s.keMax*s.keBins);
     if (bx >= 0 && bx < s.thBins && by >= 0 && by < s.keBins) hKT[by*s.thBins + bx]++;
@@ -1119,6 +1157,15 @@ function init() {
 
   setEbeam(CFG.ebeam0);
   $("keHi").value = 1000; $("thHi").value = 180;
+  // pivot defaults to THIS dataset's median KE, not the 13 MeV of the 16C(p,d) reference slide
+  {
+    const kv = Array.from(DATA().ke).filter(v => v > 0).sort((a, b) => a - b);
+    if (kv.length) {
+      const med = kv[kv.length >> 1];
+      $('kcPivot').value = (Math.round(med*2)/2).toFixed(1);
+      $('kcNote').textContent = 'pivot preset to median KE = ' + med.toFixed(1) + ' MeV';
+    }
+  }
   for (const id of IDS) DEFAULTS[id] = $(id).value;
   for (const id of FLAGS) DEFAULTS[id] = $(id).checked;
 
