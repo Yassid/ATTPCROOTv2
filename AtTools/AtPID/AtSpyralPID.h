@@ -24,8 +24,13 @@ struct AtSpyralResult {
    double azimuthal{0.0};  // azimuthal angle (rad)
    double radius{0.0};     // fitted first-arc circle radius (mm)
    int direction{-1};      // 0 forward, 1 backward, -1 none
-   int nPoints{0};         // points used
-   int trackID{-1};        // source AtTrack::GetTrackID() (so cached PID matches by ID, not array position)
+   int nPoints{0};         // points used (after the z-tie collapse, so < nClusters)
+   int nClusters{0};       // clusters on the source track -- the usual PID quality cut. Stored so a
+                           // gate can be drawn from the PID output alone, without reopening the
+                           // (much larger) pattern file just to count clusters.
+   int trackID{-1};        // source AtTrack::GetTrackID(). NOTE this is AtTrackFinderTC's CLUSTER
+                           // LABEL, not the track's array position -- a lone track can have ID 2.
+                           // Match on it; never assume ID == index.
    ROOT::Math::XYZPoint vertex; // reaction vertex (mm)
    ROOT::Math::XYZPoint center; // spiral center (mm)
    bool valid{false};

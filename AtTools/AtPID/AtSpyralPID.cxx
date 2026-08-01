@@ -214,6 +214,16 @@ AtSpyralResult AtSpyralPID::Estimate(AtTrack &track) const
 {
    AtSpyralResult res;
 
+   // Stamp the identity and quality fields FIRST, before any of the early returns below, so that
+   // even a track whose PID fails still carries them. A gate is drawn on the whole landscape,
+   // including the rejects, and having these here means that can be done from the PID output
+   // alone -- no need to reopen the pattern file to recover which track this was or how big it was.
+   res.trackID = track.GetTrackID();
+   {
+      auto *hc = track.GetHitClusterArray();
+      res.nClusters = hc ? static_cast<int>(hc->size()) : 0;
+   }
+
    // gather trajectory points (x,y,z,charge), sorted ascending in z.
    // Faithful to Spyral: use the AtHit point cloud (GetHitArray). Optionally fall
    // back to the coarser merged hit-clusters.

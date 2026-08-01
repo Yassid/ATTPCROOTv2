@@ -58,12 +58,17 @@ void AtPIDTask::Exec(Option_t * /*opt*/)
       return;
 
    auto *pidEvent = new (fPIDArray[0]) AtPIDEvent();
+   // One entry per pattern track, in order, in BOTH vectors -- downstream code may rely on that
+   // parallelism. It should still prefer matching on trackID, because a fitted track records only
+   // its ID and AtTrackFinderTC's ID is a cluster label, not an array position.
    for (auto &track : patternEvent->GetTrackCand()) {
       AtTrack &tr = const_cast<AtTrack &>(track);
-      pidEvent->AddClassic(fClassicEst.Estimate(tr));
-      auto sp = fSpyralEst.Estimate(tr);
-      sp.trackID = tr.GetTrackID(); // stamp source trackID for ID-based matching downstream
-      pidEvent->AddSpyral(sp);
+      auto cl = fClassicEst.Estimate(tr);
+      cl.trackID = tr.GetTrackID();
+      pidEvent->AddClassic(cl);
+      // AtSpyralPID stamps trackID/nClusters itself, before its own early returns, so even
+      // tracks with an invalid PID come back identified.
+      pidEvent->AddSpyral(fSpyralEst.Estimate(tr));
    }
 }
 

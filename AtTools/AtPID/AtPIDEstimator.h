@@ -22,6 +22,8 @@ struct AtPIDResult {
    double polar{0.0};     // polar angle (rad, digi frame) from PRA
    double azimuthal{0.0}; // azimuthal angle (rad) from PRA
    int nClusters{0};      // number of clusters (or hits) used — for quality cuts
+   int trackID{-1};       // source AtTrack::GetTrackID(), same convention as AtSpyralResult:
+                          // AtTrackFinderTC's cluster LABEL, not the array position
    ROOT::Math::XYZPoint vertex;
    bool valid{false};
 };
