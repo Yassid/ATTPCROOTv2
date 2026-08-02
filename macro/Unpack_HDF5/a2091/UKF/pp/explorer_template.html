@@ -216,7 +216,14 @@ footer{
       <div class="eyebrow">kinematics correction</div>
       <div class="row"><label class="check"><input type="checkbox" id="kcOn"> apply &theta; correction</label></div>
       <div class="row"><label for="kcDenom">N in 2&pi;/N [rad/MeV]</label><input type="number" id="kcDenom" step="50" value="4000"></div>
+      <!-- The slider drives the SLOPE, not N: N is inverse (360/N deg/MeV), so a linear slider on
+           it spends nearly all its travel in the small-slope region and skips through the range
+           that actually matters. Slope is linear, signed, and is what the panels respond to; N
+           stays the stored parameter so saved params files keep working. -->
+      <input type="range" id="kcSlopeR" min="-0.5" max="0.5" step="0.002" value="0.09">
+      <div class="row"><span class="mono num" id="kcSlopeLbl" style="font-size:11.5px;color:var(--ink-3)"></span></div>
       <div class="row"><label for="kcPivot">kethe [MeV]</label><input type="number" id="kcPivot" step="0.5" value="13"></div>
+      <input type="range" id="kcPivotR" min="0" max="60" step="0.5" value="13">
       <div class="row"><span class="mono num" id="kcNote" style="font-size:11.5px;color:var(--ink-3)"></span></div>
     </div>
 
@@ -245,9 +252,14 @@ footer{
       <div class="eyebrow">maps</div>
       <div class="sublab">KE vs &theta;<sub>lab</sub></div>
       <div class="row"><label for="thBins">&theta;<sub>lab</sub> bins</label><input type="number" id="thBins" step="10" value="100"></div>
-      <div class="row"><label for="thMax">&theta;<sub>lab</sub> max</label><input type="number" id="thMax" step="5" value="95"></div>
+      <!-- min as well as max: these two maps carry the kinematic loci, so being able to zoom
+           onto the part of the fan where the g.s. curve meets the data is the whole point of
+           the panel. Range is display only -- it never removes events, that is what CUTS does. -->
+      <div class="row"><label>&theta;<sub>lab</sub> range [deg]</label></div>
+      <div class="pair"><input type="number" id="thMin" step="5" value="0"><input type="number" id="thMax" step="5" value="95"></div>
       <div class="row"><label for="keBins">KE bins</label><input type="number" id="keBins" step="10" value="150"></div>
-      <div class="row"><label for="keMax">KE max</label><input type="number" id="keMax" step="1" value="40"></div>
+      <div class="row"><label>KE range [MeV]</label></div>
+      <div class="pair"><input type="number" id="keMin" step="1" value="0"><input type="number" id="keMax" step="1" value="40"></div>
       <div class="sublab">E<sub>x</sub> vs &theta;<sub>cm</sub></div>
       <div class="row"><label for="cmBins">&theta;<sub>cm</sub> bins</label><input type="number" id="cmBins" step="10" value="90"></div>
       <div class="row"><label for="etExBins">E<sub>x</sub> bins</label><input type="number" id="etExBins" step="10" value="200"></div>
@@ -399,7 +411,7 @@ function kinLocus(Eb, Ex) {
    ------------------------------------------------------------------------ */
 const $ = id => document.getElementById(id);
 const IDS = ['ebeam','chi2','thLo','thHi','keLo','keHi','exBins','exLo','exHi','fitLo','fitHi',
-             'thBins','thMax','keBins','keMax','cmBins','etExBins','cmLo','cmHi','slBins',
+             'thBins','thMin','thMax','keBins','keMin','keMax','cmBins','etExBins','cmLo','cmHi','slBins',
              'vzLo','vzHi','vzBins','vzExBins',
              'kcDenom','kcPivot'];
 
@@ -429,8 +441,12 @@ function readState() {
   s.keBins   = nb(s.keBins, 150);
   s.cmBins   = nb(s.cmBins, 90);
   s.vzBins   = nb(s.vzBins, 120);
-  if (!(s.thMax > 0)) s.thMax = 95;
-  if (!(s.keMax > 0)) s.keMax = 40;
+  // a min typed above its max would give a zero or negative span and divide the binning by it,
+  // so fall back to the full default window rather than rendering an empty canvas
+  if (!isFinite(s.thMin)) s.thMin = 0;
+  if (!isFinite(s.keMin)) s.keMin = 0;
+  if (!(s.thMax > s.thMin)) { s.thMin = 0; s.thMax = 95; }
+  if (!(s.keMax > s.keMin)) { s.keMin = 0; s.keMax = 40; }
   if (!(s.vzHi > s.vzLo)) { s.vzLo = -100; s.vzHi = 1100; }
   return s;
 }
@@ -518,12 +534,13 @@ function compute(s) {
   for (let i = 0; i < N; ++i) {
     if (!pass(d, i, s)) continue;
     const ke = d.ke[i], th = thCorr(s, d.th[i], ke);
-    // KE vs theta_lab map (0..thMax deg)
-    const bx = Math.floor(th/s.thMax*s.thBins), by = Math.floor(ke/s.keMax*s.keBins);
+    // KE vs theta_lab map (thMin..thMax deg, keMin..keMax MeV)
+    const bx = Math.floor((th - s.thMin)/(s.thMax - s.thMin)*s.thBins),
+          by = Math.floor((ke - s.keMin)/(s.keMax - s.keMin)*s.keBins);
     if (bx >= 0 && bx < s.thBins && by >= 0 && by < s.keBins) hKT[by*s.thBins + bx]++;
     // the tuning panel: same events, theta corrected, always applied
     const thc = thCorrForce(s, d.th[i], ke);
-    const bxc = Math.floor(thc/s.thMax*s.thBins);
+    const bxc = Math.floor((thc - s.thMin)/(s.thMax - s.thMin)*s.thBins);
     if (bxc >= 0 && bxc < s.thBins && by >= 0 && by < s.keBins) hKTc[by*s.thBins + bxc]++;
     const [ex, tcm] = kine2b(s.ebeam, th*Math.PI/180, ke);
     if (!isFinite(ex)) continue;
@@ -884,19 +901,20 @@ function render() {
       g.strokeStyle = col; g.lineWidth = 2; g.setLineDash(dash); g.beginPath();
       let started = false;
       for (const [th, ke] of pts) {
-        if (th < 0 || th > s.thMax || ke > s.keMax) { started = false; continue; }
-        const x = PAD.l + th/s.thMax*pw, y = PAD.t + ph - ke/s.keMax*ph;
+        if (th < s.thMin || th > s.thMax || ke < s.keMin || ke > s.keMax) { started = false; continue; }
+        const x = PAD.l + (th - s.thMin)/(s.thMax - s.thMin)*pw,
+              y = PAD.t + ph - (ke - s.keMin)/(s.keMax - s.keMin)*ph;
         started ? g.lineTo(x, y) : g.moveTo(x, y); started = true;
       }
       g.stroke(); g.setLineDash([]);
     }
   };
-  views.cKT = drawHeat($('cKT'), r.hKT, s.thBins, s.keBins, 0, s.thMax, 0, s.keMax,
+  views.cKT = drawHeat($('cKT'), r.hKT, s.thBins, s.keBins, s.thMin, s.thMax, s.keMin, s.keMax,
                        '\\theta_{lab}  (deg)', 'ejectile KE  (MeV)', s, lociOverlay,
                        'ejectile KE vs \\theta_{lab}  (raw)');
 
   // the tuning panel: identical events and identical loci, theta corrected
-  views.cKc = drawHeat($('cKc'), r.hKTc, s.thBins, s.keBins, 0, s.thMax, 0, s.keMax,
+  views.cKc = drawHeat($('cKc'), r.hKTc, s.thBins, s.keBins, s.thMin, s.thMax, s.keMin, s.keMax,
                        '\\theta_{lab} corrected  (deg)', 'ejectile KE  (MeV)', s, lociOverlay,
                        'corrected: \\theta - slope(KE - kethe)');
   {
@@ -971,6 +989,20 @@ function zeroGs() {
 }
 
 function setEbeam(v) { $('ebeam').value = v; $('ebeamR').value = v; }
+
+/** Push the two kinematics-correction NUMBER boxes out to their sliders and relabel. Called
+    whenever N or kethe is typed, params are restored, or the pivot is preset from the data,
+    so the sliders never drift out of step with the values the panels actually use. */
+function syncKcSliders() {
+  const N = parseFloat($('kcDenom').value);
+  const sl = (isFinite(N) && Math.abs(N) > 1e-9) ? 360/N : 0;
+  const r = $('kcSlopeR');
+  r.value = Math.max(parseFloat(r.min), Math.min(parseFloat(r.max), sl));
+  $('kcPivotR').value = $('kcPivot').value;
+  // flag the clamp: past +-0.5 deg/MeV the handle would sit at the end and silently lie
+  $('kcSlopeLbl').textContent = 'slope ' + sl.toFixed(4) + ' °/MeV'
+    + (Math.abs(sl) > parseFloat(r.max) ? '  (beyond slider range)' : '');
+}
 
 /* ---- hover readout ---- */
 function hookTip(cvId, tipId, fmt) {
@@ -1060,6 +1092,7 @@ function applyParams(p) {
   for (const k of Object.keys(c)) if (!IDS.includes(k)) skipped.push(k);
   for (const k of Object.keys(f)) if (!FLAGS.includes(k) && k !== 'cmpFit') skipped.push(k);
   if ($('ebeam')) $('ebeamR').value = $('ebeam').value;
+  syncKcSliders();
   render();
   let msg = 'restored ' + n + ' control' + (n === 1 ? '' : 's');
   if (p.tag && CFG.tag && p.tag !== CFG.tag) msg += ' -- WARNING: saved for "' + p.tag + '", page is "' + CFG.tag + '"';
@@ -1137,13 +1170,19 @@ function saveCsv() {
     const v = views[id];
     if (!v) continue;
     lines.push('', `# ---- panel ${id} (${v.kind}) ----`);
+    // axis ranges, so the panel can be rebuilt EXACTLY (a sparse 2D block alone cannot say where
+    // its empty edge bins were). pp/csv_to_root.C relies on these lines.
     if (v.kind === 'hist') {
       const lo = st.exLo, hi = st.exHi;
       const w = (hi - lo)/v.nb;
+      lines.push(`# axes nb=${v.nb},lo=${lo},hi=${hi}`);
+      lines.push(`# title ${(v.title||id).replace(/\n/g,' ')}`);
       lines.push('bin_centre_MeV,counts');
       for (let b = 0; b < v.nb; ++b) lines.push(`${(lo + (b+0.5)*w).toFixed(6)},${v.hist[b]}`);
     } else {
       const dx = (v.xhi - v.xlo)/v.nx, dy = (v.yhi - v.ylo)/v.ny;
+      lines.push(`# axes nx=${v.nx},xlo=${v.xlo},xhi=${v.xhi},ny=${v.ny},ylo=${v.ylo},yhi=${v.yhi}`);
+      lines.push(`# title ${(v.title||id).replace(/\n/g,' ')}`);
       lines.push('x_centre,y_centre,counts');
       for (let iy = 0; iy < v.ny; ++iy)
         for (let ix = 0; ix < v.nx; ++ix) {
@@ -1202,17 +1241,32 @@ function init() {
       const med = kv[kv.length >> 1];
       $('kcPivot').value = (Math.round(med*2)/2).toFixed(1);
       $('kcNote').textContent = 'pivot preset to median KE = ' + med.toFixed(1) + ' MeV';
+      // span the pivot slider over THIS dataset (99th pct, so a few runaway fits do not
+      // stretch it), else a fixed 0-60 is useless for a channel that lives below 10 MeV
+      const hi = kv[Math.min(kv.length - 1, Math.floor(0.99*kv.length))];
+      $('kcPivotR').max = Math.max(5, Math.ceil(hi));
     }
   }
+  syncKcSliders();
   for (const id of IDS) DEFAULTS[id] = $(id).value;
   for (const id of FLAGS) DEFAULTS[id] = $(id).checked;
 
   for (const id of IDS) $(id).addEventListener('input', () => {
     if (id === 'ebeam') $('ebeamR').value = $('ebeam').value;
+    if (id === 'kcDenom' || id === 'kcPivot') syncKcSliders();
     render();
   });
   for (const id of FLAGS) $(id).addEventListener('change', render);
   $('ebeamR').addEventListener('input', () => { $('ebeam').value = $('ebeamR').value; render(); });
+  // slope slider -> N. Zero slope means "no tilt", which is N = infinity; store a big finite
+  // number so kcSlopeDeg's 360/N lands on ~0 instead of producing Infinity/NaN downstream.
+  $('kcSlopeR').addEventListener('input', () => {
+    const sl = parseFloat($('kcSlopeR').value);
+    $('kcDenom').value = (Math.abs(sl) < 1e-6) ? 1e9 : (360/sl).toFixed(1);
+    $('kcSlopeLbl').textContent = 'slope ' + sl.toFixed(4) + ' °/MeV';
+    render();
+  });
+  $('kcPivotR').addEventListener('input', () => { $('kcPivot').value = $('kcPivotR').value; render(); });
   $('zeroBtn').addEventListener('click', zeroGs);
   $('pngBtn').addEventListener('click', savePng);
   $('panelBtn').addEventListener('click', savePanels);
@@ -1229,7 +1283,7 @@ function init() {
   $('resetBtn').addEventListener('click', () => {
     for (const id of IDS) $(id).value = DEFAULTS[id];
     for (const id of FLAGS) $(id).checked = DEFAULTS[id];
-    setEbeam(CFG.ebeam0); render();
+    setEbeam(CFG.ebeam0); syncKcSliders(); render();
   });
   $('themeBtn').addEventListener('click', () => {
     const cur = document.documentElement.getAttribute('data-theme')
