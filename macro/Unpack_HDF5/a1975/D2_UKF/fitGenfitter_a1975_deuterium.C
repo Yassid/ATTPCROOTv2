@@ -21,34 +21,37 @@
 /// macro used -2.85. The correct sign for the D2 backward protons must be verified
 /// on the fitted vertex/KE -- bField is an arg so both can be tried quickly.
 
+/// Species is parametrised so the same macro serves every D2 ejectile; the defaults are the
+/// PROTON hypothesis of 16C(d,p)17C, so existing calls are unchanged.
+///   (d,p) 17C : defaults                          -> <run>_genfitter_p<suffix>.root
+///   (d,t) 15C : pdg 1000010030, 3.01550072, Z 1, speciesTag "t"
+/// The eloss file is empty either way (genfit's internal model), so no per-species table is needed.
 void fitGenfitter_a1975_deuterium(TString fileName = "run_0016", Long64_t nEvents = -1,
                                   TString ioDir = "/mnt/f/a1975/reco_d2/", TString outSuffix = "",
                                   TString outDir = "", Double_t bField = -2.85, Int_t minIter = 2, Int_t maxIter = 5,
                                   TString pidGate = "", Double_t measSigma = 4.0, Double_t thetaMinDeg = 10.0,
                                   Double_t thetaMaxDeg = 170.0, Bool_t matEffects = kFALSE,
-                                  Bool_t backwardSeedFix = kTRUE)
+                                  Bool_t backwardSeedFix = kTRUE, Int_t pdg = 2212,
+                                  Double_t massAmu = 1.00782503207, Int_t Z = 1,
+                                  TString speciesTag = "p", TString recoSuffix = "_reco")
 {
    gSystem->Load("libAtReconstruction.so");
    FairLogger::GetLogger()->SetLogScreenLevel("WARNING");
-
-   // PROTON ejectile hypothesis for 16C(d,p)17C
-   const Int_t pdg = 2212;
-   const Double_t massAmu = 1.00782503207;
-   const Int_t Z = 1;
 
    TString dir = getenv("VMCWORKDIR");
    gSystem->Setenv("GEOMPATH", (dir + "/geometry/").Data());
    TString geoManFile = dir + "/geometry/ATTPC_H1bar_geomanager.root";
    TString digiParFile = dir + "/parameters/ATTPC.a1975_deuterium.par"; // D2 gas
-   TString inputFile = ioDir + fileName + "_reco.root";
+   TString inputFile = ioDir + fileName + recoSuffix + ".root";
    TString outBase = (outDir.Length() ? outDir : ioDir);
-   TString outputFile = outBase + fileName + "_genfitter_p" + outSuffix + ".root";
+   TString outputFile = outBase + fileName + "_genfitter_" + speciesTag + outSuffix + ".root";
 
    if (gSystem->AccessPathName(inputFile.Data())) {
       std::cout << "\033[1;31mERROR: " << inputFile << " not found.\033[0m\n";
       return;
    }
-   std::cout << "\033[1;33m=== fitGenfitter_a1975_deuterium (16C(d,p)17C, PROTON hyp) ===\033[0m\n"
+   std::cout << "\033[1;33m=== fitGenfitter_a1975_deuterium (D2 target, ejectile '" << speciesTag
+             << "' pdg=" << pdg << " m=" << massAmu << " amu Z=" << Z << ") ===\033[0m\n"
              << "  in   : " << inputFile << "\n  out  : " << outputFile << "\n  B=" << bField << "  iter "
              << minIter << "-" << maxIter << "  theta[" << thetaMinDeg << "," << thetaMaxDeg << "]\n";
 
@@ -67,7 +70,7 @@ void fitGenfitter_a1975_deuterium(TString fileName = "run_0016", Long64_t nEvent
       gf->Get("FAIRGeom");
    }
 
-   std::cout << "  particle: pdg=" << pdg << " massAmu=" << massAmu << " Z=" << Z << " (proton)\n";
+   std::cout << "  particle: pdg=" << pdg << " massAmu=" << massAmu << " Z=" << Z << " ('" << speciesTag << "')\n";
    // empty eloss file -> genfit internal; noMatEffects = !matEffects
    auto fitter = std::make_unique<EventFit::AtGenfitter>(bField, pdg, massAmu, Z, /*elossFile*/ "", !matEffects,
                                                          minIter, maxIter);

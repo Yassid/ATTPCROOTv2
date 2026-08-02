@@ -71,23 +71,25 @@ void fitUKF_a1975_deuterium(TString fileName = "run_0016", Long64_t nEvents = -1
                             Int_t bFieldSign = -1, Double_t bFieldMag = 2.85, Double_t gasDensity = 9.0e-5,
                             TString ioDir = "/mnt/f/a1975/reco_d2/", TString outDir = "", Double_t measSigma = 2.0,
                             Double_t momSigmaFrac = 0.3, Int_t nIter = 1, Int_t minClusters = 4,
-                            Bool_t clusterDirSeed = kTRUE)
+                            Bool_t clusterDirSeed = kTRUE, TString recoSuffix = "_reco",
+                            TString outTag = "_genfitter_p_UKF")
 {
    gSystem->Load("libAtReconstruction.so");
    gSystem->Load("libAtTools.so");
    FairLogger::GetLogger()->SetLogScreenLevel("WARNING");
 
    TString dir = getenv("VMCWORKDIR");
-   TString inputFile = ioDir + fileName + "_reco.root";
+   TString inputFile = ioDir + fileName + recoSuffix + ".root";
    TString outBase = (outDir.Length() ? outDir : ioDir);
-   TString outputFile = outBase + fileName + "_genfitter_p_UKF.root"; // ex_dp reads via fitSuffix="_UKF"
+   // outTag keeps the historical (d,p) name by default; (d,t) passes "_genfitter_t_UKF"
+   TString outputFile = outBase + fileName + outTag + ".root";
    TString digiParFile = dir + "/parameters/ATTPC.a1975_deuterium.par";
 
    if (gSystem->AccessPathName(inputFile.Data())) {
       std::cout << "\033[1;31mERROR: " << inputFile << " not found.\033[0m\n";
       return;
    }
-   std::cout << "\033[1;33m=== fitUKF_a1975_deuterium (16C(d,p)17C, UKF, PROTON hyp) ===\033[0m\n"
+   std::cout << "\033[1;33m=== fitUKF_a1975_deuterium (D2 target, UKF, hyp: " << particles << ") ===\033[0m\n"
              << "  in : " << inputFile << "\n  out: " << outputFile << "\n  Bz=" << bFieldSign * bFieldMag
              << " T  particles=" << particles << "\n";
 
