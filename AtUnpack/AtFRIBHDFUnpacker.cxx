@@ -59,10 +59,11 @@ void AtFRIBHDFUnpacker::processData()
    fRawEvent->SetEventName(event_name.Data());
    std::size_t npads = n_pads(event_name.Data());
 
-   for (auto ipad = 0; ipad < npads; ++ipad)
+   for (std::size_t ipad = 0; ipad < npads; ++ipad)
       processPad(ipad);
 
-   end_raw_event(); // Close dataset
+   if (_dataset >= 0)
+      end_raw_event(); // Close dataset
 }
 
 void AtFRIBHDFUnpacker::processPad(std::size_t ipad)
@@ -92,8 +93,13 @@ std::size_t AtFRIBHDFUnpacker::n_pads(std::string i_raw_event)
 {
    std::string dataset_name = i_raw_event;
    auto dataset_dims = open_dataset(_group, dataset_name.c_str());
-   if (std::get<0>(dataset_dims) == 0)
+   // open_dataset() signals failure with id -1 and a 1-element dims vector, so testing for 0 both
+   // kept an invalid id in _dataset and read dims[1] out of bounds. The garbage pad count that came
+   // back (633k on a1975 run_0022) then allocated one 24 kB trace per phantom pad until the job died.
+   if (std::get<0>(dataset_dims) < 0 || std::get<1>(dataset_dims).size() < 2) {
+      _dataset = -1;
       return 0;
+   }
    _dataset = std::get<0>(dataset_dims);
    return std::get<1>(dataset_dims)[1];
 }
