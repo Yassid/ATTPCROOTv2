@@ -8,4 +8,8 @@ plots/
 log_run_*.txt
 fitlog_*.txt
 ukflog_*.txt
+iclog_*.txt
 *.log
+# ROOT ACLiC leftovers from macros run with the "+" suffix
+*_C.d
+*_C_ACLiC_dict*
