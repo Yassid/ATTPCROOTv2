@@ -275,6 +275,19 @@ AtFittedTrack *AtGenfitter::GetFittedTrack(AtTrack *track, AtFitMetadata * /*fit
          chi2 = st->getChi2();
          ndf = st->getNdf();
          genfit::MeasuredStateOnPlane fitState = gfTrack->getFittedState();
+         // getFittedState() with no argument is the FIRST MEASUREMENT POINT, not the reaction
+         // vertex. The gap between them is unmeasured gas the ejectile already crossed, so its
+         // energy loss there is missing from every fitted momentum. Extrapolating back to the
+         // beam axis recovers it -- but only while material effects are on, since without them
+         // the transport is geometric and |p| comes back unchanged.
+         if (fBackExtrapToAxis) {
+            try {
+               rep->extrapolateToLine(fitState, TVector3(0., 0., 0.), TVector3(0., 0., 1.));
+            } catch (genfit::Exception &) {
+               // a track that never approaches the axis, or an extrapolation that runs away,
+               // keeps the first-point state rather than being dropped
+            }
+         }
          fitState.getPosMomCov(posRes, momRes, covRes);
          fittedPts.clear();
          int npts = gfTrack->getNumPointsWithMeasurement();

@@ -86,6 +86,21 @@ public:
    /// off, so the validated forward (p,d)/(p,p) pipelines are byte-for-byte preserved.
    void SetBackwardSeedFix(Bool_t on) { fBackwardSeedFix = on; }
 
+   /// Back-extrapolate the vertex-end state to the beam axis before reading position and
+   /// momentum off it. genfit's getFittedState() with no argument is the FIRST MEASUREMENT
+   /// POINT, not the reaction vertex: between them lies unmeasured gas in which the ejectile
+   /// already lost energy, and that loss is never restored. AtFitterUKF has done this since
+   /// the start (AtFitterUKF.cxx, "Back-extrapolation to beam axis") and on a1975 16C(d,t)15C
+   /// it is worth a great deal -- with the correct D2 density it opens the reconstructed
+   /// g.s.-to-3.103 spacing from 2.919 to 3.192 (truth 3.103) and cuts sigma 0.252 -> 0.155.
+   ///
+   /// ONLY MEANINGFUL WITH MATERIAL EFFECTS ON. With setNoEffects(true) the extrapolation
+   /// transports the state geometrically and leaves |p| untouched, so it moves the vertex
+   /// and changes nothing about the energy. It is also only as good as the material: the
+   /// medium in the loaded geometry has to be the actual target gas, not a stand-in.
+   /// Default off, so every existing pipeline is unchanged.
+   void SetBackExtrapToAxis(Bool_t on) { fBackExtrapToAxis = on; }
+
    /// Acceptance window on the fitted polar angle (deg). Tracks outside are DROPPED
    /// as unphysical (near-beam / backward). Default 10-170 deg.
    void SetThetaWindow(Double_t minDeg, Double_t maxDeg)
@@ -209,6 +224,7 @@ private:
    Bool_t fInit{kFALSE};
 
    Bool_t fBackwardSeedFix{kFALSE};    // seed backward (GeoTheta>90) tracks from the far end (see setter)
+   Bool_t fBackExtrapToAxis{kFALSE};   // extrapolate the vertex-end state to the beam axis (see setter)
    Bool_t fMatEffectsFallback{kTRUE};  // retry a failed matFX fit without material effects (flagged; see setter)
 
    Bool_t fMergeContinuity{kFALSE};    // merge PRA-split fragments of one track before fitting
