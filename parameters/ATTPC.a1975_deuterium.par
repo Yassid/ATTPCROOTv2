@@ -30,11 +30,7 @@ TB0:Int_t                       98   # Time Bucket reference for micromegas posi
 LorentzAngle:Double_t          0.0   # Lorentz Angle
 TBEntrance:Int_t               480   # Beam position at detector entrance in TB
 ZPadPlane:Double_t          1000.0   # Position of the micromegas pad plane
-Density:Double_t            0.0661   # mg/cm3 = g/cm3 * 1e3. D2 at 300 torr, 293 K, ideal gas.
-                                     # Was 0.197, which is D2 at ~900 torr and matched neither the
-                                     # stated pressure nor the target. NB deuterium: same Z as H2 but
-                                     # twice the A, so HALF the stopping per g/cm2 -- do not reuse an
-                                     # H2 density or an H2 material for energy loss in this gas.
+Density:Double_t            0.0661   # mg/cm3. D2 at 300 torr, 293 K
 ThetaPad:Double_t            110.9   # AT-TPC pad plane rotation
 ThetaRot:Double_t              0.0   # Second Lorentz Angle
 GasPressure:Double_t           300   # torr (was 600; the D2 target ran at 300)
