@@ -236,7 +236,16 @@ void AtPRAtask::Exec(Option_t *option)
 
       if (hitArray.size() > fMinNumHits && hitArray.size() < fMaxNumHits) {
          auto patternEvent = fPRA->FindTracks(event);
-         new (fPatternEventArray[0]) AtPatternEvent(std::move(*patternEvent));
+         // FindTracks returns nullptr on events it cannot handle -- an empty cloud, or a dnn of
+         // zero when the cloud contains coincident points. Dereferencing that killed the whole
+         // run on the first such event: a1975 run_0017 died at event 333 and took 38 of 39 runs
+         // in the production with it. The try/catch above does not help, a null dereference is
+         // not a runtime_error. Skip the event and carry on; the pattern array simply keeps no
+         // entry for it, which is what an unreconstructable event should produce anyway.
+         if (patternEvent)
+            new (fPatternEventArray[0]) AtPatternEvent(std::move(*patternEvent));
+         else
+            LOG(warning) << "AtPRAtask: pattern recognition returned nothing for this event, skipping it";
       }
 
    } catch (std::runtime_error e) {
