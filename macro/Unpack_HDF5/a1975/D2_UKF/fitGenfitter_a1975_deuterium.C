@@ -33,14 +33,22 @@ void fitGenfitter_a1975_deuterium(TString fileName = "run_0016", Long64_t nEvent
                                   Double_t thetaMaxDeg = 170.0, Bool_t matEffects = kFALSE,
                                   Bool_t backwardSeedFix = kTRUE, Int_t pdg = 2212,
                                   Double_t massAmu = 1.00782503207, Int_t Z = 1,
-                                  TString speciesTag = "p", TString recoSuffix = "_reco")
+                                  TString speciesTag = "p", TString recoSuffix = "_reco",
+                                  TString geoName = "ATTPC_H1bar_geomanager.root",
+                                  Bool_t backExtrap = kFALSE, Double_t manualElossDensity = 0, Int_t matA = 2)
 {
    gSystem->Load("libAtReconstruction.so");
    FairLogger::GetLogger()->SetLogScreenLevel("WARNING");
 
    TString dir = getenv("VMCWORKDIR");
    gSystem->Setenv("GEOMPATH", (dir + "/geometry/").Data());
-   TString geoManFile = dir + "/geometry/ATTPC_H1bar_geomanager.root";
+   // The geometry supplies genfit's MATERIAL, so it has to be the real target gas whenever
+   // matEffects is on. The default here is the historical H1bar, whose H_1bar medium is
+   // ordinary hydrogen and has nothing to do with a D2 target; pass
+   // ATTPC_D300torr_v2_geomanager.root (medium TargetD2_300: A 2.0141, Z 1, 6.564e-5 g/cm3)
+   // for these runs. With matEffects off the geometry only drives navigation and the choice
+   // is harmless, which is why this went unnoticed.
+   TString geoManFile = dir + "/geometry/" + geoName;
    TString digiParFile = dir + "/parameters/ATTPC.a1975_deuterium.par"; // D2 gas
    TString inputFile = ioDir + fileName + recoSuffix + ".root";
    TString outBase = (outDir.Length() ? outDir : ioDir);
@@ -78,6 +86,16 @@ void fitGenfitter_a1975_deuterium(TString fileName = "run_0016", Long64_t nEvent
    fitter->SetMeasSigma(measSigma);
    fitter->SetThetaWindow(thetaMinDeg, thetaMaxDeg); // keep BACKWARD protons (default clips at 170)
    fitter->SetBackwardSeedFix(backwardSeedFix);      // prototype: fix backward-track seed reversal
+   fitter->SetBackExtrapToAxis(backExtrap);
+   if (backExtrap)
+      std::cout << "  Back-extrapolation to beam axis: ON\n";
+   // Hand-applied dE/dx over the vertex gap, for the matEffects-OFF configuration: genfit stays
+   // fast and keeps its 85% good-fit rate, CATIMA supplies the energy the fit never saw.
+   if (manualElossDensity > 0) {
+      fitter->SetManualELoss(manualElossDensity, matA);
+      std::cout << "  Manual CATIMA eloss over the vertex gap: rho=" << manualElossDensity
+                << " g/cm3, target A=" << matA << "\n";
+   }
    if (backwardSeedFix)
       std::cout << "  \033[1;36mBackward seed-fix: ON\033[0m\n";
    if (pidGate.Length()) {

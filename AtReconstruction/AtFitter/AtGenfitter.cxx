@@ -7,6 +7,7 @@
 #include "AtPatternEvent.h"
 #include "AtSpacePointMeasurement.h"
 #include "AtSpyralPID.h"
+#include "AtELossCATIMA.h"
 #include "AtTrack.h"
 #include "AtTrackingEvent.h"
 
@@ -250,6 +251,7 @@ AtFittedTrack *AtGenfitter::GetFittedTrack(AtTrack *track, AtFitMetadata * /*fit
    trackCand.setPdgCode(fPDG);
 
    TVector3 posRes, momRes;
+   double vtxGapCm = 0.0; // vertex-to-first-cluster distance opened up by the back-extrapolation
    TMatrixDSym covRes(6);
    double chi2 = -1, ndf = -1;
    bool converged = false;
@@ -275,6 +277,7 @@ AtFittedTrack *AtGenfitter::GetFittedTrack(AtTrack *track, AtFitMetadata * /*fit
          chi2 = st->getChi2();
          ndf = st->getNdf();
          genfit::MeasuredStateOnPlane fitState = gfTrack->getFittedState();
+         const TVector3 posFirstHit = fitState.getPos(); // cm, before any extrapolation
          // getFittedState() with no argument is the FIRST MEASUREMENT POINT, not the reaction
          // vertex. The gap between them is unmeasured gas the ejectile already crossed, so its
          // energy loss there is missing from every fitted momentum. Extrapolating back to the
@@ -289,6 +292,7 @@ AtFittedTrack *AtGenfitter::GetFittedTrack(AtTrack *track, AtFitMetadata * /*fit
             }
          }
          fitState.getPosMomCov(posRes, momRes, covRes);
+         vtxGapCm = (posRes - posFirstHit).Mag();
          fittedPts.clear();
          int npts = gfTrack->getNumPointsWithMeasurement();
          for (int ip = 0; ip < npts; ++ip) {
@@ -336,6 +340,24 @@ AtFittedTrack *AtGenfitter::GetFittedTrack(AtTrack *track, AtFitMetadata * /*fit
    if (!std::isfinite(p) || p <= 0 || p > 1e6)
       return nullptr;
    double KE = std::sqrt(p * p + mass * mass) - mass;
+
+   // Hand-applied energy loss over the vertex gap. genfit fitted this track with material
+   // effects off, so |p| is the momentum at the FIRST CLUSTER; the ejectile had already
+   // crossed vtxGapCm of gas before that and arrived with more energy than the fit reports.
+   // One iteration is plenty: evaluate the loss at the first-cluster energy, then re-evaluate
+   // at the resulting (higher) vertex energy, which is where dE/dx should really be sampled.
+   if (fManualELoss && vtxGapCm > 0 && KE > 0) {
+      const double gapMM = vtxGapCm * 10.0;
+      double dE = fManualELoss->GetEnergyLoss(KE, gapMM);
+      if (std::isfinite(dE) && dE > 0)
+         dE = fManualELoss->GetEnergyLoss(KE + dE, gapMM);
+      if (std::isfinite(dE) && dE > 0 && dE < KE) {
+         KE += dE;
+         const double pNew = std::sqrt((KE + mass) * (KE + mass) - mass * mass);
+         if (std::isfinite(pNew) && pNew > 0)
+            momRes *= pNew / p; // direction is unchanged; only the magnitude is restored
+      }
+   }
 
    // drop unphysical near-beam / backward tracks by fitted polar angle
    double thetaFitDeg = momRes.Theta() * 180.0 / M_PI;
@@ -485,3 +507,13 @@ void AtGenfitter::FitEvent(AtTrackingEvent *trackingEvent, AtPatternEvent *patte
 }
 
 } // namespace EventFit
+
+void EventFit::AtGenfitter::SetManualELoss(Double_t density, Int_t matA)
+{
+   auto e = std::make_unique<AtTools::AtELossCATIMA>(density);
+   e->SetProjectile(static_cast<int>(std::round(fMassAmu)), fZ, fMassAmu);
+   std::vector<std::tuple<int, int, int>> mat;
+   mat.emplace_back(matA, 1, 1); // (A, Z, stoichiometry); Z=1 for both H and D
+   e->SetMaterial(mat);
+   fManualELoss = std::move(e);
+}

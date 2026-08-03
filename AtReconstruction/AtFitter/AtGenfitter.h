@@ -49,6 +49,7 @@ class AtHitCluster;
 namespace AtTools {
 class AtSpyralPID;
 class AtParticleID;
+class AtELossModel;
 } // namespace AtTools
 
 namespace EventFit {
@@ -100,6 +101,19 @@ public:
    /// medium in the loaded geometry has to be the actual target gas, not a stand-in.
    /// Default off, so every existing pipeline is unchanged.
    void SetBackExtrapToAxis(Bool_t on) { fBackExtrapToAxis = on; }
+
+   /// Add back, by hand, the energy the ejectile lost between the reaction vertex and the first
+   /// measured cluster. Meant to be used WITH SetBackExtrapToAxis and WITHOUT genfit material
+   /// effects: the extrapolation supplies the gap length geometrically, and CATIMA supplies the
+   /// dE/dx over it, so the fit keeps the stability and the 85%-good-fit rate it has with
+   /// material off (material on drops that to 60%) while still recovering the missing energy.
+   /// Deliberately approximate -- one iteration on the mean energy over the gap, no straggling,
+   /// no correction along the measured part of the track.
+   /// @param density  g/cm3 of the gas (D2 at 300 torr, 293 K is 6.61e-5)
+   /// @param matA     mass number of the target gas. 2 for deuterium; passing 1 here computes
+   ///                 the loss in ordinary hydrogen, which for the same mass density is twice
+   ///                 the stopping and is the mistake this whole exercise came out of.
+   void SetManualELoss(Double_t density, Int_t matA);
 
    /// Acceptance window on the fitted polar angle (deg). Tracks outside are DROPPED
    /// as unphysical (near-beam / backward). Default 10-170 deg.
@@ -225,6 +239,7 @@ private:
 
    Bool_t fBackwardSeedFix{kFALSE};    // seed backward (GeoTheta>90) tracks from the far end (see setter)
    Bool_t fBackExtrapToAxis{kFALSE};   // extrapolate the vertex-end state to the beam axis (see setter)
+   std::unique_ptr<AtTools::AtELossModel> fManualELoss; // optional hand-applied dE/dx over the vertex gap
    Bool_t fMatEffectsFallback{kTRUE};  // retry a failed matFX fit without material effects (flagged; see setter)
 
    Bool_t fMergeContinuity{kFALSE};    // merge PRA-split fragments of one track before fitting
