@@ -33,7 +33,7 @@ const std::map<TString, PSpecU> kParticleTableU = {
 const double kU_MeVu = 931.49410242;
 const double kE_Cu = 1.602176634e-19;
 
-std::unique_ptr<EventFit::AtFitterUKF> MakeHypoU(const TString &name, int bFieldSign, double bFieldMag,
+std::unique_ptr<EventFit::AtFitterUKF> MakeHypoU(const TString &name, int bFieldSign, double bFieldMag, int matA,
                                                  double gasDensity, double measSigma, double momSigmaFrac, int nIter,
                                                  int minClusters, bool clusterDirSeed)
 {
@@ -45,8 +45,12 @@ std::unique_ptr<EventFit::AtFitterUKF> MakeHypoU(const TString &name, int bField
    const double charge = p.Z * kE_Cu;
    auto eloss = std::make_unique<AtTools::AtELossCATIMA>(gasDensity);
    eloss->SetProjectile(p.A, p.Z, massAmu);
+   // Target material as (A, Z, stoichiometry). This was hardcoded to (1,1,1) -- ORDINARY
+   // HYDROGEN -- which is wrong for a D2 target: deuterium has the same Z but twice the A,
+   // so half the electrons per unit mass and half the stopping per g/cm2. Left at 1 by
+   // default so existing callers are unchanged; pass matA=2 for the deuterium target.
    std::vector<std::tuple<int, int, int>> mat;
-   mat.push_back(std::make_tuple(1, 1, 1));
+   mat.push_back(std::make_tuple(matA, 1, 1));
    eloss->SetMaterial(mat);
    auto ukf = std::make_unique<EventFit::AtFitterUKF>(charge, p.massMeV, std::move(eloss));
    ukf->SetBField(ROOT::Math::XYZVector(0, 0, bFieldSign * bFieldMag));
@@ -72,7 +76,7 @@ void fitUKF_a1975_deuterium(TString fileName = "run_0016", Long64_t nEvents = -1
                             TString ioDir = "/mnt/f/a1975/reco_d2/", TString outDir = "", Double_t measSigma = 2.0,
                             Double_t momSigmaFrac = 0.3, Int_t nIter = 1, Int_t minClusters = 4,
                             Bool_t clusterDirSeed = kTRUE, TString recoSuffix = "_reco",
-                            TString outTag = "_genfitter_p_UKF")
+                            TString outTag = "_genfitter_p_UKF", Int_t matA = 1)
 {
    gSystem->Load("libAtReconstruction.so");
    gSystem->Load("libAtTools.so");
@@ -106,7 +110,7 @@ void fitUKF_a1975_deuterium(TString fileName = "run_0016", Long64_t nEvents = -1
    for (int i = 0; i < toks->GetEntries(); ++i) {
       TString pname = ((TObjString *)toks->At(i))->GetString().Strip(TString::kBoth);
       auto hypo =
-         MakeHypoU(pname, bFieldSign, bFieldMag, gasDensity, measSigma, momSigmaFrac, nIter, minClusters, clusterDirSeed);
+         MakeHypoU(pname, bFieldSign, bFieldMag, matA, gasDensity, measSigma, momSigmaFrac, nIter, minClusters, clusterDirSeed);
       if (hypo) {
          multi->AddHypothesis(std::move(hypo), pname.Data(), 0);
          std::cout << "  + hypothesis: " << pname << "\n";
