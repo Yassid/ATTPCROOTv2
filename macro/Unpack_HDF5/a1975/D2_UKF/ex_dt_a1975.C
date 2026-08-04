@@ -129,8 +129,24 @@ void ex_dt_a1975(TString runsCSV = "run_0016", TString inDir = "/mnt/f/a1975/rec
       std::vector<float> icv;
       if (icDir.Length()) {
          TString icf = icDir + runTag + "_IC.root";
-         if (!gSystem->AccessPathName(icf)) {
-            TFile *fi = TFile::Open(icf);
+         // RETRY. On WSL the data drive is drvfs, and with several of these running in parallel
+         // AccessPathName/TFile::Open fail INTERMITTENTLY on a file that is plainly there: the
+         // same run reports "IC for 41610 events" alone and "no IC file" inside a 6-way batch.
+         // The old code took that at face value and fell through to ic = -1, i.e. it silently
+         // produced an UNGATED cache -- 27 of 47 runs in one build, which then looks like a
+         // physics difference in the track counts. Never treat a missing IC as routine.
+         TFile *fi = nullptr;
+         for (int att = 0; att < 5 && !fi; ++att) {
+            if (att)
+               gSystem->Sleep(200);
+            if (!gSystem->AccessPathName(icf))
+               fi = TFile::Open(icf);
+            if (fi && fi->IsZombie()) {
+               fi->Close();
+               fi = nullptr;
+            }
+         }
+         if (fi) {
             TTree *ti = (TTree *)fi->Get("ic");
             float icm = 0;
             ti->SetBranchAddress("icmax", &icm);
@@ -142,7 +158,10 @@ void ex_dt_a1975(TString runsCSV = "run_0016", TString inDir = "/mnt/f/a1975/rec
             fi->Close();
             printf("  %s: IC for %zu events\n", run.Data(), icv.size());
          } else {
-            printf("  %s: no IC file, ic = -1\n", run.Data());
+            printf("\n  *** WARNING %s: NO IC after 5 attempts (%s) -- this run is UNGATED.\n"
+                   "      Every track gets ic = -1 and the beam gate then drops all of them.\n"
+                   "      Do not merge this into a cache that other runs are gated in.\n\n",
+                   run.Data(), icf.Data());
          }
       }
       for (Long64_t i = 0; i < N; ++i) {
