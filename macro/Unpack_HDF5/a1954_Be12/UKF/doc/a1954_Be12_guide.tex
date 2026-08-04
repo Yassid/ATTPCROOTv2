@@ -1,0 +1,960 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%  a1954 12Be analysis -- step-by-step user guide
+%  Build:  pdflatex a1954_Be12_guide.tex   (twice, for the ToC)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[margin=2.3cm]{geometry}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{caption}
+\usepackage{microtype}
+\usepackage[colorlinks=true,linkcolor=blue!55!black,urlcolor=blue!55!black,
+            citecolor=blue!55!black]{hyperref}
+
+% ---- literal code (never math mode; underscores stay literal) ------------------
+\newcommand{\code}[1]{\texttt{\detokenize{#1}}}
+\newcommand{\file}[1]{\texttt{\detokenize{#1}}}
+
+% ---- shell / macro listings ---------------------------------------------------
+\definecolor{shellbg}{RGB}{245,245,242}
+\definecolor{shellrule}{RGB}{200,200,192}
+\definecolor{cmt}{RGB}{100,120,100}
+\lstdefinestyle{sh}{
+  basicstyle=\ttfamily\footnotesize,
+  backgroundcolor=\color{shellbg},
+  frame=single, rulecolor=\color{shellrule},
+  framesep=5pt, xleftmargin=6pt, xrightmargin=2pt,
+  breaklines=true, breakatwhitespace=false,
+  postbreak=\mbox{\textcolor{gray}{$\hookrightarrow$}\space},
+  columns=fullflexible, keepspaces=true,
+  commentstyle=\color{cmt}\itshape,
+  morecomment=[l]{\#}, showstringspaces=false,
+  literate={\_}{{\_}}1 {~}{{\textasciitilde}}1
+}
+\lstset{style=sh}
+
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{\small a1954 $^{12}$Be --- analysis guide}
+\rhead{\small\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+\newcommand{\warn}[1]{\par\noindent\fcolorbox{red!45!black}{red!4}{%
+  \parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule}{\small #1}}\par\medskip}
+\newcommand{\note}[1]{\par\noindent\fcolorbox{blue!40!black}{blue!4}{%
+  \parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule}{\small #1}}\par\medskip}
+
+\title{\vspace{-1.4cm}\textbf{Running the a1954 $^{12}$Be analysis}\\[2mm]
+\large Step-by-step guide to the reconstruction, pattern-recognition and\\
+track-fitting pipeline, with the tuning knobs that matter}
+\author{ATTPCROOT \texttt{OpenKF-Claude} branch}
+\date{\today}
+
+\begin{document}
+\maketitle
+\thispagestyle{fancy}
+
+\begin{abstract}
+\noindent
+This guide walks through the complete analysis of the a1954 $^{12}$Be proton-target
+data set --- $^{12}$Be$(p,p')^{12}$Be$^{*}$ and $^{12}$Be$(p,d)^{11}$Be in inverse
+kinematics --- from the raw HDF5 files to the excitation-energy spectrum. Every stage is
+given as a command you can copy, followed by the options that stage exposes. Sections
+\ref{sec:pra-tuning} and \ref{sec:fit-tuning} collect the pattern-recognition (PRA) and
+fitting parameters in reference tables together with recipes for improving them, and
+Section~\ref{sec:pitfalls} lists the traps this data set has already sprung.
+\end{abstract}
+
+\tableofcontents
+\bigskip
+
+%===============================================================================
+\section{What the analysis does}
+%===============================================================================
+
+A $^{12}$Be beam at $\approx 155$~MeV (12.9~MeV/u, \emph{not yet independently confirmed};
+see Section~\ref{sec:pitfalls}) is stopped in the AT-TPC filled with H$_2$ at 600~torr,
+which acts simultaneously as target and detection medium. Two channels are analysed:
+
+\begin{center}
+\begin{tabular}{@{}lllll@{}}
+\toprule
+Channel & Ejectile detected & Typical $\theta_{\rm lab}$ & Typical KE & Residual \\
+\midrule
+$^{12}$Be$(p,p')^{12}$Be$^{*}$ & recoil proton   & $60$--$90^\circ$ (backward) & 1--10 MeV  & $^{12}$Be \\
+$^{12}$Be$(p,d)^{11}$Be        & deuteron        & $10$--$50^\circ$ (forward)  & 10--30 MeV & $^{11}$Be \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The pipeline is staged so that the expensive part (unpacking + PSA + PRA, hours per run) is
+done \emph{once} and the cheap part (fitting, minutes per run) can be iterated freely:
+
+\begin{center}\small
+\file{run_XXXX.h5} $\rightarrow$ \textbf{reco} (unpack + PSA + clean + PRA) $\rightarrow$
+\file{run_XXXX_reco.root} $\rightarrow$ \textbf{slim} $\rightarrow$ \textbf{gate}
+(IC + PID) $\rightarrow$ \textbf{fit} (UKF and/or GENFIT) $\rightarrow$
+\textbf{kinematics} ($E_x$ spectrum, explorers)
+\end{center}
+
+\noindent All macros live in
+\file{macro/Unpack_HDF5/a1954_Be12/UKF/} of the \code{OpenKF-Claude} branch, referred to
+below as \textbf{\code{$HERE}}.
+
+%===============================================================================
+\section{Setting up}
+%===============================================================================
+
+\subsection{Environment}
+
+\begin{lstlisting}
+export REPO=/home/yassid/fair_install/ATTPCROOTv2-OpenKF
+export HERE=$REPO/macro/Unpack_HDF5/a1954_Be12/UKF
+
+source /home/yassid/fair_install/FairSoft/install/bin/thisroot.sh
+source $REPO/build/config.sh
+# MANDATORY -- config.sh does not set this, and cling crashes without it
+export ROOT_INCLUDE_PATH=$REPO/build/include:/home/yassid/fair_install/FairRootInstall/include
+\end{lstlisting}
+
+\warn{\textbf{\code{ROOT_INCLUDE_PATH} must point at \file{build/include}}, not at the
+source directories. Pointing it at the sources makes cling crash on a hidden-friend
+\code{swap} declaration. Every batch script in \code{$HERE} already exports it correctly;
+you only need this line for interactive work.}
+
+\subsection{Two builds, on purpose}
+
+\begin{center}
+\begin{tabular}{@{}lll@{}}
+\toprule
+Build & GENFIT2 & Use for \\
+\midrule
+\file{build/}        & not found & reco, PSA, PRA, UKF fitting \\
+\file{build_genfit/} & linked against \file{~/fair_install/GenFitInst} & \code{fitGenfit_Be12.C} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent They compile the same sources; they are kept apart so a GENFIT rebuild never
+disturbs a running reco batch. Source \file{build_genfit/config.sh} instead of
+\file{build/config.sh} when you run GENFIT.
+
+\subsection{Geometry (once per clone)}
+
+The geometry \code{.root} files are \emph{not} tracked in git. Build the 600~torr
+hydrogen geometry that GENFIT needs before the first GENFIT fit:
+
+\begin{lstlisting}
+cd $REPO && root -b -q geometry/ATTPC_H600torr.C
+# writes geometry/ATTPC_H600torr.root and ATTPC_H600torr_geomanager.root
+\end{lstlisting}
+
+\warn{Do \emph{not} fall back on \file{ATTPC_H1bar_geomanager.root}: a1954 ran at 600~torr,
+so the 1-bar geometry is 27\,\% too dense and every material-effects correction GENFIT
+applies will be miscalibrated.}
+
+\subsection{Data}
+
+\begin{center}
+\begin{tabular}{@{}lp{10.2cm}@{}}
+\toprule
+Raw HDF5      & \file{/mnt/f/a1954_remerged/run_XXXX.h5} (drive F, \code{WD_Cris}) \\
+Mount         & \code{sudo mount -t drvfs F: /mnt/f} --- F: is \emph{not} auto-mounted after a reboot \\
+Physics runs  & 0142--0215 (+0216--0224); 0160 and 0177--0181, 0183 are absent \\
+Runs fitted   & 75 (\file{~/a1954_Be12_fit/}); \textbf{73 clean} after dropping the two desynced runs \\
+Excluded      & \textbf{run\_0142} and \textbf{run\_0212} (timestamp desync, Section~\ref{sec:tsync});
+                \textbf{run\_0161} in the $(p,d)$ pass (FRIB file empty, 587~B) \\
+Parameters    & \file{parameters/ATTPC.a1954_Be12.par} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent Key entries of the parameter file:
+
+\begin{center}
+\begin{tabular}{@{}llp{7.4cm}@{}}
+\toprule
+Parameter & Value & Comment \\
+\midrule
+\code{BField}        & 2.85 T   & sign is set in the macros, \emph{not} here \\
+\code{GasPressure}   & 600 torr & H$_2$ \\
+\code{DriftVelocity} & 1.00 cm/$\mu$s & \emph{the} parameter to scan (Section~\ref{sec:driftv}) \\
+\code{SamplingRate}  & 3.0      & MHz \\
+\code{TBEntrance}    & 300      & beam entrance in time buckets \\
+\code{NumTbs}        & 512      & \\
+\code{ZPadPlane}     & 1000 mm  & \\
+\code{PeakingTime}   & 720 ns   & GET electronics $\tau$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\note{The $^{14}$C sibling analysis (\file{macro/Unpack_HDF5/a1954/UKF/}) uses a
+\emph{different} par file with \code{SamplingRate 6.0}, \code{DriftVelocity 1.30} and
+\code{TBEntrance 480}. Do not mix them up.}
+
+%===============================================================================
+\section{Stage 1 --- reconstruction (unpack $+$ PSA $+$ cleaning $+$ PRA)}
+\label{sec:reco}
+%===============================================================================
+
+This is the expensive stage: it reads the 5--9~GB HDF5 file, turns pad traces into hits,
+removes noise hits and clusters the surviving hits into track candidates.
+
+\subsection{One run, interactively}
+
+\begin{lstlisting}
+root -b -q -l "$HERE/pipeline/unpackReco_Be12.C(\"run_0147\")"
+# first 500 events only, for a quick look:
+root -b -q -l "$HERE/pipeline/unpackReco_Be12.C(\"run_0147\",500)"
+\end{lstlisting}
+
+\subsection{Production (the validated configuration)}
+
+\begin{lstlisting}
+cd $HERE
+./reco_hdb_F.sh "run_0142 run_0143 run_0144" 2      # 2-parallel; drvfs I/O is the cap
+\end{lstlisting}
+
+\noindent \code{reco_hdb_F.sh} reads from \file{/mnt/f/a1954_remerged/} and writes\\
+\file{/mnt/f/a1954_Be12_reco_hdb/run_XXXX_reco.root}. It skips runs that are already
+done and logs to \file{$OUT/logs/}. The configuration it pins is:
+
+\begin{center}
+\textbf{AtPSAMultiFit (thr 20) $+$ AtDirDeDxCleaner $+$ AtTrackFinderHDBSCAN (mover join)}
+\end{center}
+
+\subsection{Full argument list of \texttt{unpackReco\_Be12.C}}
+
+\begin{longtable}{@{}lll p{6.9cm}@{}}
+\toprule
+\# & Argument & Default & Meaning \\
+\midrule
+\endhead
+1  & \code{fileName}      & \code{"run_0142"} & run name, no extension \\
+2  & \code{nEvents}       & 0                 & 0 = all events \\
+3  & \code{persistRaw}    & \code{true}       & write the raw pads too; production uses \code{false} (files are 4$\times$ smaller) \\
+4  & \code{outDir}        & \file{~/a1954_Be12_reco/} & output directory \\
+5  & \code{filepath}      & (NSCL drive)      & input directory; use \file{/mnt/f/a1954_remerged/} \\
+6  & \code{doSC}          & \code{false}      & space-charge correction; not needed (does not affect $z$) \\
+7  & \code{applyTimeCorr} & \code{false}      & pad-time offsets --- the CSV that exists is a1975-specific; leave OFF until an a1954 table is measured \\
+8  & \code{psaType}       & \code{"multifit"} & \code{"multifit"} or \code{"max"} \\
+9  & \code{primSigma}     & 0                 & $>0$ enables prominence-on-primary at that many $\sigma$ \\
+10 & \code{thr}           & 20                & PSA amplitude threshold [ADC] \\
+11 & \code{praType}       & \code{"tc"}       & \code{"tc"} (triplclust) or \code{"hdbscan"} --- \textbf{production uses hdbscan} \\
+12 & \code{hdMcs}         & 20                & HDBSCAN min cluster size \\
+13 & \code{hdMs}          & 8                 & HDBSCAN min samples \\
+14 & \code{fitChi2}       & 0                 & $>0$ = PSA shape $\chi^2$ gate (also turns on float-$\tau$); $<0$ = diagnostic only \\
+15 & \code{relErr}        & 0.1               & fractional model error in the PSA $\chi^2$ \\
+16 & \code{parFile}       & \code{ATTPC.a1954_Be12.par} & \\
+17 & \code{doClean}       & \code{kTRUE}      & run \code{AtDirDeDxCleaner} before PRA \\
+\bottomrule
+\end{longtable}
+
+\subsection{What each sub-stage produces}
+
+\begin{center}
+\begin{tabular}{@{}llp{7.3cm}@{}}
+\toprule
+Task & Branch out & Content \\
+\midrule
+\code{AtUnpackTask}  & \code{AtRawEvent} & raw pad traces (only if \code{persistRaw}) \\
+\code{AtPSAtask}     & \code{AtEventH}   & \code{AtHit} point cloud \\
+\code{AtDataCleaningTask} & \code{AtEventClean} & de-noised point cloud (transient) \\
+\code{AtPRAtask}     & \code{AtPatternEvent} & \code{AtTrack} candidates + their hits \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+%===============================================================================
+\section{Stage 2 --- FRIB/ion-chamber unpacking and the slim cache}
+%===============================================================================
+
+The ion chamber lives in the \code{frib/evt} HDF5 group, not in the pad stream, and is
+unpacked separately by \code{AtFRIBHDFUnpacker}. It is fast (no PSA/PRA).
+
+\begin{lstlisting}
+cd $HERE
+./frib_F_batch.sh "run_0142 run_0143 ..." 4   # -> ~/a1954_Be12_reco_hdb_slim/run_XXXX_FRIB.root
+./slim_cache_batch.sh "run_0142 run_0143 ..." 4  # -> ~/a1954_Be12_reco_hdb_slim/run_XXXX_slim.root
+\end{lstlisting}
+
+\noindent The \emph{slim cache} clones only the \code{AtPatternEvent} and
+\code{EventHeader} branches of the big reco file onto the local disk. Every downstream
+PID/gate/fit pass then reads locally instead of streaming tens of GB back over drvfs
+($\approx 250\times$ faster).
+
+\warn{An empty FRIB file (a few hundred bytes, e.g. run\_0161) means no IC gate is
+possible for that run. The batch scripts skip files below 10~kB.}
+
+%===============================================================================
+\section{Stage 3 --- beam identification and particle ID}
+\label{sec:pid}
+%===============================================================================
+
+\subsection{The ion-chamber gate}
+
+The a1954 beam is a fragment cocktail. The IC pulse is \emph{bipolar}: a positive
+overshoot near TB~1134 and a negative dip near TB~1155.
+
+\begin{center}
+\begin{tabular}{@{}ll@{}}
+\toprule
+IC observable & \textbf{maximum} ADC in TB $[1050,1250]$ (the positive overshoot, \emph{not} $-\min$) \\
+$^{12}$Be     & the isolated peak at $\approx 650$ $\Rightarrow$ gate \textbf{[500, 900]} \\
+Contaminant   & the dominant peak at $\approx 1900$ --- reject \\
+Pile-up       & require \textbf{exactly one} pulse above 200 ADC in TB $[800,1500]$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{lstlisting}
+root -b -q -l "$HERE/pid/ic_Be12.C(\"run_0147,run_0148\",\"~/a1954_Be12_reco_hdb_slim/\")"
+root -b -q -l "$HERE/pid/ic_multiplicity_Be12.C(\"run_0147\")"   # pile-up check
+\end{lstlisting}
+
+\subsection{Timestamp synchronisation --- run this before trusting any gate}
+\label{sec:tsync}
+
+The IC is matched to the pad data \textbf{by entry index}, which is only valid when the two
+streams have not dropped events relative to each other. The check compares timestamp
+\emph{deltas} (so it is offset-independent):
+
+\begin{lstlisting}
+root -b -q -l "$HERE/pid/tsync_check.C(\"run_0143\")"
+\end{lstlisting}
+
+\begin{center}
+\begin{tabular}{@{}lll@{}}
+\toprule
+Verdict & Signature & Action \\
+\midrule
+aligned  & event-count difference $+1$ (trailing event), $\approx 100\,\%$ deltas agree & use \\
+desynced & negative count difference, $0\,\%$ agree & \textbf{exclude the run} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent For a1954 $^{12}$Be: 73 of 75 runs are aligned; \textbf{run\_0142 (diff $-9$)} and
+\textbf{run\_0212 (diff $-5$)} are desynced and must be dropped.
+
+\subsection{Drawing the PID gate}
+
+The PID plane is $\sqrt{dE/dx}$ versus $B\rho$ from \code{AtTools::AtSpyralPID}, computed on
+the PRA track candidates --- \emph{no fit is needed}, so this is the natural place to
+inspect the data before committing to a fitting configuration. It is also charge-sign
+agnostic, hence unaffected by the $B_z$ handedness.
+
+\begin{lstlisting}
+# 1. build the PID plane and persist it as a CSV
+root -b -q -l "$HERE/pid/pid_Be12.C(\"run_0147,run_0148\",\"~/a1954_Be12_reco_hdb_slim/\")"
+root -b -q -l "$HERE/pid/dump_pid_Be12.C(\"run_0147\",\"<recoDir>\",\"$HERE/pid/pid_Be12_data.csv\")"
+
+# 2. draw the polygon by hand (INTERACTIVE -- never with -b)
+root -l "$HERE/pid/draw_gate_Be12.C(\"proton_12Be\")"
+root -l "$HERE/pid/draw_gate_Be12.C(\"deuteron_12Be\",625,750,0,1,2)"
+
+# 3. verify it headlessly
+root -b -q -l "$HERE/pid/apply_gate_Be12.C(\"proton_12Be.json\")"
+root -b -q -l "$HERE/pid/show_gates_Be12.C"
+\end{lstlisting}
+
+\noindent Left-click to place each vertex, double-click to close; the polygon is written to
+\file{<name>.json} in \file{$HERE/pid/}. The gates in use are
+\file{pid/proton_12Be.json} (wraps the full proton band) and \file{pid/deuteron_12Be.json}.
+
+\note{An \code{arclen > 200} cut visibly sharpens the band and is worth trying when
+redrawing a gate. HDBSCAN reco gives a tighter band than triplclust.}
+
+%===============================================================================
+\section{Stage 4 --- building the gated fit input}
+%===============================================================================
+
+\code{gate_events_Be12.C} writes a small ROOT file containing \emph{only} the events that
+pass the IC gate and, inside them, \emph{only} the tracks that fall in the PID polygon and
+the requested angular window. Because it also copies the FairRoot metadata
+(\code{BranchList}, \code{FileHeader}, \code{cbmout}), the fitters read it exactly like a
+normal reco file.
+
+\begin{lstlisting}
+root -b -q -l "$HERE/pipeline/gate_events_Be12.C(\"run_0147\",\
+  \"/home/yassid/a1954_Be12_reco_hdb_slim/\",\"/home/yassid/a1954_Be12_fit/in/\",\
+  \"/mnt/f/a1954_Be12_reco_hdb/run_0147_reco.root\")"
+\end{lstlisting}
+
+\begin{longtable}{@{}lll p{6.6cm}@{}}
+\toprule
+\# & Argument & Default & Meaning \\
+\midrule
+\endhead
+1  & \code{run}         & ---   & run name \\
+2  & \code{inDir}       & slim dir & holds \file{_slim.root} and \file{_FRIB.root} \\
+3  & \code{outDir}      & \file{~/a1954_Be12_fit/in/} & gated output \\
+4  & \code{refReco}     & \code{""} & big reco file, only to copy FairRoot metadata from \\
+5,6 & \code{icLo, icHi} & 500, 900 & IC amplitude window \\
+7,8 & \code{icTbLo, icTbHi} & 1050, 1250 & IC integration window [TB] \\
+9  & \code{bField}      & 2.85  & used by \code{AtSpyralPID} (magnitude only) \\
+10 & \code{protonGate}  & \file{pid/proton_12Be.json} & PID polygon; swap for \file{deuteron_12Be.json} \\
+11 & \code{thMin}       & 90.0  & minimum $\theta_{\rm lab}$ [deg]. \textbf{90 for $(p,p')$; 0 for $(p,d)$} \\
+12 & \code{peakThr}     & 200   & IC pulse-counting threshold \\
+13,14 & \code{pkTbLo, pkTbHi} & 800, 1500 & IC pulse-counting window \\
+\bottomrule
+\end{longtable}
+
+\warn{The $\theta$ convention differs between stages. The \code{thMin} cut here is on the
+\emph{Spyral polar} angle \code{r.polar}, whereas the fitted \code{k.theta} used downstream
+satisfies $\theta_{\rm fit} \approx 180^\circ - \theta_{\rm polar}$. Using
+\code{thMin = 90} on a $(p,d)$ pass kills every deuteron.}
+
+%===============================================================================
+\section{Stage 5 --- fitting}
+\label{sec:fit}
+%===============================================================================
+
+Both fitters read the \emph{same} gated input, so tracks can be compared one-to-one.
+
+\subsection{The $(p,p')$ production pass}
+
+\begin{lstlisting}
+cd $HERE
+./fitpipe_Be12.sh "run_0143 run_0144 run_0145" 4     # gate -> UKF -> GENFIT, 4 cores
+# outputs: ~/a1954_Be12_fit/run_XXXX_{ukf,genfit}.root  (+ rsync to /mnt/f/a1954_Be12_fit/)
+\end{lstlisting}
+
+\subsection{The $(p,d)$ production pass}
+
+\begin{lstlisting}
+./fitpipe_pd_Be12.sh "run_0143 run_0144" 4 0   # deuteron gate, thMin = 0 (FORWARD tracks)
+./genfit_pd_Be12.sh  "run_0143 run_0144" 4     # GENFIT over the same gated input
+# outputs: ~/a1954_Be12_fit_pd/  and  ~/a1954_Be12_genfix_pd/
+\end{lstlisting}
+
+\subsection{UKF --- \texttt{fitUKF\_Be12.C}}
+
+\begin{lstlisting}
+root -b -q -l "$HERE/pipeline/fitUKF_Be12.C(\"run_0147\",-1,\"proton\",-1,2.85,6.5e-5,\
+  \"\",\"/home/yassid/a1954_Be12_fit/in/\",0.5,0.1,1,10,\"/home/yassid/a1954_Be12_fit/\")"
+\end{lstlisting}
+
+\begin{longtable}{@{}ll l p{6.3cm}@{}}
+\toprule
+\# & Argument & Default & Meaning \\
+\midrule
+\endhead
+1  & \code{fileName}      & \code{"run_0142"} & \\
+2  & \code{nEvents}       & $-1$ & $-1$ = all \\
+3  & \code{particles}     & \code{"proton"} & comma list; one hypothesis per species (\code{proton}, \code{deuteron}, \code{triton}, \code{He3}, \code{alpha}) \\
+4  & \code{bFieldSign}    & $-1$ & \textbf{$-1$ = experimental handedness}, $+1$ = simulation \\
+5  & \code{bFieldMag}     & 2.85 & T \\
+6  & \code{gasDensity}    & 6.5e-5 & g/cm$^3$, feeds CATIMA \\
+7  & \code{outSuffix}     & \code{""} & appended to the output name (use for scans) \\
+8  & \code{ioDir}         & reco dir & input directory \\
+9  & \code{measSigma}     & 0.5 & \textbf{per-cluster position $\sigma$ [mm]} \\
+10 & \code{momSigmaFrac}  & 0.1 & fractional momentum-seed uncertainty \\
+11 & \code{nIter}         & 1   & filter/smoother iterations \\
+12 & \code{minClusters}   & 10  & minimum clusters for a fit attempt \\
+13 & \code{outDir}        & \code{""} & defaults to \code{ioDir} \\
+14 & \code{refTrack}      & \code{false} & reference-track mode \\
+15 & \code{refInflation}  & 4.0 & covariance inflation in reference-track mode \\
+\bottomrule
+\end{longtable}
+
+\warn{\textbf{Handedness.} Experimental data has the opposite helix handedness to
+simulation because the digitisation reverses the drift $z$. Use $B_z = -2.85$~T for data.
+This was validated on run\_0142: median $\chi^2/\mathrm{ndf} = 0.03$, median KE 5.96~MeV,
+clean elastic locus. If fits diverge or the KE is unphysical, flip the sign first.}
+
+\subsection{GENFIT --- \texttt{fitGenfit\_Be12.C}}
+
+\begin{lstlisting}
+source $REPO/build_genfit/config.sh          # <-- the GENFIT build
+root -b -q -l "$HERE/pipeline/fitGenfit_Be12.C(\"run_0147\",-1,\"<inDir>\",\"\",\"<outDir>\",\
+  -2.85,2,5,\"\",4.0,10.0,170.0,kTRUE,kFALSE,\"proton\",\"ATTPC_H600torr\")"
+\end{lstlisting}
+
+\begin{longtable}{@{}ll l p{6.1cm}@{}}
+\toprule
+\# & Argument & Default & Meaning \\
+\midrule
+\endhead
+1  & \code{fileName}       & \code{"run_0142"} & \\
+2  & \code{nEvents}        & $-1$ & \\
+3  & \code{ioDir}          & reco dir & \\
+4  & \code{outSuffix}      & \code{""} & \\
+5  & \code{outDir}         & \code{""} & \\
+6  & \code{bField}         & $-2.85$ & signed, as for the UKF \\
+7,8 & \code{minIter, maxIter} & 2, 5 & Kalman refit iterations \\
+9  & \code{pidGate}        & \code{""} & optional in-fitter Spyral PID gate (JSON) \\
+10 & \code{measSigma}      & 4.0 & \textbf{per-cluster position $\sigma$ [mm]} \\
+11,12 & \code{thetaMinDeg, thetaMaxDeg} & 10, 170 & \textbf{lower it to 5 for $(p,d)$} \\
+13 & \code{matEffects}     & \code{kFALSE} & \textbf{set \code{kTRUE}} --- see below \\
+14 & \code{backwardSeedFix}& \code{kFALSE} & alternative backward-track seeding \\
+15 & \code{particle}       & \code{"proton"} & \code{proton}, \code{deuteron}, \code{triton} \\
+16 & \code{geoName}        & \code{ATTPC_H600torr} & must match the real gas density \\
+\bottomrule
+\end{longtable}
+
+\note{\textbf{Always run GENFIT with \code{matEffects = kTRUE} and the 600-torr geometry.}
+With \code{matEffects = kFALSE} GENFIT fits a constant-momentum helix, so the reported KE is
+a track \emph{average}: it comes out $\approx 30\,\%$ low below 6~MeV, 9.5\,\% low at
+6--10~MeV, and only converges to the UKF above $\approx 10$--15~MeV. That single flag was
+the whole $+0.45$~MeV $E_x$ offset.}
+
+\subsection{Which fitter to believe}
+
+After the \code{AtGenfitter} energy-loss fix (commit \code{5f87e625}) the two fitters
+agree. The bug: the code called \code{useEnergyLossParam()} unconditionally, which threw on
+every step and silently truncated reference tracks to $\mathrm{ndf} \le 0$.
+
+\begin{center}
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+$(p,p')$, 73 clean runs, $\chi^2/\mathrm{ndf} < 5$ & tracks & g.s.\ $\mu$ [MeV] & FWHM [MeV] \\
+\midrule
+UKF                          & 26\,604 & $+0.020$ & 0.555 \\
+GENFIT, pre-fix (\code{matEffects=kFALSE}) & 12\,533 & $+0.451$ & --- \\
+GENFIT, fixed                & 23\,316 & $+0.028$ & 0.521 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent GENFIT is now marginally the better resolution and its old KE-vs-$\theta$ double
+band is gone. A known residual remains: a $+16\,\%$ KE deficit \emph{below 2~MeV}, because
+under $\beta\gamma = 0.05$ genfit leaves Bethe--Bloch for \code{dEdxParam}, which returns
+zero without a table. Load a proton $dE/dx$ table via \code{SetELossFile()} to close it.
+
+For $(p,d)$: UKF 2\,661 vs GENFIT 2\,866 deuterons; both behave, because forward deuterons
+are 10--30~MeV where GENFIT was never in trouble.
+
+%===============================================================================
+\section{Stage 6 --- physics output}
+%===============================================================================
+
+\subsection{Excitation-energy spectrum}
+
+\code{ex_Be12.C} applies relativistic two-body kinematics to the fitted (KE, $\theta$) and
+fills the $E_x$ spectrum, $E_x$ vs $\theta_{\rm cm}$, and KE vs $\theta_{\rm lab}$. It also
+writes an \code{TNtuple} cache (\code{ke:theta:vertexz:thcm:ex:chi2ndf}) that every
+interactive tool then works from.
+
+\begin{lstlisting}
+RUNS="run_0143,run_0144,run_0145"   # comma separated!
+
+# (p,p')  -- proton ejectile, 12Be residual
+root -b -q -l "$HERE/pp/ex_Be12.C(\"$RUNS\",\"/home/yassid/a1954_Be12_genfix/\",155,5,\
+  \"_pp_genfit\",1.007825,12.026921,\"12Be(p,p')\",\"genfit\")"
+
+# (p,d)   -- deuteron ejectile, 11Be residual
+root -b -q -l "$HERE/pp/ex_Be12.C(\"$RUNS\",\"/home/yassid/a1954_Be12_fit_pd/\",155,5,\
+  \"_pd_ukf\",2.014102,11.021658,\"12Be(p,d)11Be\",\"ukf\")"
+\end{lstlisting}
+
+\begin{center}
+\begin{tabular}{@{}lll@{}}
+\toprule
+\# & Argument & Meaning \\
+\midrule
+1 & \code{runsCSV}   & comma-separated run list \\
+2 & \code{inDir}     & directory holding \file{<run>_<fitter>.root} \\
+3 & \code{Ebeam}     & beam energy [MeV] --- \textbf{155 for a1954 $^{12}$Be} \\
+4 & \code{chi2Cut}   & $\chi^2/\mathrm{ndf}$ cut (5 nominal; \code{1e9} to disable) \\
+5 & \code{outTag}    & cache suffix --- \textbf{must include the leading underscore} \\
+6 & \code{mEjectAmu} & 1.007825 (p) or 2.014102 (d) \\
+7 & \code{mResidAmu} & 12.026921 ($^{12}$Be) or 11.021658 ($^{11}$Be) \\
+8 & \code{chanLabel} & plot title \\
+9 & \code{fitter}    & \code{"ukf"} or \code{"genfit"} --- selects the input file suffix \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent Caches land in \file{$HERE/pp/plots/proton_kin<outTag>.root}.
+
+\subsection{Interactive exploration}
+
+Both explorers recompute $E_x$ and $\theta_{\rm cm}$ live from the cache, so you can move
+$E_{\rm beam}$, the cuts and the binnings without refitting anything. Both carry the UKF
+and GENFIT caches with an in-page switch and an overlay.
+
+\begin{lstlisting}
+# browser version (no X11 needed; regenerates the HTML and launches Chrome)
+$HERE/pp/open_explorer.sh pp        # 12Be(p,p')
+$HERE/pp/open_explorer.sh pd        # 12Be(p,d)11Be
+
+# ROOT/X11 GUI version -- plain ROOT, no config.sh needed, and never with -b
+root -l $HERE/pp/explore_Be12.C
+\end{lstlisting}
+
+\warn{ROOT's 3D/Eve viewers crash under WSL, and \code{explorer.exe <file>} silently does
+nothing on this machine --- \code{open_explorer.sh} therefore stages the HTML on the Windows
+side and launches the browser binary directly. Prefer the browser explorer.}
+
+\subsection{Fitter comparison}
+
+\begin{lstlisting}
+root -b -q -l "$HERE/pp/compare_fitters_Be12.C(\"run_0143,run_0144\",\
+  \"/home/yassid/a1954_Be12_fit/\")"
+# -> pp/plots/compare_fitters_Be12.png, compare_fitters_chi2_Be12.png
+\end{lstlisting}
+
+%===============================================================================
+\section{Tuning the pattern recognition}
+\label{sec:pra-tuning}
+%===============================================================================
+
+\warn{\textbf{PRA and fitting settings are physics-dependent.} A knob that improves one
+reaction/geometry can hurt another. Always re-validate on \emph{this} data set --- one run,
+a few hundred events, is enough to see the effect.}
+
+\subsection{Choosing the track finder}
+
+\begin{center}
+\begin{tabular}{@{}lp{5.2cm}p{5.2cm}@{}}
+\toprule
+& \code{AtTrackFinderTC} (triplclust) & \code{AtTrackFinderHDBSCAN} \\
+\midrule
+Selected by & \code{praType="tc"} & \code{praType="hdbscan"} \\
+Strength & fast, robust on isolated tracks & separates \emph{overlapping/crossing} tracks that triplclust merges \\
+Weakness & merges crossing tracks & over-segments; needs the join step \\
+On a1954 & tighter-band alternative & \textbf{production choice}; gives the tightest PID band \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{HDBSCAN parameters}
+
+Set inside \code{unpackReco_Be12.C}; the first two are exposed as macro arguments
+(\code{hdMcs}, \code{hdMs}), the rest are edited in the macro body.
+
+\begin{longtable}{@{}l l l p{6.0cm}@{}}
+\toprule
+Setter & a1954 value & Default & Effect / how to tune \\
+\midrule
+\endhead
+\code{SetMinClusterSize}        & 20   & adaptive & Smallest accepted cluster. \textbf{Lower} to recover short/low-energy tracks, \textbf{raise} to suppress noise blobs. Primary yield knob. \\
+\code{SetMinSamples}            & 8    & 3  & $k$ for the core distance. Higher = more conservative, more points declared noise. \\
+\code{SetClusterSelectionEpsilon} & 10.0 & 10.0 & [mm] Do not split clusters closer than this. \textbf{The big over-segmentation lever}: raise to stop one track being cut into pieces, lower to separate two nearby tracks. \\
+\code{SetJoinMethod}            & \code{"mover"} & \code{"overlap"} & \code{mover} = vertex-seeded trajectory following; \code{overlap} = circle-area overlap; \code{continuity} = end-to-end; \code{none}. \\
+\code{SetMinClusterSizeJoin}    & 15   & 15 & Minimum size a fragment must have to take part in a join. \\
+\code{SetCircleOverlapRatio}    & 0.25 & 0.25 & Overlap join: merge if overlap area $>$ ratio $\times$ smaller area. \\
+\code{SetMotionGapTol}          & 40   & 40 & [mm] \code{mover}: largest end-to-end gap that can be chained. Raise if tracks stay broken across a gap. \\
+\code{SetMotionAngleTol}        & 35   & 35 & [deg] \code{mover}: tangent-continuity tolerance at the junction. \\
+\code{SetOutlierScaleFactor}    & --- (0.05) & 0.05 & Per-cluster LOF cleaning; $\le 0$ disables. \\
+\code{SetOutlierThreshold}      & --- (1.5)  & 1.5  & LOF above this $\rightarrow$ noise. \\
+\code{SetJoinZFraction}         & --- (0.2)  & 0.2  & \code{continuity} join only. \\
+\code{SetJoinRadiusFraction}    & --- (0.3)  & 0.3  & \code{continuity} join only. \\
+\bottomrule
+\end{longtable}
+
+\subsection{Triplclust parameters}
+
+Exposed through \code{SetScluster} ($s$, 0.3), \code{SetKtriplet} ($k$, 19),
+\code{SetNtriplet} ($n$, 2), \code{SetMcluster} ($m$, 15), \code{SetRsmooth} ($r$, 2),
+\code{SetAtriplet} ($a$, 0.03), \code{SetTcluster} ($t$, 4.0); a1954 additionally sets the
+base-class \code{SetClusterRadius(15.0)} and \code{SetClusterDistance(7.5)}. Increasing $k$
+and $m$ makes clustering more conservative (fewer, cleaner tracks); increasing $s$ merges
+more aggressively.
+
+\subsection{Base-class knobs shared by both finders (\code{AtPRA})}
+
+\begin{center}
+\begin{tabular}{@{}l l p{8.5cm}@{}}
+\toprule
+Setter & Default & Effect \\
+\midrule
+\code{SetMinHits} / \code{SetMaxHits} & 0 / 5000 & accepted hit-count window per track \\
+\code{SetClusterRadius}   & 0 (15 for tc) & [mm] radius of the hit clusters handed to the fitter \\
+\code{SetClusterDistance} & 0 (7.5 for tc)& [mm] spacing between those clusters \\
+\code{SetTargetClusters}  & 25 & adaptive clustering target \\
+\code{SetUseArcWalk}      & false & arc-walk clustering instead of \code{ClusterizeSmooth3D};
+                                       recovers track tails \\
+\code{SetUseDriftAwareWeights} & false & weight the circle fit by $1/\sigma^2_{xy}(z)$ \\
+\code{SetMergeAngleThreshold}  & 45 deg & fragment-merging angular tolerance \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\note{\textbf{The cluster radius/distance pair is the hidden coupling between PRA and
+fitting}: it sets how many measurement points the Kalman filter sees. Too few clusters and
+the fit is under-constrained ($\mathrm{ndf}$ collapses); too many and you are fitting
+correlated noise. Change it and re-check \code{minClusters} in the fitter.}
+
+\subsection{PSA parameters worth revisiting}
+
+\begin{center}
+\begin{tabular}{@{}l l p{9.6cm}@{}}
+\toprule
+Setter & a1954 & Effect \\
+\midrule
+\code{SetThreshold}        & 20 & ADC threshold. The single biggest hit-yield knob; lower it to recover faint tracks at the cost of noise (the cleaner then has more work). \\
+\code{SetPeakingTime}      & 0.720 & [$\mu$s] GET $\tau$; must match the electronics. \\
+\code{SetMaxPeaks}         & 4 & pulses fitted simultaneously per pad --- this is what deconvolves two tracks sharing a pad. \\
+\code{SetMinSeparation}    & 4 & [TB] minimum seed spacing; lower resolves closer crossings. \\
+\code{SetProminenceOnPrimary} & false & \textbf{leave false.} True rejects broad baseline humps but also kills diffusion-broadened far-drift pulses, collapsing the track in $z$. \\
+\code{SetFitChi2Cut}       & 0 (off) & shape gate on the fitted pulse; also enables float-$\tau$. \\
+\code{SetMinSignificance}  & 3.0 & keep a pulse only if $A/\sigma_A \ge$ this. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Cleaner parameters (\code{AtDirDeDxCleaner})}
+
+Constructor defaults: $k=12$, \code{cosSeg}~0.78, \code{cosTan}~0.72, \code{rMax}~32~mm,
+\code{qRatio}~0.65, \code{minDeg}~1, \code{smoothQ}~true, \code{qKeep}~150. A hit survives if
+it has at least \code{minDeg} neighbours that are both direction- and $dE/dx$-continuous.
+Relax \code{cosSeg}/\code{cosTan} or raise \code{rMax} if the cleaner is eating sparse
+low-$dE/dx$ tracks; raise \code{minDeg} if noise is surviving.
+
+\subsection{A practical PRA tuning loop}
+
+\begin{enumerate}[leftmargin=*,itemsep=2pt]
+\item Pick one representative run and reco only 500--2000 events into a scratch directory,
+      varying \emph{one} knob:
+\begin{lstlisting}
+root -b -q 'pipeline/unpackReco_Be12.C("run_0147",2000,false,"/tmp/scan_mcs15/",...)'
+\end{lstlisting}
+\item Judge it on the \textbf{PID plane} first (\code{pid/pid_Be12.C}) --- it needs no fit
+      and a tighter, more continuous band is the cleanest indicator that clustering
+      improved.
+\item Then look at track multiplicity per event and at the fraction of events with at least
+      one gated track (printed by \code{gate_events_Be12.C}).
+\item Only then fit, and judge on the elastic peak: \textbf{FWHM of the $E_x$ g.s.\ peak}
+      and the number of surviving tracks. Both are printed by \code{ex_Be12.C} and fitted
+      live in the explorers.
+\item Keep the scan outputs under distinct \code{outSuffix}/\code{outTag} names so caches
+      never overwrite each other.
+\end{enumerate}
+
+%===============================================================================
+\section{Tuning the fitters}
+\label{sec:fit-tuning}
+%===============================================================================
+
+\subsection{\code{measSigma} --- and why the $\chi^2$ cut is not portable}
+
+The UKF runs at \code{measSigma = 0.5}~mm and GENFIT at \code{4.0}~mm. Both enter identically
+as a per-cluster position sigma, so the $8\times$ difference is $64\times$ in $\chi^2$. This
+was measured directly on 73 runs by swapping the two values
+(\code{sigma_test_Be12.sh}):
+
+\begin{center}
+\begin{tabular}{@{}lrr@{}}
+\toprule
+& tracks (no $\chi^2$ cut) & kept by $\chi^2/\mathrm{ndf} < 5$ \\
+\midrule
+UKF at $\sigma = 0.5$    & 32\,120 & 82.8\,\% \\
+UKF at $\sigma = 4.0$    & ---     & 99.5\,\% \\
+GENFIT at $\sigma = 4.0$ & 31\,578 & 39.7\,\% \\
+GENFIT at $\sigma = 0.5$ & ---     & \phantom{0}4.2\,\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent Swapping the sigmas scaled GENFIT's median $\chi^2$ by 63.9 (predicted
+$(4/0.5)^2 = 64$) and the UKF's by 40.1 --- less than 64, because the UKF's \code{measSigma}
+also enters the filter gain.
+
+\warn{\textbf{A $\chi^2/\mathrm{ndf}$ cut is not portable between fitters or between
+\code{measSigma} settings.} With no cut, both fitters return the same tracks to within
+1.7\,\%; the shared cut at 5 is the \emph{entire} 26\,604 vs 12\,533 yield gap. Set the cut
+per fitter from a percentile of that fitter's own $\chi^2$ distribution, not from a number
+copied across.}
+
+\noindent Importantly, \code{measSigma} does \emph{not} move the energy scale: the GENFIT
+g.s.\ centroid was $+0.451$~MeV at both $\sigma = 4.0$ and $\sigma = 0.5$ on 31.5\,k tracks
+each. Covariance controls \emph{which tracks survive a cut}, not \emph{what energy they get}.
+
+\subsection{UKF knobs}
+
+\begin{longtable}{@{}l l p{8.3cm}@{}}
+\toprule
+Knob & a1954 & Effect / when to change \\
+\midrule
+\endhead
+\code{measSigma}      & 0.5 mm  & See above. Raise towards the physical cluster resolution if you want a $\chi^2$ that is interpretable; then re-derive the cut. \\
+\code{momSigmaFrac}   & 0.1     & Momentum-seed uncertainty. Raise if the seed is poor (short tracks) so the filter is not over-confident. \\
+\code{nIter}          & 1       & More iterations help when the seed is far from the solution; costs time linearly. \\
+\code{minClusters}    & 10      & Yield/quality trade-off. Lower to keep short backward recoils, at the price of poorly constrained fits. \\
+\code{gasDensity}     & 6.5e-5  & CATIMA density. \textbf{Inconsistency to resolve:} the geometry builder computes 6.616e-5 g/cm$^3$ for H$_2$ at 600 torr / 293 K, $\approx 2\,\%$ above this. \\
+\code{bFieldSign}     & $-1$    & Experimental handedness. \\
+\code{refTrack}       & false   & Do not re-attempt the unscented reference-track port; the UKF cannot match genfit's analytic-Jacobian transport. \\
+\code{SetEnableEnergyStraggling} & false & In the macro body. \\
+\code{SetEnableMultipleScattering} & --- & In the macro body; worth a test for the lowest-energy protons. \\
+\code{SetForceVertexOnBeamAxis} & --- & Vertex-constraint knob in \code{AtFitterUKF} (with \code{SetVertexZBias}), not exposed as a macro argument. \\
+\bottomrule
+\end{longtable}
+
+\noindent The UKF stores KE at two reference points, which is the cheapest available handle
+on energy-loss systematics: \code{GetKinematics()} is the vertex value (back-extrapolated to
+the beam axis with the lost energy added back), \code{GetKinematicsXtr()} is the value at the
+first cluster. On a1954 the difference is a median of only 0.082~MeV, moving the g.s.\
+centroid by $+0.055$~MeV.
+
+\subsection{GENFIT knobs}
+
+\begin{longtable}{@{}l l p{8.3cm}@{}}
+\toprule
+Knob & Recommended & Effect / when to change \\
+\midrule
+\endhead
+\code{matEffects}   & \code{kTRUE} & \textbf{The important one.} False $\Rightarrow$ constant-momentum helix $\Rightarrow$ KE 30\,\% low below 6~MeV. \\
+\code{geoName}      & \code{ATTPC_H600torr} & Material effects are only as good as the density. \\
+\code{measSigma}    & 4.0 mm & See Section \ref{sec:fit-tuning}. \\
+\code{minIter/maxIter} & 2 / 5 & More iterations for badly seeded tracks. \\
+\code{thetaMin}     & 10 ($pp$) / 5 ($pd$) & Rejects near-beam tracks; too high kills forward deuterons. \\
+\code{backwardSeedFix} & \code{kFALSE} & Alternative seeding for backward tracks; untested here, worth a scan if backward-angle behaviour still looks odd. \\
+\code{pidGate}      & \code{""} & In-fitter Spyral PID gate; redundant when \code{gate_events_Be12.C} already gated. \\
+\code{SetELossFile} & (unset) & Loading a proton $dE/dx$ table would close the residual $+16\,\%$ deficit below 2~MeV. \\
+\bottomrule
+\end{longtable}
+
+\subsection{Drift velocity --- the systematic most likely to be limiting you}
+\label{sec:driftv}
+
+The a1954 par file carries \code{DriftVelocity 1.00} cm/$\mu$s for $^{12}$Be. In the sibling
+$^{14}$C analysis of the \emph{same experiment}, a scan showed the nominal value (1.30 there)
+was clearly too low, and moving to 1.45 improved the resolution by 18\,\% (FWHM
+$0.535 \rightarrow 0.441$~MeV) while pulling the g.s.\ from $-0.36$ to $-0.09$~MeV. Three
+criteria gave three slightly different optima --- slope$\rightarrow$0 at 1.37, $\mu
+\rightarrow 0$ at 1.49, best FWHM at 1.45 --- so quote which one you used.
+
+\textbf{The same scan has not been done for $^{12}$Be and is the highest-value next test.}
+The recipe:
+
+\begin{enumerate}[leftmargin=*,itemsep=2pt]
+\item Copy \file{parameters/ATTPC.a1954_Be12.par} to
+      \file{ATTPC.a1954_Be12_dv110.par} etc., changing only \code{DriftVelocity}.
+\item Re-run \emph{reco} for one run per point (drift velocity enters at the PSA
+      $z$-calibration, so refitting alone is not enough), into per-point directories.
+\item Gate and UKF-fit each point, then build an $E_x$ cache per point with a distinct
+      \code{outTag} (remember the leading underscore).
+\item Tabulate g.s.\ $\mu$, FWHM and the $dE_x/d\theta_{\rm cm}$ slope against $v_d$, and
+      pick your criterion.
+\end{enumerate}
+
+\subsection{Other levers on the resolution}
+
+\begin{itemize}[leftmargin=*,itemsep=2pt]
+\item \textbf{Beam energy.} $dE_x/dE_{\rm beam} \approx 0.01$~MeV per MeV, so zeroing the
+      elastic peak constrains $E_{\rm beam}$ only to $\pm 20$~MeV. Use the \emph{shape} of
+      the KE-vs-$\theta_{\rm lab}$ locus (the explorers overlay the kinematic line) or an
+      independent measurement.
+\item \textbf{Vertex-$z$ dependence.} Resolution is flat in vertex $z$ (a good sign for the
+      calibration) but degrades for far vertices; a \code{vz < 600} cut gave FWHM 0.43~MeV
+      but cost the weak $2^+$ statistics.
+\item \textbf{$E_x$-vs-$\theta$ drift.} If the elastic centroid drifts with angle, that is a
+      drift-velocity or KE-scale signature, not a statistical effect. The $^{14}$C
+      workspace has \code{pp/hyp_C14.C}, which discriminates the three hypotheses (wrong
+      $E_{\rm beam}$ / wrong KE scale / empirical correction) by where it places known
+      levels; porting it to $^{12}$Be is straightforward.
+\item \textbf{Gates.} Redraw the PID polygon with \code{arclen > 200}; check that the
+      deuteron gate is not leaking tritons (this happened in a1975 --- genfit fits them with
+      a perfectly good $\chi^2$).
+\end{itemize}
+
+%===============================================================================
+\section{Known pitfalls}
+\label{sec:pitfalls}
+%===============================================================================
+
+\begin{enumerate}[leftmargin=*,itemsep=3pt]
+\item \textbf{Beam energy is not calibrated.} 155~MeV comes from zeroing the elastic peak,
+      which as shown above barely constrains it. Every absolute $E_x$ rides on it. Find the
+      logbook value before quoting numbers.
+\item \textbf{F: is not auto-mounted} after a reboot: \code{sudo mount -t drvfs F: /mnt/f}.
+      Only the raw data and the big reco files live there; all fit outputs are local and
+      survive.
+\item \textbf{\code{df /} lies inside WSL.} It shows the guest view of a sparse VHDX. When
+      the Windows C: drive fills, jobs get killed mid-write while \code{df} still reports
+      free space. Watch \code{df /mnt/c} and compact the VHDX to reclaim.
+\item \textbf{Kill ROOT jobs at 80\,\% memory} rather than waiting through swap.
+\item \textbf{Two runs are timestamp-desynced} (0142, 0212) --- exclude them
+      (Section~\ref{sec:tsync}).
+\item \textbf{IC amplitude is the positive overshoot}, not $-\min$, and the gate is
+      $[500,900]$, not the older $[625,750]$.
+\item \textbf{$\theta$ conventions differ} between the gate stage (Spyral polar) and the fit
+      output ($\approx 180^\circ$ minus that).
+\item \textbf{\code{outTag} needs its leading underscore} --- the cache name is built as
+      \code{"proton_kin" + outTag}.
+\item \textbf{ROOT Eve / 3D viewers crash under WSL.} Use the browser explorer or static
+      PNGs. (Geant4 Qt/OpenGL, by contrast, does work under WSLg.)
+\item \textbf{The GENFIT fix propagates.} \code{AtGenfitter} commit \code{5f87e625} affects
+      a1975 and PUMA too; anything fitted with \code{matEffects = kTRUE} before it had the
+      same silent $\mathrm{ndf} \le 0$ truncation and will change on a re-run.
+\end{enumerate}
+
+%===============================================================================
+\section{Command cheat-sheet}
+%===============================================================================
+
+\begin{lstlisting}
+# --- environment ------------------------------------------------------------
+export REPO=/home/yassid/fair_install/ATTPCROOTv2-OpenKF
+export HERE=$REPO/macro/Unpack_HDF5/a1954_Be12/UKF
+source /home/yassid/fair_install/FairSoft/install/bin/thisroot.sh
+source $REPO/build/config.sh
+export ROOT_INCLUDE_PATH=$REPO/build/include:/home/yassid/fair_install/FairRootInstall/include
+sudo mount -t drvfs F: /mnt/f                  # if F: is not mounted
+root -b -q $REPO/geometry/ATTPC_H600torr.C     # once per clone
+
+# --- stage 1-2: reco + auxiliary streams ------------------------------------
+cd $HERE
+./reco_hdb_F.sh      "run_0143 run_0144" 2     # -> /mnt/f/a1954_Be12_reco_hdb/
+./frib_F_batch.sh    "run_0143 run_0144" 4     # -> ~/a1954_Be12_reco_hdb_slim/*_FRIB.root
+./slim_cache_batch.sh "run_0143 run_0144" 4    # -> ~/a1954_Be12_reco_hdb_slim/*_slim.root
+
+# --- stage 3: checks and gates ----------------------------------------------
+root -b -q -l "$HERE/pid/tsync_check.C(\"run_0143\")"
+root -b -q -l "$HERE/pid/ic_Be12.C(\"run_0143\")"
+root -l      "$HERE/pid/draw_gate_Be12.C(\"proton_12Be\")"     # interactive
+
+# --- stage 4-5: gate + fit ---------------------------------------------------
+./fitpipe_Be12.sh    "run_0143 run_0144" 4     # (p,p'): gate -> UKF -> GENFIT
+./fitpipe_pd_Be12.sh "run_0143 run_0144" 4 0   # (p,d) : gate -> UKF(deuteron)
+./genfit_pd_Be12.sh  "run_0143 run_0144" 4     # (p,d) : GENFIT
+
+# --- stage 6: physics --------------------------------------------------------
+root -b -q -l "$HERE/pp/ex_Be12.C(\"run_0143,run_0144\",\"~/a1954_Be12_genfix/\",155,5,\
+  \"_pp_genfit\",1.007825,12.026921,\"12Be(p,p')\",\"genfit\")"
+$HERE/pp/open_explorer.sh pp
+\end{lstlisting}
+
+\subsection*{Output directories}
+
+\begin{center}
+\begin{tabular}{@{}ll@{}}
+\toprule
+\file{/mnt/f/a1954_Be12_reco_hdb/}      & full reco (big) \\
+\file{~/a1954_Be12_reco_hdb_slim/}      & slim \code{AtPatternEvent} cache $+$ FRIB \\
+\file{~/a1954_Be12_fit/in/}             & gated fit inputs (reusable) \\
+\file{~/a1954_Be12_fit/}                & $(p,p')$ UKF $+$ pre-fix GENFIT \\
+\file{~/a1954_Be12_genfix/}             & $(p,p')$ fixed GENFIT \\
+\file{~/a1954_Be12_fit_pd/}             & $(p,d)$ UKF \\
+\file{~/a1954_Be12_genfix_pd/}          & $(p,d)$ fixed GENFIT \\
+\file{~/a1954_Be12_sigtest/}            & sigma-swap covariance test \\
+\file{$HERE/pp/plots/}                  & $E_x$ caches and PNGs \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection*{Further reading in the workspace}
+
+\begin{center}
+\begin{tabular}{@{}ll@{}}
+\toprule
+\file{README.md}                    & the terse version of this guide \\
+\file{ANALYSIS_REPORT.md}           & the first end-to-end physics pass \\
+\file{pp/FITTER_COVARIANCE_TEST.md} & the full UKF-vs-GENFIT investigation \\
+\file{pid/PID_COMPARISON.md}        & Spyral vs ATTPCROOT PID \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\end{document}
