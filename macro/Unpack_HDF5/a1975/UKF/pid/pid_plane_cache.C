@@ -15,12 +15,13 @@
 ///
 ///   root -b -q 'pid/pid_plane_cache.C("run_0106","/tmp/pidplane_0106.root")'
 
+/// recoSuffix: "_reco" for the proton-target files, "_multifit_reco" for the D2-target ones.
 void pid_plane_cache(TString run, TString outFile, TString inDir = "/mnt/f/a1975/reco/",
-                     double bField = 2.85, Long64_t maxEvents = -1)
+                     double bField = 2.85, Long64_t maxEvents = -1, TString recoSuffix = "_reco")
 {
    gSystem->Load("libAtReconstruction.so");
    gSystem->Load("libAtTools.so");
-   TString fr = inDir + run + "_reco.root";
+   TString fr = inDir + run + recoSuffix + ".root";
    if (gSystem->AccessPathName(fr)) { printf("skip %s (no reco)\n", run.Data()); return; }
 
    TFile *Fr = TFile::Open(fr);
