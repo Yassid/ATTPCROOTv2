@@ -5,15 +5,21 @@
 /// (AtPatternEvent, from unpackReco_C14.C) and runs EventFit::AtFitterUKF wrapped
 /// in AtFitterUKFMulti. Fast to iterate (skips unpack/PSA/PRA).
 ///
-/// HANDEDNESS: experimental data has the opposite helix handedness to simulation,
-/// so Bz is flipped for exp data. bFieldSign = -1 (EXPERIMENTAL, default), +1 = sim.
+/// HANDEDNESS -- bFieldSign is NOT a free knob, it is set by the data source:
+///     bFieldSign = -1   EXPERIMENTAL data   <-- the DEFAULT, and what every a1954 run uses
+///     bFieldSign = +1   SIMULATION ONLY
+/// The simulation reverses the drift-z handedness in digitization and the experiment does
+/// not, so the helix winds the other way. NEVER pass +1 for a real run: the fits do not
+/// obviously blow up, they come back with a mirrored/biased KE, so the mistake is silent.
+/// fitpipe_C14.sh passes -1 explicitly for the production; +1 appears only in the
+/// Simulation/ATTPC/14C_pp closure test.
 /// If fits diverge / give unphysical KE, try the other sign first (validated on a1975).
 ///
 /// gasDensity default 3.553e-5 g/cm^3 = H2 at 300 torr, the a1954 target.
 /// WAS 6.5e-5 (600 torr) for the whole first production -- ~1.9x too much material. Refitting
 /// at 3.553e-5 moved the 14C(p,p') g.s. from -0.364 to -0.059 MeV at the NOMINAL 161 MeV beam
 /// and improved FWHM 0.555 -> 0.396, which is what showed the 600 torr value was wrong.
-/// (a1975 used 9.0e-5 for H2 at 1 bar; scaled by 600/760.)  << CONFIRM against run conditions.
+/// (a1975 used 9.0e-5 for H2 at 1 bar.)
 ///
 ///   root -b -q 'fitUKF_C14.C("run_0055", -1, "proton", -1)'
 

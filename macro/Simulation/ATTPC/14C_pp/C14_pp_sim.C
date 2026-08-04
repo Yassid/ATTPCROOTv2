@@ -21,8 +21,10 @@
 /// nucleon and the TOTAL momentum is what sets the beam energy.
 ///     m(14C) = 14.003242 u = 13.04394 GeV
 ///     KE = 161 MeV  ->  p = 2.055740 GeV/c  ->  pz = 2.055740/14 per nucleon
-/// NomEnergy is passed for bookkeeping only: AtVertexPropagator::GetBeamNomE() has no
-/// consumer anywhere in the tree, so it does NOT set the beam energy. Only pz does.
+/// NomEnergy does NOT set the beam energy -- only pz does; AtVertexPropagator::GetBeamNomE()
+/// has no consumer anywhere in the tree. But it is NOT harmless either: the same constructor
+/// argument doubles as the default for maxELoss, which controls how often a reaction is
+/// generated at all (see the maxELoss comment below). Pass maxELoss explicitly.
 ///
 ///   root -l 'C14_pp_sim.C(2000)'
 ///
@@ -32,7 +34,13 @@
 /// means the beam energy MUST be verified from MC truth rather than assumed. See
 /// check_beam_C14.C, which does exactly that.
 
-void C14_pp_sim(Int_t nEvents = 2000, TString mcEngine = "TGeant4")
+/// CM ANGULAR RANGE: default 5-120 deg, not the full 0-180. In inverse kinematics the recoil
+/// proton comes out at theta_lab ~ (180 - theta_cm)/2, so theta_cm 5-120 maps to roughly
+/// theta_lab 30-88 -- the region the AT-TPC actually accepts. Beyond ~120 deg CM the recoil
+/// proton is too low in energy to make a reconstructable track, so generating there just
+/// produces events with no track and wastes the digitization (the slow step).
+void C14_pp_sim(Int_t nEvents = 2000, Double_t thetaMinCM = 5.0, Double_t thetaMaxCM = 120.0,
+                TString mcEngine = "TGeant4")
 {
    TString dir = getenv("VMCWORKDIR");
    TString outFile = "./data/attpcsim.root";
@@ -74,10 +82,22 @@ void C14_pp_sim(Int_t nEvents = 2000, TString mcEngine = "TGeant4")
    Double_t pz = 2.055740 / a; // GeV/c per nucleon -> 161.0 MeV total KE
    Double_t BExcEner = 0.0;
    Double_t Bmass = 14.003242; // amu (repo convention -- see the note above)
-   Double_t NomEnergy = 161.0; // MeV, bookkeeping only (dead in the framework)
+   Double_t NomEnergy = 161.0; // MeV
+
+   // maxELoss CONTROLS THE REACTION RATE -- it is not cosmetic.
+   // AtTPCIonGenerator does  fMaxEnLoss = (eLoss < 0 ? ener : eLoss)  and then samples
+   //     Er = gRandom->Uniform(0, fMaxEnLoss);  SetRndELoss(Er)
+   // while AtTpc::reactionOccursHere() fires only once  fELossAcc > GetRndELoss().
+   // A 14C beam at 161 MeV loses only ~12 MeV crossing the whole 1 m of H2 at 300 torr, so
+   // leaving eLoss at its -1 default (=> threshold uniform in [0,161]) means the threshold
+   // exceeds the available energy loss ~92% of the time and NO reaction is generated:
+   // measured 300 reactions in 8000 events (7.5%), matching 12/161.
+   // Setting it to the actual traversal loss makes essentially every reaction event fire,
+   // with the vertex still uniform in z.
+   Double_t maxELoss = 12.0; // MeV, ~ the 14C energy loss across the full drift length
 
    AtTPCIonGenerator *ionGen =
-      new AtTPCIonGenerator("Ion", z, a, q, m, px, py, pz, BExcEner, Bmass, NomEnergy);
+      new AtTPCIonGenerator("Ion", z, a, q, m, px, py, pz, BExcEner, Bmass, NomEnergy, maxELoss);
    ionGen->SetSpotRadius(0, -100, 0);
    primGen->AddGenerator(ionGen);
 
@@ -127,10 +147,11 @@ void C14_pp_sim(Int_t nEvents = 2000, TString mcEngine = "TGeant4")
    Mass.push_back(1.0078250322); // uma
    ExE.push_back(0.0);
 
-   // Full CM range: the experimental elastic ridge spans theta_cm ~15-140 deg and the
-   // point of the sim is to reproduce the acceptance, so do not pre-restrict it.
-   Double_t ThetaMinCMS = 0.0;
-   Double_t ThetaMaxCMS = 180.0;
+   Double_t ThetaMinCMS = thetaMinCM;
+   Double_t ThetaMaxCMS = thetaMaxCM;
+   std::cout << "CM angular range: " << ThetaMinCMS << " - " << ThetaMaxCMS << " deg"
+             << "   (recoil proton theta_lab ~ " << 0.5 * (180 - ThetaMaxCMS) << " - "
+             << 0.5 * (180 - ThetaMinCMS) << " deg)" << std::endl;
 
    AtTPC2Body *TwoBody = new AtTPC2Body("TwoBody", &Zp, &Ap, &Qp, mult, &Pxp, &Pyp, &Pzp, &Mass, &ExE, ResEner,
                                         ThetaMinCMS, ThetaMaxCMS);
