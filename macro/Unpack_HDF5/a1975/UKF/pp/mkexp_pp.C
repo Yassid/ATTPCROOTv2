@@ -7,7 +7,13 @@
 ///
 ///   root -b -q 'pp/mkexp_pp.C("in.root","out.root")'
 
-void mkexp_pp(TString in, TString out, double chi2max = 1e9, double icMin = 950, double icMax = 1350)
+/// keCol/thCol pick WHICH energy column to build the page from. The (d,t) cache carries two per
+/// track since AtGenfitter started writing them separately: "ke"/"theta" are back-extrapolated to
+/// the beam axis (plus CATIMA over the vertex gap), "kefit"/"thetafit" are what the fit returned
+/// at the first measurement point. Pointing two slots at the same cache with different columns is
+/// how the two are compared without deriving a second file.
+void mkexp_pp(TString in, TString out, double chi2max = 1e9, double icMin = 950, double icMax = 1350,
+              TString keCol = "ke", TString thCol = "theta")
 {
    TFile *f = TFile::Open(in);
    if (!f || f->IsZombie()) { printf("cannot open %s\n", in.Data()); return; }
@@ -17,7 +23,10 @@ void mkexp_pp(TString in, TString out, double chi2max = 1e9, double icMin = 950,
    // D2 reco has no _FRIB.root at all so there is no `ic`. A flat vertexz makes the page hide its
    // z panel, which is the honest outcome when the column was never filled.
    float ke, theta, vz = 0, chi2ndf, ic = -1;
-   t->SetBranchAddress("ke",&ke); t->SetBranchAddress("theta",&theta);
+   if (!t->GetBranch(keCol) || !t->GetBranch(thCol)) {
+      printf("mkexp_pp: no `%s`/`%s` in %s\n", keCol.Data(), thCol.Data(), in.Data()); return;
+   }
+   t->SetBranchAddress(keCol,&ke); t->SetBranchAddress(thCol,&theta);
    t->SetBranchAddress("chi2ndf",&chi2ndf);
    if (t->GetBranch("vz")) t->SetBranchAddress("vz",&vz);
    else if (t->GetBranch("vertexz")) t->SetBranchAddress("vertexz",&vz);
