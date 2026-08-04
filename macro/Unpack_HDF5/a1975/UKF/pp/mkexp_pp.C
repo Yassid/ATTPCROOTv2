@@ -13,9 +13,17 @@ void mkexp_pp(TString in, TString out, double chi2max = 1e9, double icMin = 950,
    if (!f || f->IsZombie()) { printf("cannot open %s\n", in.Data()); return; }
    TTree *t = (TTree *)f->Get("pk");
    if (!t) { printf("no tree `pk` in %s\n", in.Data()); return; }
-   float ke, theta, vz, chi2ndf, ic;
-   t->SetBranchAddress("ke",&ke); t->SetBranchAddress("theta",&theta); t->SetBranchAddress("vz",&vz);
-   t->SetBranchAddress("chi2ndf",&chi2ndf); t->SetBranchAddress("ic",&ic);
+   // vertex and ion-chamber columns are optional: the D2 caches name the vertex `vertexz`, and the
+   // D2 reco has no _FRIB.root at all so there is no `ic`. A flat vertexz makes the page hide its
+   // z panel, which is the honest outcome when the column was never filled.
+   float ke, theta, vz = 0, chi2ndf, ic = -1;
+   t->SetBranchAddress("ke",&ke); t->SetBranchAddress("theta",&theta);
+   t->SetBranchAddress("chi2ndf",&chi2ndf);
+   if (t->GetBranch("vz")) t->SetBranchAddress("vz",&vz);
+   else if (t->GetBranch("vertexz")) t->SetBranchAddress("vertexz",&vz);
+   const bool hasIC = t->GetBranch("ic") != nullptr;
+   if (hasIC) t->SetBranchAddress("ic",&ic);
+   if (!hasIC && icMin > 0) { printf("mkexp_pp: no `ic` branch -- IC gate disabled\n"); icMin = -1; }
 
    TFile o(out, "RECREATE");
    float oke, oth, ovz, oc2;

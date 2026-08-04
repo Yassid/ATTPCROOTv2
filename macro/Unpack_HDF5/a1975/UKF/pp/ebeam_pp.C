@@ -44,22 +44,37 @@ static bool fitPk(TH1F *h, double c, double win, double &mu, double &er, double 
    return er > 0 && er < 0.5;
 }
 
+/// Masses default to 16C(p,p')16C. For the D2-target elastic 16C(d,d)16C pass
+/// mEject = mTarg = 2.0135532 and leave the rest; the 16C 2+ at 1.766 is the ruler either way,
+/// since the residual is 16C in both channels.
 void ebeam_pp(TString cache, double eLo = 180, double eHi = 205, double dE = 2.5, TString outTag = "",
               double chi2max = 5.0, double icMin = 950, double icMax = 1350,
-              double ex2p = 1.766, double thLo = 30, double thHi = 95, double win2p = 1.2)
+              double ex2p = 1.766, double thLo = 30, double thHi = 95, double win2p = 1.2,
+              double mBeamAmu = 16.0147013, double mTargAmu = 1.00782503,
+              double mEjectAmu = 1.00782503, double mResidAmu = 16.0147013)
 {
    gStyle->SetOptStat(0);
    const double u = 931.49401;
-   const double m1 = 16.0147013*u, m2 = 1.00782503*u, m3 = m2, m4 = m1;
+   const double m1 = mBeamAmu*u, m2 = mTargAmu*u, m3 = mEjectAmu*u, m4 = mResidAmu*u;
    TString dir = gSystem->DirName(__FILE__);
 
    TFile *f = TFile::Open(cache);
    if (!f || f->IsZombie()) { printf("cannot open %s\n", cache.Data()); return; }
    TTree *t = (TTree *)f->Get("pk");
    if (!t) { printf("no tree `pk`\n"); return; }
-   float ke, theta, vz, chi2ndf, ic;
-   t->SetBranchAddress("ke",&ke); t->SetBranchAddress("theta",&theta); t->SetBranchAddress("vz",&vz);
-   t->SetBranchAddress("chi2ndf",&chi2ndf); t->SetBranchAddress("ic",&ic);
+   // the (p,p') caches call the vertex column `vz` and carry an ion-chamber value; the D2 (d,d)
+   // cache calls it `vertexz` and has no IC at all (the D2 reco has no _FRIB.root)
+   float ke, theta, vz = 0, chi2ndf, ic = -1;
+   t->SetBranchAddress("ke",&ke); t->SetBranchAddress("theta",&theta);
+   t->SetBranchAddress("chi2ndf",&chi2ndf);
+   if (t->GetBranch("vz")) t->SetBranchAddress("vz",&vz);
+   else if (t->GetBranch("vertexz")) t->SetBranchAddress("vertexz",&vz);
+   const bool hasIC = t->GetBranch("ic") != nullptr;
+   if (hasIC) t->SetBranchAddress("ic",&ic);
+   if (!hasIC && icMin > 0) {
+      printf("note: no `ic` branch in this cache -- IC gate disabled\n");
+      icMin = -1;
+   }
    std::vector<float> vk, vt;
    for (Long64_t i = 0; i < t->GetEntries(); ++i) {
       t->GetEntry(i);

@@ -42,23 +42,33 @@ static bool anchoredPeak(TH1F *h, double &mu, double &er, double &sg, double lo,
    return er > 0 && er < 0.4;
 }
 
+/// Masses default to 16C(p,p')16C; for the D2-target elastic 16C(d,d)16C pass
+/// mTarg = mEject = 2.0135532.
 void thetadiag_pp(TString cache, double Ebeam = 192.0, double thLo = 30, double thHi = 100,
                   double dth = 5, double chi2Cut = 5.0, double icMin = 950, double icMax = 1350,
                   TString outTag = "", double anchorLo = -1.5, double anchorHi = 1.2,
-                  double keThresh = 0.79, double keFlag = 2.0)
+                  double keThresh = 0.79, double keFlag = 2.0,
+                  double mBeamAmu = 16.0147013, double mTargAmu = 1.00782503,
+                  double mEjectAmu = 1.00782503, double mResidAmu = 16.0147013)
 {
    gStyle->SetOptStat(0);
    const double u = 931.49401;
-   const double m1 = 16.0147013*u, m2 = 1.00782503*u, m3 = m2, m4 = m1;  // 16C(p,p)16C
+   const double m1 = mBeamAmu*u, m2 = mTargAmu*u, m3 = mEjectAmu*u, m4 = mResidAmu*u;
    TString dir = gSystem->DirName(__FILE__);
 
    TFile *f = TFile::Open(cache);
    if (!f || f->IsZombie()) { printf("cannot open %s\n", cache.Data()); return; }
    TTree *n = (TTree *)f->Get("pk");
    if (!n) { printf("no `pk` in %s\n", cache.Data()); return; }
-   float ke, th, vz, c2, ic; int rn;
-   n->SetBranchAddress("ke",&ke); n->SetBranchAddress("theta",&th); n->SetBranchAddress("vz",&vz);
-   n->SetBranchAddress("chi2ndf",&c2); n->SetBranchAddress("ic",&ic); n->SetBranchAddress("run",&rn);
+   // (p,p') caches use `vz` + `ic` + `run`; the D2 (d,d) cache uses `vertexz` and has no IC
+   float ke, th, vz = 0, c2, ic = -1;
+   n->SetBranchAddress("ke",&ke); n->SetBranchAddress("theta",&th);
+   n->SetBranchAddress("chi2ndf",&c2);
+   if (n->GetBranch("vz")) n->SetBranchAddress("vz",&vz);
+   else if (n->GetBranch("vertexz")) n->SetBranchAddress("vertexz",&vz);
+   const bool hasIC = n->GetBranch("ic") != nullptr;
+   if (hasIC) n->SetBranchAddress("ic",&ic);
+   if (!hasIC && icMin > 0) { printf("note: no `ic` branch -- IC gate disabled\n"); icMin = -1; }
 
    std::vector<float> vk, vt;
    Long64_t nIC = 0;
