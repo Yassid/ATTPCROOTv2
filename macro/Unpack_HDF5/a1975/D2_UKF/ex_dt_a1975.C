@@ -80,8 +80,14 @@ void ex_dt_a1975(TString runsCSV = "run_0016", TString inDir = "/mnt/f/a1975/rec
       pid = AtTools::AtParticleID::LoadJSON(gateFile.Data());
 
    TFile *fcache = new TFile(cacheOut, "RECREATE");
+   // ke/theta/ex are the BACK-EXTRAPOLATED values (AtGenfitter's Xtr slot: vertex state on the
+   // beam axis, plus any manual dE/dx). kefit/thetafit/exfit are what the fit itself returned at
+   // the first measurement point, kept so the two can be compared on the same tracks. Before
+   // AtGenfitter wrote them separately both slots held the corrected value, so an older cache
+   // has kefit == ke by construction.
    TNtuple *ntk = new TNtuple("pk", "candidate triton kinematics (d,t)",
-                              "ke:theta:vertexz:vertexr:thcm:ex:chi2ndf:brho:dedx:sqrtdedx:ncl:ntrk:run:ic");
+                              "ke:theta:vertexz:vertexr:thcm:ex:chi2ndf:brho:dedx:sqrtdedx:ncl:ntrk:run:ic:"
+                              "kefit:thetafit:exfit");
 
    auto *hex = new TH1F("hex", "^{15}C excitation energy (d,t), triton hyp;E_{x}(^{15}C) [MeV];tritons", 200, -10, 25);
    auto *hexAll = new TH1F("hexAll", "Ex, no PID gate", 200, -10, 25);
@@ -102,7 +108,15 @@ void ex_dt_a1975(TString runsCSV = "run_0016", TString inDir = "/mnt/f/a1975/rec
          printf("skip %s (missing %s)\n", run.Data(), gf.Data());
          continue;
       }
-      int runNo = TString(run(run.Length() - 4, 4)).Atoi();
+      // The fit file may carry a stage suffix (run_0017_multifit), but the run number and the IC
+      // file are keyed on the bare run_NNNN. Taking the LAST four characters silently returned
+      // runNo = 0 and looked for run_0017_multifit_IC.root, so the whole cache came out with
+      // ic = -1 -- i.e. no beam gate at all, which is worth ~1.7 MeV on the reconstructed Ex.
+      TString runTag = run;
+      Ssiz_t rp = runTag.Index("run_");
+      if (rp != kNPOS && runTag.Length() >= rp + 8)
+         runTag = runTag(rp, 8); // "run_NNNN"
+      int runNo = TString(runTag(runTag.Length() - 4, 4)).Atoi();
       TFile *fu = TFile::Open(gf);
       TTree *tu = (TTree *)fu->Get("cbmsim");
       TClonesArray *te = nullptr, *pe = nullptr;
@@ -114,7 +128,7 @@ void ex_dt_a1975(TString runsCSV = "run_0016", TString inDir = "/mnt/f/a1975/rec
       // ion chamber, entry-aligned with the fit tree (see unpackIC_d2.C on the alignment)
       std::vector<float> icv;
       if (icDir.Length()) {
-         TString icf = icDir + run + "_IC.root";
+         TString icf = icDir + runTag + "_IC.root";
          if (!gSystem->AccessPathName(icf)) {
             TFile *fi = TFile::Open(icf);
             TTree *ti = (TTree *)fi->Get("ic");
@@ -158,10 +172,12 @@ void ex_dt_a1975(TString runsCSV = "run_0016", TString inDir = "/mnt/f/a1975/rec
             if (inGate)
                ++nGated;
             auto *ft = it->second;
-            auto &k = ft->GetKinematics();
+            auto &k = ft->GetKinematicsXtr(); // back-extrapolated: the value the analysis uses
+            auto &kf = ft->GetKinematics();   // raw fit at the first measurement point
             double ndf = ft->GetTrackMetadata()->GetNdf(), chi2 = ft->GetTrackMetadata()->GetChi2();
             double c2n = ndf > 0 ? chi2 / ndf : 1e9;
             double ke = k.kineticEnergy, thRad = k.theta, thDeg = thRad * TMath::RadToDeg();
+            double keF = kf.kineticEnergy, thRadF = kf.theta;
             if (ke <= 0 || ke > keMax || c2n > chi2Cut)
                continue;
             if (thDeg < thMinDeg || thDeg > thMaxDeg)
@@ -185,10 +201,25 @@ void ex_dt_a1975(TString runsCSV = "run_0016", TString inDir = "/mnt/f/a1975/rec
                hpidBl->Fill(sr.sqrtdEdx, sr.brho);
                hvzBl->Fill(v.Z());
             }
-            float row[14] = {(float)ke,        (float)thDeg,     (float)v.Z(),        (float)vr,
-                             (float)thcm,      (float)exCal,     (float)c2n,          (float)sr.brho,
-                             (float)sr.dEdx,   (float)sr.sqrtdEdx, (float)sr.nClusters, (float)ntrk,
-                             (float)runNo,     icNow};
+            // same kinematics, evaluated on the uncorrected fit value; NaN if it does not close
+            auto [exF, thcmF] = kine_2b(m_C16, m_d, m_t, m_C15, Ebeam, thRadF, keF);
+            float row[17] = {(float)ke,
+                             (float)thDeg,
+                             (float)v.Z(),
+                             (float)vr,
+                             (float)thcm,
+                             (float)exCal,
+                             (float)c2n,
+                             (float)sr.brho,
+                             (float)sr.dEdx,
+                             (float)sr.sqrtdEdx,
+                             (float)sr.nClusters,
+                             (float)ntrk,
+                             (float)runNo,
+                             icNow,
+                             (float)keF,
+                             (float)(thRadF * TMath::RadToDeg()),
+                             (float)(std::isnan(exF) ? -999.0 : exF + exShift)};
             ntk->Fill(row);
          }
       }
