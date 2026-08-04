@@ -35,7 +35,8 @@ void fitGenfitter_a1975_deuterium(TString fileName = "run_0016", Long64_t nEvent
                                   Double_t massAmu = 1.00782503207, Int_t Z = 1,
                                   TString speciesTag = "p", TString recoSuffix = "_reco",
                                   TString geoName = "ATTPC_H1bar_geomanager.root",
-                                  Bool_t backExtrap = kFALSE, Double_t manualElossDensity = 0, Int_t matA = 2)
+                                  Bool_t backExtrap = kFALSE, Double_t manualElossDensity = 0, Int_t matA = 2,
+                                  TString parName = "ATTPC.a1975_deuterium.par")
 {
    gSystem->Load("libAtReconstruction.so");
    FairLogger::GetLogger()->SetLogScreenLevel("WARNING");
@@ -49,7 +50,10 @@ void fitGenfitter_a1975_deuterium(TString fileName = "run_0016", Long64_t nEvent
    // for these runs. With matEffects off the geometry only drives navigation and the choice
    // is harmless, which is why this went unnoticed.
    TString geoManFile = dir + "/geometry/" + geoName;
-   TString digiParFile = dir + "/parameters/ATTPC.a1975_deuterium.par"; // D2 gas
+   // The par MUST be the one the reco ran with. It was hardcoded to the 1.136 baseline, so a
+   // drift-velocity study that re-recoed with a variant par was still fitted against 1.136 --
+   // silently, since nothing cross-checks the two.
+   TString digiParFile = dir + "/parameters/" + parName;
    TString inputFile = ioDir + fileName + recoSuffix + ".root";
    TString outBase = (outDir.Length() ? outDir : ioDir);
    TString outputFile = outBase + fileName + "_genfitter_" + speciesTag + outSuffix + ".root";
