@@ -48,6 +48,13 @@ void AtGRAWUnpacker::Init()
    if (!fIsData)
       LOG(error) << "Problem setting the data pointer to the first file in the list!";
 
+   // SetData() above replaced any pseudo-topology frame with the one read from the file,
+   // so re-apply it here for data that has none of its own (e.g. the Dec 2014 AT-TPC runs).
+   // Gated on fUseCoboFrame so the default path stays bit-identical to before.
+   if (fUseCoboFrame && fPseudoTopologyMask >= 0)
+      for (auto &decoder : fDecoder)
+         decoder->SetPseudoTopologyFrame(fPseudoTopologyMask, fPseudoTopologyCheck);
+
    std::vector<int> iniFrameIDs;
    LOG(info) << "Initial frame IDs";
    for (int i = 0; i < fNumFiles; ++i) {
@@ -117,8 +124,10 @@ void AtGRAWUnpacker::FillRawEvent(AtRawEvent &event)
       std::vector<std::thread> file;
 
       for (Int_t iFile = 0; iFile < fNumFiles; iFile++) {
-         file.emplace_back([this](Int_t fileIdx) { this->ProcessBasicFile(fileIdx); }, iFile);
-         // file[iFile] = std::thread([this](Int_t fileIdx) { this->ProcessBasicFile(fileIdx); }, iFile);
+         if (fUseCoboFrame)
+            file.emplace_back([this](Int_t fileIdx) { this->ProcessFile(fileIdx); }, iFile);
+         else
+            file.emplace_back([this](Int_t fileIdx) { this->ProcessBasicFile(fileIdx); }, iFile);
       }
 
       for (auto &fileThread : file)
@@ -171,8 +180,14 @@ bool AtGRAWUnpacker::IsLastEvent()
 {
    if (fIsSeparatedData) {
       bool isLastEvent = false;
+      // Probe with the same frame type the event was assembled from. Mixing a GetBasicFrame
+      // probe into the GetCoboFrame path corrupts the decoder's frame bookkeeping and makes
+      // the next GetCoboFrame return null (i.e. zero pads for every event).
       for (int i = 0; i < fNumFiles; ++i)
-         isLastEvent |= fDecoder[i]->GetBasicFrame(fDataEventID) == nullptr;
+         if (fUseCoboFrame)
+            isLastEvent |= fDecoder[i]->GetCoboFrame(fDataEventID) == nullptr;
+         else
+            isLastEvent |= fDecoder[i]->GetBasicFrame(fDataEventID) == nullptr;
       return isLastEvent;
    } else {
       if (dynamic_cast<AtTpcMap *>(fMap.get()) != nullptr) {
@@ -381,6 +396,10 @@ void AtGRAWUnpacker::doBaselineSubtraction(AtPad &pad)
 
 void AtGRAWUnpacker::SetPseudoTopologyFrame(Int_t asadMask, Bool_t check)
 {
+   // Remember it: Init() calls SetData(), which reads the file's own topology frame and
+   // undoes this, so it has to be applied again afterwards.
+   fPseudoTopologyMask = asadMask;
+   fPseudoTopologyCheck = check;
    for (auto &decoder : fDecoder)
       decoder->SetPseudoTopologyFrame(asadMask, check);
 }

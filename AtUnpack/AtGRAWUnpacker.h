@@ -61,6 +61,19 @@ protected:
     */
    Bool_t fIsMutantOneRun{false};
    Bool_t fCheckNumEvents{false};
+   /** If true, assemble each event from a full GETCoboFrame (all AsAd frames) instead of a
+    * single GETBasicFrame. Required for multi-AsAd AT-TPC data such as the Dec 2014 alphas:
+    * with the default the event holds only 1 of the 4 AsAds per CoBo and the AsAd index
+    * cycles 0,1,2,3 across consecutive events. Defaults to false to preserve the behaviour
+    * every existing analysis on this branch was run with.
+    */
+   Bool_t fUseCoboFrame{false};
+   /** Pseudo-topology mask, remembered so Init() can re-apply it after SetData(). SetData()
+    * reads the real topology frame from the file and overwrites whatever the caller set
+    * beforehand, which leaves GetCoboFrame() returning null. -1 means "not requested".
+    */
+   Int_t fPseudoTopologyMask{-1};
+   Bool_t fPseudoTopologyCheck{kFALSE};
 
    // String to identify which file in fInputFileName map to which fDecoder
    std::string fFileIDString;
@@ -86,6 +99,7 @@ public:
    void SetBaseLineSubtraction(Bool_t val) { fIsBaseLineSubtraction = val; }
    void SetMutantOneRun(Bool_t val) { fIsMutantOneRun = val; }
    void SetCheckNumEvents() { fCheckNumEvents = true; }
+   void SetUseCoboFrame(Bool_t val = kTRUE) { fUseCoboFrame = val; }
    // AtUnpacker interface
    virtual void Init() override;
    virtual void FillRawEvent(AtRawEvent &event) override; // Pass by ref to ensure it's a valid object
