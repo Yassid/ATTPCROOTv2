@@ -251,6 +251,7 @@ AtFittedTrack *AtGenfitter::GetFittedTrack(AtTrack *track, AtFitMetadata * /*fit
    trackCand.setPdgCode(fPDG);
 
    TVector3 posRes, momRes;
+   TVector3 momFit;       // momentum at the FIRST MEASUREMENT POINT, before any extrapolation
    double vtxGapCm = 0.0; // vertex-to-first-cluster distance opened up by the back-extrapolation
    TMatrixDSym covRes(6);
    double chi2 = -1, ndf = -1;
@@ -278,6 +279,7 @@ AtFittedTrack *AtGenfitter::GetFittedTrack(AtTrack *track, AtFitMetadata * /*fit
          ndf = st->getNdf();
          genfit::MeasuredStateOnPlane fitState = gfTrack->getFittedState();
          const TVector3 posFirstHit = fitState.getPos(); // cm, before any extrapolation
+         momFit = fitState.getMom();                     // kept so the raw fit value survives the extrapolation
          // getFittedState() with no argument is the FIRST MEASUREMENT POINT, not the reaction
          // vertex. The gap between them is unmeasured gas the ejectile already crossed, so its
          // energy loss there is missing from every fitted momentum. Extrapolating back to the
@@ -364,10 +366,21 @@ AtFittedTrack *AtGenfitter::GetFittedTrack(AtTrack *track, AtFitMetadata * /*fit
    if (thetaFitDeg < fThetaMinDeg || thetaFitDeg > fThetaMaxDeg)
       return nullptr;
 
+   // The two kinematics slots are NOT the same quantity, and before this they were both
+   // filled with the corrected value:
+   //   GetKinematics()    -- what the fit itself returned, at the first measurement point
+   //   GetKinematicsXtr() -- after back-extrapolation to the beam axis and any manual dE/dx
+   // With material effects OFF the extrapolation is geometric and leaves |p| untouched, so the
+   // two differ only when fManualELoss is set; with them ON they differ by the gas the ejectile
+   // crossed before the first cluster. Keeping both is what makes that difference measurable.
+   // NB every consumer that wants the corrected energy must now read GetKinematicsXtr().
+   const double pFit = momFit.Mag() * 1000.0; // GeV -> MeV
+   const double KEFit = (std::isfinite(pFit) && pFit > 0) ? std::sqrt(pFit * pFit + mass * mass) - mass : KE;
+
    auto owner = std::make_unique<AtFittedTrack>();
    AtFittedTrack *ft = owner.get();
    ft->SetTrackID(track->GetTrackID());
-   ft->SetKinematics(KE, momRes.Theta(), momRes.Phi());
+   ft->SetKinematics(KEFit, momFit.Theta(), momFit.Phi());
    ft->SetKinematicsXtr(KE, momRes.Theta(), momRes.Phi());
    ft->SetVertex(XYZVector(posRes.X() * 10.0, posRes.Y() * 10.0, posRes.Z() * 10.0)); // cm -> mm
    ft->SetParticleInfo(std::to_string(fZ), fZ, fMassAmu);
