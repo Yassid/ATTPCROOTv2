@@ -93,7 +93,10 @@ void AtDecoderSpecMATTask::SetProtoMap(TString mapfile) {
   fProtoMapFile = mapfile;
 }
 void AtDecoderSpecMATTask::SetMapOpt(Int_t value) { fOpt = value; }
-Bool_t AtDecoderSpecMATTask::SetMap(Char_t const *map) { fMap = map; }
+Bool_t AtDecoderSpecMATTask::SetMap(Char_t const *map) {
+  fMap = map;
+  return kTRUE;
+}
 void AtDecoderSpecMATTask::SetPseudoTopologyFrame(Bool_t value) {
   fIsPseudoTopology = value;
 }

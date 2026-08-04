@@ -181,6 +181,7 @@ Bool_t AtHDFParserTask::SetProtoMapFile(TString mapfile)
 Bool_t AtHDFParserTask::SetInitialEvent(std::size_t inievent)
 {
    fIniEventID = inievent;
+   return kTRUE;
 }
 
 InitStatus AtHDFParserTask::Init()

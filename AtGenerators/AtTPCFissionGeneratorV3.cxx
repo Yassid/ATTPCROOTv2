@@ -1,6 +1,8 @@
 #include "AtTPCFissionGeneratorV3.h"
 #include "TFile.h"
 #include "TTree.h"
+
+#include <set>
 // Default constructor
 AtTPCFissionGeneratorV3::AtTPCFissionGeneratorV3() : nTracks(0) {}
 

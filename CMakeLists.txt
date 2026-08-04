@@ -306,6 +306,10 @@ add_subdirectory (AtS800)
 add_subdirectory (AtApollo)
 add_subdirectory (AtTools)
 
+# AtEventDisplay's own CMakeLists only mentions PCL via an empty ${PCL_INCLUDE_DIRS}, but
+# AtEventDrawTask includes AtRansac.h / AtHoughSpaceCircle.h, which do need PCL -- and
+# AtReconstruction drops those classes entirely when PCL is absent. So the gate is real.
+# Use the OpenKF-Claude branch's PCL-free AtViewerManager display instead.
 if (PCL_FOUND)
 add_subdirectory (AtEventDisplay)
 endif()

@@ -211,6 +211,7 @@ std::size_t AtHDFParser::inievent()
 std::size_t AtHDFParser::datasets()
 {
    herr_t idx = H5Literate(_group, H5_INDEX_NAME, H5_ITER_INC, NULL, file_info, NULL);
+   return (idx < 0) ? 0 : static_cast<std::size_t>(idx);
 }
 
 herr_t AtHDFParser::file_info(hid_t loc_id, const char *name, const H5L_info_t *linfo, void *opdata)

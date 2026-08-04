@@ -413,8 +413,13 @@ AtRawEvent *AtCore2::GetRawEvent(Long64_t frameID)
       std::thread *cobo = new std::thread[fNumCobo];
       
             
-      for (Int_t iCobo = 0; iCobo < fNumCobo; iCobo++){	 
-	 cobo[iCobo] = std::thread([this](Int_t coboIdx) { this->ProcessBasicCobo(coboIdx); }, iCobo);
+      // ProcessBasicCobo reads a SINGLE basic frame, i.e. one AsAd, so each output event
+      // ended up holding only 1 of the 4 AsAds per CoBo (2304 pads instead of 9216) with the
+      // AsAd index cycling 0,1,2,3 across consecutive events. ProcessCobo fetches the
+      // GETCoboFrame and loops over all its AsAd frames, which is what the 2014-era working
+      // version did.
+      for (Int_t iCobo = 0; iCobo < fNumCobo; iCobo++){
+	 cobo[iCobo] = std::thread([this](Int_t coboIdx) { this->ProcessCobo(coboIdx); }, iCobo);
       }
 	 
       

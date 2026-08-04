@@ -433,10 +433,12 @@ Bool_t AtTrack::SortHitArrayTime()
 {
 
    std::sort(fHitArray.begin(), fHitArray.end(), SortHitTime);
+   return kTRUE;
 }
 
 Bool_t AtTrack::SortClusterHitArrayZ()
 {
 
    std::sort(fHitClusterArray.begin(), fHitClusterArray.end(), SortClusterHitZ);
+   return kTRUE;
 }

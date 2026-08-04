@@ -94,10 +94,13 @@ private:
 
    Int_t fNumTbs;
 
-   GETDecoder2 *fDecoderPtr[4];
+   // Sized to match AtDecoder2Task::fDataList[40]. These were [4] while fNumCobo is
+   // routinely 9-10, so SetUseSeparatedData()/Initialize() wrote past the end and
+   // corrupted the following members (garbage fDecoderPtr[0] -> segfault in SetData).
+   GETDecoder2 *fDecoderPtr[40];
    Bool_t fIsData;
 
-   AtPedestal *fPedestalPtr[4];
+   AtPedestal *fPedestalPtr[40];
    Bool_t fIsNegativePolarity;
    Double_t fFPNSigmaThreshold;
    Bool_t fIsProtoGeoSet;
@@ -109,7 +112,7 @@ private:
    AtRawEvent *fRawEventPtr;
    TClonesArray *fPadArray;
 
-   Int_t fCurrentEventID[4];
+   Int_t fCurrentEventID[40];
    Int_t fTargetFrameID;
 
    Bool_t fIsSeparatedData;

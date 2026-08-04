@@ -202,12 +202,14 @@ Bool_t AtEvent::SortHitArray()
 {
 
    std::sort(fHitArray.begin(), fHitArray.end(), SortHit);
+   return kTRUE;
 }
 
 Bool_t AtEvent::SortHitArrayTime()
 {
 
    std::sort(fHitArray.begin(), fHitArray.end(), SortHitTime);
+   return kTRUE;
 }
 
 // Bool_t operator<(const AtHit &s1, const AtHit &s2){

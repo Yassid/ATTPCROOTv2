@@ -1,0 +1,9 @@
+/media/yassid/Cris_OneD/Dec2014_alphas/run_0075/CoBo0_run_0075_11Dec14_05h01m19s.graw
+/media/yassid/Cris_OneD/Dec2014_alphas/run_0075/CoBo1_run_0075_11Dec14_05h01m19s.graw
+/media/yassid/Cris_OneD/Dec2014_alphas/run_0075/CoBo2_run_0075_11Dec14_05h01m19s.graw
+/media/yassid/Cris_OneD/Dec2014_alphas/run_0075/CoBo3_run_0075_11Dec14_05h01m19s.graw
+/media/yassid/Cris_OneD/Dec2014_alphas/run_0075/CoBo4_run_0075_11Dec14_05h01m19s.graw
+/media/yassid/Cris_OneD/Dec2014_alphas/run_0075/CoBo6_run_0075_11Dec14_05h01m19s.graw
+/media/yassid/Cris_OneD/Dec2014_alphas/run_0075/CoBo7_run_0075_11Dec14_05h01m19s.graw
+/media/yassid/Cris_OneD/Dec2014_alphas/run_0075/CoBo8_run_0075_11Dec14_05h01m19s.graw
+/media/yassid/Cris_OneD/Dec2014_alphas/run_0075/CoBo9_run_0075_11Dec14_05h01m19s.graw

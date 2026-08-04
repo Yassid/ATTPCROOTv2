@@ -43,6 +43,7 @@ Set(LIBRARY_NAME AtTpcMap)
 Set(DEPENDENCIES
     Base
     XMLParser
+    Hist
 )
 
 

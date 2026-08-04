@@ -110,6 +110,7 @@ Int_t AtMCTrack::GetNPoints(DetectorId detId) const
        return 0;
      }
    */
+   return 0;
 }
 // -------------------------------------------------------------------------
 

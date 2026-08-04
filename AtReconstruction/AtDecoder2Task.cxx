@@ -110,6 +110,7 @@ void AtDecoder2Task::SetMapOpt(Int_t value)
 Bool_t AtDecoder2Task::SetMap(Char_t const *map)
 {
    fMap = map;
+   return kTRUE;
 }
 void AtDecoder2Task::SetPseudoTopologyFrame(Bool_t value)
 {
