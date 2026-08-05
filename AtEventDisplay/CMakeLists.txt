@@ -33,12 +33,11 @@ link_directories(${LINK_DIRECTORIES})
 
 set(SRCS
 # Add all the source files below this line. Those must have cc for their extension.
+# Only the AT-TPC display is built. The Proto and S800 variants still pull in the
+# PCL-only RANSAC / Hough classes (AtEventDrawTaskS800.h includes AtRansac.h and
+# AtRansacMod.h), so they are excluded from this PCL-free build.
 AtEventManager.cxx
-AtEventManagerProto.cxx
 AtEventDrawTask.cxx
-AtEventDrawTaskProto.cxx
-AtEventManagerS800.cxx
-AtEventDrawTaskS800.cxx
 
 )
 

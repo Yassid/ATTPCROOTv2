@@ -1,0 +1,55 @@
+################################################################################
+# Parameters used throughout ATTPCROOT software
+# Format:
+# parameter_name:parameter_type(Int_t-integer, Double_t-double) parameter_value
+# AtDigiPar
+#
+# Low-pressure (149-150 torr) Dec 2014 alpha runs: 114-241.
+# From the run log Alphas-Dec14-RunData.xlsx:
+#   He:CO2 at 149-150 torr, cathode 15 kV, ring 510 V, mesh 850/851 V,
+#   1.95 MeV/u 4He, solenoid 0.5691 T.
+# DriftVelocity is UNCHANGED from the 299.5 torr set: the cathode and ring were
+# halved along with the pressure, so E/p is 1.000 vs 1.002 V/cm/torr -- the same
+# reduced field, hence the same drift velocity.
+# LorentzAngle left at 0 for now (E || B in the AT-TPC); revisit for reconstruction.
+# Density scaled from the 299.5 torr value (0.145 -> 0.0727); unused by unpack+PSA.
+# Description of parameters
+################################################################################
+[AtDigiPar]
+PadPlaneX:Int_t                864   # mm
+PadPlaneZ:Int_t               1344   # mm
+PadSizeX:Int_t                   8   # mm
+PadSizeZ:Int_t                  12   # mm
+PadRows:Int_t                  108   #
+PadLayers:Int_t                112   #
+AnodeWirePlaneY:Double_t     -4.05   # mm
+GroundWirePlaneY:Double_t     -8.1   # mm
+GatingWirePlaneY:Double_t      -14   # mm
+EField:Double_t               5000   # V/m
+NumTbs:Int_t                   512
+SamplingRate:Int_t             6.0   # Real value is 6.25 MHz
+DriftVelocity:Double_t        2.25   # cm/us
+DriftLength:Double_t          1000   # mm //ATTPC : 1000 - Prototype : 500
+YDivider:Int_t                1000   # Full drift length will be divided by this number when finding cluster
+GasFile:Int_t                    2
+PadPlaneFile:Int_t               3
+PadShapeFile:Int_t               4   # might not be needed because the shape is simply rectangle
+BField:Double_t             0.5691   # Tesla
+TiltAng:Double_t               7.0   # Degrees
+TB0:Int_t                       98   # Time Bucket reference for micromegas position (DEPRECATED)
+LorentzAngle:Double_t          0.0   # Lorentz Angle
+TBEntrance:Int_t               280   # Beam position at detector entrance in TB
+ZPadPlane:Double_t          1000.0   # Position of the micromegas pad plane
+Density:Double_t            0.0727   # Gas density (kg/m3 or mg/cm3)
+ThetaPad:Double_t            110.9   # AT-TPC pad plane rotation
+ThetaRot:Double_t              0.0   # Second Lorentz Angle
+GasPressure:Double_t           150   # Gas pressure in torr
+EIonize:Double_t            15.603   # Ionization energy of gas in eV
+CoefL:Double_t               0.025   # Longitudal coefficient of diffusion [cm^-0.5]
+CoefT:Double_t               0.025   # Transverse coefficient of diffusion [cm^-0.5]
+Gain:Double_t                 0.28   # Average gain of micromegas
+MaxRange:Double_t           1032.0   # Maximum range from Beam energy in mm
+Fano:Double_t                 0.24   # Fano factor of the gas
+GETGain:Double_t              1000   # Gain of the GET electronics in fC
+PeakingTime:Int_t              720   # Electronic peaking time in ns
+################################################################################

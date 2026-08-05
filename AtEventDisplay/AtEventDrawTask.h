@@ -8,23 +8,13 @@
 #define ATEVENTDRAWTASK_H
 
 // ATTPCROOT classes
-namespace AtPATTERN {
-class AtTrackFinderHC;
-}
-namespace AtRANSACN {
-class AtRansac;
-}
+// NOTE: the RANSAC / Hough / pattern-recognition / analysis classes are built only when
+// PCL is available (see AtReconstruction/CMakeLists.txt). This display is deliberately
+// PCL-free, so it does not reference them at all.
 class AtEvent;
 class AtEventManager;
 class AtHit;
-class AtHoughSpace;
-class AtHoughSpaceCircle;
-class AtHoughSpaceLine;
-class AtLmedsMod;
-class AtMlesacMod;
-class AtRansacMod;
 class AtRawEvent;
-class AtTrackingEventAna;
 class AtMap;
 class AtTpcMap;
 class AtPatternEvent;
@@ -146,20 +136,7 @@ private:
 
    TClonesArray *fHitArray;
    TClonesArray *fRawEventArray;
-   TClonesArray *fHoughSpaceArray;
-   TClonesArray *fRansacArray;
-   TClonesArray *fTrackFinderHCArray;
-   TClonesArray *fTrackingEventAnaArray;
    TClonesArray *fPatternEventArray;
-
-   AtHoughSpaceLine *fHoughSpaceLine_buff;
-   AtHoughSpaceCircle *fHoughSpaceCircle_buff;
-   AtRANSACN::AtRansac *fRansac;
-   AtRansacMod *fRansacMod;
-   AtMlesacMod *fMlesacMod;
-   AtLmedsMod *fLmedsMod;
-   AtTrackingEventAna *fTrackingEventAna;
-   AtPATTERN::AtTrackFinderHC *fTrackFinderHC;
 
    AtEventManager *fEventManager;
    AtRawEvent *fRawevent;

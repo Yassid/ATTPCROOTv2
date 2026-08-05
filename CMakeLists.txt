@@ -306,13 +306,11 @@ add_subdirectory (AtS800)
 add_subdirectory (AtApollo)
 add_subdirectory (AtTools)
 
-# AtEventDisplay's own CMakeLists only mentions PCL via an empty ${PCL_INCLUDE_DIRS}, but
-# AtEventDrawTask includes AtRansac.h / AtHoughSpaceCircle.h, which do need PCL -- and
-# AtReconstruction drops those classes entirely when PCL is absent. So the gate is real.
-# Use the OpenKF-Claude branch's PCL-free AtViewerManager display instead.
-if (PCL_FOUND)
+# AtEventDisplay is now PCL-free: AtEventDrawTask no longer references the RANSAC / Hough /
+# tracking-analysis classes (which AtReconstruction only builds when PCL is present), and the
+# Proto/S800 display variants -- which still do -- are excluded from its source list.
+# So it builds unconditionally.
 add_subdirectory (AtEventDisplay)
-endif()
 
 WRITE_CONFIG_FILE(config.sh)
 

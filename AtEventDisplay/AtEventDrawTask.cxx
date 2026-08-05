@@ -9,21 +9,12 @@
 #include "AtEvent.h"
 #include "AtEventManager.h"
 #include "AtHit.h"
-#include "AtHoughSpace.h"
-#include "AtHoughSpaceCircle.h"
-#include "AtHoughSpaceLine.h"
-#include "AtLmedsMod.h"
-#include "AtMlesacMod.h"
 #include "AtPatternEvent.h"
-#include "AtRansac.h"
-#include "AtRansacMod.h"
 #include "AtRawEvent.h"
 #include "AtMap.h"
 #include "AtGadgetIIMap.h"
 #include "AtSpecMATMap.h"
 #include "AtTpcMap.h"
-#include "AtTrackFinderHC.h"
-#include "AtTrackingEventAna.h"
 
 #include "FairLogger.h"
 #include "FairRootManager.h"
@@ -38,6 +29,7 @@
 #include "TEveTrans.h"
 #include "TF1.h"
 #include "TGeoSphere.h"
+#include "TGraph.h"
 #include "TH1.h"
 #include "TH2.h"
 #include "TH2Poly.h"
@@ -46,6 +38,7 @@
 #include "TRandom.h"
 #include "TStyle.h"
 #include "TVector3.h"
+#include "TVirtualX.h"
 
 #ifndef __CINT__ // Boost
 #include <boost/multi_array.hpp>
@@ -68,7 +61,7 @@ AtEventDrawTask::AtEventDrawTask()
      // fHitClusterArray(0),
      // fRiemannTrackArray(0),
      // fKalmanArray(0),
-     fEventManager(0), fRawevent(0), fHoughSpaceArray(0), fDetmap(0), fThreshold(0), fHitSet(0),
+     fEventManager(0), fRawevent(0), fDetmap(0), fThreshold(0), fHitSet(0),
      // x(0),
      // hitSphereArray(0),
      fhitBoxSet(0), fPadPlanePal(0), fHitColor(kPink), fHitSize(1), fHitStyle(kFullDotMedium),
@@ -192,25 +185,12 @@ InitStatus AtEventDrawTask::Init()
       fIsRawData = kTRUE;
    }
 
-   fHoughSpaceArray = (TClonesArray *)ioMan->GetObject("AtHough");
-   if (fHoughSpaceArray)
-      LOG(INFO) << cGREEN << "Hough Array Found." << cNORMAL << std::endl;
-
-   fRansacArray = (TClonesArray *)ioMan->GetObject("AtRansac");
-   if (fRansacArray)
-      LOG(INFO) << cGREEN << "RANSAC Array Found." << cNORMAL << std::endl;
-
-   // fTrackFinderHCArray = (TClonesArray*) ioMan->GetObject("AtTrackFinderHC");
-   // if(fTrackFinderHCArray)  LOG(INFO)<<cGREEN<<"Track Finder Hierarchical Clustering Array
-   // Found."<<cNORMAL<<std::endl;
+   // The AtHough / AtRansac / AtTrackingEventAna branches are produced by PCL-only tasks,
+   // which are not built here, so they are deliberately not looked up.
 
    fPatternEventArray = (TClonesArray *)ioMan->GetObject("AtPatternEvent");
    if (fPatternEventArray)
       LOG(INFO) << cGREEN << "Pattern Event Array Found." << cNORMAL << std::endl;
-
-   fTrackingEventAnaArray = (TClonesArray *)ioMan->GetObject("AtTrackingEventAna");
-   if (fTrackingEventAnaArray)
-      LOG(INFO) << cGREEN << "Tracking Event Analysis Array Found." << cNORMAL << std::endl;
 
    // gROOT->GetListOfSpecials()->Add(fRawEventArray);
    // fRawEventArray->SetName("AtRawEvent");
@@ -264,6 +244,8 @@ InitStatus AtEventDrawTask::Init()
 
    std::cout << " AtEventDrawTask::Init : Initialization complete! "
              << "\n";
+
+   return kSUCCESS;
 }
 
 void AtEventDrawTask::Exec(Option_t *option)
@@ -272,28 +254,7 @@ void AtEventDrawTask::Exec(Option_t *option)
    ResetPadAll();
    ResetPhiDistr();
 
-   if (fHoughSpaceArray) {
-      if (fHoughSpaceLine_buff = dynamic_cast<AtHoughSpaceLine *>(fHoughSpaceArray->At(0))) {
-         std::cout << " Linear Hough Space Found!" << std::endl;
-         fIsLinearHough = kTRUE;
-      } else if (fHoughSpaceCircle_buff = dynamic_cast<AtHoughSpaceCircle *>(fHoughSpaceArray->At(0))) {
-         std::cout << "Circular Hough Space Found!" << std::endl;
-         fIsCircularHough = kTRUE;
-      } else
-         std::cout << "Hough Space Type NOT Found!" << std::endl;
-
-      if (fIsCircularHough) {
-         Double_t XCenter = fHoughSpaceCircle_buff->GetXCenter();
-         Double_t YCenter = fHoughSpaceCircle_buff->GetYCenter();
-         std::pair<Double_t, Double_t> LinearHoughPar = fHoughSpaceCircle_buff->GetHoughPar();
-         std::cout << cYELLOW << " ---- Spiral Hough Space Calculation ----" << std::endl;
-         std::cout << " X Center : " << XCenter << " Y Center : " << YCenter << std::endl;
-         std::cout << " Radius x Phi Linear Hough parameters - Angle : " << LinearHoughPar.first << "  - Distance "
-                   << LinearHoughPar.second << cNORMAL << std::endl;
-         fHoughLinearFit->SetParameter(0, TMath::Pi() / 2.0 - LinearHoughPar.first);
-         fHoughLinearFit->SetParameter(1, LinearHoughPar.second);
-      }
-   }
+   // Hough-space detection removed with the PCL-only classes.
 
    // if (fRawEventArray)
    //  DrawPadAll();
@@ -302,8 +263,6 @@ void AtEventDrawTask::Exec(Option_t *option)
       DrawHitPoints();
       DrawMeshSpace();
    }
-   if (fHoughSpaceArray && fUnpackHough)
-      DrawHSpace();
 
    gEve->Redraw3D(kFALSE);
 
@@ -413,258 +372,9 @@ void AtEventDrawTask::DrawHitPoints()
    Int_t nHitsMin = 0; // Initialization of the variable to ensure a non-NULL pointer
    fHitSetMin = new TEvePointSet();
 
-   if (fEventManager->GetDrawHoughSpace()) {
-
-      if (fIsCircularHough) {
-
-         fPosXMin = fHoughSpaceCircle_buff->GetPosXMin();
-         fPosYMin = fHoughSpaceCircle_buff->GetPosYMin();
-         fPosZMin = fHoughSpaceCircle_buff->GetPosZMin();
-         nHitsMin = fPosXMin.size();
-
-         fHitSetMin = new TEvePointSet("HitMin", nHitsMin, TEvePointSelectorConsumer::kTVT_XYZ);
-         fHitSetMin->SetOwnIds(kTRUE);
-         fHitSetMin->SetMarkerColor(kGreen);
-         fHitSetMin->SetMarkerSize(fHitSize);
-         fHitSetMin->SetMarkerStyle(fHitStyle);
-      }
-   }
-
-   if (fEventManager->GetDrawHoughSpace()) {
-
-      //  if(fIsLinearHough){
-      // fLineArray.clear();
-      for (Int_t i = 0; i < 5; i++)
-         fLineArray[i] = new TEveLine();
-      int n = 100;
-      double t0 = 0;
-      double dt = 2000;
-      std::vector<AtTrack> TrackCand;
-
-      if (fIsLinearHough)
-         TrackCand = fHoughSpaceLine_buff->GetTrackCand();
-      else if (fRansacArray) {
-         if (fRANSACAlg == 0) {
-            fRansac = dynamic_cast<AtRANSACN::AtRansac *>(fRansacArray->At(0));
-            TrackCand = fRansac->GetTrackCand();
-            TVector3 Vertex1 = fRansac->GetVertex1();
-            TVector3 Vertex2 = fRansac->GetVertex2();
-            Double_t VertexTime = fRansac->GetVertexTime();
-            std::cout << cGREEN << " Vertex 1 - X : " << Vertex1.X() << " - Y : " << Vertex1.Y()
-                      << "  - Z : " << Vertex1.Z() << std::endl;
-            std::cout << " Vertex 2 - X : " << Vertex2.X() << " - Y : " << Vertex2.Y() << "  - Z : " << Vertex2.Z()
-                      << std::endl;
-            std::cout << " Vertex Time : " << VertexTime << std::endl;
-            std::cout << " Vertex Mean - X : " << (Vertex1.X() + Vertex2.X()) / 2.0
-                      << " - Y : " << (Vertex1.Y() + Vertex2.Y()) / 2.0
-                      << "  - Z : " << (Vertex1.Z() + Vertex2.Z()) / 2.0 << cNORMAL << std::endl;
-
-            std::vector<AtRANSACN::AtRansac::PairedLines> trackCorr = fRansac->GetPairedLinesArray();
-            // std::ostream_iterator<AtRANSACN::AtRansac::PairedLines> pairLine_it (std::cout,"  ");
-            if (trackCorr.size() > 0) {
-               for (Int_t i = 0; i < trackCorr.size(); i++) {
-                  AtRANSACN::AtRansac::PairedLines pl = trackCorr.at(i);
-                  std::cout << pl << std::endl;
-               }
-            }
-         }
-
-         if (fRANSACAlg == 1) {
-            fRansacMod = dynamic_cast<AtRansacMod *>(fRansacArray->At(0));
-            TrackCand = fRansacMod->GetTrackCand();
-            TVector3 Vertex1 = fRansacMod->GetVertex1();
-            TVector3 Vertex2 = fRansacMod->GetVertex2();
-            Double_t VertexTime = fRansacMod->GetVertexTime();
-            std::cout << cGREEN << " Vertex 1 - X : " << Vertex1.X() << " - Y : " << Vertex1.Y()
-                      << "  - Z : " << Vertex1.Z() << std::endl;
-            std::cout << " Vertex 2 - X : " << Vertex2.X() << " - Y : " << Vertex2.Y() << "  - Z : " << Vertex2.Z()
-                      << std::endl;
-            std::cout << " Vertex Time : " << VertexTime << std::endl;
-            std::cout << " Vertex Mean - X : " << (Vertex1.X() + Vertex2.X()) / 2.0
-                      << " - Y : " << (Vertex1.Y() + Vertex2.Y()) / 2.0
-                      << "  - Z : " << (Vertex1.Z() + Vertex2.Z()) / 2.0 << cNORMAL << std::endl;
-         }
-
-         if (fRANSACAlg == 2) {
-            fMlesacMod = dynamic_cast<AtMlesacMod *>(fRansacArray->At(0));
-            TrackCand = fMlesacMod->GetTrackCand();
-            TVector3 Vertex1 = fMlesacMod->GetVertex1();
-            TVector3 Vertex2 = fMlesacMod->GetVertex2();
-            Double_t VertexTime = fMlesacMod->GetVertexTime();
-            std::cout << cGREEN << " Vertex 1 - X : " << Vertex1.X() << " - Y : " << Vertex1.Y()
-                      << "  - Z : " << Vertex1.Z() << std::endl;
-            std::cout << " Vertex 2 - X : " << Vertex2.X() << " - Y : " << Vertex2.Y() << "  - Z : " << Vertex2.Z()
-                      << std::endl;
-            std::cout << " Vertex Time : " << VertexTime << std::endl;
-            std::cout << " Vertex Mean - X : " << (Vertex1.X() + Vertex2.X()) / 2.0
-                      << " - Y : " << (Vertex1.Y() + Vertex2.Y()) / 2.0
-                      << "  - Z : " << (Vertex1.Z() + Vertex2.Z()) / 2.0 << cNORMAL << std::endl;
-         }
-
-         if (fRANSACAlg == 3) {
-            fLmedsMod = dynamic_cast<AtLmedsMod *>(fRansacArray->At(0));
-            TrackCand = fLmedsMod->GetTrackCand();
-            TVector3 Vertex1 = fLmedsMod->GetVertex1();
-            TVector3 Vertex2 = fLmedsMod->GetVertex2();
-            Double_t VertexTime = fLmedsMod->GetVertexTime();
-            std::cout << cGREEN << " Vertex 1 - X : " << Vertex1.X() << " - Y : " << Vertex1.Y()
-                      << "  - Z : " << Vertex1.Z() << std::endl;
-            std::cout << " Vertex 2 - X : " << Vertex2.X() << " - Y : " << Vertex2.Y() << "  - Z : " << Vertex2.Z()
-                      << std::endl;
-            std::cout << " Vertex Time : " << VertexTime << std::endl;
-            std::cout << " Vertex Mean - X : " << (Vertex1.X() + Vertex2.X()) / 2.0
-                      << " - Y : " << (Vertex1.Y() + Vertex2.Y()) / 2.0
-                      << "  - Z : " << (Vertex1.Z() + Vertex2.Z()) / 2.0 << cNORMAL << std::endl;
-         }
-
-      } else if (fPatternEventArray) {
-         AtPatternEvent *patternEvent = dynamic_cast<AtPatternEvent *>(fPatternEventArray->At(0));
-         TrackCand = patternEvent->GetTrackCand();
-
-         for (Int_t i = 0; i < 20; i++) {
-            fHitSetTFHC[i] = 0;
-            fHitClusterSet[i] = 0;
-         }
-
-         if (TrackCand.size() < 20) {
-            for (Int_t i = 0; i < TrackCand.size(); i++) {
-
-               AtTrack track = TrackCand.at(i);
-               std::vector<AtHit> *trackHits = track.GetHitArray();
-               std::vector<AtHitCluster> *hitClusters = track.GetHitClusterArray();
-
-               Color_t trackColor = GetTrackColor(i) + 1;
-
-               fHitSetTFHC[i] = new TEvePointSet(Form("HitMC_%d", i), nHitsMin, TEvePointSelectorConsumer::kTVT_XYZ);
-               if (track.GetIsNoise())
-                  fHitSetTFHC[i]->SetMarkerColor(kRed);
-               else
-                  fHitSetTFHC[i]->SetMarkerColor(trackColor);
-               fHitSetTFHC[i]->SetMarkerSize(fHitSize);
-               fHitSetTFHC[i]->SetMarkerStyle(fHitStyle);
-
-               for (int j = 0; j < trackHits->size(); ++j) {
-                  TVector3 position = trackHits->at(j).GetPosition();
-                  fHitSetTFHC[i]->SetNextPoint(position.X() / 10., position.Y() / 10., position.Z() / 10.);
-               }
-
-               fHitClusterSet[i] = new TEveBoxSet(Form("HitCluster_%d", i));
-               fHitClusterSet[i]->Reset(TEveBoxSet::kBT_AABox, kFALSE, 64);
-               // fHitClusterSet[i]->SetPalette(fRGBAPalette);
-               // fHitClusterSet[i]->DigitValue(2000);
-
-               if (hitClusters->size() > 0 && !track.GetIsNoise()) {
-
-                  for (auto hitCluster : *hitClusters) {
-                     auto clusPos = hitCluster.GetPosition();
-                     double boxSize = 0.6;
-
-                     fHitClusterSet[i]->AddBox(clusPos.X() / 10. - boxSize / 2.0, clusPos.Y() / 10. - boxSize / 2.0,
-                                               clusPos.Z() / 10. - boxSize / 2.0, boxSize, boxSize, boxSize);
-                  }
-               }
-
-               fHitClusterSet[i]->UseSingleColor();
-               fHitClusterSet[i]->SetMainColor(trackColor);
-               fHitClusterSet[i]->SetMainTransparency(50);
-
-               fHitClusterSet[i]->RefitPlex();
-               TEveTrans &tHitClusterBoxPos = fHitClusterSet[i]->RefMainTrans();
-               tHitClusterBoxPos.SetPos(0.0, 0.0, 0.0);
-            }
-         }
-      }
-
-      if (fTrackingEventAnaArray) {
-
-         for (Int_t i = 0; i < 5; i++)
-            fHitSetMC[i] = 0;
-
-         fTrackingEventAna = (AtTrackingEventAna *)fTrackingEventAnaArray->At(0);
-         std::vector<AtTrack> anaTracks = fTrackingEventAna->GetTrackArray();
-         std::cout << cYELLOW << "  ====   Tracking analysis ==== " << std::endl;
-         std::cout << " Number of analyzed tracks : " << anaTracks.size() << std::endl;
-         std::cout << " Vertex of reaction : " << fTrackingEventAna->GetVertex() << std::endl;
-
-         fTrackNum = anaTracks.size();
-
-         if (anaTracks.size() < 5) { // Limited to 5 tracks
-            for (Int_t i = 0; i < anaTracks.size(); i++) {
-               AtTrack track = anaTracks.at(i);
-               std::cout << track << std::endl;
-               fPosXMin = track.GetPosXMin();
-               fPosYMin = track.GetPosYMin();
-               fPosZMin = track.GetPosZMin();
-               nHitsMin = fPosXMin.size();
-               fHitSetMC[i] = new TEvePointSet(Form("HitMC_%d", i), nHitsMin, TEvePointSelectorConsumer::kTVT_XYZ);
-               fHitSetMC[i]->SetOwnIds(kTRUE);
-               fHitSetMC[i]->SetMarkerColor(kGreen);
-               fHitSetMC[i]->SetMarkerSize(fHitSize);
-               fHitSetMC[i]->SetMarkerStyle(fHitStyle);
-
-               for (Int_t iHit = 0; iHit < fPosXMin.size(); iHit++)
-                  fHitSetMC[i]->SetNextPoint(fPosXMin.at(iHit) / 10., fPosYMin.at(iHit) / 10., fPosZMin.at(iHit) / 10.);
-            }
-         }
-      } // If trackingEventAnaArray
-
-      fLineNum = TrackCand.size();
-      std::cout << cRED << " Found " << TrackCand.size() << " track candidates " << cNORMAL << std::endl;
-
-      if (TrackCand.size() > 0 && fRansacArray) {
-
-         for (Int_t j = 0; j < TrackCand.size(); j++) {
-            fLineArray[j] = new TEveLine();
-            AtTrack track = TrackCand.at(j);
-            std::vector<Double_t> parFit = track.GetFitPar();
-            fLineArray[j]->SetMainColor(kRed);
-            if (parFit.size() == 4) {
-               for (int i = 0; i < n; ++i) {
-                  double t = t0 + dt * i / n;
-                  double x, y, z;
-                  SetLine(t, parFit, x, y, z);
-                  fLineArray[j]->SetNextPoint(x, y, z);
-
-                  // fLineArray.push_back(fLine);
-                  // l->SetPoint(i,x,y,z);
-                  // std::cout<<" x : "<<x<<" y : "<<y<<"  z : "<<z<<std::endl;
-               }
-            } else if (parFit.size() == 6) {
-               for (int i = -n; i < n; ++i) {
-                  double t = t0 + dt * i / n;
-                  double x, y, z;
-                  SetLine6(t, parFit, x, y, z);
-                  fLineArray[j]->SetNextPoint(x, y, z);
-
-                  // fLineArray.push_back(fLine);
-                  // l->SetPoint(i,x,y,z);
-                  // std::cout<<" x : "<<x<<" y : "<<y<<"  z : "<<z<<std::endl;
-               }
-            } else
-               std::cout
-                  << cRED
-                  << " AtEventDrawTask::DrawHitPoints - Warning: wrong number of fit parameters for RANSAC lines!"
-                  << std::endl;
-         }
-         fVertex = new TEvePointSet("Vertex", 1, TEvePointSelectorConsumer::kTVT_XYZ);
-         fVertex->SetOwnIds(kTRUE);
-         fVertex->SetMarkerStyle(34);
-         fVertex->SetMarkerSize(2.0);
-         fVertex->SetMarkerColor(kViolet);
-         if (fRANSACAlg == 0)
-            fVertex->SetNextPoint(fRansac->GetVertexMean().x() * 0.1, fRansac->GetVertexMean().y() * 0.1,
-                                  fRansac->GetVertexMean().z() * 0.1);
-         if (fRANSACAlg == 1)
-            fVertex->SetNextPoint(fRansacMod->GetVertexMean().x() * 0.1, fRansacMod->GetVertexMean().y() * 0.1,
-                                  fRansacMod->GetVertexMean().z() * 0.1);
-         if (fRANSACAlg == 2)
-            fVertex->SetNextPoint(fMlesacMod->GetVertexMean().x() * 0.1, fMlesacMod->GetVertexMean().y() * 0.1,
-                                  fMlesacMod->GetVertexMean().z() * 0.1);
-         if (fRANSACAlg == 3)
-            fVertex->SetNextPoint(fLmedsMod->GetVertexMean().x() * 0.1, fLmedsMod->GetVertexMean().y() * 0.1,
-                                  fLmedsMod->GetVertexMean().z() * 0.1);
-      }
-   }
+   // The Hough / RANSAC / minimization overlays lived here. They depend on the PCL-only
+   // classes (AtHoughSpace*, AtRansac, AtRansacMod, AtMlesacMod, AtLmedsMod,
+   // AtTrackingEventAna) and have been removed so this display builds without PCL.
 
    //////////////////////////////////////////////
 
@@ -875,22 +585,9 @@ void AtEventDrawTask::DrawHitPoints()
       gEve->AddElement(fHitSet);
       gEve->AddElement(fhitBoxSet);
 
-      // Adding pattern rec. and tracking algorithm results
+      // Adding pattern rec. results (the Hough / RANSAC / tracking-analysis overlays that
+      // were drawn here need the PCL-only classes and have been removed).
    } else if (fEventManager->GetDrawHoughSpace()) {
-
-      if (fIsCircularHough)
-         gEve->AddElement(fHitSetMin);
-
-      if (fIsLinearHough || fRansacArray) {
-         if (fLineNum > 0)
-            for (Int_t i = 0; i < fLineNum; i++)
-               gEve->AddElement(fLineArray[i]);
-         // Lines plto together with data points
-         gEve->AddElement(fHitSet);
-         gEve->AddElement(fhitBoxSet);
-         if (fVertex)
-            gEve->AddElement(fVertex);
-      }
 
       if (fPatternEventArray)
          if (fLineNum > 0)
@@ -898,11 +595,6 @@ void AtEventDrawTask::DrawHitPoints()
                gEve->AddElement(fHitSetTFHC[i]);
                gEve->AddElement(fHitClusterSet[i]);
             }
-
-      if (fTrackingEventAnaArray)
-         if (fTrackNum > 0 && fTrackNum < 5)
-            for (Int_t i = 0; i < fTrackNum; i++)
-               gEve->AddElement(fHitSetMC[i]);
    }
 
    dumpEvent.close();
@@ -911,191 +603,11 @@ void AtEventDrawTask::DrawHitPoints()
    // if(fLineArray.size()>0) gEve -> AddElement(fLineArray.at(0));
 }
 
-void AtEventDrawTask::DrawHSpace()
-{
-
-   fRadVSTb->Reset(0);
-   fTheta->Reset(0);
-   fThetaxPhi->Reset(0);
-   fThetaxPhi_Ini->Reset(0);
-   fThetaxPhi_Ini_RANSAC->Reset(0);
-   fMC_XY->Set(0);
-   fMC_ZX->Set(0);
-   fMC_ZY->Set(0);
-   fMC_XY_exp->Set(0);
-   fMC_XY_int->Set(0);
-   fMC_ZX_int->Set(0);
-   fMC_ZY_int->Set(0);
-   fMC_XY_back->Set(0);
-   fMC_ZX_back->Set(0);
-   fMC_ZY_back->Set(0);
-
-   if (fEventManager->GetDrawHoughSpace()) {
-      if (fIsCircularHough) {
-         fHoughSpace = fHoughSpaceCircle_buff->GetHoughSpace("XY");
-         std::vector<Double_t> const *Radius = fHoughSpaceCircle_buff->GetRadiusDist();
-         std::vector<Int_t> const *TimeStamp = fHoughSpaceCircle_buff->GetTimeStamp();
-         std::vector<Double_t> const *Theta = fHoughSpaceCircle_buff->GetTheta();
-         std::vector<Double_t> const *Dl = fHoughSpaceCircle_buff->GetDl();
-         std::vector<Double_t> const *Phi = fHoughSpaceCircle_buff->GetPhi();
-         fIniHit = fHoughSpaceCircle_buff->GetIniHit();
-         fIniHitRansac = fHoughSpaceCircle_buff->GetIniHitRansac();
-
-         Int_t numRad = Radius->size();
-         Int_t numTheta = Theta->size();
-
-         for (Int_t i = 0; i < numRad; i++) {
-            fRadVSTb->Fill(TimeStamp->at(i), Radius->at(i));
-            // fTheta->SetBinContent(TimeStamp->at(i),Theta->at(i));
-            fThetaxPhi->Fill(TimeStamp->at(i), Phi->at(i) * Radius->at(i));
-         }
-
-         for (Int_t i = 0; i < numTheta; i++) {
-            fTheta->Fill(Dl->at(i), Theta->at(i));
-            // std::cout<<" Dl : "<<Dl->at(i)<<" Theta : "<<Theta->at(i)<<std::endl;
-         }
-
-         fThetaxPhi_Ini->Fill(fIniHit->GetTimeStamp(),
-                              fHoughSpaceCircle_buff->GetIniPhi() * fHoughSpaceCircle_buff->GetIniRadius());
-         fThetaxPhi_Ini_RANSAC->Fill(fIniHitRansac->GetTimeStamp(), fHoughSpaceCircle_buff->GetIniPhiRansac() *
-                                                                       fHoughSpaceCircle_buff->GetIniRadiusRansac());
-
-         std::vector<Double_t> fPosXMin = fHoughSpaceCircle_buff->GetPosXMin();
-         std::vector<Double_t> fPosYMin = fHoughSpaceCircle_buff->GetPosYMin();
-         std::vector<Double_t> fPosZMin = fHoughSpaceCircle_buff->GetPosZMin();
-
-         std::vector<Double_t> fPosXExp = fHoughSpaceCircle_buff->GetPosXExp();
-         std::vector<Double_t> fPosYExp = fHoughSpaceCircle_buff->GetPosYExp();
-
-         std::vector<Double_t> fPosXInt = fHoughSpaceCircle_buff->GetPosXInt();
-         std::vector<Double_t> fPosYInt = fHoughSpaceCircle_buff->GetPosYInt();
-         std::vector<Double_t> fPosZInt = fHoughSpaceCircle_buff->GetPosZInt();
-
-         std::vector<Double_t> fPosXBack = fHoughSpaceCircle_buff->GetPosXBack();
-         std::vector<Double_t> fPosYBack = fHoughSpaceCircle_buff->GetPosYBack();
-         std::vector<Double_t> fPosZBack = fHoughSpaceCircle_buff->GetPosZBack();
-
-         for (Int_t i = 0; i < fPosXMin.size(); i++) {
-            fMC_XY->SetPoint(fMC_XY->GetN(), fPosXMin.at(i), fPosYMin.at(i));
-            fMC_ZX->SetPoint(fMC_ZX->GetN(), fPosZMin.at(i), fPosXMin.at(i));
-            fMC_ZY->SetPoint(fMC_ZY->GetN(), fPosZMin.at(i), fPosYMin.at(i));
-         }
-
-         for (Int_t i = 0; i < fPosXExp.size(); i++) {
-            fMC_XY_exp->SetPoint(fMC_XY_exp->GetN(), fPosXExp.at(i), fPosYExp.at(i));
-         }
-
-         for (Int_t i = 0; i < fPosXInt.size(); i++) {
-            fMC_XY_int->SetPoint(fMC_XY_int->GetN(), fPosXInt.at(i), fPosYInt.at(i));
-            fMC_ZX_int->SetPoint(fMC_ZX_int->GetN(), fPosZInt.at(i), fPosXInt.at(i));
-            fMC_ZY_int->SetPoint(fMC_ZY_int->GetN(), fPosZInt.at(i), fPosYInt.at(i));
-         }
-
-         for (Int_t i = 0; i < fPosXBack.size(); i++) {
-            fMC_XY_back->SetPoint(fMC_XY_back->GetN(), fPosXBack.at(i), fPosYBack.at(i));
-            fMC_ZX_back->SetPoint(fMC_ZX_back->GetN(), fPosZBack.at(i), fPosXBack.at(i));
-            fMC_ZY_back->SetPoint(fMC_ZY_back->GetN(), fPosZBack.at(i), fPosYBack.at(i));
-         }
-
-         std::cout << cGREEN << "  = Initial conditions for MC : " << std::endl;
-         std::cout << "  Theta                 : " << fHoughSpaceCircle_buff->GetIniTheta() * 180 / TMath::Pi()
-                   << std::endl;
-         std::cout << "  Phi                   : " << fHoughSpaceCircle_buff->GetIniPhi() * 180 / TMath::Pi()
-                   << std::endl;
-         std::cout << "  Radius                : " << fHoughSpaceCircle_buff->GetIniRadius() << std::endl;
-         std::cout << "  Time Bucket           : " << fIniHit->GetTimeStamp() << std::endl;
-         std::cout << "  Time Bucket RANSAC    : " << fIniHitRansac->GetTimeStamp() << std::endl;
-         std::cout << "  Radius x Phi          : "
-                   << fHoughSpaceCircle_buff->GetIniPhi() * fHoughSpaceCircle_buff->GetIniRadius() << cNORMAL
-                   << std::endl;
-
-         std::cout << cGREEN << "  = MC results : " << std::endl;
-         std::cout << "  Theta          : " << fHoughSpaceCircle_buff->FitParameters.sThetaMin * 180 / TMath::Pi()
-                   << std::endl;
-         std::cout << "  Phi            : " << fHoughSpaceCircle_buff->FitParameters.sPhiMin * 180 / TMath::Pi()
-                   << std::endl;
-         std::cout << "  Energy         : " << fHoughSpaceCircle_buff->FitParameters.sEnerMin << std::endl;
-         std::cout << "  Brho           : " << fHoughSpaceCircle_buff->FitParameters.sBrhoMin << std::endl;
-         std::cout << "  Magnetic field : " << fHoughSpaceCircle_buff->FitParameters.sBMin << std::endl;
-         std::cout << "  Norm. Chi-2    : " << fHoughSpaceCircle_buff->FitParameters.sNormChi2 << cNORMAL << std::endl;
-
-      } else if (fIsLinearHough) {
-         fHoughSpace = fHoughSpaceLine_buff->GetHoughSpace("XY");
-         std::vector<std::pair<Double_t, Double_t>> LinearHoughPar = fHoughSpaceLine_buff->GetHoughPar();
-         std::vector<Double_t> LinearHoughMax = fHoughSpaceLine_buff->GetHoughMax();
-         TVector3 Vertex_1 = fHoughSpaceLine_buff->GetVertex1();
-         TVector3 Vertex_2 = fHoughSpaceLine_buff->GetVertex2();
-         // std::vector<AtTrack> TrackCand = fHoughSpaceLine_buff->GetTrackCand();
-
-         std::cout << std::endl;
-         std::cout << cGREEN << "  = Number of lines found by Linear Hough Space : " << LinearHoughPar.size()
-                   << std::endl;
-
-         // int n = 1000;
-         // double t0 = 0;
-         // double dt = 1000;
-
-         /*if(TrackCand.size()>0)
-         {
-
-           for(Int_t i=0;i<TrackCand.size();i++){
-           AtTrack track = TrackCand.at(i);
-           std::vector<Double_t> parFit = track.GetFitPar();
-           //std::cout<<cRED<<parFit[0]<<" "<<parFit[1]<<" "<<parFit[2]<<" "<<parFit[3]<<cNORMAL<<std::endl;
-           TEveLine* line = new TEveLine(n);
-           for (int i = 0; i <n;++i) {
-           double t = t0+ dt*i/n;
-           double x,y,z;
-           SetLine(t,parFit,x,y,z);
-           line->SetNextPoint(x, y, z);
-           //l->SetPoint(i,x,y,z);
-           //std::cout<<" x : "<<x<<" y : "<<y<<"  z : "<<z<<std::endl;
-           }
-           line->SetMainColor(kRed);
-           //l->Draw("same");
-           fLineArray.push_back(fLine);
-
-           }
-
-           }*/
-
-         for (Int_t i = 0; i < LinearHoughPar.size(); i++) {
-            std::cout << cYELLOW << "  Hough Maximum " << i << "  : " << std::endl;
-            std::cout << cYELLOW << "  Hough Angle : " << LinearHoughPar.at(i).first << std::endl;
-            std::cout << cYELLOW << "  Hough Distance : " << LinearHoughPar.at(i).second << std::endl;
-            std::cout << cYELLOW << "  Maximum Bin Content : " << LinearHoughMax.at(i) << cNORMAL << std::endl;
-            std::cout << cYELLOW << "  Vertex 1 -  X : " << Vertex_1.X() << "   Y : " << Vertex_1.Y()
-                      << "  Z : " << Vertex_1.Z() << cNORMAL << std::endl;
-            std::cout << cYELLOW << "  Vertex 2 -  X : " << Vertex_2.X() << "   Y : " << Vertex_2.Y()
-                      << "  Z : " << Vertex_2.Z() << cNORMAL << std::endl;
-            std::cout << std::endl;
-         }
-      }
-
-      // Test to see if the histograms are there
-      /*TCanvas *test = new TCanvas();
-       test->Divide(2,3);
-       test->cd(1);
-       fQuadrant1->Draw("zcol");
-       test->cd(2);
-       fQuadrant2->Draw("zcol");
-       test->cd(3);
-       fQuadrant3->Draw("zcol");
-       test->cd(4);
-       fQuadrant4->Draw("zcol");
-       test->cd(5);
-       test->Modified();
-       test->Update();*/
-
-   } else {
-      fHoughSpace = new TH2F();
-      // fQuadrant1 = new TH2F();
-      // fQuadrant2 = new TH2F();
-      // fQuadrant3 = new TH2F();
-      // fQuadrant4 = new TH2F();
-   }
-}
-
+// DrawHSpace() drew the Hough-space diagnostics (radius-vs-TB, theta, theta-x-phi, the
+// minimized/expected/interpolated position graphs). All of it read AtHoughSpaceCircle /
+// AtHoughSpaceLine, which are PCL-only, so the body is gone. Kept as a no-op because
+// AtEventManager still references the method.
+void AtEventDrawTask::DrawHSpace() {}
 void AtEventDrawTask::DrawMeshSpace() {}
 
 void AtEventDrawTask::Reset()
@@ -1112,33 +624,20 @@ void AtEventDrawTask::Reset()
 
    if (fEventManager->GetDrawHoughSpace()) {
 
-      if (fIsCircularHough) {
-         if (fHitSetMin) {
-            fHitSetMin->Reset();
-            gEve->RemoveElement(fHitSetMin, fEventManager);
-         }
+      if (fHitSetMin) {
+         fHitSetMin->Reset();
+         gEve->RemoveElement(fHitSetMin, fEventManager);
       }
 
-      else if (fIsLinearHough || fRansacArray) {
-
-         /*if(fLine){
-          fLine->Reset();
-          gEve -> RemoveElement(fLine,fEventManager);
-          }*/
-         if (fVertex) {
-            // fVertex->Reset();
-            gEve->RemoveElement(fVertex, fEventManager);
-            fVertex = nullptr;
-         }
-
-         if (fLineNum > 0) {
-            for (Int_t i = 0; i < fLineNum; i++) {
-               if (fLineArray[i]) {
-                  gEve->RemoveElement(fLineArray[i], fEventManager);
-               }
-            }
-         }
+      if (fVertex) {
+         gEve->RemoveElement(fVertex, fEventManager);
+         fVertex = nullptr;
       }
+
+      if (fLineNum > 0)
+         for (Int_t i = 0; i < fLineNum; i++)
+            if (fLineArray[i])
+               gEve->RemoveElement(fLineArray[i], fEventManager);
 
       if (fPatternEventArray) {
 
@@ -1156,15 +655,7 @@ void AtEventDrawTask::Reset()
          }
       }
 
-      if (fTrackingEventAnaArray) {
-
-         for (Int_t i = 0; i < fTrackNum; i++) {
-            if (fHitSetMC[i]) {
-               fHitSetMC[i]->Reset();
-               gEve->RemoveElement(fHitSetMC[i], fEventManager);
-            }
-         }
-      }
+      // The AtTrackingEventAna (PCL-only) cleanup that was here is no longer needed.
 
    } // Draw Minimization
 

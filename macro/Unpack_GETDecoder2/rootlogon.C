@@ -20,4 +20,10 @@
    gSystem->Load("libAtParameter");
    gSystem->Load("libAtTools");
    gSystem->Load("libAtReconstruction");
+
+   // Event display (PCL-free build). Eve and FairRoot's EventDisplay must come first:
+   // AtEventManager derives from TEveEventManager.
+   gSystem->Load("libEve");
+   gSystem->Load("libEventDisplay");
+   gSystem->Load("libAtEventDisplay");
 }
