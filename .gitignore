@@ -53,3 +53,8 @@ macros/data
 .DS_Store
 .nfs*
 compiled/E20009Analysis/.NabinWorkDir/
+# Out-of-source install tree (ROOT_INCLUDE_PATH points here; see setup_fr19port.sh)
+install/
+
+# Written by AtEventDrawTask when the display dumps an event
+macro/Unpack_GETDecoder2/event.dat
