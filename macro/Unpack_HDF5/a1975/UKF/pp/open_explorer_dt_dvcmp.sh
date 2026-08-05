@@ -27,10 +27,11 @@ cachefor(){ case "$1" in
     1136) echo "$CDIR/dt_kin_catima_dv1136.root";;
     135)  echo "$CDIR/dt_kin_dv135.root";;
     150)  echo "$CDIR/dt_kin_dv150.root";;
+    160)  echo "$CDIR/dt_kin_dv160.root";;
     *)    echo "";; esac; }
-lblfor(){ case "$1" in 1136) echo "dv 1.136";; 135) echo "dv 1.35";; 150) echo "dv 1.50";; *) echo "dv $1";; esac; }
+lblfor(){ case "$1" in 1136) echo "dv 1.136";; 135) echo "dv 1.35";; 150) echo "dv 1.50";; 160) echo "dv 1.60";; *) echo "dv $1";; esac; }
 CA="$(cachefor "$TAGA")"; CB="$(cachefor "$TAGB")"
-[[ -n "$CA" && -n "$CB" ]] || { echo "ERROR: unknown dv tag (use 1136 | 135 | 150)"; exit 1; }
+[[ -n "$CA" && -n "$CB" ]] || { echo "ERROR: unknown dv tag (use 1136 | 135 | 150 | 160)"; exit 1; }
 # Output is named after the PAIR: the page holds two slots (its switch toggles between exactly
 # two), so three drift velocities means three pages rather than one three-way page.
 TMP="${DTTMP:-/tmp}"; OUT="$HOME/a1975_C16_dt_dv${TAGA}_vs_${TAGB}_explorer.html"
