@@ -47,8 +47,11 @@ static std::tuple<double, double> acc_kine(double m1, double m2, double m3, doub
    return {Ex, theta_cm * TMath::RadToDeg()};
 }
 
+/// @param dThetaMax  truth match: |theta_fit - theta_true| must be under this (deg). <=0 disables.
+/// @param keRatioMin/Max  truth match window on KE_fit/KE_true.
 void acceptance_C14(TString simFile, TString fitFile, TString tag = "gs", Double_t resEx = 0.0, Double_t Ebeam = 161.0,
-                    Double_t chi2Cut = 5.0, Int_t nBins = 36, Double_t cmMax = 180.0)
+                    Double_t chi2Cut = 5.0, Int_t nBins = 36, Double_t cmMax = 180.0, Double_t dThetaMax = 10.0,
+                    Double_t keRatioMin = 0.5, Double_t keRatioMax = 2.0)
 {
    gSystem->Load("libAtReconstruction.so");
    gSystem->Load("libAtSimulationData.so");
@@ -131,10 +134,22 @@ void acceptance_C14(TString simFile, TString fitFile, TString tag = "gs", Double
                double ndf = md ? md->GetNdf() : 0, chi2 = md ? md->GetChi2() : 0;
                double c2n = ndf > 0 ? chi2 / ndf : 1e9;
                double ke = ft->GetKinematics().kineticEnergy;
-               if (ke > 0 && ke < 1000 && c2n < chi2Cut) {
-                  good = true;
-                  break;
+               if (!(ke > 0 && ke < 1000 && c2n < chi2Cut))
+                  continue;
+               // TRUTH MATCH. Counting any converged fit in the event is NOT the acceptance of
+               // the recoil proton: with the beam hole in place the scattered 14C still makes a
+               // track once it leaves the hole, and at small theta_cm -- where the proton comes
+               // out at 0.05-0.5 MeV and cannot be reconstructed at all -- that other track was
+               // supplying almost the whole numerator, giving a fake ~0.9 acceptance on protons
+               // that never made a track. Require the fit to actually BE this proton.
+               if (dThetaMax > 0) {
+                  double dth = std::fabs(ft->GetKinematics().theta * TMath::RadToDeg() - thT * TMath::RadToDeg());
+                  double r = keT > 0 ? ke / keT : -1;
+                  if (dth > dThetaMax || r < keRatioMin || r > keRatioMax)
+                     continue;
                }
+               good = true;
+               break;
             }
       }
       if (good) {
