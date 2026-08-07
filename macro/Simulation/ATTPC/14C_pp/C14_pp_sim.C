@@ -40,10 +40,9 @@
 /// proton is too low in energy to make a reconstructable track, so generating there just
 /// produces events with no track and wastes the digitization (the slow step).
 void C14_pp_sim(Int_t nEvents = 2000, Double_t thetaMinCM = 5.0, Double_t thetaMaxCM = 120.0,
-                TString mcEngine = "TGeant4")
+                TString mcEngine = "TGeant4", Double_t bFieldkG = -28.5, TString outFile = "./data/attpcsim.root")
 {
    TString dir = getenv("VMCWORKDIR");
-   TString outFile = "./data/attpcsim.root";
    TString parFile = "./data/attpcpar.root";
 
    TStopwatch timer;
@@ -65,8 +64,14 @@ void C14_pp_sim(Int_t nEvents = 2000, Double_t thetaMinCM = 5.0, Double_t thetaM
    run->AddModule(ATTPC);
 
    // -----   Magnetic field : 2.85 T, as in ATTPC.a1954_C14.par   -----------
+   // SIGN: the a1954 DATA corresponds to -2.85 T. Generating at +28.5 kG gave the sim the
+   // opposite sense of rotation, and AtSpyralPID::Direction() infers forward/backward purely
+   // from that sense (it never looks at z) while `polar` comes from d(rho)/dz -- so its
+   // consistency check rejected 82 % of sim tracks (only 10.8 % valid, vs 100 % on data).
+   // Mirroring a transverse coordinate, i.e. flipping the rotation sense alone, restored
+   // 96.8 %. Generate in the DATA convention so nothing downstream needs a sign special-case.
    AtConstField *fMagField = new AtConstField();
-   fMagField->SetField(0., 0., 28.5);                     // kG
+   fMagField->SetField(0., 0., bFieldkG);                 // kG
    fMagField->SetFieldRegion(-50, 50, -50, 50, -10, 230); // cm
    run->SetField(fMagField);
 

@@ -282,7 +282,7 @@ AtSpyralResult AtSpyralPID::Estimate(AtTrack &track) const
    }
    int n = (int)pts.size();
    if (n < fMinPoints) // min_total_trajectory_points, on the usable (collapsed) cloud
-      return res;
+      { res.failCode = 1; return res; }
 
    std::vector<double> x(n), y(n), z(n), q(n);
    for (int i = 0; i < n; ++i) {
@@ -295,12 +295,12 @@ AtSpyralResult AtSpyralPID::Estimate(AtTrack &track) const
    // direction from clustering-style winding analysis
    int direction = Direction(x, y, z);
    if (direction < 0)
-      return res;
+      { res.failCode = 2; return res; }
 
    // smoothing splines (lam=fSmoothing) on x(z), y(z), charge(z); replace data
    AtSmoothingSpline xSpline, ySpline, cSpline;
    if (!xSpline.Fit(z, x, fSmoothing) || !ySpline.Fit(z, y, fSmoothing) || !cSpline.Fit(z, q, fSmoothing))
-      return res; // spline failure (e.g. multivalued z) -> skip, like Spyral
+      { res.failCode = 3; return res; } // spline failure (e.g. multivalued z) -> skip, like Spyral
    x = xSpline.FittedValues();
    y = ySpline.FittedValues();
    q = cSpline.FittedValues();
@@ -348,7 +348,7 @@ AtSpyralResult AtSpyralPID::Estimate(AtTrack &track) const
       std::vector<double> fx(x.begin(), x.begin() + maximum + 1), fy(y.begin(), y.begin() + maximum + 1);
       double cx, cy, radius;
       if (!LeastSquaresCircle(fx, fy, cx, cy, radius))
-         return res;
+         { res.failCode = 4; return res; }
 
       // re-estimate vertex: circle point nearest the beam axis (origin in xy)
       double dc = std::hypot(cx, cy);
@@ -377,7 +377,7 @@ AtSpyralResult AtSpyralPID::Estimate(AtTrack &track) const
          testIndex = n;
       res.dbgTestIdx = testIndex;
       if (testIndex < 2)
-         return res;
+         { res.failCode = 5; return res; }
       double sz = 0, sr = 0;
       for (int i = 0; i < testIndex; ++i) {
          sz += z[i];
@@ -390,21 +390,21 @@ AtSpyralResult AtSpyralPID::Estimate(AtTrack &track) const
          Sxx += (z[i] - mz) * (z[i] - mz);
       }
       if (Sxx == 0.0)
-         return res;
+         { res.failCode = 6; return res; }
       double slope = Sxy / Sxx;
       res.dbgSlope = slope;
       double intercept = mr - slope * mz;
       if (slope == 0.0)
-         return res;
+         { res.failCode = 7; return res; }
       double vertexRho = std::hypot(vx, vy);
       vz = -intercept / slope;
 
       if (vertexRho > fBeamRegionRadius)
-         return res;
+         { res.failCode = 8; return res; }
 
       double polar = std::atan(slope);
       if ((polar > 0.0 && direction == 1) || (polar < 0.0 && direction == 0))
-         return res; // direction/polar inconsistent
+         { res.failCode = 9; return res; } // direction/polar inconsistent
       if (direction == 1)
          polar += M_PI;
 
@@ -430,7 +430,7 @@ AtSpyralResult AtSpyralPID::Estimate(AtTrack &track) const
          chargeDep += q[idx + 1];
       }
       if (chargeDep == q[0])
-         return res;
+         { res.failCode = 10; return res; }
 
       int cutIdx = (cutoff == -1) ? maximum2 : cutoff; // Spyral: -1 -> last of first_arc
       // arc length: 1000-point spline line integral over the first-arc z-range
@@ -447,7 +447,7 @@ AtSpyralResult AtSpyralPID::Estimate(AtTrack &track) const
          pz = zk;
       }
       if (arclength <= 0.0)
-         return res;
+         { res.failCode = 11; return res; }
 
       double dEdx = chargeDep / arclength;
 

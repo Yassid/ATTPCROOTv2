@@ -1,0 +1,45 @@
+# scan started 12:39:28  nEvents=400
+# DATA REF: charge/mm 1070  hits/mm 1.72  q/hit(med) 280  sz2 = 0.20+0.00021z
+### base  Gain=150000 CoefT=0.0009 CoefL=0.0009
+tracks: 192   tracks/evt: 1.04   hits: 63204   hits/track: 329.2 (median 221)
+CHARGE/hit: mean 1168.9  median 175.1   | charge/track: mean 428891
+LENGTH    : median 336.2 mm   | hits/mm: median 0.587   | charge/mm: median 1212.5
+PAD-PLANE : sigma_xy^2 = 4.0643 + 0.000519*z   sigma0 = 2.016 mm   -> CoefT = 0.000034 cm^2/us
+DRIFT     : sigma_z^2  = -0.0114 + 0.000771*z   sigma0 = 0.000 mm   -> CoefL = 0.000050 cm^2/us
+COMPLETED base
+### T3  Gain=150000 CoefT=0.0030 CoefL=0.0002
+tracks: 162   tracks/evt: 1.22   hits: 82044   hits/track: 506.4 (median 301)
+CHARGE/hit: mean 656.1  median 156.0   | charge/track: mean 395441
+LENGTH    : median 315.0 mm   | hits/mm: median 1.076   | charge/mm: median 1314.6
+PAD-PLANE : sigma_xy^2 = 4.5853 + 0.000092*z   sigma0 = 2.141 mm   -> CoefT = 0.000006 cm^2/us
+DRIFT     : sigma_z^2  = 0.0279 + 0.001035*z   sigma0 = 0.167 mm   -> CoefL = 0.000067 cm^2/us
+COMPLETED T3
+### T6  Gain=150000 CoefT=0.0060 CoefL=0.0002
+tracks: 153   tracks/evt: 1.29   hits: 99325   hits/track: 649.2 (median 364)
+CHARGE/hit: mean 492.7  median 137.3   | charge/track: mean 365616
+LENGTH    : median 285.6 mm   | hits/mm: median 1.297   | charge/mm: median 1324.0
+PAD-PLANE : sigma_xy^2 = 4.6801 + -0.000246*z   sigma0 = 2.163 mm   -> CoefT = 0.000016 cm^2/us
+DRIFT     : sigma_z^2  = 0.2574 + 0.001054*z   sigma0 = 0.507 mm   -> CoefL = 0.000069 cm^2/us
+COMPLETED T6
+### T12  Gain=150000 CoefT=0.0120 CoefL=0.0002
+tracks: 143   tracks/evt: 1.38   hits: 120969   hits/track: 845.9 (median 485)
+CHARGE/hit: mean 360.2  median 117.6   | charge/track: mean 342303
+LENGTH    : median 274.9 mm   | hits/mm: median 1.688   | charge/mm: median 1219.7
+PAD-PLANE : sigma_xy^2 = 4.6332 + -0.000342*z   sigma0 = 2.152 mm   -> CoefT = 0.000022 cm^2/us
+DRIFT     : sigma_z^2  = 0.5190 + 0.001279*z   sigma0 = 0.720 mm   -> CoefL = 0.000083 cm^2/us
+COMPLETED T12
+### T6L9  Gain=150000 CoefT=0.0060 CoefL=0.0009
+tracks: 147   tracks/evt: 1.24   hits: 98854   hits/track: 672.5 (median 397)
+CHARGE/hit: mean 475.0  median 134.6   | charge/track: mean 363104
+LENGTH    : median 294.7 mm   | hits/mm: median 1.417   | charge/mm: median 1265.4
+PAD-PLANE : sigma_xy^2 = 4.7443 + -0.000447*z   sigma0 = 2.178 mm   -> CoefT = 0.000029 cm^2/us
+DRIFT     : sigma_z^2  = 0.2090 + 0.001758*z   sigma0 = 0.457 mm   -> CoefL = 0.000114 cm^2/us
+COMPLETED T6L9
+### T6g75  Gain=75000 CoefT=0.0060 CoefL=0.0002
+tracks: 171   tracks/evt: 1.37   hits: 76482   hits/track: 447.3 (median 150)
+CHARGE/hit: mean 281.6  median 89.6   | charge/track: mean 146900
+LENGTH    : median 249.8 mm   | hits/mm: median 1.072   | charge/mm: median 616.4
+PAD-PLANE : sigma_xy^2 = 4.6146 + -0.000148*z   sigma0 = 2.148 mm   -> CoefT = 0.000010 cm^2/us
+DRIFT     : sigma_z^2  = 0.1558 + 0.000760*z   sigma0 = 0.395 mm   -> CoefL = 0.000049 cm^2/us
+COMPLETED T6g75
+# scan finished 13:12:49

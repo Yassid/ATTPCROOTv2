@@ -50,7 +50,7 @@ static std::tuple<double, double> kine_2b(double m1, double m2, double m3, doubl
 ///   mEjectAmu = 2.014102 (deuteron), mResidAmu = 13.003355 (13C).
 void ex_C14(TString runsCSV = "run_0055", TString inDir = "/home/yassid/a1954_C14_reco/", double Ebeam = 161.0,
              double chi2Cut = 5.0, TString outTag = "", double mEjectAmu = 1.007825, double mResidAmu = 14.003242,
-             TString chanLabel = "", TString fitter = "ukf")
+             TString chanLabel = "", TString fitter = "ukf", Bool_t useXtr = kFALSE)
 {
    gSystem->Load("libAtReconstruction.so");
    gSystem->Load("libAtTools.so");
@@ -108,7 +108,12 @@ void ex_C14(TString runsCSV = "run_0055", TString inDir = "/home/yassid/a1954_C1
          for (auto &ft : ev->GetFittedTracks()) {
             if (!ft)
                continue;
-            auto &k = ft->GetKinematics();
+            // THE TWO FITTERS USE THESE SLOTS WITH OPPOSITE MEANINGS:
+            //   UKF    GetKinematics() = at-vertex (back-extrapolated), Xtr = at first cluster
+            //   GENFIT GetKinematics() = at first measurement point,    Xtr = vertex-corrected
+            // So useXtr = kTRUE is what a genfit fit run with backExtrap + CATIMA eloss needs,
+            // and kFALSE (the default, unchanged) is right for the UKF.
+            auto &k = useXtr ? ft->GetKinematicsXtr() : ft->GetKinematics();
             double ndf = ft->GetTrackMetadata()->GetNdf(), chi2 = ft->GetTrackMetadata()->GetChi2();
             double c2n = ndf > 0 ? chi2 / ndf : 1e9;
             double ke = k.kineticEnergy, thRad = k.theta;

@@ -24,9 +24,11 @@
 ///
 ///   root -l 'run_reco_C14.C()'
 
+#include "../AtBeamHole.h"
+
 void run_reco_C14(TString mcFile = "./data/attpcsim.root", TString outputFile = "./data/sim_reco.root",
                   TString paramFile = "ATTPC.a1954_C14.par", Double_t thr = 20, Int_t hdMcs = 20, Int_t hdMs = 8,
-                  Int_t nEvents = 0)
+                  Int_t nEvents = 0, Double_t holeR = 30.0, TString joinMethod = "mover")
 {
    TString scriptfile = "Lookup20150611.xml";
    TString dir = getenv("VMCWORKDIR");
@@ -48,6 +50,13 @@ void run_reco_C14(TString mcFile = "./data/attpcsim.root", TString outputFile = 
    auto mapping = std::make_shared<AtTpcMap>();
    mapping->ParseXMLMap(mapParFile.Data());
    mapping->GeneratePadPlane();
+
+   // ---- BEAM HOLE ---------------------------------------------------------
+   // a1954 has a 3 cm beam hole. Without it the sim digitizes the beam over a region the real
+   // detector does not read out, and HDBSCAN merges the beam into the recoil-proton cluster
+   // (67 % of protons -> 0.2 % once inhibited; see cluster_eval_C14.C). Shared helper, because
+   // every AT-TPC simulation needs this -- 15C and 16C included. holeR = 0 disables it.
+   AtSim::InhibitBeamHole(mapping, holeR);
 
    // ---- digitization ------------------------------------------------------
    AtClusterizeTask *clusterizer = new AtClusterizeTask();
@@ -84,7 +93,7 @@ void run_reco_C14(TString mcFile = "./data/attpcsim.root", TString outputFile = 
    hdb->SetMinClusterSize(hdMcs);
    hdb->SetMinSamples(hdMs);
    hdb->SetClusterSelectionEpsilon(10.0);
-   hdb->SetJoinMethod("mover");
+   hdb->SetJoinMethod(joinMethod.Data()); // "mover" (default) | "overlap" | "motion" | "both" | "none"
    hdb->SetMinClusterSizeJoin(15);
    hdb->SetCircleOverlapRatio(0.25);
    hdb->SetMotionGapTol(40);

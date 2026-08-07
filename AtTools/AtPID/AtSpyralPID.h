@@ -34,6 +34,17 @@ struct AtSpyralResult {
    ROOT::Math::XYZPoint vertex; // reaction vertex (mm)
    ROOT::Math::XYZPoint center; // spiral center (mm)
    bool valid{false};
+   // Which early exit rejected this track (0 = accepted). Set at every `return res` in
+   // Estimate() so a failure population can be attributed to a specific check instead of
+   // being reported as an undifferentiated "invalid".
+   //  1 too few points        2 no direction         3 spline fit failed
+   //  4 circle fit failed     5 testIndex < 2        6 Sxx == 0 (degenerate rho-z)
+   //  7 slope == 0            8 vertex outside beam region                9 polar/direction inconsistent
+   // 10 no charge accumulated 11 arclength <= 0
+   int failCode{0}; //! TRANSIENT (ROOT //!): deliberately NOT streamed. AtSpyralResult is
+                    // persisted (AtPIDEvent::fSpyral -> *_pid.root, LinkDef "+"), so adding a
+                    // streamed member would change the on-disk layout and break interop with
+                    // existing files and unpatched builds. Diagnostic only, in memory.
    // debug intermediates (for ground-truth comparison vs real Spyral)
    double dbgSlope{0.0};
    int dbgMax1{-1};   // first-arc max index (pass 1, [1:]-relative)

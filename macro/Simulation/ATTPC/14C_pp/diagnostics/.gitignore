@@ -1,0 +1,7 @@
+# Reco/fit output and diagnostic caches -- tens of GB, all regenerable from the scripts here.
+full/
+negB/
+scan/
+*.root
+match_diag
+*.log

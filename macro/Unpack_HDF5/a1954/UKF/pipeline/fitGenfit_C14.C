@@ -20,7 +20,8 @@ void fitGenfit_C14(TString fileName = "run_0055", Long64_t nEvents = -1,
                     Double_t bField = -2.85, Int_t minIter = 2, Int_t maxIter = 5, TString pidGate = "",
                     Double_t measSigma = 4.0, Double_t thetaMinDeg = 10.0, Double_t thetaMaxDeg = 170.0,
                     Bool_t matEffects = kFALSE, Bool_t backwardSeedFix = kFALSE, TString particle = "proton",
-                    TString geoName = "ATTPC_H300torr", Bool_t matFallback = kTRUE)
+                    TString geoName = "ATTPC_H300torr", Bool_t matFallback = kTRUE,
+                    Bool_t backExtrap = kFALSE, Double_t manualElossDensity = 0.0, Int_t matA = 1)
 {
    gSystem->Load("libAtReconstruction.so");
    FairLogger::GetLogger()->SetLogScreenLevel("WARNING");
@@ -89,6 +90,21 @@ void fitGenfit_C14(TString fileName = "run_0055", Long64_t nEvents = -1,
    fitter->SetZPadPlane(1000.0);
    fitter->SetMeasSigma(measSigma);
    fitter->SetThetaWindow(thetaMinDeg, thetaMaxDeg);
+   // Vertex-gap energy recovery, the a1975 D2 pattern (fitGenfitter_a1975_deuterium.C:93-102).
+   // genfit's getFittedState() is the FIRST MEASUREMENT POINT: the gas between the reaction
+   // vertex and the first cluster is unmeasured, so its energy loss is missing from |p|. The
+   // extrapolation supplies the gap length geometrically and CATIMA supplies the dE/dx over it,
+   // which works with matEffects OFF -- no need to pay the ~60 % good-fit rate that turning
+   // genfit material effects on costs. Result lands in GetKinematicsXtr(), NOT GetKinematics().
+   // matA = 1 for the H2 target here (2 would be deuterium).
+   fitter->SetBackExtrapToAxis(backExtrap);
+   if (backExtrap)
+      std::cout << "  Back-extrapolation to beam axis: ON" << std::endl;
+   if (manualElossDensity > 0) {
+      fitter->SetManualELoss(manualElossDensity, matA);
+      std::cout << "  Manual CATIMA eloss over the vertex gap: rho=" << manualElossDensity
+                << " g/cm3, target A=" << matA << std::endl;
+   }
    fitter->SetBackwardSeedFix(backwardSeedFix);
    // When a material-effects fit throws, the fitter retries it with material effects OFF.
    // Those tracks come from a different model and are marked in AtFitTrackMetadata
