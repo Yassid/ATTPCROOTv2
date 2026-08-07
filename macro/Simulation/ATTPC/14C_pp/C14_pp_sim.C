@@ -41,8 +41,17 @@
 /// produces events with no track and wastes the digitization (the slow step).
 void C14_pp_sim(Int_t nEvents = 2000, Double_t thetaMinCM = 5.0, Double_t thetaMaxCM = 120.0,
                 TString mcEngine = "TGeant4", Double_t bFieldkG = -28.5, TString outFile = "./data/attpcsim.root",
-                Double_t resEx = 0.0)
+                Double_t resEx = 0.0, UInt_t seed = 0)
 {
+   // RNG seed. There was NO seeding here, so parallel jobs would have produced byte-identical
+   // events and any "added statistics" would have been a copy of the same sample. seed = 0 keeps
+   // ROOT's default (time-based) behaviour; pass a distinct value per parallel job.
+   // The same pattern as macro/Simulation/ATTPC/15C_d/C15_dp_sim.C:6.
+   if (seed != 0)
+      gRandom->SetSeed(seed);
+   // Print the REQUESTED seed. gRandom->GetSeed() returns TRandom3's internal state counter
+   // (always 624 right after SetSeed), not the seed -- useless for verifying a parallel run.
+   std::cout << "RNG seed requested: " << seed << std::endl;
    TString dir = getenv("VMCWORKDIR");
    TString parFile = "./data/attpcpar.root";
 
