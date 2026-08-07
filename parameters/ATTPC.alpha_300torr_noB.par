@@ -4,6 +4,18 @@
 # parameter_name:parameter_type(Int_t-integer, Double_t-double) parameter_value
 # AtDigiPar
 #
+# Dec 2014 alpha runs 96-113: 299.5 torr, MAGNET OFF.
+#
+# These are the calibration runs: with B=0 the Langevin drift vector reduces to
+# v_D z-hat, so there is no E x B lateral drift and the tracks are straight. The
+# beam direction therefore measures the mechanical tilt angle directly, with no
+# degeneracy against E, and the scattered tracks carry no curvature bias.
+#
+# The reduced field matches the 150 torr set almost exactly
+# (30000/299.5 = 100.2 vs 15000/150 = 100.0 V/m/torr), so the drift velocity
+# should agree with it -- which is the cross-check, not an assumption.
+# Original 150 torr header follows.
+#
 # Low-pressure (149-150 torr) Dec 2014 alpha runs: 114-241.
 # From the run log Alphas-Dec14-RunData.xlsx:
 #   He:CO2 at 149-150 torr, cathode 15 kV, ring 510 V, mesh 850/851 V,
@@ -25,7 +37,7 @@ PadLayers:Int_t                112   #
 AnodeWirePlaneY:Double_t     -4.05   # mm
 GroundWirePlaneY:Double_t     -8.1   # mm
 GatingWirePlaneY:Double_t      -14   # mm
-EField:Double_t              15000   # V/m  (cathode 15 kV over the 1 m drift, from Alphas-Dec14-RunData.xlsx)
+EField:Double_t              30000   # V/m  (cathode 30 kV over the 1 m drift, from Alphas-Dec14-RunData.xlsx)
 NumTbs:Int_t                   512
 SamplingRate:Int_t             6.0   # Real value is 6.25 MHz
 DriftVelocity:Double_t        2.25   # cm/us -- measured: 2.251 +- 0.011 (run 100, B=0) and 2.253 (run 128)
@@ -34,16 +46,16 @@ YDivider:Int_t                1000   # Full drift length will be divided by this
 GasFile:Int_t                    2
 PadPlaneFile:Int_t               3
 PadShapeFile:Int_t               4   # might not be needed because the shape is simply rectangle
-BField:Double_t             0.5691   # Tesla
+BField:Double_t                 0.0   # Tesla -- magnet OFF for runs 96-113
 TiltAng:Double_t              6.47   # Degrees -- measured from run 100 (magnet OFF): 6.47 +- 0.04
 TB0:Int_t                       98   # Time Bucket reference for micromegas position (DEPRECATED)
 LorentzAngle:Double_t          0.0   # Lorentz Angle
 TBEntrance:Int_t               280   # Beam position at detector entrance in TB
 ZPadPlane:Double_t          1000.0   # Position of the micromegas pad plane
-Density:Double_t            0.0727   # Gas density (kg/m3 or mg/cm3)
+Density:Double_t             0.145   # Gas density at 299.5 torr
 ThetaPad:Double_t            110.9   # AT-TPC pad plane rotation
 ThetaRot:Double_t              0.0   # Second Lorentz Angle
-GasPressure:Double_t           150   # Gas pressure in torr
+GasPressure:Double_t         299.5   # Gas pressure in torr
 EIonize:Double_t            15.603   # Ionization energy of gas in eV
 CoefL:Double_t               0.025   # Longitudal coefficient of diffusion [cm^-0.5]
 CoefT:Double_t               0.025   # Transverse coefficient of diffusion [cm^-0.5]
