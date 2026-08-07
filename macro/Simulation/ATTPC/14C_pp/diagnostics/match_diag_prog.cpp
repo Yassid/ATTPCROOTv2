@@ -15,6 +15,7 @@
 //
 // Build: ./build_match.sh    Run: ./match_diag <file.root> <tag> [vDrift] [maxEvt] [R] [Nmin] [linCut]
 #include "AtHit.h"
+#include <set>
 #include "AtPatternEvent.h"
 #include "AtTrack.h"
 
@@ -76,12 +77,21 @@ int main(int argc, char **argv)
    TH1D hNpt(Form("h_npt_%s", tag.c_str()), Form("%s hits per track;hits;tracks", tag.c_str()), 100, 0, 500);
    TH1D hNtr(Form("h_ntr_%s", tag.c_str()), Form("%s tracks per event;tracks;events", tag.c_str()), 20, 0, 20);
    TH1D hQtr(Form("h_qtr_%s", tag.c_str()), Form("%s total charge per track;charge;tracks", tag.c_str()), 200, 0, 4e5);
+   // LATERAL PROFILE: charge and hit count vs perpendicular distance from the LOCAL track axis.
+   // This is what separates real charge sharing from cross-talk/noise: sharing gives a smooth
+   // charge fall-off into the neighbouring pads, whereas cross-talk/noise adds low-charge hits
+   // that are not correlated with distance. The width measurement cannot see the difference
+   // because its linearity cut throws away non-track-like neighbourhoods.
+   TProfile pQperp(Form("p_qperp_%s", tag.c_str()),
+                   Form("%s;perp distance from local axis [mm];<charge>", tag.c_str()), 16, 0, 8);
+   TH1D hNperp(Form("h_nperp_%s", tag.c_str()),
+               Form("%s;perp distance from local axis [mm];hits", tag.c_str()), 16, 0, 8);
 
    long n = tree->GetEntries();
    if (maxEvt > 0 && maxEvt < n)
       n = maxEvt;
    long nSeg = 0, nHits = 0, nTrk = 0, nEvtNonEmpty = 0;
-   std::vector<double> qAll, nptAll, lenAll, densAll, qmmAll;
+   std::vector<double> qAll, nptAll, lenAll, densAll, qmmAll, padDensAll, hitsPerPadAll;
 
    for (long ie = 0; ie < n; ++ie) {
       tree->GetEntry(ie);
@@ -107,11 +117,13 @@ int main(int argc, char **argv)
 
          std::vector<WPt> pts;
          pts.reserve(hitArr.size());
+         std::set<int> padsHit; // unique pads -> separates lateral sharing from time-domain effects
          double qTrk = 0;
          for (const auto &h : hitArr) {
             if (!h)
                continue;
             auto pos = h->GetPosition();
+            padsHit.insert(h->GetPadNum());
             double q = h->GetCharge();
             pts.push_back({pos.X(), pos.Y(), pos.Z(), q});
             zmin = std::min(zmin, pos.Z());
@@ -135,6 +147,12 @@ int main(int argc, char **argv)
             lenAll.push_back(len);
             densAll.push_back(pts.size() / len);
             qmmAll.push_back(qTrk / len);
+            // hits/mm = (pads/mm) x (hits per pad). More pads/mm in data => lateral charge
+            // sharing missing from the sim (a pad response function). More hits per pad =>
+            // a time-domain problem (pulse too narrow, fewer TBs over threshold).
+            padDensAll.push_back(padsHit.size() / len);
+            if (!padsHit.empty())
+               hitsPerPadAll.push_back(double(pts.size()) / padsHit.size());
          }
 
          const int N = pts.size();
@@ -179,6 +197,18 @@ int main(int argc, char **argv)
             double z2 = std::fabs(evec(2, 1)), z3 = std::fabs(evec(2, 2));
             double lamXY = (z2 <= z3) ? l2 : l3;
             double lamZ = (z2 <= z3) ? l3 : l2;
+            // lateral profile around this local axis (eigenvector 0 = track direction)
+            {
+               double ax = evec(0, 0), ay = evec(1, 0), az = evec(2, 0);
+               for (int j : nb) {
+                  double dx = pts[j].x - pts[i].x, dy = pts[j].y - pts[i].y, dz = pts[j].z - pts[i].z;
+                  double along = dx * ax + dy * ay + dz * az;
+                  double px2 = dx - along * ax, py2 = dy - along * ay, pz2 = dz - along * az;
+                  double perp = std::sqrt(px2 * px2 + py2 * py2 + pz2 * pz2);
+                  pQperp.Fill(perp, pts[j].q);
+                  hNperp.Fill(perp);
+               }
+            }
             ++nSeg;
             pXY.Fill(pts[i].z, lamXY);
             pZd.Fill(pts[i].z, lamZ);
@@ -208,6 +238,8 @@ int main(int argc, char **argv)
           vmean(qmmAll) * vmean(lenAll));
    printf("LENGTH    : median %.1f mm   | hits/mm: median %.3f   | charge/mm: median %.1f\n", median(lenAll),
           median(densAll), median(qmmAll));
+   printf("DECOMPOSE : pads/mm median %.3f   x   hits-per-pad median %.3f\n", median(padDensAll),
+          median(hitsPerPadAll));
 
    TF1 linXY("linXY", "[0]+[1]*x", 100, 1000);
    TF1 linZ("linZ", "[0]+[1]*x", 100, 1000);
@@ -221,9 +253,18 @@ int main(int argc, char **argv)
    printf("DRIFT     : sigma_z^2  = %.4f + %.6f*z   sigma0 = %.3f mm   -> CoefL = %.6f cm^2/us\n", az, bz,
           az > 0 ? std::sqrt(az) : 0.0, std::fabs(bz) * 10.0 * vDrift / 200.0);
    printf("mean sigma_xy = %.3f mm   (%ld local segments)\n", hWxy.GetMean(), nSeg);
+   printf("LATERAL    perp[mm]:");
+   for (int b = 1; b <= 8; ++b) printf(" %4.1f", pQperp.GetBinCenter(b));
+   printf("\n           <charge>:");
+   for (int b = 1; b <= 8; ++b) printf(" %4.0f", pQperp.GetBinContent(b));
+   printf("\n           hits(%%) :");
+   double tot = hNperp.Integral();
+   for (int b = 1; b <= 8; ++b) printf(" %4.1f", tot > 0 ? 100.0 * hNperp.GetBinContent(b) / tot : 0.0);
+   printf("\n");
 
    TFile out(Form("match_%s.root", tag.c_str()), "RECREATE");
    pXY.Write(); pZd.Write(); hQ.Write(); hWxy.Write(); hNpt.Write(); hNtr.Write(); hQtr.Write();
+   pQperp.Write(); hNperp.Write();
    out.Close();
    printf("wrote match_%s.root\n", tag.c_str());
    f->Close();

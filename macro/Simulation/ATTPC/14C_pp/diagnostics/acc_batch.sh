@@ -11,7 +11,7 @@ set -eo pipefail
 TAG=$1; EX=$2; SEED=$3; NEV=${4:-8000}
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd); SIM=$(cd "$HERE/.." && pwd)
 REPO=$(cd "$SIM/../../../.." && pwd); UKF="$REPO/macro/Unpack_HDF5/a1954/UKF"
-OUT=/mnt/f/a1954_C14_acc
+OUT=${ACC_OUT:-/mnt/f/a1954_C14_acc}
 mkdir -p "$OUT"
 set +u; source "$REPO/build/config.sh" >/dev/null 2>&1; set -u
 export ROOT_INCLUDE_PATH="$REPO/build/include:$HOME/fair_install/FairRootInstall/include"
