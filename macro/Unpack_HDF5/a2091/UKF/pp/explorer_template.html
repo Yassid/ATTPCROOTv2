@@ -240,7 +240,7 @@ footer{
 
     <div class="grp">
       <div class="eyebrow">E<sub>x</sub> axis &amp; fit</div>
-      <div class="row"><label for="exBins">spectrum bins</label><input type="number" id="exBins" step="10" value="200"></div>
+      <div class="row"><label for="exBins">spectrum bins</label><input type="number" id="exBins" step="10" value="500"></div>
       <div class="row"><label>range [MeV]</label></div>
       <div class="pair"><input type="number" id="exLo" step="1" value="-5"><input type="number" id="exHi" step="1" value="25"></div>
       <div class="row"><label>g.s. fit window</label></div>
@@ -251,21 +251,21 @@ footer{
     <div class="grp">
       <div class="eyebrow">maps</div>
       <div class="sublab">KE vs &theta;<sub>lab</sub></div>
-      <div class="row"><label for="thBins">&theta;<sub>lab</sub> bins</label><input type="number" id="thBins" step="10" value="100"></div>
+      <div class="row"><label for="thBins">&theta;<sub>lab</sub> bins</label><input type="number" id="thBins" step="10" value="500"></div>
       <!-- min as well as max: these two maps carry the kinematic loci, so being able to zoom
            onto the part of the fan where the g.s. curve meets the data is the whole point of
            the panel. Range is display only -- it never removes events, that is what CUTS does. -->
       <div class="row"><label>&theta;<sub>lab</sub> range [deg]</label></div>
       <div class="pair"><input type="number" id="thMin" step="5" value="0"><input type="number" id="thMax" step="5" value="95"></div>
-      <div class="row"><label for="keBins">KE bins</label><input type="number" id="keBins" step="10" value="150"></div>
+      <div class="row"><label for="keBins">KE bins</label><input type="number" id="keBins" step="10" value="500"></div>
       <div class="row"><label>KE range [MeV]</label></div>
       <div class="pair"><input type="number" id="keMin" step="1" value="0"><input type="number" id="keMax" step="1" value="40"></div>
       <div class="sublab">E<sub>x</sub> vs &theta;<sub>cm</sub></div>
-      <div class="row"><label for="cmBins">&theta;<sub>cm</sub> bins</label><input type="number" id="cmBins" step="10" value="90"></div>
-      <div class="row"><label for="etExBins">E<sub>x</sub> bins</label><input type="number" id="etExBins" step="10" value="200"></div>
+      <div class="row"><label for="cmBins">&theta;<sub>cm</sub> bins</label><input type="number" id="cmBins" step="10" value="500"></div>
+      <div class="row"><label for="etExBins">E<sub>x</sub> bins</label><input type="number" id="etExBins" step="10" value="500"></div>
       <div class="sublab" id="lblVzMap">E<sub>x</sub> vs vertex z</div>
-      <div class="row" id="rowVzBins"><label for="vzBins">z bins</label><input type="number" id="vzBins" step="10" value="120"></div>
-      <div class="row" id="rowVzExBins"><label for="vzExBins">E<sub>x</sub> bins</label><input type="number" id="vzExBins" step="10" value="200"></div>
+      <div class="row" id="rowVzBins"><label for="vzBins">z bins</label><input type="number" id="vzBins" step="10" value="500"></div>
+      <div class="row" id="rowVzExBins"><label for="vzExBins">E<sub>x</sub> bins</label><input type="number" id="vzExBins" step="10" value="500"></div>
       <label class="check"><input type="checkbox" id="kinLines" checked> kinematic loci</label>
       <label class="check"><input type="checkbox" id="logZ" checked> log density</label>
     </div>
@@ -273,7 +273,7 @@ footer{
     <div class="grp">
       <div class="eyebrow">&theta;<sub>cm</sub> slice</div>
       <div class="pair"><input type="number" id="cmLo" step="5" value="0"><input type="number" id="cmHi" step="5" value="180"></div>
-      <div class="row"><label for="slBins">bins</label><input type="number" id="slBins" step="10" value="200"></div>
+      <div class="row"><label for="slBins">bins</label><input type="number" id="slBins" step="10" value="500"></div>
     </div>
 
     <div class="grp">
@@ -433,14 +433,14 @@ function readState() {
   for (const id of FLAGS) s[id] = $(id).checked;
   // every panel's bin count is independent; clamp each so a typo cannot lock the page up
   const nb = (v, d) => Math.max(10, Math.min(5000, Math.round(isFinite(v) ? v : d)));
-  s.exBins   = nb(s.exBins, 200);
-  s.slBins   = nb(s.slBins, 200);
-  s.etExBins = nb(s.etExBins, 200);
-  s.vzExBins = nb(s.vzExBins, 200);
-  s.thBins   = nb(s.thBins, 100);
-  s.keBins   = nb(s.keBins, 150);
-  s.cmBins   = nb(s.cmBins, 90);
-  s.vzBins   = nb(s.vzBins, 120);
+  s.exBins   = nb(s.exBins, 500);
+  s.slBins   = nb(s.slBins, 500);
+  s.etExBins = nb(s.etExBins, 500);
+  s.vzExBins = nb(s.vzExBins, 500);
+  s.thBins   = nb(s.thBins, 500);
+  s.keBins   = nb(s.keBins, 500);
+  s.cmBins   = nb(s.cmBins, 500);
+  s.vzBins   = nb(s.vzBins, 500);
   // a min typed above its max would give a zero or negative span and divide the binning by it,
   // so fall back to the full default window rather than rendering an empty canvas
   if (!isFinite(s.thMin)) s.thMin = 0;
