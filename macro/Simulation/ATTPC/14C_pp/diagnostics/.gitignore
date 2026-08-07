@@ -2,6 +2,12 @@
 full/
 negB/
 scan/
+acc/
 *.root
 match_diag
 *.log
+
+# The acceptance RESULT histograms and figures are small (~7 kB / ~21 kB) and cost a ~2 h
+# generate+reco+fit per level to remake, so they are kept despite the *.root rule above.
+!acceptance_*.root
+!acceptance_*.png

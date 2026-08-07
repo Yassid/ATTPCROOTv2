@@ -40,7 +40,8 @@
 /// proton is too low in energy to make a reconstructable track, so generating there just
 /// produces events with no track and wastes the digitization (the slow step).
 void C14_pp_sim(Int_t nEvents = 2000, Double_t thetaMinCM = 5.0, Double_t thetaMaxCM = 120.0,
-                TString mcEngine = "TGeant4", Double_t bFieldkG = -28.5, TString outFile = "./data/attpcsim.root")
+                TString mcEngine = "TGeant4", Double_t bFieldkG = -28.5, TString outFile = "./data/attpcsim.root",
+                Double_t resEx = 0.0)
 {
    TString dir = getenv("VMCWORKDIR");
    TString parFile = "./data/attpcpar.root";
@@ -140,7 +141,11 @@ void C14_pp_sim(Int_t nEvents = 2000, Double_t thetaMinCM = 5.0, Double_t thetaM
    Pyp.push_back(0.0);
    Pzp.push_back(0.0);
    Mass.push_back(14.003242); // uma
-   ExE.push_back(0.0);        // elastic; set to a level energy for inelastic runs
+   // Excitation of the RESIDUAL 14C. 0 = elastic; 6.094 = the first excited state (1-).
+   // Inelastic changes the two-body kinematics, so theta_lab(theta_cm) and the recoil energy
+   // both shift -- which is exactly why acceptance has to be measured per level, not assumed
+   // from the elastic case.
+   ExE.push_back(resEx);
 
    // ---- Recoil : p ----
    Zp.push_back(1);
