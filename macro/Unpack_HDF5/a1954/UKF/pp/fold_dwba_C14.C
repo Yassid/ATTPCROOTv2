@@ -14,11 +14,19 @@
 ///     N_reco(r)      = SUM_t P(r|t) N_true(t)
 ///     folded(r)      = N_reco(r) / (sin(r) dt)
 ///
-/// LIMITATION, stated rather than hidden: the sim populates theta_true only down to ~15 deg, so
-/// leakage out of the very intense 5-20 deg region cannot be modelled. Since that region carries
-/// ~700x the events of the 60 deg bin, the folded curve near the minimum is a LOWER bound on the
-/// true feed-down. The fold therefore starts at foldMin (default 15 deg) and the comparison below
-/// 25 deg should not be used.
+/// CORRECTED 2026-08-08: an earlier version of this file claimed the sim only populated
+/// theta_true above ~15 deg and truncated the fold there. That was WRONG -- acc_batch.sh generates
+/// 2-178 deg and the response file has generated AND reconstructed events from 0-5 deg up. The
+/// truncation was self-imposed and it suppressed exactly the forward leakage it was meant to
+/// bound.
+///
+/// The migration matrix is normalised per true-column, so P(r|t) is CONDITIONAL on the event being
+/// reconstructed. The number that migrates therefore carries the acceptance:
+///     N_reco(r) = SUM_t P(r|t) * A(t) * dsigma/dOmega(t) * sin(t) dt
+/// and since the data is acceptance-CORRECTED, the prediction to compare against is that divided
+/// by A(r) sin(r). Omitting A(t) (as the first version did) over-weights the forward region, where
+/// the acceptance falls to nearly zero below 20 deg -- so it would have manufactured feed-down.
+/// Both effects are now handled explicitly and the fold runs from foldMin = 0.
 ///
 ///   root -b -q 'fold_dwba_C14.C()'
 
@@ -27,7 +35,7 @@
 /// against 0.96-1.02 everywhere else). Anchoring the normalisation on those bins biases every
 /// ratio by 7-14 %. Do not lower normLo without also extending the simulation below 15 deg.
 void fold_dwba_C14(TString frFile = "",
-                   Double_t normLo = 30.0, Double_t normHi = 50.0, Double_t foldMin = 15.0)
+                   Double_t normLo = 30.0, Double_t normHi = 50.0, Double_t foldMin = 0.0)
 {
    gStyle->SetOptStat(0);
    TString here = gSystem->DirName(gInterpreter->GetCurrentMacroName());
@@ -67,6 +75,20 @@ void fold_dwba_C14(TString frFile = "",
       if (!R)
          return;
       R->SetDirectory(nullptr);
+      // the acceptance that goes with this response, needed on BOTH sides of the migration
+      TFile *fA = TFile::Open(i == 0 ? "/mnt/f/a1954_C14_acc_nochi2/acceptance_merged_gs.root"
+                                     : "/mnt/f/a1954_C14_acc_gf_nochi2/acceptance_merged_gs.root");
+      TH1D *Acc = nullptr;
+      if (fA && !fA->IsZombie()) {
+         Acc = (TH1D *)fA->Get("hAcc_gs_sum");
+         if (Acc) Acc = (TH1D *)Acc->Clone(TString::Format("accf%d", i));
+         if (Acc) Acc->SetDirectory(nullptr);
+         fA->Close();
+      }
+      if (!Acc) {
+         printf("\033[1;31mno acceptance for the fold -- refusing to guess\033[0m\n");
+         return;
+      }
       fR->Close();
 
       TFile *fD = TFile::Open(here + "/plots/" + df[i]);
@@ -89,15 +111,17 @@ void fold_dwba_C14(TString frFile = "",
          if (th < foldMin)
             continue;
          double s = std::sin(th * TMath::DegToRad());
-         Nt[t] = fr->Eval(th) * s;
+         double a = Acc->GetBinContent(Acc->FindBin(th)); // events only migrate if reconstructed
+         Nt[t] = fr->Eval(th) * s * a;
       }
       for (int r = 1; r <= nb; ++r) {
          double acc = 0;
          for (int t = 1; t <= nb; ++t)
             acc += R->GetBinContent(t, r) * Nt[t];
          double sr = std::sin(f->GetBinCenter(r) * TMath::DegToRad());
-         if (sr > 1e-3)
-            f->SetBinContent(r, acc / sr);
+         double ar = Acc->GetBinContent(Acc->FindBin(f->GetBinCenter(r)));
+         if (sr > 1e-3 && ar > 0.05)
+            f->SetBinContent(r, acc / sr / ar); // data is acceptance-corrected, so undo A(r)
       }
       fold[i] = f;
    }
