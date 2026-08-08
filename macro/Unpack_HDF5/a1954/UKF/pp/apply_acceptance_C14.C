@@ -25,13 +25,24 @@
 /// angle factor, so the last panel divides it out. Shape only -- no luminosity or target
 /// thickness here, so the normalisation is arbitrary.
 ///
+/// The data cache and the acceptance must come from the SAME fitter in the SAME configuration:
+/// UKF data goes with /mnt/f/a1954_C14_acc/, GENFIT data (proton_kin_300gfx.root, refit with
+/// matEffects OFF + backExtrap) goes with /mnt/f/a1954_C14_acc_gf/. Mixing them corrects the
+/// data with an efficiency it does not have. GENFIT's g.s. sits at +0.115 rather than UKF's
+/// -0.059, so its Ex windows must be shifted by +0.174 to select the same physics.
+///
+/// outTag keeps the two fitters' outputs apart: without it a GENFIT run silently overwrites
+/// plots/angdist_gs.{png,root} from the UKF run.
+///
 ///   root -b -q 'apply_acceptance_C14.C("plots/proton_kin_300_ukf.root",-0.6,0.6,"gs","elastic")'
 ///   root -b -q 'apply_acceptance_C14.C("plots/proton_kin_300_ukf.root",5.5,7.0,"ex1","Ex 5.5-7.0")'
+///   root -b -q 'apply_acceptance_C14.C("plots/proton_kin_300gfx.root",-0.485,0.715,"gs",
+///                                      "elastic (GENFIT)",5,"/mnt/f/a1954_C14_acc_gf/",20,150,"_gf")'
 
 void apply_acceptance_C14(TString dataCache = "plots/proton_kin_300_ukf.root", Double_t exLo = -0.6,
                           Double_t exHi = 0.6, TString level = "gs", TString label = "elastic",
                           Double_t chi2Cut = 5.0, TString accDir = "/mnt/f/a1954_C14_acc/",
-                          Double_t cmMin = 20.0, Double_t cmMax = 150.0)
+                          Double_t cmMin = 20.0, Double_t cmMax = 150.0, TString outTag = "")
 {
    gStyle->SetOptStat(0);
    TString here = gSystem->DirName(gInterpreter->GetCurrentMacroName());
@@ -127,10 +138,10 @@ void apply_acceptance_C14(TString dataCache = "plots/proton_kin_300_ukf.root", D
    dsdo->SetMarkerColor(kOrange + 7);
    dsdo->SetLineColor(kOrange + 7);
    dsdo->Draw("E1");
-   TString png = here + "/plots/angdist_" + level + ".png";
+   TString png = here + "/plots/angdist_" + level + outTag + ".png";
    c->SaveAs(png);
 
-   TFile fo(here + "/plots/angdist_" + level + ".root", "RECREATE");
+   TFile fo(here + "/plots/angdist_" + level + outTag + ".root", "RECREATE");
    raw->Write("raw");
    cor->Write("corrected");
    dsdo->Write("dsigma_dOmega");
