@@ -22,10 +22,14 @@
 void elastic_yield2_C14(TString dataCache = "plots/proton_kin_300_ukf_nc.root",
                         TString accDir = "/mnt/f/a1954_C14_acc_nochi2/", TString tag = "ukf",
                         Double_t cmMin = 20.0, Double_t cmMax = 145.0, Int_t minN = 60,
-                        TString frFile = "/home/yassid/a1954_C14_fresco/outputs/p14C_el_161_dsdo.dat")
+                        TString frFile = "")
 {
    gStyle->SetOptStat(0);
    TString here = gSystem->DirName(gInterpreter->GetCurrentMacroName());
+   // FRESCO products live beside this analysis, in ../fresco; resolve them relative to
+   // this macro so the comparison is reproducible outside one machine.
+   if (frFile.IsNull())
+      frFile = here + "/../fresco/outputs/p14C_el_161_dsdo.dat";
 
    TFile *fd = TFile::Open(here + "/" + dataCache);
    TFile *fa = TFile::Open(accDir + "acceptance_merged_gs.root");

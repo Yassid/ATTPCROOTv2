@@ -26,11 +26,15 @@
 /// 20-30 deg bins from below and the folded curve is artificially depleted there (fold/raw = 0.79
 /// against 0.96-1.02 everywhere else). Anchoring the normalisation on those bins biases every
 /// ratio by 7-14 %. Do not lower normLo without also extending the simulation below 15 deg.
-void fold_dwba_C14(TString frFile = "/home/yassid/a1954_C14_fresco/outputs/p14C_el_161_dsdo.dat",
+void fold_dwba_C14(TString frFile = "",
                    Double_t normLo = 30.0, Double_t normHi = 50.0, Double_t foldMin = 15.0)
 {
    gStyle->SetOptStat(0);
    TString here = gSystem->DirName(gInterpreter->GetCurrentMacroName());
+   // FRESCO products live beside this analysis, in ../fresco; resolve them relative to
+   // this macro so the comparison is reproducible outside one machine.
+   if (frFile.IsNull())
+      frFile = here + "/../fresco/outputs/p14C_el_161_dsdo.dat";
    TString simDir = here + "/../../../../Simulation/ATTPC/14C_pp/diagnostics/";
 
    auto *fr = new TGraph();

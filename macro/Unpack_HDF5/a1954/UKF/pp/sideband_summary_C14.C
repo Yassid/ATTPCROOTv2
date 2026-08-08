@@ -8,10 +8,14 @@
 ///   root -b -q 'sideband_summary_C14.C()'
 
 void sideband_summary_C14(Double_t normLo = 20.0, Double_t normHi = 50.0,
-                          TString frFile = "/home/yassid/a1954_C14_fresco/outputs/p14C_el_161_dsdo.dat")
+                          TString frFile = "")
 {
    gStyle->SetOptStat(0);
    TString here = gSystem->DirName(gInterpreter->GetCurrentMacroName());
+   // FRESCO products live beside this analysis, in ../fresco; resolve them relative to
+   // this macro so the comparison is reproducible outside one machine.
+   if (frFile.IsNull())
+      frFile = here + "/../fresco/outputs/p14C_el_161_dsdo.dat";
 
    auto grab = [&](const char *f, const char *obj, const char *as) -> TH1D * {
       TFile *fi = TFile::Open(here + "/plots/" + f);

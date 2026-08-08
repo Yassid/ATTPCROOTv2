@@ -1,0 +1,3 @@
+# FRESCO's full text log is regenerable from the .nin input via run_fresco.sh;
+# only the parsed per-state cross sections are tracked, since the macros read those.
+outputs/*.out

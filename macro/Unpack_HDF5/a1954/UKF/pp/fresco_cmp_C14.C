@@ -5,7 +5,7 @@
 /// qualitatively between 60 and 140 deg -- so an independent prediction is the only arbiter.
 /// FRESCO runs in normal kinematics (p on 14C) at the lab proton energy giving the same E_cm as
 /// 14C at 161 MeV on a proton: E_lab(p) = 11.581 MeV. Koning-Delaroche 2003 proton global OMP,
-/// computed in ~/a1954_C14_fresco/kd_params.py (NOT copied from the a2091 15C input, whose real
+/// computed in ../fresco/kd_params.py (NOT copied from the a2091 15C input, whose real
 /// depth uses the neutron asymmetry term).
 ///
 /// SHAPE ONLY: FRESCO is scaled by one factor per curve, fitted over a forward window where the
@@ -51,11 +51,15 @@ static double fitScale(TH1D *h, TGraph *g, double lo, double hi)
    return sPrime > 0 ? 1.0 / sPrime : 1.0;
 }
 
-void fresco_cmp_C14(TString frDir = "/home/yassid/a1954_C14_fresco/outputs", Double_t normLo = 20.0,
+void fresco_cmp_C14(TString frDir = "", Double_t normLo = 20.0,
                     Double_t normHi = 50.0)
 {
    gStyle->SetOptStat(0);
    TString here = gSystem->DirName(gInterpreter->GetCurrentMacroName());
+   // FRESCO products live beside this analysis, in ../fresco; resolve them relative to
+   // this macro so the comparison is reproducible outside one machine.
+   if (frDir.IsNull())
+      frDir = here + "/../fresco/outputs";
 
    auto grab = [&](const char *f, const char *obj, const char *as) -> TH1D * {
       TFile *fi = TFile::Open(here + "/plots/" + f);
