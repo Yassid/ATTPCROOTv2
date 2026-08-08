@@ -43,6 +43,11 @@ private:
                                  ///< far-drift pulses -> collapses track z. Only enable if noise pads are a problem.
                                  ///< (FWHM ~50-90 TB, low prominence) that a threshold-only primary would keep.
    Bool_t fFloatTau{false};      ///< let the peaking time float in the fit (else fixed)
+   Bool_t fReportT0{false};      ///< report the fitted impulse arrival t0 instead of the response peak.
+                                 ///< Default false keeps the historical peak-referenced time, which lags
+                                 ///< the impulse by fRespPeakRedT*tau (~5 TB at tau=0.72 us, 6 MHz) and is
+                                 ///< what every existing z calibration was tuned against. Turning it on
+                                 ///< shifts every hit z by that lag -- correct, but recalibrate first.
    Double_t fFitChi2Cut{0};      ///< if >0, reject a peak whose LOCAL reduced chi2 (data vs fitted GET pulse)
                                  ///< exceeds this -> trace is not a real pulse SHAPE (noise hump). >0 also turns
                                  ///< on float-tau so a real BROAD pulse fits and survives. chi2 stored in
@@ -70,6 +75,7 @@ public:
    void SetMinSignificance(Double_t s) { fMinSignif = s; }
    void SetProminenceOnPrimary(Bool_t v) { fPromPrimary = v; } ///< false = old behavior (primary=threshold only)
    void SetFloatPeakingTime(Bool_t v) { fFloatTau = v; }
+   void SetReportT0(Bool_t v) { fReportT0 = v; } ///< report impulse arrival instead of the response peak
    void SetFitChi2Cut(Double_t c) { fFitChi2Cut = c; } ///< local reduced-chi2 shape gate; 0 disables
    void SetFitRelErr(Double_t e) { fFitRelErr = e; }   ///< fractional model error in the chi2 effective sigma
    // SetSpyralZ / LoadPadTimeOffsets are inherited from AtPSA.

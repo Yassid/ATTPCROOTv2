@@ -174,11 +174,25 @@ AtPSAMultiFit::HitVector AtPSAMultiFit::AnalyzePad(AtPad *pad)
    HitVector hits;
    for (int i = 0; i < n; ++i) {
       double A = good ? tf.GetParameter(2 * i) : adc[seeds[i]] / fRespPeakVal;
-      // time-bucket = MAXIMUM of the fitted curve in this peak's window (GetMaximumX interpolates
-      // with Brent -> sub-bucket precision). Window = midpoints to neighbouring seeds.
+      // Time of THIS pulse, from its own fitted t0 plus the response's analytic peak lag.
+      //
+      // This used to be tf.GetMaximumX(wLo, wHi), the maximum of the fitted model over a window
+      // bounded by the midpoints to the neighbouring seeds. For an isolated pulse the two agree,
+      // but the model is a SUM: where two pulses overlap -- the case this class exists to handle --
+      // the maximum of the sum sits between them, so the reported time was pulled toward the
+      // neighbour and the deconvolution the fit had just achieved was thrown away.
+      //
+      // t0 + fRespPeakRedT * tau is the peak of pulse i ALONE, so it keeps the same time reference
+      // as before (the response maximum, not the impulse) and therefore does not move any existing
+      // z calibration; it only stops the neighbour pull. Set SetReportT0() to report the impulse
+      // arrival instead, which removes the ~fRespPeakRedT*tau lag entirely -- that DOES shift z and
+      // is opt-in for exactly that reason.
+      // window = midpoints to the neighbouring seeds; still used by the shape gate below
       double wLo = (i == 0) ? (double)lo : 0.5 * (seeds[i - 1] + seeds[i]);
       double wHi = (i == n - 1) ? (double)hi : 0.5 * (seeds[i] + seeds[i + 1]);
-      double peakTB = good ? tf.GetMaximumX(wLo, wHi) : (double)seeds[i];
+      double tauUsed = (floatTau && good) ? tf.GetParameter(2 * n) : tauTB;
+      double t0i = good ? tf.GetParameter(2 * i + 1) : (double)seeds[i] - peakOff;
+      double peakTB = t0i + fRespPeakRedT * tauUsed;
       double amp = A * fRespPeakVal;
       double Q = A * fRespIntegral * tauTB;
 
@@ -214,10 +228,14 @@ AtPSAMultiFit::HitVector AtPSAMultiFit::AnalyzePad(AtPad *pad)
          }
       }
 
-      pos.SetZ(CalibrateZ(peakTB, pad->GetPadNum())); // base: per-pad offset + Spyral/Geo z
+      // Default reports the response-peak time (the historical reference, so no z recalibration);
+      // SetReportT0 reports the impulse arrival instead. The GATES above always use the
+      // peak-referenced time so their thresholds keep their meaning either way.
+      double tRep = fReportT0 ? t0i : peakTB;
+      pos.SetZ(CalibrateZ(tRep, pad->GetPadNum())); // base: per-pad offset + Spyral/Geo z
       auto hit = std::make_unique<AtHit>(pad->GetPadNum(), pos, amp);
-      hit->SetTimeStamp(peakTB);
-      hit->SetTimeStampCorr(peakTB);
+      hit->SetTimeStamp(tRep);
+      hit->SetTimeStampCorr(tRep);
       hit->SetTraceIntegral(Q);
       hit->SetChargeVariance(redChi2);         // fit-shape chi2, stashed for the distribution / diagnostics
       hit->SetTimeStampCorrInter(tauFit);      // fitted peaking time, stashed for diagnostics
