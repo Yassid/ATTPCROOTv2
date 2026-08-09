@@ -83,7 +83,7 @@ void elastic_sideband_C14(TString dataCache = "plots/proton_kin_300_ukf_nc.root"
                           Double_t sbGap = 1.0, Double_t sbWidth = 2.0, Int_t minN = 60,
                           TString frFile = "",
                           TString level = "gs", Double_t seed0 = 0.0, Double_t exLo = -6.0,
-                          Double_t exHi = 4.0)
+                          Double_t exHi = 4.0, Double_t zMin = -1e9, Double_t zMax = 1e9)
 {
    gStyle->SetOptStat(0);
    TString here = gSystem->DirName(gInterpreter->GetCurrentMacroName());
@@ -122,7 +122,14 @@ void elastic_sideband_C14(TString dataCache = "plots/proton_kin_300_ukf_nc.root"
       if (ctr < cmMin || ctr > cmMax)
          continue;
       auto *h = new TH1D(TString::Format("hsb_%d", b), "", 200, exLo, exHi);
-      t->Draw(TString::Format("ex>>hsb_%d", b), TString::Format("thcm>=%g&&thcm<%g", lo, lo + wid), "goff");
+      // The vertex-z slab, when one is asked for. It has to be applied HERE, on the same
+      // spectra the locus and the sidebands are measured from, so that signal and background are
+      // both taken from the selection the normalisation will use. Cutting afterwards would
+      // subtract a background measured on a different event sample.
+      TString cut = TString::Format("thcm>=%g&&thcm<%g", lo, lo + wid);
+      if (zMin > -1e8 || zMax < 1e8)
+         cut += TString::Format("&&vertexz>%g&&vertexz<%g", zMin, zMax);
+      t->Draw(TString::Format("ex>>hsb_%d", b), cut, "goff");
       h->SetDirectory(nullptr);
       hx[b] = h;
       Nent[b] = h->Integral();

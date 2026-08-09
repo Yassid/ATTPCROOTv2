@@ -51,7 +51,8 @@ static std::tuple<double, double> acc_kine(double m1, double m2, double m3, doub
 /// @param keRatioMin/Max  truth match window on KE_fit/KE_true.
 void acceptance_C14(TString simFile, TString fitFile, TString tag = "gs", Double_t resEx = 0.0, Double_t Ebeam = 161.0,
                     Double_t chi2Cut = 5.0, Int_t nBins = 36, Double_t cmMax = 180.0, Double_t dThetaMax = 10.0,
-                    Double_t keRatioMin = 0.5, Double_t keRatioMax = 2.0, Bool_t useXtr = kFALSE)
+                    Double_t keRatioMin = 0.5, Double_t keRatioMax = 2.0, Bool_t useXtr = kFALSE,
+                    Double_t zMin = -1e9, Double_t zMax = 1e9)
 {
    gSystem->Load("libAtReconstruction.so");
    gSystem->Load("libAtSimulationData.so");
@@ -98,11 +99,12 @@ void acceptance_C14(TString simFile, TString fitFile, TString tag = "gs", Double
       if (!mc)
          continue;
       // the true recoil proton: PDG 2212, primary (mother -1)
-      double keT = -1, thT = -1;
+      double keT = -1, thT = -1, zT = -1e9;
       for (int k = 0; k < mc->GetEntriesFast(); ++k) {
          auto *t = (AtMCTrack *)mc->At(k);
          if (!t || t->GetPdgCode() != 2212 || t->GetMotherId() != -1)
             continue;
+         zT = t->GetStartZ() * 10.0; // FairRoot stores cm; the analysis works in mm
          double px = t->GetPx() * 1000, py = t->GetPy() * 1000, pz = t->GetPz() * 1000; // GeV -> MeV
          double p = std::sqrt(px * px + py * py + pz * pz);
          if (p <= 0)
@@ -113,6 +115,15 @@ void acceptance_C14(TString simFile, TString fitFile, TString tag = "gs", Double
       }
       if (keT <= 0)
          continue; // beam-only event: no reaction happened here
+      // VERTEX-Z SLAB. The excited states only populate the first ~40 cm of the chamber, so
+      // their yields are extracted in a z window and the acceptance has to be measured in the
+      // SAME window or it describes a different target thickness than the data selection does.
+      // The denominator is cut on TRUTH z (the reactions that really happened in the slab) and
+      // the numerator additionally on RECONSTRUCTED z, which is what the data cut can actually
+      // use. Migration across the two edges is what makes those different, and it is small
+      // here: reco z tracks truth to about 15 mm below 600 mm.
+      if (zT < zMin || zT > zMax)
+         continue;
       auto [exT, cmT] = acc_kine(m_C14, m_p, m_p, m_resid, Ebeam, thT, keT);
       if (std::isnan(cmT))
          continue;
@@ -155,6 +166,12 @@ void acceptance_C14(TString simFile, TString fitFile, TString tag = "gs", Double
                   if (dth > dThetaMax || r < keRatioMin || r > keRatioMax)
                      continue;
                }
+               // the data selection cuts on the RECONSTRUCTED vertex, so the numerator must too
+               if (zMin > -1e8 || zMax < 1e8) {
+                  double zR = ft->GetVertex(0).Z();
+                  if (zR < zMin || zR > zMax)
+                     continue;
+               }
                good = true;
                break;
             }
@@ -167,6 +184,8 @@ void acceptance_C14(TString simFile, TString fitFile, TString tag = "gs", Double
    }
 
    printf("\n===== acceptance %s (residual Ex = %.3f MeV) =====\n", tag.Data(), resEx);
+   if (zMin > -1e8 || zMax < 1e8)
+      printf("vertex z slab %.0f to %.0f mm (truth on the denominator, reco on the numerator)\n", zMin, zMax);
    printf("generated reactions %ld   reconstructed %ld   overall acceptance %.3f\n", nGen, nRec,
           nGen ? double(nRec) / nGen : 0.0);
    if (!nGen) {
