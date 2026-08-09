@@ -1,10 +1,12 @@
 ################################################################################
 # a1975 16C(p,d)15C SIMULATION parameters.
 #
-# Derived from ATTPC.a1954_C14_sim.par by changing the gas to H2 at 1 bar, which is what the
-# a1975 proton-target runs used and what the reconstruction geometry (ATTPC_H1bar) carries.
-# Density is the 293 K value 0.0827 mg/cm3, not the 273 K value 0.090 that the workspace notes
-# and the fitter gasDensity argument both use -- that one is about 9 percent too dense.
+# Derived from ATTPC.a1954_C14_sim.par. The gas is H2 at 300 torr, the same as a1954.
+#
+# !! THE PRODUCTION RECONSTRUCTION DISAGREES WITH THIS !!
+# The a1975 data reconstruction uses geometry ATTPC_H1bar (8.27e-5 g/cm3) and a fitter
+# gasDensity of 9.0e-5, against the correct 3.308e-5 -- 2.5 times too much material. Energy loss
+# scales with path length, so the resulting error is angle- and vertex-dependent.
 #
 # !! GAIN AND DIFFUSION ARE NOT TUNED FOR a1975 !!
 # Gain 150000 and CoefT/L 0.0009 are carried over from a1954, where they were established by
@@ -13,8 +15,9 @@
 # how many marginal tracks survive and therefore the acceptance near threshold. Match track width
 # and charge per unit length against a1975 data before treating any acceptance from this as final.
 #
-# Note also that the a1975 RECONSTRUCTION loads ATTPC.a1954.par, which declares 600 torr and
-# density 0.197 mg/cm3 -- neither of which is H2 at 1 bar. That inconsistency is unresolved.
+# ATTPC.a1954.par, which the a1975 reconstruction loads, declares 600 torr and 0.197 mg/cm3 --
+# also not the real gas. Those entries drive digitisation rather than transport, but they are
+# wrong too.
 #
 # Parameters used throughout ATTPCROOT software
 # Format:
@@ -47,10 +50,10 @@ TB0:Int_t                       98   # Time Bucket reference for micromegas posi
 LorentzAngle:Double_t          0.0   # Lorentz Angle
 TBEntrance:Int_t               480   # Beam position at detector entrance in TB
 ZPadPlane:Double_t          1000.0   # Position of the micromegas pad plane
-Density:Double_t            0.0827   # mg/cm3. H2 at 1 bar, 293 K (NOT the 273 K value 0.090)
+Density:Double_t            0.0331   # mg/cm3. H2 at 300 torr, 293 K
 ThetaPad:Double_t            110.9   # AT-TPC pad plane rotation
 ThetaRot:Double_t              0.0   # Second Lorentz Angle
-GasPressure:Double_t           760   # Gas pressure in torr (1 bar)
+GasPressure:Double_t           300   # Gas pressure in torr
 EIonize:Double_t            15.603   # Ionization energy of gas in eV
 Fano:Double_t                 0.24   # Fano factor of the gas
 CoefL:Double_t              0.0009   # Longitudal coefficient of diffusion [cm^2/us]

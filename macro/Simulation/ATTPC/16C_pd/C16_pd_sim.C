@@ -8,22 +8,18 @@
 /// describe another; that is the whole reason for running this per level rather than once.
 ///
 /// CONDITIONS (a1975, proton-target runs):
-///     B = 2.85 T,  H2 at 1 bar,  drift length 1000 mm
+///     B = 2.85 T,  H2 at 300 torr,  drift length 1000 mm
 ///     beam 16C at 192 MeV = 12.0 MeV/u
 ///
-/// THE GAS. The workspace documents H2 at 1 bar and the fitters are run with
-/// gasDensity = 9.0e-5 g/cm3. That number is the 273 K density; at the 293 K the gas was
-/// actually at, 1 bar of H2 is 8.27e-5 g/cm3, which is what the geometry ATTPC_H1bar.root and
-/// the medium H_1bar carry and what is used here. The 9.0e-5 in the reconstruction is therefore
-/// about 9 percent too dense. This is the same trap that was found and fixed in the a1954
-/// analysis, where media.geo carried the 273 K value for 300 torr; it is recorded here because
-/// energy loss scales with path length, so an error in it is angle- and vertex-dependent rather
-/// than a constant offset.
+/// !! THE GAS IS 300 torr, AND THE PRODUCTION RECONSTRUCTION DISAGREES !!
+/// rho = 3.308e-5 g/cm3 (H2, 300 torr, 293 K), geometry ATTPC_H300torr_RT.root. But the a1975
+/// data reconstruction uses ATTPC_H1bar_geomanager.root (8.27e-5) and fitUKF_a1975.C defaults to
+/// gasDensity = 9.0e-5, i.e. 2.5 TIMES too much material. Energy loss scales with path length, so
+/// that error is angle- and vertex-dependent rather than a constant offset. This is the same
+/// class of mistake as the a1954 600-versus-300 torr error, which cost an entire production.
 ///
-/// Separately, the a1975 reconstruction loads parameters/ATTPC.a1954.par, which declares
-/// GasPressure 600 torr and Density 0.197 mg/cm3 -- neither of which is H2 at 1 bar. Those
-/// entries drive the digitisation, not the transport, but the inconsistency is real and worth
-/// resolving before these acceptances are used for anything absolute.
+/// The 9.0e-5 figure is doubly wrong: even at 1 bar it is the 273 K density, where 293 K gives
+/// 8.27e-5. Use the _RT media entries, which carry the room-temperature values.
 ///
 /// BEAM ENERGY. 192 MeV is what the (p,d) analysis macros use. The (p,p') calibration of the
 /// same data set prefers 195.5 MeV; the difference moves pz by 0.9 percent and is left as a
@@ -73,7 +69,7 @@ void C16_pd_sim(Int_t nEvents = 2000, Double_t thetaMinCM = 2.0, Double_t thetaM
    run->AddModule(cave);
 
    FairDetector *ATTPC = new AtTpc("ATTPC", kTRUE);
-   ATTPC->SetGeometryFileName("ATTPC_H1bar.root"); // H2 at 1 bar, rho = 8.27e-5 g/cm3 (293 K)
+   ATTPC->SetGeometryFileName("ATTPC_H300torr_RT.root"); // H2 at 300 torr, rho = 3.308e-5 g/cm3 (293 K)
    run->AddModule(ATTPC);
 
    // Field sign follows the a1954 lesson: generate in the DATA convention so that the sense of
@@ -107,11 +103,12 @@ void C16_pd_sim(Int_t nEvents = 2000, Double_t thetaMinCM = 2.0, Double_t thetaM
    // react; set it far below and every reaction happens near the entrance, so the vertex is no
    // longer uniform in z and the acceptance is measured on the wrong vertex distribution.
    //
-   // 16C at 12 MeV/u through 1 m of H2 at 1 bar loses roughly 28 MeV: the a1954 14C beam lost
-   // ~12 MeV through 1 m at 300 torr, and this gas is 2.3x denser at a similar velocity.
-   // VERIFY THIS on the first run by checking that the truth vertex z is flat across the drift
-   // length -- a slope means the estimate is wrong.
-   Double_t maxELoss = 28.0; // MeV
+   // MEASURED, not estimated: solving the elastic truth for the beam energy that gives Ex = 0
+   // event by event showed 25.2 MeV of loss across the chamber when the gas was (wrongly) set to
+   // 1 bar. Scaling by the density ratio 3.308/8.27 gives about 10 MeV at 300 torr. Re-verify the
+   // same way after any change: the vertex must stay flat across the drift length, and the solved
+   // beam energy should fall linearly from the entrance value.
+   Double_t maxELoss = 10.0; // MeV
 
    AtTPCIonGenerator *ionGen =
       new AtTPCIonGenerator("Ion", z, a, q, m, px, py, pz, BExcEner, Bmass, NomEnergy, maxELoss);
