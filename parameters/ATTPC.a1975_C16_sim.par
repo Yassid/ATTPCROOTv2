@@ -1,0 +1,62 @@
+################################################################################
+# a1975 16C(p,d)15C SIMULATION parameters.
+#
+# Derived from ATTPC.a1954_C14_sim.par by changing the gas to H2 at 1 bar, which is what the
+# a1975 proton-target runs used and what the reconstruction geometry (ATTPC_H1bar) carries.
+# Density is the 293 K value 0.0827 mg/cm3, not the 273 K value 0.090 that the workspace notes
+# and the fitter gasDensity argument both use -- that one is about 9 percent too dense.
+#
+# !! GAIN AND DIFFUSION ARE NOT TUNED FOR a1975 !!
+# Gain 150000 and CoefT/L 0.0009 are carried over from a1954, where they were established by
+# matching simulated track width and charge to that data set. They have NOT been checked against
+# a1975. For a1954 the original value was ~15x too low, so this is not a small effect: it changes
+# how many marginal tracks survive and therefore the acceptance near threshold. Match track width
+# and charge per unit length against a1975 data before treating any acceptance from this as final.
+#
+# Note also that the a1975 RECONSTRUCTION loads ATTPC.a1954.par, which declares 600 torr and
+# density 0.197 mg/cm3 -- neither of which is H2 at 1 bar. That inconsistency is unresolved.
+#
+# Parameters used throughout ATTPCROOT software
+# Format:
+# parameter_name:parameter_type(Int_t-integer, Double_t-double) parameter_value
+# AtDigiPar
+# Description of parameters
+################################################################################
+[AtDigiPar]
+PadPlaneX:Int_t                864   # mm
+PadPlaneZ:Int_t               1344   # mm
+PadSizeX:Int_t                   8   # mm
+PadSizeZ:Int_t                  12   # mm
+PadRows:Int_t                  108   #
+PadLayers:Int_t                112   #
+AnodeWirePlaneY:Double_t     -4.05   # mm
+GroundWirePlaneY:Double_t     -8.1   # mm
+GatingWirePlaneY:Double_t      -14   # mm
+EField:Double_t               5000   # V/m
+NumTbs:Int_t                   512
+SamplingRate:Int_t             6.0   #
+DriftVelocity:Double_t        1.30   # cm/us
+DriftLength:Double_t          1000   # mm //ATTPC : 1000 - Prototype : 500
+YDivider:Int_t                1000   # Full drift length will be divided by this number when finding cluster
+GasFile:Int_t                    2
+PadPlaneFile:Int_t               3
+PadShapeFile:Int_t               4   # might not be needed because the shape is simply rectangle
+BField:Double_t               2.85   # Tesla
+TiltAng:Double_t               0.0   # Degrees
+TB0:Int_t                       98   # Time Bucket reference for micromegas position (DEPRECATED)
+LorentzAngle:Double_t          0.0   # Lorentz Angle
+TBEntrance:Int_t               480   # Beam position at detector entrance in TB
+ZPadPlane:Double_t          1000.0   # Position of the micromegas pad plane
+Density:Double_t            0.0827   # mg/cm3. H2 at 1 bar, 293 K (NOT the 273 K value 0.090)
+ThetaPad:Double_t            110.9   # AT-TPC pad plane rotation
+ThetaRot:Double_t              0.0   # Second Lorentz Angle
+GasPressure:Double_t           760   # Gas pressure in torr (1 bar)
+EIonize:Double_t            15.603   # Ionization energy of gas in eV
+Fano:Double_t                 0.24   # Fano factor of the gas
+CoefL:Double_t              0.0009   # Longitudal coefficient of diffusion [cm^2/us]
+CoefT:Double_t              0.0009   # Transverse coefficient of diffusion [cm^2/us]
+Gain:Double_t               150000   # NOT 2.5e6: that matches charge/mm but flattens the width sqrt(z) growth. See project_a1954_c14_sim_match.
+GETGain:Double_t              1000   # Gain of the GET electronics in fC
+PeakingTime:Int_t              720   # Electronic peaking time in ns
+MaxRange:Double_t            500.0   # Maximum range from Beam energy in mm
+################################################################################
