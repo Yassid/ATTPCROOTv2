@@ -82,6 +82,7 @@ double multiplet(double *x, double *p)
 
 void exc_angdist_C14(TString cache = "plots/proton_kin_300gfx_ex.root",
                      TString accDir = "/mnt/f/a1954_C14_acc_gf_nochi2/", Double_t cmMin = 20.0,
+                     Double_t zMin = -1e9, Double_t zMax = 1e9,
                      Double_t cmMax = 140.0, Double_t dcm = 10.0, Int_t minN = 80, TString tag = "gfex",
                      Double_t gain = 1.078, Double_t winPad = 0.10, Double_t sig0 = 0.132,
                      Double_t dSig = 0.0123, Bool_t freeShift = kFALSE)
@@ -104,7 +105,13 @@ void exc_angdist_C14(TString cache = "plots/proton_kin_300gfx_ex.root",
 
    // ---------------- stage 1: angle-integrated, published two-stage recipe ----------------
    auto *hAll = new TH1D("hAll", "", 140, 5.3, 8.1);
-   t->Draw(TString::Format("ex>>hAll"), TString::Format("thcm>=%g&&thcm<%g", cmMin, cmMax), "goff");
+   // Optional vertex-z window. The absolute normalisation is taken from the elastic yield in the
+   // SAME window, so that the beam flux, the target thickness and the trigger efficiency -- which
+   // is what shapes the z distribution and which the simulation does not contain -- all cancel in
+   // the ratio. 10-400 mm is the flat part of that distribution, where the trigger efficiency is
+   // constant and so cancels exactly rather than on average.
+   TString zcut = (zMin > -1e8 || zMax < 1e8) ? TString::Format("&&vertexz>%g&&vertexz<%g", zMin, zMax) : TString("");
+   t->Draw(TString::Format("ex>>hAll"), TString::Format("thcm>=%g&&thcm<%g", cmMin, cmMax) + zcut, "goff");
    hAll->SetDirectory(nullptr);
    // Centroids at the tabulated energies mapped through the calibration gain, widths from the
    // MEASURED resolution rather than fitted. Letting the widths float gave 0.20-0.42 MeV against
@@ -172,7 +179,7 @@ void exc_angdist_C14(TString cache = "plots/proton_kin_300gfx_ex.root",
    for (int b = 1; b <= NB; ++b) {
       double lo = cmMin + (b - 1) * dcm, hi = lo + dcm;
       auto *h = new TH1D(TString::Format("hx%d", b), "", 56, 5.3, 8.1);
-      t->Draw(TString::Format("ex>>hx%d", b), TString::Format("thcm>=%g&&thcm<%g", lo, hi), "goff");
+      t->Draw(TString::Format("ex>>hx%d", b), TString::Format("thcm>=%g&&thcm<%g", lo, hi) + zcut, "goff");
       h->SetDirectory(nullptr);
       double N = h->Integral();
       if (N < minN) {

@@ -79,6 +79,7 @@ double twoPeak(double *x, double *p)
 
 void exc8_angdist_C14(TString cache = "plots/proton_kin_300gfx_ex.root",
                       TString accDir = "/mnt/f/a1954_C14_acc_gf_nochi2/", TString accLevel = "ex8",
+                      Double_t zMin = -1e9, Double_t zMax = 1e9,
                       Double_t cmMin = 20.0,
                       Double_t cmMax = 140.0, Double_t dcm = 20.0, Int_t minN = 25, Int_t nEx = 27, // 100 keV bins; see the binning note above
                       
@@ -100,7 +101,10 @@ void exc8_angdist_C14(TString cache = "plots/proton_kin_300gfx_ex.root",
 
    // ---- angle-integrated first: confirm the fixed parameters on this cache ----
    auto *hAll = new TH1D("hAll8", "", nEx + 3, 7.7, 10.4);
-   t->Draw("ex>>hAll8", TString::Format("thcm>=%g&&thcm<%g", cmMin, cmMax), "goff");
+   // see exc_angdist_C14.C: the z window exists so the elastic normalisation cancels the flux,
+   // the target thickness and the trigger efficiency
+   TString zcut = (zMin > -1e8 || zMax < 1e8) ? TString::Format("&&vertexz>%g&&vertexz<%g", zMin, zMax) : TString("");
+   t->Draw("ex>>hAll8", TString::Format("thcm>=%g&&thcm<%g", cmMin, cmMax) + zcut, "goff");
    hAll->SetDirectory(nullptr);
    double bwA = hAll->GetBinWidth(1);
    TF1 fA("fA", twoPeak, FITLO, FITHI, NP + 2);
@@ -140,7 +144,7 @@ void exc8_angdist_C14(TString cache = "plots/proton_kin_300gfx_ex.root",
    for (int b = 1; b <= NB; ++b) {
       double lo = cmMin + (b - 1) * dcm, hi = lo + dcm;
       auto *h = new TH1D(TString::Format("h8_%d", b), "", nEx, 7.7, 10.4);
-      t->Draw(TString::Format("ex>>h8_%d", b), TString::Format("thcm>=%g&&thcm<%g", lo, hi), "goff");
+      t->Draw(TString::Format("ex>>h8_%d", b), TString::Format("thcm>=%g&&thcm<%g", lo, hi) + zcut, "goff");
       h->SetDirectory(nullptr);
       double N = h->Integral();
       if (N < minN) {
