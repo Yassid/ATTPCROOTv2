@@ -200,7 +200,17 @@ void exc_angdist_C14(TString cache = "plots/proton_kin_300gfx_ex.root",
          fn.SetParLimits(NLV + 2, -0.40, 0.40); // the whole multiplet may slide, but not reorder
       else
          fn.FixParameter(NLV + 2, 0); // drift already removed from the DATA -- no shift allowed
-      int st = h->Fit(&fn, "QNRL"); // likelihood -- the per-bin counts are small
+      // Likelihood fit -- the per-bin counts are small. RETRY ON A NON-ZERO STATUS rather than
+      // discarding the bin: with fewer events (the vertex-z window) Minuit can stop with a
+      // non-zero status while sitting on perfectly sane parameters, and a discarded bin removes
+      // an angular point from every level at once. Restarting from the current parameters is
+      // usually enough. Only a bin that still fails after the retries is dropped, loudly.
+      int st = h->Fit(&fn, "QNRL");
+      int nTry = 0;
+      while (st != 0 && nTry < 3) {
+         ++nTry;
+         st = h->Fit(&fn, "QNRL"); // restarts from where the previous attempt stopped
+      }
       double c2n = fn.GetNDF() > 0 ? fn.GetChisquare() / fn.GetNDF() : -1;
       printf("  %3.0f-%3.0f  | %4.0f |", lo, hi, N);
       for (int i = 0; i < NLV; ++i) {
@@ -216,7 +226,7 @@ void exc_angdist_C14(TString cache = "plots/proton_kin_300gfx_ex.root",
       // simply vanishes from the angular distribution downstream -- which is exactly what
       // happened to the 90-100 deg bin when the vertex-z window was first applied.
       printf(" %6.2f | shift %+6.3f%s\n", c2n, fn.GetParameter(NLV + 2),
-             st != 0 ? "  <-- FIT STATUS != 0, BIN DROPPED" : "");
+             st != 0 ? "  <-- FIT STATUS != 0, BIN DROPPED" : (nTry ? "  (converged on retry)" : ""));
       gShift->SetPoint(nShift++, 0.5 * (lo + hi), fn.GetParameter(NLV + 2));
 
       if (pad < 12) {
