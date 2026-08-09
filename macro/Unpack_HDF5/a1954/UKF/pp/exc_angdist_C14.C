@@ -211,7 +211,12 @@ void exc_angdist_C14(TString cache = "plots/proton_kin_300gfx_ex.root",
             yld[i]->SetBinError(b, std::max(e, std::sqrt(std::max(a, 1.0))));
          }
       }
-      printf(" %6.2f | shift %+6.3f\n", c2n, fn.GetParameter(NLV + 2));
+      // A non-converged fit is DROPPED from the stored distribution, so say so on the line that
+      // reports it. Otherwise the numbers print, look entirely reasonable, and the angular bin
+      // simply vanishes from the angular distribution downstream -- which is exactly what
+      // happened to the 90-100 deg bin when the vertex-z window was first applied.
+      printf(" %6.2f | shift %+6.3f%s\n", c2n, fn.GetParameter(NLV + 2),
+             st != 0 ? "  <-- FIT STATUS != 0, BIN DROPPED" : "");
       gShift->SetPoint(nShift++, 0.5 * (lo + hi), fn.GetParameter(NLV + 2));
 
       if (pad < 12) {

@@ -172,7 +172,7 @@ void exc8_angdist_C14(TString cache = "plots/proton_kin_300gfx_ex.root",
             yld[i]->SetBinError(b, e);
          }
       }
-      printf(" %6.2f\n", c2n);
+      printf(" %6.2f%s\n", c2n, st != 0 ? "  <-- FIT STATUS != 0, BIN DROPPED" : "");
       if (b <= 6) {
          cf->cd(b);
          h->SetTitle(TString::Format("#theta_{cm} %.0f-%.0f;E_{x} [MeV];counts", lo, hi));
