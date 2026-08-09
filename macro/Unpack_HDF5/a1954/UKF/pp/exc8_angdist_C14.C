@@ -28,8 +28,15 @@
 /// a noisy statistic and should not be read as a goodness-of-fit at that binning. 100 keV is
 /// used, being the best-behaved of the three. 150 keV starts to lose the peak shape.
 ///
-/// The acceptance applied is the 6.094 one, the only one available; at 8.5-9.4 MeV that is a
-/// longer extrapolation than for the multiplet and is the leading systematic on these yields.
+/// THE ACCEPTANCE IS NOW MEASURED AT THIS EXCITATION ENERGY. A dedicated simulation was run at
+/// Ex = 8.317 MeV (three seeds, diagnostics/acc_level_genfit.sh) rather than reusing the 6.094
+/// one. That matters more at the ends of the range than in the middle: against the 6.094
+/// acceptance the yields move by -6.7 % at 30 deg and -9.1 % at 130 deg, but by only 1 % or so
+/// between 50 and 110 deg. Extrapolating the gs-to-6.094 gradient would have predicted the
+/// middle to 0.4 % and the ends to only 5-8 %, so the measurement was worth making.
+///
+/// The 9.363 MeV structure still uses it, being 1 MeV further up with no simulation of its own;
+/// that remains the leading systematic on the upper distribution alone.
 ///
 ///   root -b -q 'exc8_angdist_C14.C()'
 
@@ -71,7 +78,8 @@ double twoPeak(double *x, double *p)
 } // namespace
 
 void exc8_angdist_C14(TString cache = "plots/proton_kin_300gfx_ex.root",
-                      TString accDir = "/mnt/f/a1954_C14_acc_gf_nochi2/", Double_t cmMin = 20.0,
+                      TString accDir = "/mnt/f/a1954_C14_acc_gf_nochi2/", TString accLevel = "ex8",
+                      Double_t cmMin = 20.0,
                       Double_t cmMax = 140.0, Double_t dcm = 20.0, Int_t minN = 25, Int_t nEx = 27, // 100 keV bins; see the binning note above
                       
                       TString tag = "hi")
@@ -80,13 +88,13 @@ void exc8_angdist_C14(TString cache = "plots/proton_kin_300gfx_ex.root",
    TString here = gSystem->DirName(gInterpreter->GetCurrentMacroName());
 
    TFile *fd = TFile::Open(here + "/" + cache);
-   TFile *fa = TFile::Open(accDir + "acceptance_merged_ex1.root");
+   TFile *fa = TFile::Open(accDir + "acceptance_merged_" + accLevel + ".root");
    if (!fd || fd->IsZombie() || !fa || fa->IsZombie()) {
       printf("\033[1;31mcannot open the cache or the acceptance\033[0m\n");
       return;
    }
    TTree *t = (TTree *)fd->Get("pk");
-   auto *acc = (TH1D *)fa->Get("hAcc_ex1_sum");
+   auto *acc = (TH1D *)fa->Get("hAcc_" + accLevel + "_sum");
    if (!t || !acc)
       return;
 

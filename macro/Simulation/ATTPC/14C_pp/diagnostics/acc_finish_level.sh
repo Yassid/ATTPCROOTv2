@@ -15,6 +15,10 @@
 #
 #   ./acc_finish_level.sh <tag> <resEx> [seedLo] [seedHi]
 #   ./acc_finish_level.sh ex8 8.317 1001 1003
+#
+# Note the trailing outDir argument on acceptance_split_C14.C. Without it the macro defaults to
+# its own directory, the split files land next to the macro instead of in diagnostics/split, and
+# the merge step then finds nothing -- while the split itself reports success.
 set -eo pipefail
 TAG=$1; EX=$2; S0=${3:-1001}; S1=${4:-1005}
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd); SIM=$(cd "$HERE/.." && pwd)
@@ -33,7 +37,7 @@ for ((s=S0; s<=S1; ++s)); do
     echo "  $J: no COMPLETED marker -- skipping"
     continue
   fi
-  root -b -q -l "acceptance_split_C14.C(\"$ACC/${J}_sim.root\",\"$ACC/${J}_genfit.root\",\"$TAG\",$EX,161.0,5.0,36,180.0,10.0,0.5,2.0,kTRUE,\"gf_s${s}\")" \
+  root -b -q -l "acceptance_split_C14.C(\"$ACC/${J}_sim.root\",\"$ACC/${J}_genfit.root\",\"$TAG\",$EX,161.0,5.0,36,180.0,10.0,0.5,2.0,kTRUE,\"gf_s${s}\",\"diagnostics/split\")" \
        > "$ACC/${J}_split.log" 2>&1
   if [ -s "diagnostics/split/acc_split_${TAG}_gf_s${s}.root" ]; then
     echo "  $J: split done"; NDONE=$((NDONE+1))
