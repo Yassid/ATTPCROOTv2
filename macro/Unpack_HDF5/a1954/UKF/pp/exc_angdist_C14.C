@@ -136,6 +136,8 @@ void exc_angdist_C14(TString cache = "plots/proton_kin_300gfx_ex.root",
       h->SetDirectory(nullptr);
       return h;
    };
+   auto *gShift = new TGraph();
+   int nShift = 0;
    TH1D *yld[NLV], *dsd[NLV];
    for (int i = 0; i < NLV; ++i) {
       yld[i] = mk(TString::Format("y%d", i));
@@ -184,6 +186,7 @@ void exc_angdist_C14(TString cache = "plots/proton_kin_300gfx_ex.root",
          }
       }
       printf(" %6.2f | shift %+6.3f\n", c2n, fn.GetParameter(NLV + 2));
+      gShift->SetPoint(nShift++, 0.5 * (lo + hi), fn.GetParameter(NLV + 2));
 
       if (pad < 12) {
          cf->cd(++pad);
@@ -276,6 +279,7 @@ void exc_angdist_C14(TString cache = "plots/proton_kin_300gfx_ex.root",
       dsd[i]->Write(TString::Format("dsdo_%d", i));
    }
    hAll->Write("ex_all");
+   gShift->Write("shift");   // per-bin common centroid shift, for exc_cuts_view_C14.C
    fo.Close();
    printf("\nwrote %s\n       plots/exc_fits_%s.png\n\n", png.Data(), tag.Data());
 }

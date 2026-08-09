@@ -10,6 +10,7 @@
 ///   root -b -q 'exc_cuts_view_C14.C()'
 
 void exc_cuts_view_C14(TString cache = "plots/proton_kin_300gfx_ex.root", Double_t gain = 1.078,
+                       TString fitFile = "plots/exc_angdist_gfex.root",
                        Double_t cmMin = 20.0, Double_t cmMax = 140.0, Double_t dcm = 10.0,
                        Double_t fitLo = 5.4, Double_t fitHi = 8.0)
 {
@@ -25,6 +26,14 @@ void exc_cuts_view_C14(TString cache = "plots/proton_kin_300gfx_ex.root", Double
    double mu[NLV];
    for (int i = 0; i < NLV; ++i)
       mu[i] = 6.094 + gain * (MU0[i] - 6.094);
+
+   // the per-bin shift the fit actually applied
+   TGraph *gsh = nullptr;
+   { TFile *ff = TFile::Open(here + "/" + fitFile);
+     if (ff && !ff->IsZombie()) { auto *g = (TGraph *)ff->Get("shift");
+       if (g) gsh = (TGraph *)g->Clone("gsh"); ff->Close(); } }
+   if (!gsh)
+      printf("\033[1;33mno shift found in %s -- drawing the UNSHIFTED centroids only\033[0m\n", fitFile.Data());
 
    TFile *f = TFile::Open(here + "/" + cache);
    if (!f || f->IsZombie()) {
@@ -72,17 +81,28 @@ void exc_cuts_view_C14(TString cache = "plots/proton_kin_300gfx_ex.root", Double
    // ---- right: the same, zoomed, with the MEASURED ridge per bin on top
    c->cd(2);
    gPad->SetLogz();
-   auto *h3 = new TH2D("h3", "zoom: fixed centroids (lines) vs the measured ridge (white);"
+   auto *h3 = new TH2D("h3", "zoom: centroids AS FITTED (solid) vs unshifted (dotted) vs measured ridge (white);"
                              "#theta_{cm} [deg];E_{x} [MeV]",
                        (int)((cmMax - cmMin) / 2.5), cmMin, cmMax, 120, 5.4, 8.2);
    t->Draw("ex:thcm>>h3", "", "goff");
    h3->SetDirectory(nullptr);
    h3->Draw("colz");
+   // the centroids AS FITTED: flat position plus the per-bin shift
    for (int i = 0; i < NLV; ++i) {
-      auto *l = new TLine(cmMin, mu[i], cmMax, mu[i]);
-      l->SetLineColor(LVCOL[i]);
-      l->SetLineWidth(2);
-      l->Draw();
+      auto *gc = new TGraph();
+      int m = 0;
+      for (double lo = cmMin; lo < cmMax - 0.1; lo += dcm) {
+         double x = lo + dcm / 2;
+         double sh = gsh ? gsh->Eval(x) : 0.0;
+         gc->SetPoint(m++, x, mu[i] + sh);
+      }
+      gc->SetLineColor(LVCOL[i]);
+      gc->SetLineWidth(3);
+      gc->Draw("L same");
+      auto *fl = new TLine(cmMin, mu[i], cmMax, mu[i]); // unshifted, for reference
+      fl->SetLineColor(LVCOL[i]);
+      fl->SetLineStyle(3);
+      fl->Draw();
    }
    // measured ridge: mode of the Ex spectrum in each angular bin, restricted to the fit range
    auto *gr = new TGraph();
