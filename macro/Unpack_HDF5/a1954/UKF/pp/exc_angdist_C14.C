@@ -14,6 +14,22 @@
 ///
 /// STAGE 1 (angle integrated) determines the centroids and widths, which are properties of the
 /// calibration and the resolution, not of the scattering angle.
+///
+/// NO PER-ANGLE SHIFT IS APPLIED (freeShift defaults false), and that default is the result of a
+/// mistake worth recording. The MODE of the multiplet marches from 6.63 to 7.19 MeV between 20 and
+/// 130 deg, which looks exactly like a drifting energy scale. It is not: the composition changes
+/// with angle -- 6.70 dominates forward, 7.27 backward -- so the mode of the blend moves even with
+/// a perfect calibration. Two corrections were built to remove it before that was noticed. Tilting
+/// the DATA (theta' = theta - 0.15 deg/MeV (KE - 4.5), the slope that best flattens the mode) drove
+/// chi2/ndf to 6.5 in five bins and collapsed the 6.09 component to zero in three. Allowing a free
+/// per-bin shift of the centroids improved chi2 -- because it was absorbing genuine composition
+/// change into a spurious shift, i.e. fitting away part of the signal.
+///
+/// The decisive check is the ISOLATED 6.094 peak, the only calibration probe here free of
+/// composition ambiguity. Across 20-140 deg it gives 6.31, 6.08, 6.14, 6.15, 5.99, 6.28 with
+/// errors of 0.02-0.09 on 13-47 counts: scatter about ~6.1, not a trend. There is no drift to
+/// correct, and the calibration (Ebeam 164.25 MeV with a -0.014 deg/MeV tilt) already suffices.
+/// freeShift = kTRUE is kept only to reproduce the rejected variant.
 /// STAGE 2 (per angle bin) holds those fixed and floats only the four areas plus a linear
 /// background. With a few hundred counts per bin the centroids are not separately determined, and
 /// letting them float lets the fit trade position against composition.
@@ -68,7 +84,7 @@ void exc_angdist_C14(TString cache = "plots/proton_kin_300gfx_ex.root",
                      TString accDir = "/mnt/f/a1954_C14_acc_gf_nochi2/", Double_t cmMin = 20.0,
                      Double_t cmMax = 140.0, Double_t dcm = 10.0, Int_t minN = 80, TString tag = "gfex",
                      Double_t gain = 1.078, Double_t winPad = 0.10, Double_t sig0 = 0.132,
-                     Double_t dSig = 0.0123)
+                     Double_t dSig = 0.0123, Bool_t freeShift = kFALSE)
 {
    gStyle->SetOptStat(0);
    TString here = gSystem->DirName(gInterpreter->GetCurrentMacroName());
@@ -173,7 +189,10 @@ void exc_angdist_C14(TString cache = "plots/proton_kin_300gfx_ex.root",
       fn.SetParameter(NLV, 0.02 * N);
       fn.SetParameter(NLV + 1, 0);
       fn.SetParameter(NLV + 2, 0);
-      fn.SetParLimits(NLV + 2, -0.40, 0.40); // the whole multiplet may slide, but not reorder
+      if (freeShift)
+         fn.SetParLimits(NLV + 2, -0.40, 0.40); // the whole multiplet may slide, but not reorder
+      else
+         fn.FixParameter(NLV + 2, 0); // drift already removed from the DATA -- no shift allowed
       int st = h->Fit(&fn, "QNRL"); // likelihood -- the per-bin counts are small
       double c2n = fn.GetNDF() > 0 ? fn.GetChisquare() / fn.GetNDF() : -1;
       printf("  %3.0f-%3.0f  | %4.0f |", lo, hi, N);
