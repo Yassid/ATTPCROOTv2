@@ -11,14 +11,22 @@ void fitGenfitter_a1975(TString fileName = "run_0106", Long64_t nEvents = -1, TS
                         Int_t maxIter = 5, TString elossName = "deuteron_H2_catima.txt",
                         TString pidGate = "pid/deuteron_band.json", Double_t measSigma = 4.0,
                         Bool_t matEffects = kFALSE, Int_t pdg = 1000010020, Double_t massAmu = 2.0135532,
-                        Int_t Z = 1, Bool_t mergeContinuity = kFALSE)
+                        Int_t Z = 1, Bool_t mergeContinuity = kFALSE,
+                        // Geometry is a PARAMETER, not a constant: the a1975 gas is H2 at 300
+                        // torr (3.308e-5 g/cm3) and this defaulted to ATTPC_H1bar (8.27e-5),
+                        // i.e. 2.5x too much material. Whether that matters depends on
+                        // matEffects -- with it off genfit applies no material effects and the
+                        // density cannot reach the fit. Left at the historical default so an
+                        // existing call reproduces the existing production; pass the correct one
+                        // explicitly to test or to redo.
+                        TString geoName = "ATTPC_H1bar")
 {
    gSystem->Load("libAtReconstruction.so");
    FairLogger::GetLogger()->SetLogScreenLevel("WARNING");
 
    TString dir = getenv("VMCWORKDIR");
    gSystem->Setenv("GEOMPATH", (dir + "/geometry/").Data());
-   TString geoManFile = dir + "/geometry/ATTPC_H1bar_geomanager.root";
+   TString geoManFile = dir + "/geometry/" + geoName + "_geomanager.root";
    TString digiParFile = dir + "/parameters/ATTPC.a1954.par";
    TString inputFile = ioDir + fileName + "_reco.root";
    TString outBase = (outDir.Length() ? outDir : ioDir);
