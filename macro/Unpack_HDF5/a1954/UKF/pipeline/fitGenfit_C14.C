@@ -6,8 +6,11 @@
 /// (AtPatternEvent) and writes <run>_genfit<suffix>.root (AtTrackingEvent + AtPIDEvent).
 /// Same input as fitUKF_C14.C, so the two fitters can be compared track-by-track.
 ///
-/// >>> REQUIRES the GENFIT-enabled build:  source build_genfit/config.sh  <<<
-///     (the default build/ has GENFIT2 NOT FOUND, so AtGenfitter is a stub there.)
+/// Build: `source build/config.sh`. The two-build split this file used to require
+/// (`build_genfit/` for GENFIT, `build/` for everything else) is gone -- there is now a single
+/// build and it is GENFIT-enabled: build/CMakeCache.txt resolves GENFIT2_LIBRARY to
+/// ~/fair_install/GenFit/lib/libgenfit2.so and libAtReconstruction.so exports a real
+/// EventFit::AtGenfitter, not a stub. pp/refit_genfit_xtr.sh already sources build/config.sh.
 ///
 /// HANDEDNESS: experimental data -> Bz negative (as for the UKF). Default bField=-2.85;
 ///     verify on fitted vertex/KE and flip if fits diverge (bField is an arg).

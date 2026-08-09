@@ -48,17 +48,18 @@ Batch drivers (resumable, skip existing outputs):
 - `./reco_batch.sh "run_0055 run_0147 ..." 2`   — reco (2-parallel; external drive I/O cap)
 - `./fit_batch.sh  "run_0055 run_0147 ..." 4`    — UKF fit (CPU-bound, 4-parallel ok)
 
-## Builds (two, on purpose)
+## Build (one)
 
-- **`build/`** — the default build. GENFIT2 NOT FOUND. Use for UKF + reco.
-  `source build/config.sh`
-- **`build_genfit/`** — configured with `-DGENFIT=~/fair_install/GenFitInst` so
-  `AtGenfitter` is compiled against the updated GenFit fork (Yassid/GenFit, SRIM
-  energy-loss tables + `2584bfe` dEdxParam guard). Use for `fitGenfit_C14.C`.
-  `source build_genfit/config.sh`
+- **`build/`** — `source build/config.sh`. Covers reco, UKF *and* GENFIT.
 
-Both build from the same source; kept separate so a GENFIT rebuild never disturbs a
-running reco/UKF batch.
+There used to be a second `build_genfit/`, configured with `-DGENFIT=~/fair_install/GenFitInst`,
+because the default build had GENFIT2 NOT FOUND and `AtGenfitter` compiled to a stub. That split
+no longer exists: `build/CMakeCache.txt` resolves `GENFIT2_LIBRARY` to
+`~/fair_install/GenFit/lib/libgenfit2.so` (the Yassid/GenFit fork, SRIM energy-loss tables +
+`2584bfe` dEdxParam guard) and `build/lib/libAtReconstruction.so` exports a real
+`EventFit::AtGenfitter`. Any script still sourcing `build_genfit/config.sh` is sourcing a path
+that does not exist -- and most do it with `>/dev/null 2>&1`, so it fails silently and the job
+runs against whatever environment happened to be loaded.
 
 ## Handedness — VALIDATED
 
@@ -96,7 +97,7 @@ root -b -q 'pipeline/fitUKF_C14.C("run_0055", -1, "proton", -1)'
 # 14C excitation spectrum (SET Ebeam!)
 root -b -q 'pp/ex_C14.C("run_0055", "/home/yassid/a1954_C14_reco/", 100.0)'
 
-# GENFIT fit (needs the genfit build)
-source ../../../../build_genfit/config.sh
+# GENFIT fit (same build as everything else)
+source ../../../../build/config.sh
 root -b -q 'pipeline/fitGenfit_C14.C("run_0055")'
 ```
