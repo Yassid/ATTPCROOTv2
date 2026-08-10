@@ -51,8 +51,12 @@ else
 fi
 
 # 16C(p,p'): beam 16C, target p, ejectile p, residual 16C, beamA=16.
-# Reference levels: 2+ 1.766, 0+ 3.027, 2+ 3.986, 4+ 4.142 MeV.
-root -b -l -q "$MK(\"$CU\",\"$OUT\",\"16C(p,p')\",$EBEAM,16.0147013,1.00782503,1.00782503,16.0147013,16,\"1.766,3.027,3.986,4.142\",\"$CG\")"
+# Reference levels. THE GROUND STATE MUST BE IN THIS LIST: the builder draws one kinematic curve
+# per entry and nothing else, so omitting 0 leaves the elastic locus -- the strongest thing in the
+# data and the one the beam energy is tuned against -- with no line to compare to. It was missing
+# here, which made the page look as though the g.s. curve had failed to draw.
+# 16C: 0+ g.s., 2+ 1.766, 0+ 3.027, 2+ 3.986, 4+ 4.142 MeV.
+root -b -l -q "$MK(\"$CU\",\"$OUT\",\"16C(p,p')\",$EBEAM,16.0147013,1.00782503,1.00782503,16.0147013,16,\"0:g.s.,1.766:2+,3.027:0+,3.986:2+,4.142:4+\",\"$CG\")"
 
 if grep -qi microsoft /proc/version 2>/dev/null; then
   WINHOME="/mnt/c/Users/$(ls /mnt/c/Users | grep -viE 'public|default|all users' | head -1)"
