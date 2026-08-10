@@ -212,7 +212,14 @@ void acceptance_C16pd(TString simFile, TString fitFile, TString tag = "gs", Doub
    }
 
    TString outDir = TString(gSystem->DirName(gInterpreter->GetCurrentMacroName())) + "/diagnostics/";
+   // Create it. Without this the TFile silently fails to open and the macro goes on to announce
+   // that it wrote a file that does not exist.
+   gSystem->mkdir(outDir, kTRUE);
    TFile fo(outDir + "acceptance_" + tag + ".root", "RECREATE");
+   if (fo.IsZombie()) {
+      printf("\033[1;31mcannot write %sacceptance_%s.root\033[0m\n", outDir.Data(), tag.Data());
+      return;
+   }
    hGen->Write(); hRec->Write(); hAcc->Write(); hLab->Write(); hLabR->Write();
    fo.Close();
 
