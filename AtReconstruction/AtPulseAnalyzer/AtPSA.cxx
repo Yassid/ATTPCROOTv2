@@ -197,8 +197,13 @@ void AtPSA::CalcLorentzVector()
 
    fLorentzVector.SetXYZ(xr, yr, z);
 
-   std::cout << " ==== Lorentz drift vector (pad frame) : (" << xr << ", " << yr << ", " << z
-             << ") cm/us,  omega*tau = " << ot << std::endl;
+   // CalcLorentzVector is called per event, so report the vector once and not 600k times.
+   static bool reported = false;
+   if (!reported) {
+      reported = true;
+      std::cout << " ==== Lorentz drift vector (pad frame) : (" << xr << ", " << yr << ", " << z
+                << ") cm/us,  omega*tau = " << ot << std::endl;
+   }
 }
 
 TVector3 AtPSA::RotateDetector(Double_t x, Double_t y, Double_t z, Int_t tb)

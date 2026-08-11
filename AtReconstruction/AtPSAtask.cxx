@@ -80,8 +80,11 @@ void AtPSAtask::Exec(Option_t *opt) {
 
   AtRawEvent *rawEvent = (AtRawEvent *)fRawEventArray->At(0);
 
-  std::cout << " Event Number :  " << rawEvent->GetEventID()
-            << " Valid pads : " << rawEvent->GetNumPads() << std::endl;
+  // One line per event fills a bulk-unpack log with hundreds of thousands of entries.
+  static Long64_t nPSA = 0;
+  if (++nPSA % 1000 == 0)
+     std::cout << " Event Number :  " << rawEvent->GetEventID()
+               << " Valid pads : " << rawEvent->GetNumPads() << std::endl;
 
   AtEvent *event = (AtEvent *)new ((*fEventHArray)[0]) AtEvent();
 

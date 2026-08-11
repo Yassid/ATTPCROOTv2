@@ -230,7 +230,8 @@ void AtDecoder2Task::Exec(Option_t *opt)
    if (fRawEvent == NULL)
       fRawEvent = fDecoder->GetRawEvent(fEventID++);
    fInternalID++;
-   if (fInternalID % 1 == 0)
+   // Was "% 1", i.e. one line per event. Throttled so a bulk unpack stays readable.
+   if (fInternalID % 1000 == 0)
       std::cout << " Event Number " << fEventID << " Internal ID : " << fInternalID
                 << " Number of Pads : " << fRawEvent->GetNumPads() << std::endl;
 

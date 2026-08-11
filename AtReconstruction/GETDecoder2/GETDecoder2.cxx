@@ -22,6 +22,12 @@
 
 #include "GETFileChecker.h"
 
+// The DEBUG blocks below are meant to be enabled here, by uncommenting the line that
+// follows. They were in fact always on, because the build hands every AtReconstruction
+// translation unit a global -DDEBUG (visible in build/.../flags.make CXX_DEFINES; it does
+// not come from CMAKE_BUILD_TYPE, which is empty). That put ~850k lines into the log of a
+// single run -- 97% of a 149 MB per-run log -- so undo it explicitly here.
+#undef DEBUG
 //#define DEBUG
 
 ClassImp(GETDecoder2);
