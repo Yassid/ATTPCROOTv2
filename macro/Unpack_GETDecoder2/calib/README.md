@@ -69,8 +69,9 @@ with it.
 
 v_D and the tilt are unaffected -- both come from B=0 data where there is no shear at all.
 
-Note also that `AtPSASimple2.cxx` still has the Lorentz block commented out, so none of
-this reaches the reconstructed positions yet.
+(Historical note: at the time this section was first written the Lorentz block in
+`AtPSASimple2.cxx` was still commented out. It was enabled in 4bfcdb5f, along with the
+pad-frame rotation that made it work -- see the production section below.)
 
 ## Requirements
 
