@@ -50,7 +50,7 @@ BField:Double_t                 0.0   # Tesla -- magnet OFF for runs 96-113
 TiltAng:Double_t              6.47   # Degrees -- measured from run 100 (magnet OFF): 6.47 +- 0.04
 TB0:Int_t                       98   # Time Bucket reference for micromegas position (DEPRECATED)
 LorentzAngle:Double_t          0.0   # Lorentz Angle
-TBEntrance:Int_t               280   # Beam position at detector entrance in TB
+TBEntrance:Int_t               320   # Beam position at detector entrance in TB. Measured from run 100 (B=0): the beam reaches its closest approach to the detector axis at tb 320, missing it by only 2.2 mm, so this is the entrance window. Was 280 -- an error of 40 tb = 144 mm in z.
 ZPadPlane:Double_t          1000.0   # Position of the micromegas pad plane
 Density:Double_t             0.145   # Gas density at 299.5 torr
 ThetaPad:Double_t            110.9   # AT-TPC pad plane rotation (fit of the Lorentz shear gives 112)
