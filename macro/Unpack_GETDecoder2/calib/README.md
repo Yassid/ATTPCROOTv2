@@ -56,22 +56,32 @@ Two failure modes show up as distinct populations in the opening-angle spectrum 
 useful rather than harmful: **~180 deg** is one track split longitudinally into two
 halves, **~0-10 deg** is two parallel tracks, i.e. beam pile-up.
 
-## Known issue
+## Resolved: the Lorentz correction over-rotated (fixed in 4bfcdb5f)
 
-With tilt = 6.47 deg and E = 15 kV/m, the Lorentz-corrected beam in run 128 reads
-**8.04 deg** instead of 6.47 -- the correction over-rotates by ~1.6 deg. Ruled out: the
-drift geometry (matching would need a 569 mm gap, but the hit z-profile reaches ~1200 mm)
-and pile-up in the beam cluster (run 128 beam clusters are statistically identical to run
-100's). Prime suspect is the **drift-time zero**: `TB0 = 2.2` here was derived from
-`AtPSA::CalculateZGeo`, which is the same formula whose `TBEntrance = 280` contradicts the
-hardcoded `-271.0` in the deprecated `AtPSA::RotateDetector`, and the shear scales directly
-with it.
+This section previously recorded an unexplained 1.6 deg over-rotation and named the
+drift-time zero as the prime suspect. **Both of those were wrong**, and the record is kept
+here because the wrong reasoning is instructive.
 
-v_D and the tilt are unaffected -- both come from B=0 data where there is no shear at all.
+The drift-time zero can never explain an *angular* discrepancy: it enters every hit
+identically, so it is a rigid translation. It moves the vertex, not a direction. Verified
+by scanning it -- the reconstructed beam angle is identical to four decimal places for any
+origin between -100 and +200 tb.
 
-(Historical note: at the time this section was first written the Lorentz block in
-`AtPSASimple2.cxx` was still commented out. It was enabled in 4bfcdb5f, along with the
-pad-frame rotation that made it work -- see the production section below.)
+The actual cause was a missing frame rotation. `CalcLorentzVector` solves the Langevin
+equation in the **field** frame, but the result was applied straight to **pad**
+coordinates, which are rotated from it by `ThetaPad` (~111 deg). The shear had roughly the
+right magnitude pointing ~110 deg away from where it belonged, which is why adjusting E or
+the tilt never helped -- those scale it without redirecting it. Fixed in 4bfcdb5f; the
+drift-time zero was separately wrong (280 vs 320) and fixed in d20536aa, but only ever
+affected positions.
+
+Note also that the paper's specialisation of the Langevin solution assumes B lies in the
+y-z plane. That is an assumption about the tilt's *azimuth* and is false here -- the beam,
+hence B, sits at about -162 deg in the pad plane. `ThetaRot` now carries that azimuth.
+
+**Caveat that remains:** `ThetaRot` and `ThetaPad` are not individually identified. Every
+combination of azimuth, handedness and pad rotation giving the same net shear direction
+fits equally well, so changing `ThetaPad` alone will silently break the correction.
 
 ## Requirements
 
