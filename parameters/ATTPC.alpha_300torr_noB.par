@@ -53,8 +53,8 @@ LorentzAngle:Double_t          0.0   # Lorentz Angle
 TBEntrance:Int_t               280   # Beam position at detector entrance in TB
 ZPadPlane:Double_t          1000.0   # Position of the micromegas pad plane
 Density:Double_t             0.145   # Gas density at 299.5 torr
-ThetaPad:Double_t            110.9   # AT-TPC pad plane rotation
-ThetaRot:Double_t              0.0   # Second Lorentz Angle
+ThetaPad:Double_t            110.9   # AT-TPC pad plane rotation (fit of the Lorentz shear gives 112)
+ThetaRot:Double_t           -161.9   # Azimuth of B in the pad plane, deg. Measured from the run-100 (B=0) beam. 90 = the papers y-z-plane assumption
 GasPressure:Double_t         299.5   # Gas pressure in torr
 EIonize:Double_t            15.603   # Ionization energy of gas in eV
 CoefL:Double_t               0.025   # Longitudal coefficient of diffusion [cm^-0.5]

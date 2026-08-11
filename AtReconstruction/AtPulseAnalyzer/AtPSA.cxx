@@ -79,7 +79,10 @@ void AtPSA::Init()
    fZk = fPar->GetZPadPlane();
    fEntTB = (Int_t)fPar->GetTBEntrance();
 
-   fThetaPad = -103.0 * TMath::Pi() / 180.0;
+   // Was hardcoded to -103.0 deg, which contradicts both AtDigiPar (ThetaPad) and every
+   // other user of the parameter (e.g. AtMCQMinimization, which rotates by +GetThetaPad()).
+   fThetaPad = fPar->GetThetaPad() * TMath::Pi() / 180.0;
+   fTiltAzim = fPar->GetThetaRot();
 
    std::cout << " ==== Parameters for Pulse Shape Analysis Task ==== " << std::endl;
    std::cout << " ==== Magnetic Field : " << fBField << " T " << std::endl;
@@ -132,19 +135,25 @@ Double_t AtPSA::CalculateY(Double_t layer)
    return (layer + 0.5) * fPadSizeZ;
 }
 
-Double_t
-AtPSA::CalculateXCorr(Double_t xvalue,
-                      Int_t Tbx) // TODO: Yes, this can be done with one stupid function but try walking on my shoes...
+// The drift time must be referenced to the same origin as CalculateZGeo, otherwise the
+// transverse and longitudinal corrections disagree about where z=0 is. CalculateZGeo puts
+// z=0 at tb = fEntTB - fZk*100/(fTBTime*fDriftVelocity); fTB0 (98, flagged DEPRECATED in
+// the parameter file) is not that value. Note the drift-time origin only translates the
+// event -- it cannot rotate it -- so it moves the vertex, never a track direction.
+Double_t AtPSA::DriftTimeUs(Int_t tb) const
 {
+   Double_t tbZero = fEntTB - fZk * 100.0 / (fTBTime * fDriftVelocity);
+   return (tb - tbZero) * fTBTime * 1E-3;
+}
 
-   Double_t xcorr = xvalue - fLorentzVector.X() * (Tbx - fTB0) * fTBTime * 1E-2; // Convert from ns to us and cm to mm
-   return xcorr;
+Double_t AtPSA::CalculateXCorr(Double_t xvalue, Int_t Tbx)
+{
+   return xvalue - fLorentzVector.X() * DriftTimeUs(Tbx) * 10.0; // cm/us * us -> cm -> mm
 }
 
 Double_t AtPSA::CalculateYCorr(Double_t yvalue, Int_t Tby)
 {
-   Double_t ycorr = yvalue + fLorentzVector.Y() * (Tby - fTB0) * fTBTime * 1E-2;
-   return ycorr;
+   return yvalue - fLorentzVector.Y() * DriftTimeUs(Tby) * 10.0;
 }
 
 Double_t AtPSA::CalculateZCorr(Double_t zvalue, Int_t Tbz)
@@ -155,21 +164,41 @@ Double_t AtPSA::CalculateZCorr(Double_t zvalue, Int_t Tbz)
 
 void AtPSA::CalcLorentzVector()
 {
-
-   // fDriftVelocity*=-1;// TODO: Check sign of the Vd
+   // Langevin drift velocity, eq. (4) of the AT-TPC commissioning paper
+   // (Bradt et al., NIM A 875 (2017) 65-79):
+   //
+   //   v_D = v/(1+wt^2) [ Ehat + wt (Ehat x Bhat) + wt^2 (Ehat.Bhat) Bhat ]
+   //
+   // The paper then specialises it with B = B[sin(t) yhat + cos(t) zhat], i.e. it assumes
+   // the tilt lies in the y-z plane. That is an assumption about the tilt's *azimuth*, and
+   // for the Dec 2014 data it is wrong: the beam (hence B) sits at ~-162 deg in the pad
+   // plane, so the specialised form put the shear ~110 deg away from where it belongs.
+   // Keeping the azimuth general, with Ehat = zhat and
+   //   Bhat = (sin(t)cos(p), sin(t)sin(p), cos(t)):
+   //   Ehat x Bhat = (-sin(t)sin(p), sin(t)cos(p), 0),  Ehat.Bhat = cos(t)
+   //
+   // fTiltAzim = 90 deg reproduces the paper's original expression exactly.
    Double_t ot = (fBField / fEField) * fDriftVelocity * 1E4;
    Double_t front = fDriftVelocity / (1 + ot * ot);
-   Double_t TiltRad = fTiltAng * TMath::Pi() / 180.0;
+   Double_t t = fTiltAng * TMath::Pi() / 180.0;
+   Double_t p = fTiltAzim * TMath::Pi() / 180.0;
+   Double_t st = TMath::Sin(t), ct = TMath::Cos(t);
+   Double_t sp = TMath::Sin(p), cp = TMath::Cos(p);
 
-   Double_t x = front * ot * TMath::Sin(TiltRad);
-   Double_t y = front * ot * ot * TMath::Cos(TiltRad) * TMath::Sin(TiltRad);
-   Double_t z = front * (1 + ot * ot * TMath::Cos(TiltRad) * TMath::Cos(TiltRad));
+   Double_t x = front * (ot * (-st * sp) + ot * ot * ct * st * cp);
+   Double_t y = front * (ot * (st * cp) + ot * ot * ct * st * sp);
+   Double_t z = front * (1 + ot * ot * ct * ct);
 
-   fLorentzVector.SetXYZ(x, y, z);
+   // The drift vector above is in the field frame; the hit coordinates it will be applied
+   // to are pad coordinates, which are rotated from it by ThetaPad. Rotating here means
+   // CalculateXCorr/YCorr can stay as they are.
+   Double_t xr = x * TMath::Cos(fThetaPad) - y * TMath::Sin(fThetaPad);
+   Double_t yr = x * TMath::Sin(fThetaPad) + y * TMath::Cos(fThetaPad);
 
-   //  std::cout<<" Vdx : "<<x<<std::endl;
-   //   std::cout<<" Vdy : "<<y<<std::endl;
-   //  std::cout<<" Vdz : "<<z<<std::endl;
+   fLorentzVector.SetXYZ(xr, yr, z);
+
+   std::cout << " ==== Lorentz drift vector (pad frame) : (" << xr << ", " << yr << ", " << z
+             << ") cm/us,  omega*tau = " << ot << std::endl;
 }
 
 TVector3 AtPSA::RotateDetector(Double_t x, Double_t y, Double_t z, Int_t tb)

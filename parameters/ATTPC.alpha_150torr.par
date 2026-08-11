@@ -25,7 +25,7 @@ PadLayers:Int_t                112   #
 AnodeWirePlaneY:Double_t     -4.05   # mm
 GroundWirePlaneY:Double_t     -8.1   # mm
 GatingWirePlaneY:Double_t      -14   # mm
-EField:Double_t              15000   # V/m  (cathode 15 kV over the 1 m drift, from Alphas-Dec14-RunData.xlsx)
+EField:Double_t              12000   # V/m -- CALIBRATED from the beam geometry. Cathode 15 kV over the 1 m drift gives 15000; the ~20% difference is within GARFIELD-level accuracy and the beam axis-crossing strongly prefers this value
 NumTbs:Int_t                   512
 SamplingRate:Int_t             6.0   # Real value is 6.25 MHz
 DriftVelocity:Double_t        2.25   # cm/us -- measured: 2.251 +- 0.011 (run 100, B=0) and 2.253 (run 128)
@@ -41,8 +41,8 @@ LorentzAngle:Double_t          0.0   # Lorentz Angle
 TBEntrance:Int_t               280   # Beam position at detector entrance in TB
 ZPadPlane:Double_t          1000.0   # Position of the micromegas pad plane
 Density:Double_t            0.0727   # Gas density (kg/m3 or mg/cm3)
-ThetaPad:Double_t            110.9   # AT-TPC pad plane rotation
-ThetaRot:Double_t              0.0   # Second Lorentz Angle
+ThetaPad:Double_t            110.9   # AT-TPC pad plane rotation (fit of the Lorentz shear gives 112)
+ThetaRot:Double_t           -161.9   # Azimuth of B in the pad plane, deg. Measured from the run-100 (B=0) beam. 90 = the papers y-z-plane assumption
 GasPressure:Double_t           150   # Gas pressure in torr
 EIonize:Double_t            15.603   # Ionization energy of gas in eV
 CoefL:Double_t               0.025   # Longitudal coefficient of diffusion [cm^-0.5]

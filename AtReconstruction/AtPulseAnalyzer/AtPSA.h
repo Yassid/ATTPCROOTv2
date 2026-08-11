@@ -56,6 +56,7 @@ protected:
    Double_t fBField;
    Double_t fEField;
    Double_t fTiltAng;
+   Double_t fTiltAzim; ///< azimuth of B in the pad plane, degrees (AtDigiPar ThetaRot)
    TVector3 fLorentzVector;
    Int_t fTB0;
    Double_t fThetaPad;
@@ -84,6 +85,7 @@ protected:
 
    Double_t CalculateZGeo(Double_t peakIdx);
 
+   Double_t DriftTimeUs(Int_t tb) const; ///< drift time in us, same origin as CalculateZGeo
    Double_t CalculateXCorr(Double_t xval, Int_t Tbx);
    Double_t CalculateYCorr(Double_t yval, Int_t Tby);
    Double_t CalculateZCorr(Double_t zval, Int_t Tbz);

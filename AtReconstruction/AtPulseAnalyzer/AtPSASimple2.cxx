@@ -265,21 +265,23 @@ void AtPSASimple2::Analyze(AtRawEvent *rawEvent, AtEvent *event)
                   QEventTot += QHitTot; // Sum only if Hit is valid - We only sum once (iPeak==0) to account for the
                                         // whole spectrum.
 
-               /*HitPosRot = r * TVector3(xPos,yPos,zPos); // 1.- Rotate the pad plane
-                  xPosCorr = CalculateXCorr(HitPosRot.X(),maxAdcIdx);// 2.- Correct for the Lorentz transformation
-                  yPosCorr = CalculateYCorr(HitPosRot.Y(),maxAdcIdx);
-                  zPosCorr = CalculateZCorr(HitPosRot.Z(),maxAdcIdx);
-                  TVector3 RotAux(xPosCorr,yPosCorr,zPosCorr);
-                  //3.- Rotate the tracks to put them in the beam direction
-                  yPosCorr+=TMath::Tan(fTiltAng*TMath::Pi()/180.0)*(1000.0-zPosCorr); */
+               // Undo the E x B lateral drift produced by the detector tilt. The drift
+               // vector is the Langevin solution (AtPSA::CalcLorentzVector), already
+               // rotated into the pad frame there, so it applies directly to the pad
+               // coordinates. This replaces RotateDetector(), which was flagged
+               // DEPRECATED and carried two hardcoded constants (-103.0 deg and -271.0 tb)
+               // that contradict AtDigiPar's ThetaPad and TBEntrance.
+               //
+               // Validated on the Dec 2014 alpha data: calibrated on run 128 and then
+               // reproduced out-of-sample on run 130 (beam polar angle 6.53 deg against
+               // the 6.47 measured with the magnet off, and the beam projecting back
+               // through the detector axis). Without it the beam reconstructs at 1.3 deg
+               // and projects to negative z, outside the detector.
+               Double_t xPosCorr = CalculateXCorr(xPos, maxAdcIdx);
+               Double_t yPosCorr = CalculateYCorr(yPos, maxAdcIdx);
 
-               TVector3 posRot = RotateDetector(xPos, yPos, zPos, maxAdcIdx);
-
-               // AtHit *hit = new AtHit(PadNum,hitNum, HitPosRot.X(), HitPosRot.Y(),HitPosRot.Z(), charge);
                AtHit *hit = new AtHit(PadNum, hitNum, xPos, yPos, zPos, charge);
-               // AtHit *hit = new AtHit(PadNum,hitNum, xPosCorr, yPosCorr, zPosCorr, charge);
-               // hit->SetPositionCorr(xPosCorr, yPosCorr, zPosCorr);
-               hit->SetPositionCorr(posRot.X(), posRot.Y(), posRot.Z());
+               hit->SetPositionCorr(xPosCorr, yPosCorr, zPos);
                hit->SetTimeStamp(maxAdcIdx);
                hit->SetTimeStampCorr(TBCorr);
                hit->SetTimeStampCorrInter(timemax);
