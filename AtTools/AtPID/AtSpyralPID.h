@@ -98,6 +98,16 @@ public:
    void SetDirectionThreshold(double t) { fDirThreshold = t; }
    void SetMinPoints(int n) { fMinPoints = n; }
    void SetSmallPadRadius(double r) { fSmallPadRadius = r; }
+   /// Tolerance (mm) for collapsing z-ties before the smoothing spline. 0 keeps the historical
+   /// behaviour: exact double equality, which works only while z sits on the time-bucket grid.
+   /// It does not on corrected data -- the space-charge correction shifts every hit's z by a
+   /// position-dependent amount, so hits that shared a bucket end up separated by ~1e-9 mm, no
+   /// tie is merged, and the 1/h terms in the spline's Q matrix reach ~1e9 until the pentadiagonal
+   /// solve hits a singular pivot. Measured on run_0106: with the correction on, 51 % of accepted
+   /// tracks carry a sub-micron knot gap and 110 tracks fail outright; with it off, zero do and
+   /// the minimum gap is 2.09 mm, the bucket spacing. A tolerance well below the bucket and well
+   /// above the degeneracy (1e-3 mm) restores the intended merge without touching real structure.
+   void SetZTieTolerance(double t) { fZTieTol = t; }
    /// Point source: hits = the AtHit point cloud (faithful to Spyral's cluster.data,
    /// ~100 pts/track); clusters = AtPRA's merged hit-clusters (~30 pts, coarser).
    void SetUseHits(bool h) { fUseHits = h; }
@@ -119,6 +129,7 @@ private:
    double fDirThreshold{0.5};      // direction winding-fraction threshold
    int fMinPoints{30};             // min_total_trajectory_points
    double fSmallPadRadius{152.0};  // mm, inner-pad boundary for dE integration
+   double fZTieTol{0.0};           // mm, z-tie collapse tolerance; 0 = exact equality (historical)
    bool fUseHits{true};            // true = AtHit point cloud (faithful), false = hit clusters
    bool fUseTraceIntegral{false};  // true = integrated charge (Spyral scale), false = peak amplitude
 };

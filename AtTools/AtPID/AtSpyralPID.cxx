@@ -265,7 +265,9 @@ AtSpyralResult AtSpyralPID::Estimate(AtTrack &track) const
       for (size_t i = 0; i < pts.size();) {
          size_t j = i;
          double wx = 0, wy = 0, qs = 0;
-         while (j < pts.size() && pts[j].z == pts[i].z) {
+         // Compared against pts[i], not pts[j-1], so a long run of closely spaced points cannot
+         // chain into one merged knot. fZTieTol = 0 reduces to the original exact-equality test.
+         while (j < pts.size() && pts[j].z - pts[i].z <= fZTieTol) {
             double w = pts[j].q > 0 ? pts[j].q : 1.0;
             wx += w * pts[j].x;
             wy += w * pts[j].y;
