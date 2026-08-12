@@ -1,5 +1,5 @@
 {
-    "name": "proton_band_d2",
+    "name": "proton_band_d2_v2",
     "xaxis": "sqrtdEdx",
     "yaxis": "brho",
     "vertices": [
