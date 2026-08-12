@@ -16,15 +16,15 @@
 ///     B = 2.85 T,  H2 at 300 torr,  drift length 1000 mm
 ///     beam 16C at 192 MeV = 12.0 MeV/u
 ///
-/// !! THE GAS IS 300 torr, AND THE PRODUCTION RECONSTRUCTION DISAGREES !!
-/// rho = 3.308e-5 g/cm3 (H2, 300 torr, 293 K), geometry ATTPC_H300torr_RT.root. But the a1975
-/// data reconstruction uses ATTPC_H1bar_geomanager.root (8.27e-5) and fitUKF_a1975.C defaults to
-/// gasDensity = 9.0e-5, i.e. 2.5 TIMES too much material. Energy loss scales with path length, so
-/// that error is angle- and vertex-dependent rather than a constant offset. This is the same
-/// class of mistake as the a1954 600-versus-300 torr error, which cost an entire production.
+/// THE GAS IS 300 torr: rho = 3.308e-5 g/cm3 (H2, 293 K), geometry ATTPC_H300torr_RT.root. Use
+/// the _RT media entries; the plain ones carry 273 K densities and are a few percent too dense.
 ///
-/// The 9.0e-5 figure is doubly wrong: even at 1 bar it is the 273 K density, where 293 K gives
-/// 8.27e-5. Use the _RT media entries, which carry the room-temperature values.
+/// The a1975 data reconstruction DECLARES a different gas -- geometry ATTPC_H1bar (8.27e-5) and
+/// fitUKF_a1975.C gasDensity 9.0e-5 -- but that declaration is INERT for the genfit production,
+/// which runs matEffects = kFALSE with no back-extrapolation, so genfit never consults the
+/// material. Refitting run_0106 with ATTPC_H1bar and with ATTPC_H300torr_RT gave 2582 of 2582
+/// tracks bit-identical. Worth correcting for tidiness; do not expect any number to move. The
+/// UKF path takes gasDensity as a live argument and has NOT been checked this way.
 ///
 /// BEAM ENERGY. 192 MeV is what the (p,d) analysis macros use. The (p,p') calibration of the
 /// same data set prefers 195.5 MeV; the difference moves pz by 0.9 percent and is left as a
@@ -120,7 +120,7 @@ void C16_pp_a1975_sim(Int_t nEvents = 2000, Double_t thetaMinCM = 2.0, Double_t 
    ionGen->SetSpotRadius(0, -100, 0);
    primGen->AddGenerator(ionGen);
 
-   // -----   Two-body reaction 16C(p,d)15C   --------------------------------
+   // -----   Two-body reaction 16C(p,p')16C   -------------------------------
    std::vector<Int_t> Zp, Ap, Qp;
    std::vector<Double_t> Pxp, Pyp, Pzp, Mass, ExE;
    Int_t mult = 4;         // beam, target, heavy residual, light ejectile -- must be 4

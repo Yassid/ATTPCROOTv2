@@ -11,8 +11,16 @@
 //
 // persistRaw=true also keeps AtRawEvent + AtEventH so the output is self-contained
 // for the event display.
+/// @param useSC  apply the space-charge correction (default, and what the production used). With
+///               kFALSE the SC task is not added and PRA reads AtEventH directly. This exists for
+///               one diagnostic: the SC correction shifts every hit's z by a position-dependent
+///               amount, which turns the time-bucket-quantised z into a continuous one. AtSpyralPID
+///               collapses z-ties with EXACT equality, so on corrected data nothing merges, knot
+///               gaps of ~1e-9 mm survive, and AtSmoothingSpline::Fit hits a singular pivot -- 736
+///               of 10480 tracks in runs 0106-0108 (fail code 3), and they are the longest and
+///               highest-charge tracks in the sample. Running with useSC = kFALSE is the control.
 void unpackReco_a1975_UKF(TString fileName = "run_0116", Long64_t nEvents = 1000, Bool_t persistRaw = true,
-                          TString outDir = "")
+                          TString outDir = "", Bool_t useSC = kTRUE)
 {
    gSystem->Load("libAtReconstruction.so");
 
@@ -90,13 +98,16 @@ void unpackReco_a1975_UKF(TString fileName = "run_0116", Long64_t nEvents = 1000
    praAlgo->SetClusterRadius(clusterRadius);
    praAlgo->SetClusterDistance(clusterDistance);
    AtPRAtask *praTask = new AtPRAtask(std::move(praAlgo));
-   praTask->SetInputBranch("AtEventCorrected");
+   praTask->SetInputBranch(useSC ? "AtEventCorrected" : "AtEventH");
    praTask->SetOutputBranch("AtPatternEvent");
    praTask->SetPersistence(true);
 
    run->AddTask(unpackTask);
    run->AddTask(psaTask);
-   run->AddTask(SCTask);
+   if (useSC)
+      run->AddTask(SCTask);
+   else
+      std::cout << "*** SPACE-CHARGE CORRECTION OFF -- PRA reads AtEventH (diagnostic) ***" << std::endl;
    run->AddTask(praTask);
 
    std::cout << "***** Starting Init ******" << std::endl;
