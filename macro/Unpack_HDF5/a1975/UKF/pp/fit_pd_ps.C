@@ -282,6 +282,10 @@ void fit_pd_ps(TString cache,
    auto *y74 = new TH1D("y74", "", NB, cmLo, cmHi); y74->SetDirectory(nullptr);
    auto *sGS = new TH1D("sGS", "", NB, cmLo, cmHi); sGS->SetDirectory(nullptr); // width-treatment syst
    auto *s74 = new TH1D("s74", "", NB, cmLo, cmHi); s74->SetDirectory(nullptr);
+   auto *y34 = new TH1D("y34", "", NB, cmLo, cmHi); y34->SetDirectory(nullptr);
+   auto *y49 = new TH1D("y49", "", NB, cmLo, cmHi); y49->SetDirectory(nullptr);
+   auto *s34 = new TH1D("s34", "", NB, cmLo, cmHi); s34->SetDirectory(nullptr);
+   auto *s49 = new TH1D("s49", "", NB, cmLo, cmHi); s49->SetDirectory(nullptr);
    printf("\n  PER-ANGLE (sigmas fixed to the global %.3f / %.3f, means free, PS scale free)\n", sgG, sg7);
    printf("  theta_cm | entries |  E_gs  |  N_gs   stat  syst |  E_074 |  N_074  stat  syst | c2/ndf\n");
    std::vector<TF1 *> FA(NB, nullptr);
@@ -388,6 +392,23 @@ void fit_pd_ps(TString cache,
       yGS->SetBinContent(k + 1, n0); yGS->SetBinError(k + 1, e0);
       y74->SetBinContent(k + 1, n1); y74->SetBinError(k + 1, e1);
       sGS->SetBinContent(k + 1, s0); s74->SetBinContent(k + 1, s1);
+      // the two unbound structures. Their Gaussian areas depend on where the continuum is drawn,
+      // which the gap-fixed phase space now pins -- but they are still resonances fitted with a
+      // Gaussian, so treat them as indicative rather than as yields on the same footing as the
+      // bound states.
+      {
+         double a2 = FA[k]->GetParameter(6) * F->GetParameter(8) * sq / bwS;
+         double e2 = FA[k]->GetParError(6) * F->GetParameter(8) * sq / bwS;
+         double a3 = FA[k]->GetParameter(9) * F->GetParameter(11) * sq / bwS;
+         double e3 = FA[k]->GetParError(9) * F->GetParameter(11) * sq / bwS;
+         double b2 = FB->GetParameter(6) * F->GetParameter(8) * sq / bwS;
+         double b3 = FB->GetParameter(9) * F->GetParameter(11) * sq / bwS;
+         if (!(e2 > std::sqrt(std::max(a2, 1.0)) && e2 < 10 * a2)) e2 = std::sqrt(std::max(a2, 1.0));
+         if (!(e3 > std::sqrt(std::max(a3, 1.0)) && e3 < 10 * a3)) e3 = std::sqrt(std::max(a3, 1.0));
+         y34->SetBinContent(k + 1, a2); y34->SetBinError(k + 1, e2);
+         y49->SetBinContent(k + 1, a3); y49->SetBinError(k + 1, e3);
+         s34->SetBinContent(k + 1, std::fabs(a2 - b2)); s49->SetBinContent(k + 1, std::fabs(a3 - b3));
+      }
       // per-window closure: what the data has vs what the model puts there. A model/data far from
       // 1 in the continuum windows is a mis-shared broad component, not a statistical fluctuation.
       {
@@ -410,13 +431,14 @@ void fit_pd_ps(TString cache,
    // ---------------- acceptance + luminosity ----------------
    const double lumi = lumiFull * (vzHi - vzLo) / zFull;
    printf("\n  luminosity %.1f mb^-1 x %.0f/%.0f mm = %.1f mb^-1\n", lumiFull, vzHi - vzLo, zFull, lumi);
-   const char *aTag[2] = {"gs", "ex1"};
-   const char *aNm[2] = {"g.s. (1/2+)", "0.740 (5/2+)"};
-   TH1D *Y[2] = {yGS, y74}, *S[2] = {sGS, s74}, *X[2] = {nullptr, nullptr}, *XS[2] = {nullptr, nullptr};
+   const char *aTag[4] = {"gs", "ex1", "ex2", "ex3"};
+   const char *aNm[4] = {"g.s. (1/2+)", "0.740 (5/2+)", "~3.4 (unbound)", "~4.9 (unbound)"};
+   TH1D *Y[4] = {yGS, y74, y34, y49}, *S[4] = {sGS, s74, s34, s49};
+   TH1D *X[4] = {nullptr, nullptr, nullptr, nullptr}, *XS[4] = {nullptr, nullptr, nullptr, nullptr};
    auto dOm = [](double a, double b) {
       return 2 * TMath::Pi() * (std::cos(a * TMath::DegToRad()) - std::cos(b * TMath::DegToRad()));
    };
-   for (int g = 0; g < 2; ++g) {
+   for (int g = 0; g < 4; ++g) {
       TFile *fa = TFile::Open(here + Form("/../../../../Simulation/ATTPC/16C_pd/diagnostics/acceptance_%s.root", aTag[g]));
       TH1D *A = fa && !fa->IsZombie() ? (TH1D *)fa->Get(Form("hAcc_%s", aTag[g])) : nullptr;
       if (!A) { printf("  no acceptance for %s\n", aTag[g]); if (fa) fa->Close(); continue; }
@@ -516,10 +538,10 @@ void fit_pd_ps(TString cache,
 
    TCanvas *cx = new TCanvas("cx", "xsec", 950, 700);
    gPad->SetLogy(); gPad->SetGridy();
-   int col[2] = {kBlack, kRed + 1}, mk2[2] = {20, 24};
+   int col[4] = {kBlack, kRed + 1, kGreen + 3, kOrange + 7}, mk2[4] = {20, 24, 21, 25};
    bool first = true;
-   auto *lx = new TLegend(0.62, 0.76, 0.89, 0.88);
-   for (int g = 0; g < 2; ++g) {
+   auto *lx = new TLegend(0.60, 0.70, 0.89, 0.88);
+   for (int g = 0; g < 4; ++g) {
       if (!X[g]) continue;
       X[g]->SetMarkerStyle(mk2[g]); X[g]->SetMarkerColor(col[g]); X[g]->SetLineColor(col[g]); X[g]->SetLineWidth(2);
       X[g]->SetTitle("^{16}C(p,d)^{15}C;#theta_{cm} [deg];d#sigma/d#Omega [mb/sr]");
@@ -535,7 +557,7 @@ void fit_pd_ps(TString cache,
    TFile fo(here + "/plots/fit_pd_ps_" + tag + ".root", "RECREATE");
    hEx->Write("ex_all"); hPSfull->Write("ps_full");
    yGS->Write("yield_gs"); y74->Write("yield_074");
-   for (int g = 0; g < 2; ++g) if (X[g]) { X[g]->Write(Form("dsdo_%s", aTag[g]));
+   for (int g = 0; g < 4; ++g) if (X[g]) { X[g]->Write(Form("dsdo_%s", aTag[g]));
                                             XS[g]->Write(Form("dsdo_%s_syst", aTag[g])); }
    fo.Close();
    printf("\n  wrote plots/fit_pd_ps_{global,slices}_%s.png, xsec_pd_ps_%s.png, fit_pd_ps_%s.root\n\n",
