@@ -38,6 +38,29 @@ AtTpcSquareMap::AtTpcSquareMap(double padSize_mm, int nPadsX, int nPadsY,
          AtPadCoord[pad][3][1] = y0 + fPadSize_mm;
       }
    }
+   // Synthetic electronics references, one per pad.
+   //
+   // WITHOUT THIS THE MAP IS UNUSABLE WITH ANY PAD-LEVEL BOOKKEEPING. AtMap::IsInhibited and
+   // InhibitPad both go through GetPadRef(padNum), which reads fPadMapInverse; a map that never
+   // fills it returns the SAME default-constructed AtPadReference for every pad, so all 62500
+   // pads share one key. Inhibiting a single pad -- as the beam-hole helper does -- then marks
+   // the whole plane as kTotal, AtPulse::GetGain returns 0 for every electron, and the
+   // digitisation silently produces an empty event ("Skipped 100% of N points"). Measured before
+   // this was added: 100 % of points skipped with a 20 mm beam hole, 0 % with the hole disabled.
+   //
+   // The values are a bookkeeping key only -- this map has no real electronics behind it -- but
+   // they are laid out in the AT-TPC's own 68 channels / 4 agets / 4 asads nesting so that
+   // anything reasoning about the tuple sees plausible ranges.
+   for (int pad = 0; pad < n; ++pad) {
+      AtPadReference ref;
+      ref.ch = pad % 68;
+      ref.aget = (pad / 68) % 4;
+      ref.asad = (pad / (68 * 4)) % 4;
+      ref.cobo = pad / (68 * 4 * 4);
+      fPadMap[ref] = pad;
+      fPadMapInverse[pad] = ref;
+   }
+
    kIsParsed = true;
 }
 

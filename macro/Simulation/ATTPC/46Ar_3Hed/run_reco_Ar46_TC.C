@@ -27,12 +27,26 @@
 
 #include "../AtBeamHole.h"
 
+/// PAD PLANE IS SWITCHABLE. padSize_mm <= 0 (default) uses the real AT-TPC pad plane from
+/// Lookup20150611.xml. Any positive value builds a uniform square pad plane of that pitch with
+/// AtTpcSquareMap instead, sized to cover the 50 cm drift volume -- 2 mm gives 250 x 250 = 62500
+/// pads against the AT-TPC's ~10240, so expect the digitisation to be slower and the output
+/// larger. Everything downstream goes through the AtMap interface, including the beam-hole
+/// inhibition, so nothing else changes.
+///
+/// !! THE TC CLUSTERING PARAMETERS ARE NOT RE-TUNED FOR A DIFFERENT PITCH !! clusterRadius 15 mm
+/// and clusterDistance 7.5 mm were set for 8 x 12 mm pads, where they span roughly one to two
+/// pads. At 2 mm pitch the same numbers span seven pads, so the finder sees a much denser cloud
+/// under an unchanged neighbourhood definition. Compare the two pitches only after checking that
+/// pattern recognition is not the thing that changed.
+///
 /// @param praType  "tc" (default, matches the a1975 data chain) or "hdbscan" for comparison only.
 /// @param hdMcs    HDBSCAN min_cluster_size, ignored for "tc".
 void run_reco_Ar46_TC(TString mcFile = "./data/attpcsim.root", TString outputFile = "./data/sim_reco.root",
                       TString paramFile = "ATTPC.46Ar_3Hed_sim.par", Double_t thr = 20, Int_t nEvents = 0,
                       Double_t holeR = 20.0, Double_t clusterRadius = 15.0, Double_t clusterDistance = 7.5,
-                      TString praType = "tc", Int_t hdMcs = 20)
+                      TString praType = "tc", Int_t hdMcs = 20, Double_t padSize_mm = -1.0,
+                      Double_t activeExtent_mm = 500.0)
 {
    TString scriptfile = "Lookup20150611.xml";
    TString dir = getenv("VMCWORKDIR");
@@ -51,9 +65,21 @@ void run_reco_Ar46_TC(TString mcFile = "./data/attpcsim.root", TString outputFil
    parIo1->open(digiParFile.Data(), "in");
    rtdb->setFirstInput(parIo1);
 
-   auto mapping = std::make_shared<AtTpcMap>();
-   mapping->ParseXMLMap(mapParFile.Data());
-   mapping->GeneratePadPlane();
+   std::shared_ptr<AtMap> mapping;
+   if (padSize_mm > 0) {
+      int nPad = (int)std::lround(activeExtent_mm / padSize_mm);
+      auto sq = std::make_shared<AtTpcSquareMap>(padSize_mm, nPad, nPad);
+      sq->GeneratePadPlane();
+      mapping = sq;
+      std::cout << "PADS  : square " << padSize_mm << " mm, " << nPad << " x " << nPad << " = " << nPad * nPad
+                << " pads over " << activeExtent_mm << " mm" << std::endl;
+   } else {
+      auto at = std::make_shared<AtTpcMap>();
+      at->ParseXMLMap(mapParFile.Data());
+      at->GeneratePadPlane();
+      mapping = at;
+      std::cout << "PADS  : AT-TPC pad plane from " << scriptfile << std::endl;
+   }
 
    // ---- BEAM HOLE ---------------------------------------------------------
    // Without it the sim digitises the beam over a region the real detector does not read out, and

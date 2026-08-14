@@ -22,8 +22,8 @@
 ///   root -b -q 'pid_points_3Hed.C(-1)'                    // class default (30), for comparison
 ///
 /// Output: plots/pid_points_mp<N>.root, a TTree "pts" of (x = sqrt(dE/dx), y = Brho, nClusters,
-/// nPoints, polar_deg, entry, trackID) -- everything a gate needs, plus enough to go back to the
-/// track it came from.
+/// nPoints, polar_deg, vertex_z, entry, trackID) -- everything a gate needs, plus the vertex the
+/// pre-fit kinematics need, plus enough to go back to the track it came from.
 
 void pid_points_3Hed(Int_t minPoints = 15, TString outFile = "",
                      TString simDir = "/mnt/f/ar46_3hed",
@@ -43,7 +43,7 @@ void pid_points_3Hed(Int_t minPoints = 15, TString outFile = "",
       outFile = TString::Format("plots/pid_points_mp%d.root", mp);
    printf("\n  fMinPoints = %d\n", mp);
 
-   std::vector<float> vx, vy, vpol;
+   std::vector<float> vx, vy, vpol, vvz;
    std::vector<int> vnc, vnp, vent, vtid;
    long nTracks = 0;
 
@@ -84,6 +84,7 @@ void pid_points_3Hed(Int_t minPoints = 15, TString outFile = "",
             vx.push_back(res.sqrtdEdx);
             vy.push_back(res.brho);
             vpol.push_back(res.polar * TMath::RadToDeg());
+            vvz.push_back(res.vertex.Z()); // mm, reconstructed frame -- see kinematics_3Hed.C on handedness
             vnc.push_back(res.nClusters);
             vnp.push_back(res.nPoints);
             vent.push_back((int)i);
@@ -106,17 +107,18 @@ void pid_points_3Hed(Int_t minPoints = 15, TString outFile = "",
    gSystem->mkdir(here + "/plots", kTRUE);
    TFile out(here + "/" + outFile, "RECREATE");
    TTree t("pts", "46Ar(3He,d) PID points");
-   float x, y, pol;
+   float x, y, pol, vz;
    int nc, np, ent, tid;
    t.Branch("x", &x);
    t.Branch("y", &y);
    t.Branch("polar_deg", &pol);
+   t.Branch("vertex_z", &vz);
    t.Branch("nClusters", &nc);
    t.Branch("nPoints", &np);
    t.Branch("entry", &ent);
    t.Branch("trackID", &tid);
    for (size_t i = 0; i < vx.size(); ++i) {
-      x = vx[i]; y = vy[i]; pol = vpol[i]; nc = vnc[i]; np = vnp[i]; ent = vent[i]; tid = vtid[i];
+      x = vx[i]; y = vy[i]; pol = vpol[i]; vz = vvz[i]; nc = vnc[i]; np = vnp[i]; ent = vent[i]; tid = vtid[i];
       t.Fill();
    }
    t.Write();

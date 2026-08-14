@@ -34,7 +34,15 @@ if [ "${1:-}" = "-j" ]; then JOBS=${2:?-j needs a number}; shift 2; fi
 JOBLIST=("$@")
 [ ${#JOBLIST[@]} -eq 0 ] && JOBLIST=(gs:3001 gs:3002 360:3011 360:3012 2020:3021 2020:3022)
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-OUT=/mnt/f/ar46_3hed
+# Configuration comes from the environment so one driver serves the whole field/pad matrix:
+#   OUT     where reco+pid land          BT   field in tesla
+#   SIMDIR  where the sims live/go       PAD  pad pitch in mm, <=0 = real AT-TPC plane
+# Generation depends on the FIELD ONLY, so the 2 mm configurations point SIMDIR at the sims the
+# corresponding field already produced instead of regenerating them.
+OUT=${OUT:-/mnt/f/ar46_3hed}
+BT=${BT:-2.85}
+PAD=${PAD:--1}
+SIMDIR=${SIMDIR:-$OUT}
 NEV=${NEV:-12000}
 TRACE="$OUT/memtrace.csv"
 STAGEFILE="$OUT/.stage"
@@ -62,19 +70,19 @@ trap cleanup EXIT
 trap stop INT TERM
 
 say() { echo "[$(date +%F' '%H:%M:%S)] $*" | tee -a "$LOG"; }
-say "=== 3He,d accumulation start: -j $JOBS, ${JOBLIST[*]} (tracer $TRACER, guard 85%) ==="
+say "=== 3He,d accumulation start: -j $JOBS, B = $BT T, pads = $PAD mm, sims from $SIMDIR, out $OUT ==="
 
 # xargs runs in the BACKGROUND and is waited on: bash defers a trap until the current foreground
 # child returns, so with xargs in front a SIGTERM to this script does nothing until the whole run
 # is over. With wait, the signal is handled at once.
 printf '%s\n' "${JOBLIST[@]}" | xargs -P "$JOBS" -I{} \
    bash -c 'start=$SECONDS; state=${1%%:*}; seed=${1##*:}
-      if "$0" "$state" "$seed" "$2" "$3" >> "$4" 2>&1; then
+      if "$0" "$state" "$seed" "$2" "$3" "$5" "$6" "$7" >> "$4" 2>&1; then
          echo "[$(date +%F" "%H:%M:%S)] $1 COMPLETED in $(( (SECONDS-start)/60 )) min"
       else
          echo "[$(date +%F" "%H:%M:%S)] $1 FAILED after $(( (SECONDS-start)/60 )) min (resumable)"
       fi | tee -a "$4"' \
-   "$DIR/accumulate_3Hed.sh" {} "$NEV" "$OUT" "$LOG" &
+   "$DIR/accumulate_3Hed.sh" {} "$NEV" "$OUT" "$LOG" "$BT" "$PAD" "$SIMDIR" &
 XARGS=$!
 wait "$XARGS"
 
