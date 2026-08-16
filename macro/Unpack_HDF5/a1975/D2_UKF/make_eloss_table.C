@@ -19,16 +19,23 @@
 /// AtELossCATIMA::GetdEdx returns MeV/mm with the density already folded in, hence
 ///   table = GetdEdx * 10 / density_mg_per_cm3.
 ///
-///   root -b -q 'make_eloss_table.C("triton_D2_300torr.txt", 3, 1, 3.01550072, 6.61e-5, 2)'
+/// matA IS THE ISOTOPE MASS AND MUST BE THE REAL ONE. Stopping power per g/cm2 goes as Z/A of
+/// the target, so deuterium's 2.014 against a round 2 is a flat +0.70% on every point of the
+/// table -- verified, the ratio to CATIMA truth was 1.0070 at every energy from 0.5 to 40 MeV.
+/// It has to be a double, and it cannot go through AtELossCATIMA::SetMaterial's
+/// vector<tuple<int,int,int>> overload, which would silently truncate it back to 2. Build the
+/// catima::Material directly and use the Material overload instead.
+///
+///   root -b -q 'make_eloss_table.C("triton_D2_300torr.txt", 3, 1, 3.01550072, 6.61e-5, 2.014)'
 void make_eloss_table(TString out = "triton_D2_300torr.txt", int projA = 3, int projZ = 1,
-                      double projMassAmu = 3.01550072, double densityGCm3 = 6.61e-5, int matA = 2,
+                      double projMassAmu = 3.01550072, double densityGCm3 = 6.61e-5, double matA = 2.014,
                       double keMin = 0.01, double keMax = 60.0, int nPts = 600)
 {
    gSystem->Load("libAtTools.so");
    AtTools::AtELossCATIMA el(densityGCm3);
    el.SetProjectile(projA, projZ, projMassAmu);
-   std::vector<std::tuple<int, int, int>> mat;
-   mat.emplace_back(matA, 1, 1); // (A, Z, stoichiometry); Z=1 for both H and D
+   catima::Material mat;
+   mat.add_element(matA, 1, 1); // (A, Z, stoichiometry); Z=1 for both H and D
    el.SetMaterial(mat);
 
    const double densMg = densityGCm3 * 1000.0; // mg/cm3
