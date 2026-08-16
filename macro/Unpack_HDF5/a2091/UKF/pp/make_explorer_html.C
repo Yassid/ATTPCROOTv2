@@ -60,8 +60,13 @@ static Long64_t dump_pk(TTree *t, FILE *o)
 void make_explorer_html(TString cache = "", TString outHtml = "", TString tag = "15C(p,p')",
                         double ebeam0 = 170.0, double mBeamAmu = 15.0105993, double mTargAmu = 1.007825,
                         double mEjectAmu = 1.007825, double mResidAmu = 15.0105993, int beamA = 15,
-                        TString refExCSV = "", TString cacheGenfit = "")
+                        TString refExCSV = "", TString cacheGenfit = "", TString cacheThird = "",
+                        TString setNamesCSV = "")
 {
+   // cacheThird / setNamesCSV are additive and default to empty, so every existing caller gets
+   // exactly the old two-set page. setNamesCSV renames the JSON keys, which are what the page
+   // shows on its selector buttons -- "ukf"/"genfit" is meaningless once the three sets are
+   // genfit-without-material-effects, genfit-with, and the UKF.
    TString here = gSystem->DirName(gInterpreter->GetCurrentMacroName());
    // default to the GATED caches (IC 15C beam + proton PID gate); fall back to whatever
    // ungated cache exists if the gated pass has not been run
@@ -107,6 +112,23 @@ void make_explorer_html(TString cache = "", TString outHtml = "", TString tag = 
    TTree *tG = (fG && !fG->IsZombie()) ? (TTree *)fG->Get("pk") : nullptr;
    if (cacheGenfit.Length() && !tG)
       std::cerr << "WARNING: genfit cache unusable (" << cacheGenfit << ") -- writing UKF only\n";
+
+   TFile *fT = cacheThird.Length() ? TFile::Open(cacheThird) : nullptr;
+   TTree *tT = (fT && !fT->IsZombie()) ? (TTree *)fT->Get("pk") : nullptr;
+   if (cacheThird.Length() && !tT)
+      std::cerr << "WARNING: third cache unusable (" << cacheThird << ") -- skipping it\n";
+
+   // JSON keys for the three slots. A missing/short CSV falls back to the historical names.
+   TString sn[3] = {"ukf", "genfit", "third"};
+   if (setNamesCSV.Length()) {
+      std::unique_ptr<TObjArray> parts(setNamesCSV.Tokenize(","));
+      for (int i = 0; i < 3 && i < parts->GetEntries(); ++i) {
+         TString v = ((TObjString *)parts->At(i))->GetString();
+         v = v.Strip(TString::kBoth);
+         if (v.Length())
+            sn[i] = v;
+      }
+   }
 
    // ---- reference levels drawn as kinematic loci (per channel) ------------
    //  "Ex:label" pairs; default set chosen from the residual nucleus
@@ -170,11 +192,15 @@ void make_explorer_html(TString cache = "", TString outHtml = "", TString tag = 
       return;
    }
    fwrite(tpl.data(), 1, pd, o);
-   fprintf(o, "{\"ukf\":");
-   Long64_t nU = dump_pk(tU, o), nG = 0;
+   fprintf(o, "{\"%s\":", sn[0].Data());
+   Long64_t nU = dump_pk(tU, o), nG = 0, nT = 0;
    if (tG) {
-      fprintf(o, ",\"genfit\":");
+      fprintf(o, ",\"%s\":", sn[1].Data());
       nG = dump_pk(tG, o);
+   }
+   if (tT) {
+      fprintf(o, ",\"%s\":", sn[2].Data());
+      nT = dump_pk(tT, o);
    }
    fprintf(o, "}");
    fwrite(tpl.data() + pd + datKey.size(), 1, tpl.size() - pd - datKey.size(), o);
@@ -182,14 +208,18 @@ void make_explorer_html(TString cache = "", TString outHtml = "", TString tag = 
    fU->Close();
    if (fG)
       fG->Close();
+   if (fT)
+      fT->Close();
 
    FileStat_t st;
    gSystem->GetPathInfo(outHtml, st);
    printf("\nwrote %s  (%.1f MB)\n", outHtml.Data(), st.fSize / 1048576.);
-   printf("  UKF    : %lld tracks\n", nU);
+   printf("  %-10s : %lld tracks\n", sn[0].Data(), nU);
    if (tG)
-      printf("  GENFIT : %lld tracks   (fitter switch enabled in the page)\n", nG);
+      printf("  %-10s : %lld tracks   (fitter switch enabled in the page)\n", sn[1].Data(), nG);
    else
-      printf("  GENFIT : not supplied -- the page's GENFIT button stays disabled\n");
+      printf("  %-10s : not supplied -- that button stays disabled\n", sn[1].Data());
+   if (tT)
+      printf("  %-10s : %lld tracks\n", sn[2].Data(), nT);
    printf("open it with:  pp/open_explorer.sh   (or the Windows browser on %s)\n\n", outHtml.Data());
 }

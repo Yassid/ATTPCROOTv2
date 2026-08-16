@@ -351,7 +351,15 @@ const RAW  = /*__DATA__*/ null;
 
 /* RAW is {ukf:{ke,th,c2}, genfit:{...}} -- older single-fitter files are wrapped here */
 const SETS = RAW.ke ? {ukf: RAW} : RAW;
-const FITTERS = ['ukf', 'genfit'].filter(f => SETS[f] && SETS[f].ke && SETS[f].ke.length);
+// Set names come from the JSON, not a fixed list, so a page can carry more than the original
+// ukf/genfit pair (a1975 (d,t) ships three: genfit matFX-off, genfit matFX-on, UKF). The two
+// historical names are pinned to the front so existing two-set pages keep their button order
+// and their default ACTIVE; anything else follows in JSON order.
+const FITTERS = (() => {
+  const all = Object.keys(SETS).filter(f => SETS[f] && SETS[f].ke && SETS[f].ke.length);
+  const head = ['ukf', 'genfit'].filter(f => all.includes(f));
+  return [...head, ...all.filter(f => !head.includes(f))];
+})();
 let ACTIVE = FITTERS[0];
 const DATA = () => SETS[ACTIVE];
 const other = () => FITTERS.find(f => f !== ACTIVE);
@@ -1200,10 +1208,13 @@ function saveCsv() {
 /* ---- wiring ---- */
 function init() {
   const seg = $('segFitter');
-  for (const f of ['ukf','genfit']) {
+  // Build one button per set actually present, not a fixed ukf/genfit pair -- a page carrying
+  // three sets (or sets under any other name) would otherwise render two buttons for names that
+  // do not exist, both disabled, and look like it had no selector at all.
+  for (const f of FITTERS) {
     const b = document.createElement('button');
     b.textContent = f; b.dataset.f = f;
-    b.disabled = !FITTERS.includes(f);
+    b.disabled = false;
     b.setAttribute('aria-pressed', String(f === ACTIVE));
     b.addEventListener('click', () => {
       if (b.disabled || ACTIVE === f) return;
