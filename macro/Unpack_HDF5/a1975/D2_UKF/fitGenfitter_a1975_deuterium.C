@@ -37,7 +37,8 @@ void fitGenfitter_a1975_deuterium(TString fileName = "run_0016", Long64_t nEvent
                                   TString geoName = "ATTPC_H1bar_geomanager.root",
                                   Bool_t backExtrap = kFALSE, Double_t manualElossDensity = 0, Int_t matA = 2,
                                   TString parName = "ATTPC.a1975_deuterium.par", Bool_t seedFromSpyral = kFALSE,
-                                  Bool_t matFallback = kTRUE)
+                                  Bool_t matFallback = kTRUE, Bool_t rangeConstraint = kFALSE,
+                                  TString eLossTable = "")
 {
    gSystem->Load("libAtReconstruction.so");
    FairLogger::GetLogger()->SetLogScreenLevel("WARNING");
@@ -85,8 +86,15 @@ void fitGenfitter_a1975_deuterium(TString fileName = "run_0016", Long64_t nEvent
 
    std::cout << "  particle: pdg=" << pdg << " massAmu=" << massAmu << " Z=" << Z << " ('" << speciesTag << "')\n";
    // empty eloss file -> genfit internal; noMatEffects = !matEffects
-   auto fitter = std::make_unique<EventFit::AtGenfitter>(bField, pdg, massAmu, Z, /*elossFile*/ "", !matEffects,
+   TString elossPath = eLossTable.Length() ? (eLossTable.BeginsWith("/") ? eLossTable : dir + "/macro/Unpack_HDF5/a1975/D2_UKF/" + eLossTable) : TString("");
+   auto fitter = std::make_unique<EventFit::AtGenfitter>(bField, pdg, massAmu, Z, elossPath.Data(), !matEffects,
                                                          minIter, maxIter);
+   // HYBRID: the table serves only beta*gamma < 0.05, where genfit would otherwise apply ZERO
+   // energy loss (KE < 3.5 MeV for a triton); Bethe-Bloch keeps everything above.
+   if (eLossTable.Length()) {
+      fitter->SetELossHybrid(kTRUE, manualElossDensity > 0 ? manualElossDensity : 6.61e-5);
+      std::cout << "  \033[1;32mCATIMA dE/dx TABLE (hybrid): " << elossPath << "\033[0m\n";
+   }
    fitter->SetZPadPlane(1000.0);
    fitter->SetMeasSigma(measSigma);
    fitter->SetSeedFromSpyral(seedFromSpyral);
@@ -95,6 +103,13 @@ void fitGenfitter_a1975_deuterium(TString fileName = "run_0016", Long64_t nEvent
    // sample quietly contains no-matFX tracks and the two productions are no longer a clean
    // A/B on one variable. Off, a failed matFX fit simply drops out.
    fitter->SetMatEffectsFallback(matFallback);
+   // Range constraint for STOPPING tracks: energy from how far the particle went rather than
+   // from the curvature of a short arc. Uses the same gas density as the rest of the chain.
+   if (rangeConstraint) {
+      fitter->SetRangeConstraint(kTRUE, manualElossDensity > 0 ? manualElossDensity : 6.61e-5, matA);
+      std::cout << "  \033[1;32mRANGE CONSTRAINT ON: stopping tracks get a FullMeasurement on |p| "
+                   "from their path length\033[0m\n";
+   }
    if (matEffects && !matFallback)
       std::cout << "  \033[1;33mmatFX fallback DISABLED: failed material-effects fits are dropped, "
                    "not retried without material effects\033[0m\n";

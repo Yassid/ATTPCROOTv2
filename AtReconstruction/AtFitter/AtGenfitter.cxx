@@ -34,14 +34,40 @@
 #include "TGeoMaterialInterface.h"
 #include "Track.h"
 #include "TrackCand.h"
+#include "TrackPoint.h"
+#include "FullMeasurement.h"
+#include "DetPlane.h"
 
 #include <algorithm>
 #include <cmath>
+#include <vector>
 
 ClassImp(EventFit::AtGenfitter);
 
 using XYZPoint = ROOT::Math::XYZPoint;
 using XYZVector = ROOT::Math::XYZVector;
+
+/// Invert the range-energy relation: given a measured path length (mm), return the kinetic
+/// energy (MeV) a particle needed to have to stop there. GetRange is monotonic in energy, so a
+/// bisection is safe and needs no derivative. Returns -1 if the range is outside the bracket.
+static double KEFromRange(const AtTools::AtELossModel &m, double rangeMM, double keLo = 0.05,
+                          double keHi = 200.0)
+{
+   auto R = [&](double ke) { return m.GetRange(ke); }; // mm
+   if (rangeMM <= R(keLo))
+      return keLo;
+   if (rangeMM >= R(keHi))
+      return -1.0;
+   for (int i = 0; i < 60; ++i) {
+      double mid = 0.5 * (keLo + keHi);
+      if (R(mid) < rangeMM)
+         keLo = mid;
+      else
+         keHi = mid;
+   }
+   return 0.5 * (keLo + keHi);
+}
+
 
 namespace EventFit {
 
@@ -107,7 +133,16 @@ void AtGenfitter::Init()
    // below that.
    if (!fELossFile.empty()) {
       mat->setEnergyLossFile(fELossFile, fPDG);
-      mat->useEnergyLossParam();
+      if (fGasDensityMgCm3 > 0)
+         mat->setGasMediumDensity(fGasDensityMgCm3);
+      // param-ONLY mode throws above the table's maxKinEnergy_. With fELossHybrid the table is
+      // used only where genfit would otherwise apply ZERO loss (beta*gamma < 0.05), and
+      // Bethe-Bloch keeps the rest -- no throw, no truncated reference tracks.
+      if (!fELossHybrid)
+         mat->useEnergyLossParam();
+      else
+         LOG(info) << "AtGenfitter: dE/dx table loaded in HYBRID mode (table below beta*gamma=0.05, "
+                      "Bethe-Bloch above), density " << fGasDensityMgCm3 << " mg/cm3";
    }
 
    // PDG defs (genfit needs ion entries)
@@ -259,6 +294,87 @@ AtFittedTrack *AtGenfitter::GetFittedTrack(AtTrack *track, AtFitMetadata * /*fit
       trackCand.addHit(fTPCDetID, idx);
    }
 
+   // --- RANGE CONSTRAINT: energy from how far the particle went, for tracks that STOPPED -----
+   // Curvature is the weakest observable on a short track; range is the strongest. Only tracks
+   // whose far end is comfortably inside the active volume qualify -- a track that left the
+   // chamber has no measured range, and using its truncated path length would hand the fit an
+   // energy that is always too LOW and would look exactly like a calibration error.
+   double rangeKE = -1.0, rangeSigKE = 0.0;
+   if (fRangeConstraint && fRangeELoss) {
+      const int iEnd = backwardSeed ? order.front() : order.back(); // the stopping end
+      const double rEnd = std::hypot(pos[iEnd].X(), pos[iEnd].Y());
+      const bool containedR = rEnd < fRangeMaxRadiusMM;
+      const bool containedZ = (pos[iEnd].Z() > fRangeZMarginMM) && (pos[iEnd].Z() < fZPadPlane - fRangeZMarginMM);
+      double pathMM = 0.0;
+      for (int oi = 1; oi < n; ++oi) {
+         const auto &a = pos[order[oi - 1]];
+         const auto &b = pos[order[oi]];
+         pathMM += std::sqrt((b.X() - a.X()) * (b.X() - a.X()) + (b.Y() - a.Y()) * (b.Y() - a.Y()) +
+                             (b.Z() - a.Z()) * (b.Z() - a.Z()));
+      }
+      // BRAGG TEST: does dQ/dx RISE toward the far end? Containment says the track ended inside
+      // the volume, which is equally true of a track that merely left the fiducial region. Only
+      // a stopping particle piles its charge up at the end.
+      bool bragg = (fBraggMinRatio <= 0.0); // <=0 disables the test
+      if (!bragg && n >= fRangeMinClusters) {
+         // walk from the VERTEX end toward the stopping end, accumulating arc length
+         std::vector<int> seq(order.begin(), order.end());
+         if (backwardSeed)
+            std::reverse(seq.begin(), seq.end());
+         std::vector<double> s(seq.size(), 0.0); // cumulative path from the vertex (mm)
+         for (size_t k = 1; k < seq.size(); ++k) {
+            const auto &a = pos[seq[k - 1]];
+            const auto &b = pos[seq[k]];
+            s[k] = s[k - 1] + std::sqrt((b.X() - a.X()) * (b.X() - a.X()) + (b.Y() - a.Y()) * (b.Y() - a.Y()) +
+                                        (b.Z() - a.Z()) * (b.Z() - a.Z()));
+         }
+         const double L = s.back();
+         if (L > fRangeMinLengthMM) {
+            // dQ/dx compared between the last fBraggTailFrac of the path and its middle half.
+            // Charge is divided by the local segment length so that uneven cluster spacing does
+            // not fake a rise.
+            double qTail = 0, lTail = 0, qMid = 0, lMid = 0;
+            for (size_t k = 1; k < seq.size(); ++k) {
+               const double dx = s[k] - s[k - 1];
+               if (dx <= 0)
+                  continue;
+               const double q = hc->at(seq[k]).GetCharge();
+               const double frac = s[k] / L;
+               if (frac > 1.0 - fBraggTailFrac) {
+                  qTail += q;
+                  lTail += dx;
+               } else if (frac > 0.25 && frac < 0.75) {
+                  qMid += q;
+                  lMid += dx;
+               }
+            }
+            if (lTail > 0 && lMid > 0 && qMid > 0) {
+               const double ratio = (qTail / lTail) / (qMid / lMid);
+               bragg = (ratio > fBraggMinRatio);
+            }
+         }
+      }
+      if (containedR && containedZ && pathMM > fRangeMinLengthMM && !bragg)
+         ++fNRangeBragg; // contained but no Bragg rise -> almost certainly left the volume
+
+      if (containedR && containedZ && bragg && pathMM > fRangeMinLengthMM) {
+         ++fNRangeContained;
+         const double ke = KEFromRange(*fRangeELoss, pathMM);
+         if (ke > 0) {
+            // sigma(KE) from range straggling, propagated through dR/dKE. The straggling alone
+            // is optimistic here -- it ignores the unmeasured vertex gap and the cluster
+            // granularity -- so a fractional floor is imposed.
+            const double sigR = fRangeELoss->GetRangeStraggling(ke); // mm
+            const double dk = std::max(0.01 * ke, 1e-3);
+            const double dRdKE = (fRangeELoss->GetRange(ke + dk) - fRangeELoss->GetRange(ke - dk)) / (2.0 * dk);
+            const double sigStrag = (dRdKE > 0) ? sigR / dRdKE : 0.0;
+            rangeKE = ke;
+            rangeSigKE = std::max(sigStrag, fRangeSigmaFloor * ke);
+            ++fNRangeApplied;
+         }
+      }
+   }
+
    TVector3 posSeed(vPos.X() / 10.0, vPos.Y() / 10.0, vPos.Z() / 10.0); // cm
    TVector3 momSeed;
    momSeed.SetMagThetaPhi(p_GeV, theta, phi);
@@ -292,6 +408,45 @@ AtFittedTrack *AtGenfitter::GetFittedTrack(AtTrack *track, AtFitMetadata * /*fit
                          genfit::Track(trackCand, *fMeasurementFactory);
       gfTrack->addTrackRep(new genfit::RKTrackRep(fPDG));
       auto *rep = dynamic_cast<genfit::RKTrackRep *>(gfTrack->getTrackRep(0));
+
+      // Inject the range-derived momentum as a REAL measurement at the vertex end. It cannot be
+      // done as a tight seed: AbsKalmanFitter blows the covariance up by blowUpFactor_ (1e3,
+      // off-diagonals reset) between iterations, so a seed prior is erased, while a measurement
+      // is re-applied on every pass. The covariance is deliberately anisotropic -- tight only
+      // ALONG the momentum direction (sigma from the range), loose transverse to it and loose in
+      // position -- so this constrains |p| and nothing else. Constraining the direction here
+      // would double-count the clusters, which already measure it.
+      if (rangeKE > 0) {
+         const double mMeV = fMassAmu * 931.49410242;
+         const double pR = std::sqrt(rangeKE * (rangeKE + 2.0 * mMeV)) / 1000.0; // GeV/c
+         const double keHi = rangeKE + rangeSigKE;
+         const double sigP = std::max(std::sqrt(keHi * (keHi + 2.0 * mMeV)) / 1000.0 - pR, 1e-6);
+
+         TVector3 posR(vPos.X() / 10.0, vPos.Y() / 10.0, vPos.Z() / 10.0); // cm
+         TVector3 momR;
+         momR.SetMagThetaPhi(pR, theta, phi);
+
+         TMatrixDSym cov6(6);
+         cov6.Zero();
+         const double LOOSE_POS = 1.0e4; // cm^2  -- position is measured by the clusters
+         const double LOOSE_MOM = 1.0;   // GeV^2 -- transverse momentum likewise
+         for (int d = 0; d < 3; ++d)
+            cov6(d, d) = LOOSE_POS;
+         const TVector3 u = momR.Unit();
+         for (int a = 0; a < 3; ++a)
+            for (int b = 0; b < 3; ++b)
+               cov6(3 + a, 3 + b) = sigP * sigP * u[a] * u[b] + LOOSE_MOM * ((a == b ? 1.0 : 0.0) - u[a] * u[b]);
+
+         try {
+            genfit::MeasuredStateOnPlane mop(rep);
+            mop.setPosMomCov(posR, momR, cov6);
+            gfTrack->insertPoint(new genfit::TrackPoint(new genfit::FullMeasurement(mop, fTPCDetID, -1, nullptr),
+                                                        gfTrack),
+                                 0);
+         } catch (genfit::Exception &e) {
+            LOG(debug) << "range constraint not applied: " << e.what();
+         }
+      }
       try {
          fKalmanFitter->processTrackWithRep(gfTrack, rep, false);
          auto *st = gfTrack->getFitStatus(rep);
@@ -541,6 +696,19 @@ void AtGenfitter::FitEvent(AtTrackingEvent *trackingEvent, AtPatternEvent *patte
 }
 
 } // namespace EventFit
+
+void EventFit::AtGenfitter::SetRangeConstraint(Bool_t on, Double_t density, Int_t matA)
+{
+   fRangeConstraint = on;
+   if (!on)
+      return;
+   auto e = std::make_unique<AtTools::AtELossCATIMA>(density);
+   e->SetProjectile(static_cast<int>(std::round(fMassAmu)), fZ, fMassAmu);
+   std::vector<std::tuple<int, int, int>> mat;
+   mat.emplace_back(matA, 1, 1); // (A, Z, stoichiometry); Z=1 for both H and D
+   e->SetMaterial(mat);
+   fRangeELoss = std::move(e);
+}
 
 void EventFit::AtGenfitter::SetManualELoss(Double_t density, Int_t matA)
 {
