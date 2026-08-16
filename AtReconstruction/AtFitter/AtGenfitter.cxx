@@ -117,10 +117,15 @@ void AtGenfitter::Init()
    if (!db->GetParticle(1000010030))
       db->AddParticle("Triton", "Triton", 2.80943211, kFALSE, 0, 3, "Ion", 1000010030);
 
-   // optional upstream PID gate: compute Spyral PID per track, fit only gated species
-   if (fUsePIDGate) {
+   // The Spyral estimator is needed for the gate AND/OR for seeding, so build it if either
+   // is requested.
+   if (fUsePIDGate || fSeedFromSpyral) {
       fSpyralPID = std::make_unique<AtTools::AtSpyralPID>();
       fSpyralPID->SetBField(std::abs(fBField)); // brho uses |B|, matches AtPIDTask
+   }
+   if (fSeedFromSpyral)
+      LOG(info) << "AtGenfitter: SEEDING FROM THE SPYRAL ESTIMATE (arc circle fit + rho-vs-z regression)";
+   if (fUsePIDGate) {
       auto loaded = AtTools::AtParticleID::LoadJSON(fPidGateFile);
       if (loaded.GetCut().IsValid()) {
          fPidGate = std::make_unique<AtTools::AtParticleID>(std::move(loaded));
@@ -146,10 +151,12 @@ AtFittedTrack *AtGenfitter::GetFittedTrack(AtTrack *track, AtFitMetadata * /*fit
       return nullptr;
    const int n = hc->size();
 
-   // upstream PID gate: skip non-gated species before doing the fit
-   if (fUsePIDGate && fPidGate) {
-      auto pidRes = fSpyralPID->Estimate(*track);
-      if (!pidRes.valid || !fPidGate->IsInside(pidRes.sqrtdEdx, pidRes.brho))
+   // upstream PID gate: skip non-gated species before doing the fit.
+   // The estimate is kept: with fSeedFromSpyral it also supplies the seed.
+   AtTools::AtSpyralResult pidRes;
+   if (fSpyralPID) {
+      pidRes = fSpyralPID->Estimate(*track);
+      if (fUsePIDGate && fPidGate && (!pidRes.valid || !fPidGate->IsInside(pidRes.sqrtdEdx, pidRes.brho)))
          return nullptr;
    }
 
@@ -195,11 +202,25 @@ AtFittedTrack *AtGenfitter::GetFittedTrack(AtTrack *track, AtFitMetadata * /*fit
    double theta = dir.Theta();
    double phi = dir.Phi();
 
-   // momentum magnitude from Brho (circle radius from PRA)
+   // momentum magnitude from Brho. Default: PRA circle radius with the polar taken from the
+   // two-cluster direction above. With fSeedFromSpyral: the AtSpyralPID estimate instead,
+   // whose radius is a least-squares circle on the first arc and whose polar is a regression
+   // of rho vs z over >=10 points -- both far less noisy for short, tightly curved tracks.
    double radius_m = track->GetGeoRadius() / 1000.0; // mm -> m
    double sinth = std::sin(theta);
    if (std::abs(sinth) < 1e-3) sinth = (sinth < 0 ? -1e-3 : 1e-3);
    double brho = std::abs(fBField) * radius_m / std::abs(sinth);          // T*m
+   if (fSeedFromSpyral && pidRes.valid && pidRes.brho > 0) {
+      brho = pidRes.brho;
+      // keep the seed self-consistent: take the polar from the same estimate, preserving the
+      // hemisphere the z-ordering above established
+      double polSpy = pidRes.polar;
+      if (polSpy > 0) {
+         double thNew = backwardSeed ? (M_PI - std::abs(polSpy)) : std::abs(polSpy);
+         if (std::abs(std::sin(thNew)) > 1e-3)
+            theta = thNew;
+      }
+   }
    double p_GeV = 0.299792458 * brho;                                      // |q|=e
    if (!(p_GeV > 0) || p_GeV > 100)
       return nullptr;

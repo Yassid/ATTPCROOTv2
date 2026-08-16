@@ -128,6 +128,15 @@ public:
    /// off. ~2-3 mm keeps real tracks converging while still constraining momentum.
    void SetMeasSigma(Double_t mm) { fMeasSigmaMM = mm; }
 
+   /// Seed the fit from the AtSpyralPID estimate instead of GetGeoRadius() + a two-cluster
+   /// direction. Both routes end at Brho = B*r/|sin(polar)|; they differ in how r and polar
+   /// are obtained. The default takes polar from the difference of two ADJACENT clusters,
+   /// which for a short tightly-curved track is millimetres apart and very noisy, and Brho
+   /// goes as 1/sin(polar). AtSpyralPID instead least-squares a circle to the first arc and
+   /// regresses rho against z over >=10 points. Requires the PID gate to be on (that is what
+   /// constructs fSpyralPID). Default OFF: the production seed is unchanged.
+   void SetSeedFromSpyral(Bool_t on) { fSeedFromSpyral = on; }
+
    /// Diffusion model for the per-cluster measurement covariance. The transverse (x,y)
    /// and drift-z position variance grow with drift distance L as
    ///   sigma^2 = sigma0^2 + D^2 * L_cm
@@ -250,6 +259,7 @@ private:
    Bool_t fUsePIDGate{kFALSE};
    std::string fPidGateFile;
    std::unique_ptr<AtTools::AtSpyralPID> fSpyralPID;
+   Bool_t fSeedFromSpyral{kFALSE}; ///< seed momentum/polar from the Spyral estimate
    std::unique_ptr<AtTools::AtParticleID> fPidGate;
 
    std::shared_ptr<genfit::AbsKalmanFitter> fKalmanFitter;
