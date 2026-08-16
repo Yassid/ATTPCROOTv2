@@ -53,7 +53,7 @@ TAB=triton_D2_300torr.txt
 LOG=/mnt/f/a1975/logs_ab_catima/
 mkdir -p "$LOG"
 
-# name -> matFX  catimaMSC  catimaStraggling  table  backExtrap
+# name -> matFX  catimaMSC  catimaStraggling  table  backExtrap  manualElossDensity
 #
 # NOTE ON THE TABLE. `fixtab` and `nobackx` were run AFTER make_eloss_table.C was corrected to
 # matA = 2.014 (deuterium) from a round 2, which was a flat +0.70% on every point -- stopping
@@ -62,30 +62,42 @@ mkdir -p "$LOG"
 # difference `nobackx` against `on` directly: that moves two things at once.
 spec() {
   case "$1" in
-    nomat)   echo "kFALSE kFALSE kFALSE $TAB kTRUE" ;;
-    off)     echo "kTRUE  kFALSE kFALSE $TAB kTRUE" ;;
-    on)      echo "kTRUE  kTRUE  kTRUE  $TAB kTRUE" ;;
-    nostrag) echo "kTRUE  kTRUE  kFALSE $TAB kTRUE" ;;
-    notable) echo "kTRUE  kTRUE  kTRUE  ''   kTRUE" ;;
-    fixtab)  echo "kTRUE  kTRUE  kTRUE  $TAB kTRUE" ;;
-    nobackx) echo "kTRUE  kTRUE  kTRUE  $TAB kFALSE" ;;
+    nomat)   echo "kFALSE kFALSE kFALSE $TAB kTRUE  $RHO" ;;
+    off)     echo "kTRUE  kFALSE kFALSE $TAB kTRUE  $RHO" ;;
+    on)      echo "kTRUE  kTRUE  kTRUE  $TAB kTRUE  $RHO" ;;
+    nostrag) echo "kTRUE  kTRUE  kFALSE $TAB kTRUE  $RHO" ;;
+    notable) echo "kTRUE  kTRUE  kTRUE  ''   kTRUE  $RHO" ;;
+    fixtab)  echo "kTRUE  kTRUE  kTRUE  $TAB kTRUE  $RHO" ;;
+    nobackx) echo "kTRUE  kTRUE  kTRUE  $TAB kFALSE $RHO" ;;
+    # manualElossDensity = 0 disables SetManualELoss and NOTHING else: SetELossHybrid falls back
+    # to 6.61e-5 internally and the range constraint is already off. See below for why.
+    nodouble) echo "kTRUE  kTRUE  kTRUE  $TAB kTRUE  0" ;;
     *)       echo "" ;;
   esac
 }
+# THE DOUBLE COUNT. AtGenfitter applies the vertex-gap energy loss TWICE when material effects
+# are on: extrapolateToLine transports the state back through the gas with genfit's own dE/dx,
+# and then the fManualELoss block adds GetEnergyLoss(KE, vtxGapCm) on top. SetManualELoss is
+# documented as "meant to be used WITH SetBackExtrapToAxis and WITHOUT genfit material effects"
+# -- with them off the extrapolation is geometric and leaves |p| untouched, which is the case it
+# was written for -- but nothing in the code guards it, and the macro enables it for any
+# manualElossDensity > 0. Every matFX arm before `nodouble` carries the double count in
+# KE_xtr (GetKinematicsXtr), which is the slot the Ex analysis reads. The raw KE_fit
+# (GetKinematics) is untouched by this.
 
 arm() {
   tag="$1"
-  read -r MFX MSC STR TB BX <<<"$(spec "$tag")"
+  read -r MFX MSC STR TB BX MEL <<<"$(spec "$tag")"
   [ -n "${MFX:-}" ] || { echo "[skip] unknown arm $tag"; return 0; }
   [ "$TB" = "''" ] && TB=""
   out="/mnt/f/a1975/gf_dt_ab_${tag}/"
   mkdir -p "$out"
   f="${out}run_${RUN}_multifit_genfitter_t.root"
   [ -s "$f" ] && { echo "[have] $tag"; return 0; }
-  echo "[$(date '+%H:%M:%S')] start $tag  (matFX=$MFX msc=$MSC strag=$STR table='${TB}' backExtrap=$BX)"
+  echo "[$(date '+%H:%M:%S')] start $tag  (matFX=$MFX msc=$MSC strag=$STR table='${TB}' backExtrap=$BX manualEloss=$MEL)"
   root -l -b -q "fitGenfitter_a1975_deuterium.C(\"run_${RUN}_multifit\",-1,\"$REC\",\"\",\"$out\",\
 -2.85,2,5,\"$GATE\",4.0,10.0,170.0,${MFX},kTRUE,1000010030,3.01550072,1,\"t\",\"_reco\",\
-\"ATTPC_D300torr_v2_geomanager.root\",${BX},${RHO},2,\"$PAR\",kFALSE,kFALSE,kFALSE,\"$TB\",${MSC},${STR})" \
+\"ATTPC_D300torr_v2_geomanager.root\",${BX},${MEL},2,\"$PAR\",kFALSE,kFALSE,kFALSE,\"$TB\",${MSC},${STR})" \
     > "${LOG}${tag}_run_${RUN}.log" 2>&1
   if grep -qi 'segmentation violation' "${LOG}${tag}_run_${RUN}.log" || [ ! -s "$f" ]; then
     echo "[$(date '+%H:%M:%S')] FAIL $tag  (see ${LOG}${tag}_run_${RUN}.log)"
