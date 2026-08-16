@@ -87,7 +87,13 @@ void ex_dt_a1975(TString runsCSV = "run_0016", TString inDir = "/mnt/f/a1975/rec
    // has kefit == ke by construction.
    TNtuple *ntk = new TNtuple("pk", "candidate triton kinematics (d,t)",
                               "ke:theta:vertexz:vertexr:thcm:ex:chi2ndf:brho:dedx:sqrtdedx:ncl:ntrk:run:ic:"
-                              "kefit:thetafit:exfit");
+                              "kefit:thetafit:exfit:matfx:matfb");
+   // matfx/matfb are the MATERIAL-EFFECTS PROVENANCE of each fit and they are not cosmetic.
+   // AtGenfitter defaults fMatEffectsFallback=kTRUE: when a material-effects fit throws (a
+   // stopping triton's RK extrapolation does this often) the track is silently refitted with
+   // setNoEffects(true) and kept. Without these columns a "material effects" production is a
+   // BLEND of two different physics models in one spectrum, which inflates the width and
+   // fakes a shift. Require matfx==1 to quote a pure matFX sample; matfb==1 marks the retries.
 
    auto *hex = new TH1F("hex", "^{15}C excitation energy (d,t), triton hyp;E_{x}(^{15}C) [MeV];tritons", 200, -10, 25);
    auto *hexAll = new TH1F("hexAll", "Ex, no PID gate", 200, -10, 25);
@@ -222,7 +228,7 @@ void ex_dt_a1975(TString runsCSV = "run_0016", TString inDir = "/mnt/f/a1975/rec
             }
             // same kinematics, evaluated on the uncorrected fit value; NaN if it does not close
             auto [exF, thcmF] = kine_2b(m_C16, m_d, m_t, m_C15, Ebeam, thRadF, keF);
-            float row[17] = {(float)ke,
+            float row[19] = {(float)ke,
                              (float)thDeg,
                              (float)v.Z(),
                              (float)vr,
@@ -238,7 +244,9 @@ void ex_dt_a1975(TString runsCSV = "run_0016", TString inDir = "/mnt/f/a1975/rec
                              icNow,
                              (float)keF,
                              (float)(thRadF * TMath::RadToDeg()),
-                             (float)(std::isnan(exF) ? -999.0 : exF + exShift)};
+                             (float)(std::isnan(exF) ? -999.0 : exF + exShift),
+                             (float)ft->GetTrackMetadata()->GetMatEffects(),
+                             (float)ft->GetTrackMetadata()->GetMatEffectsFallback()};
             ntk->Fill(row);
          }
       }

@@ -36,7 +36,8 @@ void fitGenfitter_a1975_deuterium(TString fileName = "run_0016", Long64_t nEvent
                                   TString speciesTag = "p", TString recoSuffix = "_reco",
                                   TString geoName = "ATTPC_H1bar_geomanager.root",
                                   Bool_t backExtrap = kFALSE, Double_t manualElossDensity = 0, Int_t matA = 2,
-                                  TString parName = "ATTPC.a1975_deuterium.par")
+                                  TString parName = "ATTPC.a1975_deuterium.par", Bool_t seedFromSpyral = kFALSE,
+                                  Bool_t matFallback = kTRUE)
 {
    gSystem->Load("libAtReconstruction.so");
    FairLogger::GetLogger()->SetLogScreenLevel("WARNING");
@@ -88,6 +89,17 @@ void fitGenfitter_a1975_deuterium(TString fileName = "run_0016", Long64_t nEvent
                                                          minIter, maxIter);
    fitter->SetZPadPlane(1000.0);
    fitter->SetMeasSigma(measSigma);
+   fitter->SetSeedFromSpyral(seedFromSpyral);
+   // When comparing matEffects ON against OFF, the fallback must be OFF. Left on, a track whose
+   // material-effects fit throws is refitted with setNoEffects(true) and kept, so the "matFX"
+   // sample quietly contains no-matFX tracks and the two productions are no longer a clean
+   // A/B on one variable. Off, a failed matFX fit simply drops out.
+   fitter->SetMatEffectsFallback(matFallback);
+   if (matEffects && !matFallback)
+      std::cout << "  \033[1;33mmatFX fallback DISABLED: failed material-effects fits are dropped, "
+                   "not retried without material effects\033[0m\n";
+   if (seedFromSpyral)
+      std::cout << "  \033[1;36mSeed from the Spyral estimate (arc circle + rho-vs-z regression)\033[0m\n";
    fitter->SetThetaWindow(thetaMinDeg, thetaMaxDeg); // keep BACKWARD protons (default clips at 170)
    fitter->SetBackwardSeedFix(backwardSeedFix);      // prototype: fix backward-track seed reversal
    fitter->SetBackExtrapToAxis(backExtrap);
