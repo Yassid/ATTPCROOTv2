@@ -210,6 +210,19 @@ public:
          fGasDensityMgCm3 = densityGCm3 * 1000.0;
    }
 
+   /// Use CATIMA for genfit's MULTIPLE SCATTERING and/or ENERGY-LOSS STRAGGLING.
+   /// genfit's own models are a Highland/PANDA MSC parameterisation and Bohr/Urban straggling,
+   /// both tuned on relativistic light particles; a 1 MeV triton is beta*gamma ~ 0.027 and sits
+   /// far outside them. CATIMA's da2dx / domega2dx are the same quantities (variance per unit
+   /// thickness) computed properly for slow heavy ions.
+   /// Requires a GenFit built with -DGENFIT_USE_CATIMA=ON; without it these are silently
+   /// inert and genfit keeps its own models.
+   void SetCatimaMaterial(Bool_t msc, Bool_t straggling)
+   {
+      fCatimaMSC = msc;
+      fCatimaStraggling = straggling;
+   }
+
    void SetRangeSigmaFloor(Double_t frac) { fRangeSigmaFloor = frac; }
    /// Bragg stopping test thresholds (see fBraggMinRatio). ratio<=0 disables the test, which
    /// is only sensible for a sample already known to stop.
@@ -313,6 +326,8 @@ private:
    /// Only applied to tracks judged CONTAINED (see fRangeMaxRadiusMM / fRangeZMarginMM): a track
    /// that leaves the active volume has no measured range and would be given a meaningless -- and
    /// always too low -- energy.
+   Bool_t fCatimaMSC{kFALSE};          // CATIMA multiple scattering (needs GENFIT_USE_CATIMA)
+   Bool_t fCatimaStraggling{kFALSE};   // CATIMA energy-loss straggling
    Bool_t fELossHybrid{kFALSE};        // load the dE/dx table WITHOUT param-only mode (see setter)
    Double_t fGasDensityMgCm3{0.0};     // global density dEdxParam multiplies the curve by
    Bool_t fRangeConstraint{kFALSE};

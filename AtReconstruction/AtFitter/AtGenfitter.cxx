@@ -122,6 +122,15 @@ void AtGenfitter::Init()
    // same genfit exception counts). Turning it off also stops the OOM kills on long runs.
    mat->ignoreBoundariesBetweenEqualMaterials(false);
 
+   // CATIMA backends for scattering/straggling. These setters only exist in a GenFit built with
+   // -DGENFIT_USE_CATIMA=ON; the calls compile against the header either way and are inert when
+   // the backend is absent, so genfit keeps Highland/Urban and nothing changes.
+   mat->setUseCatimaMSC(fCatimaMSC);
+   mat->setUseCatimaStraggling(fCatimaStraggling);
+   if (fCatimaMSC || fCatimaStraggling)
+      LOG(info) << "AtGenfitter: CATIMA material model -- MSC " << (fCatimaMSC ? "ON" : "off")
+                << ", straggling " << (fCatimaStraggling ? "ON" : "off");
+
    // Energy-loss mode. genfit's parameterization-only mode (useEnergyLossParam) is ONLY
    // valid when a dE/dx curve has been loaded: MaterialEffects::maxKinEnergy_ starts at 0
    // and is set solely by setEnergyLossFile(), and dEdx() throws a FATAL exception for

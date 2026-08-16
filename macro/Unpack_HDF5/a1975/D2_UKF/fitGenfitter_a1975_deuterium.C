@@ -38,7 +38,7 @@ void fitGenfitter_a1975_deuterium(TString fileName = "run_0016", Long64_t nEvent
                                   Bool_t backExtrap = kFALSE, Double_t manualElossDensity = 0, Int_t matA = 2,
                                   TString parName = "ATTPC.a1975_deuterium.par", Bool_t seedFromSpyral = kFALSE,
                                   Bool_t matFallback = kTRUE, Bool_t rangeConstraint = kFALSE,
-                                  TString eLossTable = "")
+                                  TString eLossTable = "", Bool_t catimaMaterial = kFALSE)
 {
    gSystem->Load("libAtReconstruction.so");
    FairLogger::GetLogger()->SetLogScreenLevel("WARNING");
@@ -91,6 +91,10 @@ void fitGenfitter_a1975_deuterium(TString fileName = "run_0016", Long64_t nEvent
                                                          minIter, maxIter);
    // HYBRID: the table serves only beta*gamma < 0.05, where genfit would otherwise apply ZERO
    // energy loss (KE < 3.5 MeV for a triton); Bethe-Bloch keeps everything above.
+   if (catimaMaterial) {
+      fitter->SetCatimaMaterial(kTRUE, kTRUE);
+      std::cout << "  \033[1;35mCATIMA material model: multiple scattering + straggling\033[0m\n";
+   }
    if (eLossTable.Length()) {
       fitter->SetELossHybrid(kTRUE, manualElossDensity > 0 ? manualElossDensity : 6.61e-5);
       std::cout << "  \033[1;32mCATIMA dE/dx TABLE (hybrid): " << elossPath << "\033[0m\n";
