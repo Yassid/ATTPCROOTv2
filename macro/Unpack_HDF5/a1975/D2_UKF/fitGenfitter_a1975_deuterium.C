@@ -38,7 +38,8 @@ void fitGenfitter_a1975_deuterium(TString fileName = "run_0016", Long64_t nEvent
                                   Bool_t backExtrap = kFALSE, Double_t manualElossDensity = 0, Int_t matA = 2,
                                   TString parName = "ATTPC.a1975_deuterium.par", Bool_t seedFromSpyral = kFALSE,
                                   Bool_t matFallback = kTRUE, Bool_t rangeConstraint = kFALSE,
-                                  TString eLossTable = "", Bool_t catimaMaterial = kFALSE)
+                                  TString eLossTable = "", Bool_t catimaMSC = kFALSE,
+                                  Bool_t catimaStraggling = kFALSE)
 {
    gSystem->Load("libAtReconstruction.so");
    FairLogger::GetLogger()->SetLogScreenLevel("WARNING");
@@ -91,9 +92,13 @@ void fitGenfitter_a1975_deuterium(TString fileName = "run_0016", Long64_t nEvent
                                                          minIter, maxIter);
    // HYBRID: the table serves only beta*gamma < 0.05, where genfit would otherwise apply ZERO
    // energy loss (KE < 3.5 MeV for a triton); Bethe-Bloch keeps everything above.
-   if (catimaMaterial) {
-      fitter->SetCatimaMaterial(kTRUE, kTRUE);
-      std::cout << "  \033[1;35mCATIMA material model: multiple scattering + straggling\033[0m\n";
+   // The two are separable on purpose: with matEffects on, genfit's own Highland MSC leaves 62%
+   // of triton fits with ndf < 0, so an arm with catimaMSC OFF is not a usable control -- it
+   // reverts to the collapsing model. Straggling is the one that can be toggled independently.
+   if (catimaMSC || catimaStraggling) {
+      fitter->SetCatimaMaterial(catimaMSC, catimaStraggling);
+      std::cout << "  \033[1;35mCATIMA material model: MSC " << (catimaMSC ? "ON" : "off") << ", straggling "
+                << (catimaStraggling ? "ON" : "off") << "\033[0m\n";
    }
    if (eLossTable.Length()) {
       fitter->SetELossHybrid(kTRUE, manualElossDensity > 0 ? manualElossDensity : 6.61e-5);
