@@ -501,6 +501,29 @@ AtFittedTrack *AtGenfitter::GetFittedTrack(AtTrack *track, AtFitMetadata * /*fit
    bool usedMatEffects = !fNoMatEffects;
    bool matFallback = false;
 
+   // ---- TGeo navigator hygiene: THIS IS NOT COSMETIC -----------------------------------------
+   // genfit's TGeoMaterialInterface navigates the ONE SHARED gGeoManager and does not restore
+   // its state afterwards. A track whose RK extrapolation wanders leaves the navigator parked
+   // somewhere unhelpful, and every LATER track in the job then inherits it -- which is why the
+   // failure is contiguous in track order: a job fits its first N tracks perfectly and then
+   // fails nearly every one after.
+   //
+   // Measured, run_0016, 5000 events, matEffects on, measSigma 4.0:
+   //   without this re-seed : 139/181 fits collapse (ndf <= 0) = 76.8%
+   //   with it              :   3/171                          =  1.8%
+   //
+   // So "material effects are unusable in genfit" was never the material MODEL. genfit's own
+   // Highland arm fails at the SAME track index as the CATIMA one, and the measSigma response
+   // is bistable rather than smooth (94/0.6/77/0.6/0.6/77 % at 1.5/2.5/4/6/9/14 mm) precisely
+   // because sigma only changes WHICH track trips the navigator, not how well anything is fitted.
+   //
+   // One FindNode per track. The point is any location comfortably inside the gas volume.
+   if (gGeoManager != nullptr) {
+      gGeoManager->SetCurrentPoint(0., 0., 50.);
+      gGeoManager->SetCurrentDirection(0., 0., 1.);
+      gGeoManager->FindNode();
+   }
+
    bool ok = doFit();
    if (!ok && !fNoMatEffects && fMatEffectsFallback) {
       // material-effects fit failed (e.g. a stopping multi-turn spiral whose RK
@@ -517,6 +540,40 @@ AtFittedTrack *AtGenfitter::GetFittedTrack(AtTrack *track, AtFitMetadata * /*fit
          matFallback = true;
       }
    }
+   // ---- TRACE (set ATGENFIT_TRACE=1) -------------------------------------------------------
+   // The matFX collapse is CONTIGUOUS in track order -- a job fits its first N tracks perfectly
+   // and then fails nearly every one after -- so something GLOBAL goes bad at one track and
+   // stays bad. This probes the two shared things a fit could corrupt, once per track, so the
+   // onset can be attributed:
+   //   * the TGeo navigator, shared by every extrapolation via TGeoMaterialInterface. A
+   //     navigator left outside the volume by one runaway extrapolation would poison every
+   //     later track exactly like this.
+   //   * the MaterialEffects SINGLETON's dE/dx, evaluated at a fixed probe energy. It is
+   //     recomputed per step, so a value that changes between tracks means persistent state.
+   if (getenv("ATGENFIT_TRACE") != nullptr) {
+      static long sTrk = 0;
+      const long idx = sTrk++;
+      const char *node = "NULL", *mat = "NULL";
+      if (gGeoManager != nullptr) {
+         // READ-ONLY now. This probe used to SetCurrentPoint/FindNode, which silently re-seeded
+         // the navigator and was what led to the fix above -- turning the trace on made the bug
+         // disappear. Keep it non-mutating so the trace measures rather than treats.
+         TGeoNode *nd = gGeoManager->GetCurrentNode();
+         if (nd != nullptr) {
+            node = nd->GetName();
+            if (nd->GetVolume() != nullptr && nd->GetVolume()->GetMaterial() != nullptr)
+               mat = nd->GetVolume()->GetMaterial()->GetName();
+         }
+      }
+      // printf, not LOG(info): the fit macros set the screen log level to WARNING, which
+      // silently swallows LOG(info) and makes the trace look like it never ran.
+      printf("TRACE trk=%ld id=%d ok=%d conv=%d ndf=%g chi2=%g nhit=%d probeNode=%s "
+             "probeMat=%s isOutside=%d\n",
+             idx, track->GetTrackID(), (int)ok, (int)converged, ndf, chi2, n, node, mat,
+             gGeoManager ? (int)gGeoManager->IsOutside() : -1);
+      fflush(stdout);
+   }
+
    if (!ok) {
       LOG(debug) << "AtGenfitter: fit failed on track " << track->GetTrackID();
       return nullptr;
