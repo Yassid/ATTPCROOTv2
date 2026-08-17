@@ -22,7 +22,8 @@
 set -o pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 EBEAM="${1:-184.17}"
-TMP="/tmp/claude-1000/-home-yassid/b025789e-3ded-4e0d-8d25-35b205d047eb/scratchpad"
+TMP="${DTTMP:-/mnt/f/a1975/caches/.explorer}"   # stable; the old value was a dead session scratchpad
+mkdir -p "$TMP"
 OUT="$HOME/a1975_C16_dt_3way_explorer.html"
 MK="$HERE/../../../a2091/UKF/pp/make_explorer_html.C"
 
