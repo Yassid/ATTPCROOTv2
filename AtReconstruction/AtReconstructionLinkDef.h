@@ -67,6 +67,12 @@
 #pragma link C++ class AtFITTER::AtGenfit + ;
 #pragma link C++ class EventFit::AtGenfitter + ;
 
+#pragma link C++ namespace MCMinimization;
+#pragma link C++ class MCMinimization::AtMinimization - !;
+#pragma link C++ class MCMinimization::AtMinimization::TrackSeed - !;
+#pragma link C++ class MCMinimization::AtMinimization::FitPar - !;
+#pragma link C++ class MCMinimization::AtMCQMinimization - !;
+
 #pragma link C++ namespace MCFitter;
 #pragma link C++ class MCFitter::AtParameterDistribution - !;
 #pragma link C++ class MCFitter::AtUniformDistribution - !;

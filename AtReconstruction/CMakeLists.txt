@@ -20,6 +20,7 @@ ${CMAKE_SOURCE_DIR}/AtReconstruction/AtPatternRecognition/triplclust/src/hclust
 ${CMAKE_SOURCE_DIR}/AtReconstruction/AtPatternRecognition/triplclust/src/kdtree
 
 ${CMAKE_SOURCE_DIR}/AtReconstruction/AtPatternModification
+${CMAKE_SOURCE_DIR}/AtReconstruction/AtMinimization
 )
 
 Set(DEPENDENCIES
@@ -115,6 +116,9 @@ set(SRCS
   AtFitter/ParameterDistributions/AtParameterDistribution.cxx
   AtFitter/ParameterDistributions/AtUniformDistribution.cxx
   AtFitter/ParameterDistributions/AtStudentDistribution.cxx
+
+  AtMinimization/AtMinimization.cxx
+  AtMinimization/AtMCQMinimization.cxx
 
   AtFitter/AtFitter.cxx
   AtFitter/AtMCFitter.cxx
