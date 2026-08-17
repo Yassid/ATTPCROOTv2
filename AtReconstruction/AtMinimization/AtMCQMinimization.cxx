@@ -114,7 +114,7 @@ bool AtMCQMinimization::Init()
    }
 
    fDzStep = fDriftVelocity * fTBTime / 1000.; // [cm]
-   fBFieldGauss = fBField * 1.e4;
+   fBFieldGauss = fBField * 1.e4 * fBFieldSign;
 
    const auto numPads = fMap->GetNumPads();
    fQExp.assign(numPads, 0.);
@@ -129,7 +129,7 @@ bool AtMCQMinimization::Init()
    fStepQ.assign(kMaxIntegrationSteps, 0.);
 
    LOG(info) << "AtMCQMinimization: drift velocity " << fDriftVelocity << " cm/us, time bucket " << fTBTime << " ns, B "
-             << fBField << " T, density " << fDensity << ", pressure " << fPressure << " torr";
+             << fBField * fBFieldSign << " T, density " << fDensity << ", pressure " << fPressure << " torr";
    LOG(info) << "AtMCQMinimization: ionization energy " << fEIonize * 1.e6 << " eV, transverse diffusion " << fCoefT
              << " cm2/us, " << fGain << " ADC per primary electron";
 
@@ -259,6 +259,7 @@ void AtMCQMinimization::ClearTrack()
    fSimCharge.clear();
    fBackTrack.clear();
 
+   fHasExpEndPoint = false;
    fSimEnergy = 0;
    fBeamRange = 0;
    fChi2Points = 0;
@@ -278,7 +279,7 @@ bool AtMCQMinimization::Minimize(const TrackSeed &seed, const HitVector &hits)
       LOG(error) << "AtMCQMinimization: no stopping power function, call SetStoppingPower()!";
       return false;
    }
-   if (fBFieldGauss <= 0 && !fRangeToEnergy) {
+   if (fBFieldGauss == 0 && !fRangeToEnergy) {
       LOG(error) << "AtMCQMinimization: without a magnetic field the energy is taken from the range, "
                  << "call SetRangeToEnergy()!";
       return false;
@@ -309,7 +310,7 @@ bool AtMCQMinimization::Minimize(const TrackSeed &seed, const HitVector &hits)
 
          auto chi2Q = Chi2Q();
          double chi2Pos = fUsePosChi2 ? Chi2Pos(iCoarse, seed.fNumExpPoints) : 0.;
-         double chi2Range = fUseRangeChi2 ? Chi2Range(hits) : 0.;
+         double chi2Range = fUseRangeChi2 ? Chi2Range() : 0.;
          double chi2 = fUseRangeChi2 ? (chi2Q + chi2Range) / 2. : (chi2Q + chi2Pos) / 2.;
 
          if (chi2 < chi2Best) {
@@ -366,6 +367,12 @@ void AtMCQMinimization::FillExperimentalTrack(const HitVector &hits, int vertexT
 
       fExpTrack.push_back(hit.GetPosition());
       fExpTB.push_back(hit.GetTimeStamp());
+
+      // The simulated track is propagated towards the pad plane, so it ends at the hit of lowest z
+      if (!fHasExpEndPoint || hit.GetPosition().Z() < fExpEndPoint.Z()) {
+         fExpEndPoint = hit.GetPosition();
+         fHasExpEndPoint = true;
+      }
    }
 
    if (!fUsePosChi2)
@@ -442,8 +449,8 @@ void AtMCQMinimization::SimulateTrack(const MCState &state)
    double energy = 0;      // Per nucleon when the track is seeded from its curvature
    double totalEnergy = 0; // Kinetic energy followed along the track [MeV]
 
-   if (fBFieldGauss > 0) {
-      // Magnetic rigidity corrected for the angle [Tm]
+   if (fBFieldGauss != 0) {
+      // Magnetic rigidity corrected for the angle [Tm], signed like the field
       const double bRhoTheta = state.fB * state.fRadius * 1.e-7 / TMath::Sin(state.fTheta);
       energy = GetEnergy(fA, fZ, bRhoTheta);
       totalEnergy = energy * fA;
@@ -786,13 +793,15 @@ double AtMCQMinimization::Chi2Pos(int iteration, int numExpPoints) const
    return chi2 / (TMath::Power(numPoints, 3) * 2.0);
 }
 
-double AtMCQMinimization::Chi2Range(const HitVector &hits) const
+double AtMCQMinimization::Chi2Range() const
 {
-   if (hits.empty() || fSimTrack.empty() || fChi2Points == 0)
+   if (!fHasExpEndPoint || fSimTrack.empty() || fChi2Points == 0)
       return 1.e10;
 
-   // NB: the hits are sorted by descending time bucket, so the first one is the end of the track
-   const auto &endPoint = hits.front()->GetPosition();
+   /* NB: the original implementation took the first hit of the array as the end of the track,
+    * which held when the hits came sorted by descending time bucket. The hits of an AtTrack are
+    * in the order the pattern recognition found them, so the end point is looked up instead. */
+   const auto &endPoint = fExpEndPoint;
    const auto &simEndPoint = fSimTrack.back();
 
    const double dist =

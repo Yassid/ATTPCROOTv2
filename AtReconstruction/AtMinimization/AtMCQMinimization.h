@@ -108,7 +108,8 @@ private:
    // Parameters read from AtDigiPar by Init()
    double fDriftVelocity{0}; //< [cm/us]
    int fTBTime{0};           //< Time bucket length [ns]
-   double fBField{0};        //< [T]
+   double fBField{0};        //< [T], magnitude, the parameter file carries no sign
+   int fBFieldSign{1};       //< Direction of the field along the beam axis
    double fZPadPlane{0};     //< Position of the pad plane along the beam axis [mm]
    double fDensity{0};       //< Gas density, in the units of the parameter file
    double fPressure{0};      //< Gas pressure [torr]
@@ -176,8 +177,10 @@ private:
    int fLastTB{0};         //< Last time bucket reached by the last simulation
 
    /* Experimental track, filled by Minimize() */
-   std::vector<double> fQExp;                         //< Experimental charge per pad
-   std::vector<double> fZExp;                         //< z of the experimental hit of each pad [mm]
+   std::vector<double> fQExp; //< Experimental charge per pad
+   std::vector<double> fZExp; //< z of the experimental hit of each pad [mm]
+   XYZPoint fExpEndPoint{};   //< Experimental hit the track ends at, i.e. the one of lowest z [mm]
+   bool fHasExpEndPoint{false};
    std::vector<XYZPoint> fExpTrack;                   //< Position of every experimental hit [mm]
    std::vector<int> fExpTB;                           //< Time bucket of every experimental hit
    std::vector<std::vector<const AtHit *>> fHitsByTB; //< Hits sorted by descending time bucket
@@ -276,6 +279,21 @@ public:
    void SetUseRangeChi2(bool value = true) { fUseRangeChi2 = value; }
    void SetVerbose(bool value = true) { fVerbose = value; }
 
+   /**
+    * @brief Direction of the magnetic field along the beam axis, +1 or -1.
+    *
+    * AtDigiPar only carries the magnitude of the field while the tracks of a run may curve
+    * either way, the sign the fitters of the UKF and genfit chains call bFieldSign. A track
+    * simulated with the wrong sign curls away from the data and no set of parameters can bring
+    * it back, so this is the first thing to check when a fit does not converge on real data.
+    */
+   void SetBFieldSign(int sign)
+   {
+      fBFieldSign = sign >= 0 ? 1 : -1;
+      fBFieldGauss = (fBFieldGauss < 0 ? -fBFieldGauss : fBFieldGauss) * fBFieldSign;
+   }
+   int GetBFieldSign() const { return fBFieldSign; }
+
    /// Length of the active volume [mm], only used when the vertex is not extrapolated back.
    void SetMaxRange(double mm) { fMaxRange = mm; }
 
@@ -329,7 +347,7 @@ protected:
    /// Position term, comparing the center of gravity of each time bucket with the simulation.
    double Chi2Pos(int iteration, int numExpPoints) const;
    /// Range term, comparing the end point of the experimental and simulated tracks.
-   double Chi2Range(const HitVector &hits) const;
+   double Chi2Range() const;
 
    /// ADC per primary electron, the conversion the digitization applies (AtPulse).
    static double GainFromParameters(const AtDigiPar &par);
