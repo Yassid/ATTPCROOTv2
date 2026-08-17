@@ -36,9 +36,9 @@
 #   ./cache_dt_dv1104.sh [nparallel] [workdir]
 HERE="$(cd "$(dirname "$0")" && pwd)"; cd "$HERE"
 NPAR="${1:-6}"
-WORK="${2:-/mnt/f/a1975/caches/.catima}"
-OUT=/mnt/f/a1975/caches/dt_kin_catima.root
-FIT=/mnt/f/a1975/gf_dt_catima/
+WORK="${2:-${DTWORK:-/mnt/f/a1975/caches/.cateloss}}"
+OUT="${DTOUT:-/mnt/f/a1975/caches/dt_kin_cateloss.root}"
+FIT="${DTFIT:-/mnt/f/a1975/gf_dt_cateloss/}"
 EBEAM=184.17
 mkdir -p "$WORK" /mnt/f/a1975/caches
 # config.sh reads unset vars; under `set -u` it kills the script SILENTLY, zero-byte log,
