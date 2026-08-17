@@ -362,8 +362,10 @@ void AtMCQMinimization::FillExperimentalTrack(const HitVector &hits, int vertexT
          continue;
       }
 
-      fQExp[pad] = hit.GetCharge();
-      fZExp[pad] = hit.GetPosition().Z();
+      // A pad can hold several hits. The simulated side accumulates every electron that lands on
+      // a pad and takes the charge weighted position, so the data is summed the same way.
+      fQExp[pad] += hit.GetCharge();
+      fZExp[pad] += hit.GetCharge() * hit.GetPosition().Z(); // Normalized below
 
       fExpTrack.push_back(hit.GetPosition());
       fExpTB.push_back(hit.GetTimeStamp());
@@ -374,6 +376,10 @@ void AtMCQMinimization::FillExperimentalTrack(const HitVector &hits, int vertexT
          fHasExpEndPoint = true;
       }
    }
+
+   for (int pad = 0; pad < numPads; pad++)
+      if (fQExp[pad] > 0)
+         fZExp[pad] /= fQExp[pad];
 
    if (!fUsePosChi2)
       return;
