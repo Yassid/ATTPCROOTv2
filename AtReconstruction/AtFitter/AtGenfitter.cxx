@@ -127,9 +127,12 @@ void AtGenfitter::Init()
    // the backend is absent, so genfit keeps Highland/Urban and nothing changes.
    mat->setUseCatimaMSC(fCatimaMSC);
    mat->setUseCatimaStraggling(fCatimaStraggling);
-   if (fCatimaMSC || fCatimaStraggling)
+   mat->setUseCatimaEnergyLoss(fCatimaELoss, fCatimaELossFullRange);
+   if (fCatimaMSC || fCatimaStraggling || fCatimaELoss)
       LOG(info) << "AtGenfitter: CATIMA material model -- MSC " << (fCatimaMSC ? "ON" : "off")
-                << ", straggling " << (fCatimaStraggling ? "ON" : "off");
+                << ", straggling " << (fCatimaStraggling ? "ON" : "off") << ", dE/dx "
+                << (fCatimaELoss ? (fCatimaELossFullRange ? "ON (full range)" : "ON (below bg=0.05)")
+                                 : "off (tabulated)");
 
    // Energy-loss mode. genfit's parameterization-only mode (useEnergyLossParam) is ONLY
    // valid when a dE/dx curve has been loaded: MaterialEffects::maxKinEnergy_ starts at 0

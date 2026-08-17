@@ -39,7 +39,14 @@ void fitGenfitter_a1975_deuterium(TString fileName = "run_0016", Long64_t nEvent
                                   TString parName = "ATTPC.a1975_deuterium.par", Bool_t seedFromSpyral = kFALSE,
                                   Bool_t matFallback = kTRUE, Bool_t rangeConstraint = kFALSE,
                                   TString eLossTable = "", Bool_t catimaMSC = kFALSE,
-                                  Bool_t catimaStraggling = kFALSE)
+                                  Bool_t catimaStraggling = kFALSE,
+                                  // Take dE/dx from CATIMA per step instead of the ASCII curve.
+                                  // This channel is where it should matter: beta*gamma = 0.05 is
+                                  // KE 3.5 MeV for a triton and the (d,t) low branch is 0.8-6 MeV,
+                                  // so most of these tracks spend most of their path in the region
+                                  // the table serves -- unlike (p,d), where ~20 MeV deuterons only
+                                  // touch it near the endpoint. Last params: old callers unaffected.
+                                  Bool_t catimaELoss = kFALSE, Bool_t catimaELossFull = kFALSE)
 {
    gSystem->Load("libAtReconstruction.so");
    FairLogger::GetLogger()->SetLogScreenLevel("WARNING");
@@ -129,6 +136,19 @@ void fitGenfitter_a1975_deuterium(TString fileName = "run_0016", Long64_t nEvent
    fitter->SetBackExtrapToAxis(backExtrap);
    if (backExtrap)
       std::cout << "  Back-extrapolation to beam axis: ON\n";
+   // CATIMA dE/dx, replacing the tabulated curve below beta*gamma = 0.05 (and above it too if
+   // catimaELossFull). Inert without matEffects, so say so rather than let a run masquerade as a
+   // valid arm of an A/B.
+   fitter->SetCatimaELoss(catimaELoss, catimaELossFull);
+   if (catimaELoss) {
+      if (!matEffects)
+         std::cout << "\033[1;31mWARNING: catimaELoss set but matEffects is OFF -- it is inert.\033[0m\n";
+      else
+         std::cout << "  \033[1;32mdE/dx from CATIMA"
+                   << (catimaELossFull ? " over the FULL range (Bethe-Bloch replaced too)"
+                                       : " below beta*gamma=0.05 (Bethe-Bloch kept above)")
+                   << ", per-step material\033[0m\n";
+   }
    // Hand-applied dE/dx over the vertex gap, for the matEffects-OFF configuration: genfit stays
    // fast and keeps its 85% good-fit rate, CATIMA supplies the energy the fit never saw.
    if (manualElossDensity > 0) {

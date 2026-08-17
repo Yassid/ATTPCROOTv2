@@ -223,6 +223,28 @@ public:
       fCatimaStraggling = straggling;
    }
 
+   /// Use CATIMA for dE/dx itself, replacing the ASCII curve that SetELossHybrid loads.
+   ///
+   /// This is the last of the three material terms still going through a file. MSC and
+   /// straggling already call CATIMA per step; dE/dx below beta*gamma = 0.05 instead evaluates a
+   /// table generated once by make_eloss_table.C and multiplies it by ONE GLOBAL density, which
+   /// is why SetELossHybrid needs a density argument at all. The table also has to be regenerated
+   /// per species, per gas and per pressure, is resolved from a different directory in each
+   /// channel, and has already produced one silent error (matA = 2 instead of deuterium's 2.014,
+   /// a flat +0.70%). Asking CATIMA directly uses the material of the step and removes all of it.
+   ///
+   /// fullRange = kFALSE replaces ONLY the tabulated branch, so an A/B against the current
+   /// production differs only where the table was consulted. kTRUE also replaces Bethe-Bloch.
+   ///
+   /// Requires a GenFit built with -DGENFIT_USE_CATIMA=ON; silently inert otherwise, exactly like
+   /// SetCatimaMaterial. Leave the table loaded as well: CATIMA is consulted first and the table
+   /// remains the per-step fallback if it cannot supply a value.
+   void SetCatimaELoss(Bool_t on, Bool_t fullRange = kFALSE)
+   {
+      fCatimaELoss = on;
+      fCatimaELossFullRange = fullRange;
+   }
+
    void SetRangeSigmaFloor(Double_t frac) { fRangeSigmaFloor = frac; }
    /// Bragg stopping test thresholds (see fBraggMinRatio). ratio<=0 disables the test, which
    /// is only sensible for a sample already known to stop.
@@ -328,6 +350,8 @@ private:
    /// always too low -- energy.
    Bool_t fCatimaMSC{kFALSE};          // CATIMA multiple scattering (needs GENFIT_USE_CATIMA)
    Bool_t fCatimaStraggling{kFALSE};   // CATIMA energy-loss straggling
+   Bool_t fCatimaELoss{kFALSE};        // CATIMA dE/dx, replacing the tabulated curve
+   Bool_t fCatimaELossFullRange{kFALSE}; // ... above beta*gamma = 0.05 as well, not just below
    Bool_t fELossHybrid{kFALSE};        // load the dE/dx table WITHOUT param-only mode (see setter)
    Double_t fGasDensityMgCm3{0.0};     // global density dEdxParam multiplies the curve by
    Bool_t fRangeConstraint{kFALSE};
