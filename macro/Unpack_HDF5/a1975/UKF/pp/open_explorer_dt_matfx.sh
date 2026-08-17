@@ -19,8 +19,9 @@ set -o pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 EBEAM="${1:-180}"
 PRIMARY="${2:-matON}"
-SCR="${DTSCR:-/tmp/claude-1000/-home-yassid/843710ec-edc8-4d9e-8e1b-8cd0ce3f9f81/scratchpad/dt}"
-CMAT="$SCR/dt_kin_matON.root"; CCAT="$SCR/dt_kin_catima.root"
+SCR="${DTSCR:-/mnt/f/a1975/caches}"   # stable; was a dead session scratchpad
+# the cache on disk is dt_kin_maton.root (lower-case "on"); dt_kin_matON.root never existed
+CMAT="$SCR/dt_kin_maton.root"; CCAT="$SCR/dt_kin_catima.root"
 TMP="${DTTMP:-/tmp}"; OUT="$HOME/a1975_C16_dt_matfx_explorer.html"
 MK="$HERE/../../../a2091/UKF/pp/make_explorer_html.C"
 for f in "$MK" "$CMAT" "$CCAT"; do [[ -f "$f" ]] || { echo "ERROR: missing $f"; exit 1; }; done

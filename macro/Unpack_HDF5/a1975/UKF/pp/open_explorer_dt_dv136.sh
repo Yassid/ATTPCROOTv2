@@ -19,7 +19,7 @@ set -o pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 EBEAM="${1:-180}"
 PRIMARY="${2:-dv136}"
-SCR="${DTSCR:-/tmp/claude-1000/-home-yassid/843710ec-edc8-4d9e-8e1b-8cd0ce3f9f81/scratchpad/dt}"
+SCR="${DTSCR:-/mnt/f/a1975/caches}"   # stable; was a dead session scratchpad
 CMAT="$SCR/dt_kin_dv136.root"; CCAT="$SCR/dt_kin_dv125.root"
 TMP="${DTTMP:-/tmp}"; OUT="$HOME/a1975_C16_dt_dv136_125_explorer.html"
 MK="$HERE/../../../a2091/UKF/pp/make_explorer_html.C"

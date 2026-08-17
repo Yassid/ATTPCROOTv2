@@ -24,11 +24,9 @@
 #
 # TWO DIFFERENCES FROM open_explorer_dt_spyral.sh, both deliberate:
 #
-#   chi2max = 1e8, NOT 1e9.  mkexp_pp cuts on `chi2ndf > chi2max`, and ex_dt_a1975 writes
-#   chi2ndf = 1e9 exactly when ndf <= 0 -- a COLLAPSED fit. With chi2max = 1e9 the test is
-#   1e9 > 1e9, which is false, so every collapsed fit is kept. 1e8 drops them and keeps every
-#   real chi2. This matters far less than it used to (the navigator fix took CATIMA from 58.6%
-#   collapsed to 2.5%) but a collapsed fit still carries kinematics and must not reach the page.
+#   chi2max = 1e8 rather than the conventional 1e9. mkexp_pp now drops collapsed fits
+#   (chi2ndf >= 1e9, written when ndf <= 0) unconditionally, so this is belt-and-braces and
+#   every sibling script is safe too -- but 1e8 also keeps the intent visible at the call site.
 #
 #   TMP is a stable directory, not a session scratchpad. The older open_explorer_* scripts point
 #   at /tmp/claude-1000/.../b025789e-.../scratchpad, which no longer exists, so they fail today.

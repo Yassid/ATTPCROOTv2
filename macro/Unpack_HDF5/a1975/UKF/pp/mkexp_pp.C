@@ -40,15 +40,31 @@ void mkexp_pp(TString in, TString out, double chi2max = 1e9, double icMin = 950,
    pk->Branch("ke",&oke); pk->Branch("theta",&oth);
    pk->Branch("vertexz",&ovz); pk->Branch("chi2ndf",&oc2);
 
+   // COLLAPSED FITS ARE DROPPED UNCONDITIONALLY, and this cannot be left to chi2max.
+   // ex_dt_a1975 writes chi2ndf = 1e9 EXACTLY when ndf <= 0, i.e. when the Kalman filter kept
+   // essentially no measurement. Such a track still carries kinematics and reaches the ntuple
+   // like any other. Every caller passes chi2max = 1e9 to mean "no chi2 cut", and
+   // `chi2ndf > chi2max` is then 1e9 > 1e9, which is FALSE -- so the sentinel sailed through
+   // and the explorer pages were built on it. Measured on dt_kin_maton.root (material effects
+   // on, genfit's own Highland): 22433 of 37127 tracks, 60.4%, were collapsed fits being shown
+   // as data. dt_kin_dv1104.root (material effects off) is only 0.3%, which is why this went
+   // unnoticed for so long -- it is invisible until material effects are turned on.
+   const double kCollapsed = 1e9;
+   Long64_t nCollapsed = 0;
+
    Long64_t n = 0;
    for (Long64_t i = 0; i < t->GetEntries(); ++i) {
       t->GetEntry(i);
+      if (chi2ndf >= kCollapsed) { ++nCollapsed; continue; }
       if (ke <= 0 || chi2ndf > chi2max) continue;
       if (icMin > 0 && (ic < icMin || ic > icMax)) continue;
       oke = ke; oth = theta; ovz = vz; oc2 = chi2ndf;
       pk->Fill(); ++n;
    }
    o.cd(); pk->Write(); o.Close(); f->Close();
-   printf("mkexp_pp: %lld -> %lld tracks (IC[%.0f,%.0f]) -> %s\n",
-          t->GetEntries(), n, icMin, icMax, out.Data());
+   // report the collapsed count rather than swallowing it: a cache that is mostly collapsed
+   // fits is a finding about the production, not a detail of this converter
+   printf("mkexp_pp: %lld -> %lld tracks (IC[%.0f,%.0f], %lld collapsed ndf<=0 dropped = %.1f%%) -> %s\n",
+          t->GetEntries(), n, icMin, icMax, nCollapsed,
+          t->GetEntries() ? 100.0 * nCollapsed / t->GetEntries() : 0.0, out.Data());
 }
