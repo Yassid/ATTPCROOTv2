@@ -1,0 +1,61 @@
+################################################################################
+# Parameters used throughout ATTPCROOT software
+# Format:
+# parameter_name:parameter_type(Int_t-integer, Double_t-double) parameter_value
+# AtDigiPar
+# Description of parameters
+################################################################################
+[AtDigiPar]
+PadPlaneX:Int_t                864   # mm
+PadPlaneZ:Int_t               1344   # mm
+PadSizeX:Int_t                   8   # mm
+PadSizeZ:Int_t                  12   # mm
+PadRows:Int_t                  108   #
+PadLayers:Int_t                112   #
+AnodeWirePlaneY:Double_t     -4.05   # mm
+GroundWirePlaneY:Double_t     -8.1   # mm
+GatingWirePlaneY:Double_t      -14   # mm
+EField:Double_t               5000   # V/m
+NumTbs:Int_t                   512
+SamplingRate:Int_t             6.0   #
+DriftVelocity:Double_t        1.10424 # cm/us  two-point: micromegas TB 10 -> entrance TB 560 at 160 ns/TB (6.25 MHz)
+DriftLength:Double_t          971.7312   # mm  same, kept consistent with ZPadPlane
+YDivider:Int_t                1000   # Full drift length will be divided by this number when finding cluster
+GasFile:Int_t                    2
+PadPlaneFile:Int_t               3
+PadShapeFile:Int_t               4   # might not be needed because the shape is simply rectangle
+BField:Double_t               2.85   # Tesla
+TiltAng:Double_t               0.0   # Degrees
+TB0:Int_t                     10      # DEPRECATED and IGNORED: AtPSA derives it from the three above
+LorentzAngle:Double_t          0.0   # Lorentz Angle
+TBEntrance:Int_t              560     # Beam position at detector entrance in TB
+ZPadPlane:Double_t            971.7312   # mm  FOLLOWS from dv and the two TB anchors, it is not 1000 -- see below
+Density:Double_t            0.0661   # mg/cm3. D2 at 300 torr, 293 K
+ThetaPad:Double_t            110.9   # AT-TPC pad plane rotation
+ThetaRot:Double_t              0.0   # Second Lorentz Angle
+GasPressure:Double_t           300   # torr (was 600; the D2 target ran at 300)
+EIonize:Double_t            15.603   # Ionization energy of gas in eV
+Fano:Double_t                 0.24   # Fano factor of the gas
+CoefL:Double_t              0.0009   # Longitudal coefficient of diffusion [cm^2/us]
+CoefT:Double_t              0.0009   # Transverse coefficient of diffusion [cm^2/us]
+Gain:Double_t                35000   # Average gain of micromegas
+GETGain:Double_t              1000   # Gain of the GET electronics in fC
+PeakingTime:Int_t              720   # Electronic peaking time in ns
+MaxRange:Double_t            500.0   # Maximum range from Beam energy in mm
+################################################################################
+
+# --------------------------------------------------------------------------------------
+# Geometry note, 2026-08-14.  AtPSA::CalculateZGeo is
+#     z = ZPadPlane - (TBEntrance - peakTB) * TBTime * DriftVelocity / 100
+# and TBTime is NOT free: AtDigiPar::GetTBTime() maps SamplingRate 6 -> exactly 160 ns
+# (6.25 MHz).  So dv, the TB anchors and the drift length are over-determined -- any two
+# fix the third.  Pinning dv = 1.10424 with micromegas TB 10 and entrance TB 560 forces
+#     L = 550 TB * 160 ns * 1.10424 cm/us = 971.7312 mm
+# which is why ZPadPlane is 971.7312 here and not the 1000 of the parent par.  Keeping
+# 1000 instead would put the micromegas at TB -6.  Keeping 1000 AND the anchors gives
+# dv = 1.13636, i.e. the old value.  TB0 is written for the record only; the code
+# recomputes it and ignores what is here.
+#
+# z scale: 1.7668 mm/TB here, against 1.8182 mm/TB at dv 1.136 -- 2.9 % tighter.  Every
+# vertex-z cut inherited from the old production must be rescaled, NOT copied.
+# --------------------------------------------------------------------------------------
