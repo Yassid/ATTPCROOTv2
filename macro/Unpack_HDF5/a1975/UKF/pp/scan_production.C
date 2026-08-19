@@ -10,10 +10,15 @@
 /// The only reliable test is the entry count against the reco file the fit was made from. The
 /// FRIB count is printed too but is NOT the reference: it legitimately runs one long on six runs.
 ///
-///   root -b -q 'pp/scan_production.C'                                          // the pp production
-///   root -b -q 'pp/scan_production.C("/mnt/f/a1975/reco_pd/","_genfitter_pd")' // the pd production
+/// The reco suffix is a parameter because the channels do not agree on one: the H2 chain writes
+/// <run>_reco.root and the D2 chain <run>_multifit_reco.root.
+///
+///   root -b -q 'pp/scan_production.C'   // (p,p), the default
+///   root -b -q 'pp/scan_production.C("/mnt/f/a1975/reco_pd_catima_bx/","_genfitter_pdcatbx")'
+///   root -b -q 'pp/scan_production.C("/mnt/f/a1975/gf_dt_cateloss/","_multifit_genfitter_t",
+///                                    "/mnt/f/a1975/reco_d2_dv1104/","_multifit_reco")'
 void scan_production(TString gfDir = "/mnt/f/a1975/reco/", TString suffix = "_genfitter_pphand",
-                     TString recoDir = "/mnt/f/a1975/reco/")
+                     TString recoDir = "/mnt/f/a1975/reco/", TString recoSuffix = "_reco")
 {
    auto nent = [](TString p) -> Long64_t {
       if (gSystem->AccessPathName(p)) return -2; // no file
@@ -42,7 +47,7 @@ void scan_production(TString gfDir = "/mnt/f/a1975/reco/", TString suffix = "_ge
    for (auto &r : runs) {
       Long64_t nf = nent(gfDir + r + suffix + ".root");
       Long64_t nb = nent(recoDir + r + "_FRIB.root");
-      Long64_t nr = nent(recoDir + r + "_reco.root");
+      Long64_t nr = nent(recoDir + r + recoSuffix + ".root");
       if (nr > 0) total += nr;
       if (nr <= 0) continue; // no reference to compare against
       if (nf == 0) {
