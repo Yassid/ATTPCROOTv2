@@ -41,6 +41,23 @@ void cache_pd_run(TString run, TString outFile, TString gfDir="/mnt/f/a1975/reco
    pk->Branch("kefit",&kefit); pk->Branch("thetafit",&thetafit);
    rn=runNo;
 
+   // ENTRY-COUNT CHECK. N below is min(fit, FRIB), so a SHORT FRIB file does not fail -- it
+   // silently truncates the run and still prints the same "cached N" line as a healthy one.
+   // run_0148's FRIB tree holds 1 entry against 23514 in reco, so this loop cached ONE event of
+   // it: the run is absent from the caches entirely and nothing said so. It surfaced only when a
+   // later macro happened to print entry counts.
+   // A LONGER FRIB tree is harmless: six of the H2 runs end with a junk entry carrying event ID
+   // -1, and because it sits at the END the indices still align for every real event.
+   {
+      const Long64_t nfit = tg->GetEntries(), nfrib = tc ? tc->GetEntries() : -1;
+      if (nfrib >= 0 && nfrib < nfit)
+         printf("\033[1;31m%s: FRIB SHORT -- %lld entries against %lld in the fit file; %lld events "
+                "(%.1f%%) of this run are being DROPPED\033[0m\n",
+                run.Data(), nfrib, nfit, nfit - nfrib, nfit ? 100.0 * (nfit - nfrib) / nfit : 0.0);
+      else if (nfrib > nfit)
+         printf("%s: FRIB has %lld entries against %lld -- trailing junk, harmless\n", run.Data(), nfrib, nfit);
+   }
+
    Long64_t N = tc ? std::min(tg->GetEntries(),tc->GetEntries()) : tg->GetEntries();
    long n=0;
    for(Long64_t i=0;i<N;++i){
