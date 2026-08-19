@@ -39,6 +39,14 @@ one() {
   # ungated refit that looks like success, so check for it explicitly
   grep -q "gating will be disabled" "$MARK/$R.log" && { echo "  $R GATE_NOT_FOUND"; return 1; }
   [ -s "${OUT}${R}_genfitter${SUF}.root" ] || { echo "  $R FIT_FAILED"; return 1; }
+  # A NON-EMPTY file is not a finished job either. run_0158 hit "Cannot allocate memory" reading
+  # its 931 MB reco file, so TChain never found cbmsim, nothing was processed, and the 18 kB file
+  # it left behind -- an empty cbmsim -- sailed through -s and got a COMPLETED marker. It was only
+  # caught eight days later, in the cache. Count the entries; the run took 3.8 s instead of minutes.
+  grep -q "Cannot allocate memory" "$MARK/$R.log" && { echo "  $R OOM_READING_RECO -- rerun it alone"; return 1; }
+  NENT=$(root -b -q -l -e "TFile f(\"${OUT}${R}_genfitter${SUF}.root\"); TTree *t=(TTree*)f.Get(\"cbmsim\"); printf(\"NENT=%lld\\n\", t ? t->GetEntries() : -1);" 2>/dev/null \
+         | sed -n 's/.*NENT=\(-\?[0-9]*\).*/\1/p' | tail -1)
+  [ "${NENT:-0}" -gt 0 ] 2>/dev/null || { echo "  $R FIT_EMPTY -- cbmsim has ${NENT:-no} entries"; return 1; }
   echo COMPLETED > "$MARK/$R.marker"
   echo "[$(date +%H:%M:%S)] $R done"
 }

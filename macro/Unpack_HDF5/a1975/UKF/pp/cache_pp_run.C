@@ -35,12 +35,22 @@ void cache_pp_run(TString run, TString outFile, TString inDir="/mnt/f/a1975/reco
    // -1, and because it sits at the END the indices still align for every real event.
    {
       const Long64_t nfit = tg->GetEntries(), nfrib = tc ? tc->GetEntries() : -1;
-      if (nfrib >= 0 && nfrib < nfit)
+      if (nfit == 0)
+         // An EMPTY fit file is not a FRIB problem, and the nfrib > nfit branch below would have
+         // called it "trailing junk, harmless". run_0158's pphand file is 18 kB with 0 entries
+         // against ~200 MB for every other run, and that is exactly how it was first mis-reported.
+         printf("\033[1;31m%s: FIT FILE EMPTY -- 0 entries; this run contributes NOTHING and the "
+                "production for it needs re-running\033[0m\n", run.Data());
+      else if (nfrib >= 0 && nfrib < nfit)
          printf("\033[1;31m%s: FRIB SHORT -- %lld entries against %lld in the fit file; %lld events "
                 "(%.1f%%) of this run are being DROPPED\033[0m\n",
                 run.Data(), nfrib, nfit, nfit - nfrib, nfit ? 100.0 * (nfit - nfrib) / nfit : 0.0);
+      else if (nfrib == nfit + 1)
+         printf("%s: FRIB has one extra entry -- the trailing junk event, harmless\n", run.Data());
       else if (nfrib > nfit)
-         printf("%s: FRIB has %lld entries against %lld -- trailing junk, harmless\n", run.Data(), nfrib, nfit);
+         printf("\033[1;33m%s: FRIB has %lld entries against %lld -- %lld extra, more than the one "
+                "trailing junk event; check before trusting the alignment\033[0m\n",
+                run.Data(), nfrib, nfit, nfrib - nfit);
    }
 
    Long64_t N=std::min(tg->GetEntries(),tc->GetEntries());

@@ -113,12 +113,33 @@ Every macro that joins the two streams does `N = min(fit, FRIB)`, which means **
 does not fail — it silently truncates the run**. `cache_pp_run.C`, `cache_pd_run.C` and
 `macros/cache_pt_run.C` now report:
 
+- **fit file empty** — red warning. The run contributes nothing and its production must be rerun.
 - **FRIB shorter** — red warning with the count and percentage dropped. This is a bug.
-- **FRIB longer** — a note. Six H2 runs end with a junk entry (event ID −1); it sits at the END,
-  so indices still align for every real event. Harmless.
+- **FRIB longer by exactly one** — a note. Six H2 runs end with a junk entry (event ID −1); it sits
+  at the END, so indices still align for every real event. Harmless.
+- **FRIB longer by more than one** — yellow warning. This is *not* the junk entry: it means the FIT
+  file is short, i.e. the production died partway and left a truncated file. See below.
 - **equal** — silent, so healthy runs do not fill a driver log.
 
-### Known bad run
+The empty and longer-by-more-than-one cases exist because both were once folded into a single
+"FRIB has N entries against M — trailing junk, harmless" line, which is how two broken runs went
+unnoticed for eight days.
+
+### Known bad runs
+
+**`run_0157` and `run_0158`: the pp production died on them and said it had not.** Both hit
+`SysError ... Cannot allocate memory` reading their ~1 GB `_reco.root` on 2026-08-11, in the same
+4-way-parallel burst at 10:19 — the only two logs of 84 with that signature. run_0158 never loaded
+`cbmsim` at all and wrote an empty 18 kB file in 3.8 s; run_0157 corrupted a basket at entry 11610,
+crashed with a `Fatal`, and left 7748 of its 25585 events. `refit_pp.sh` tested the output with
+`-s`, which both files passed, so both got a `COMPLETED` marker.
+
+**MEASURED, 2026-08-19**: both were reproduced with the current build and reinstalled. The fit is
+unchanged by the eight days of intervening commits — re-running run_0157 gives 1752 fitted tracks
+over its original 7748 events, **bit-identical** to the Aug-11 file (max |ΔKE| = |Δθ| = |Δz| = 0),
+which is expected since this production runs with `matEffects = kFALSE`. All 84 runs now have
+`nfit == nreco`; zero events lost. The elastic cache went 418494 → **427835** protons and the
+`(p,d)` production was checked for the same defect and is clean on all 84 runs.
 
 **`run_0148`: its FRIB tree holds 1 entry against 23514 in reco.** Every event gets `ic = −1`,
 so any IC gate discards the whole run. **MEASURED**: it is the only run in 106–189 with zero
@@ -172,8 +193,17 @@ the `(p,t)` chain lost its `ic`.
 
 ## 8. Open items
 
-- **ASSUMED**: the elastic cache side of §3's cancellation was verified from shared code, not
-  measured — `pp_kin.root` was on `/tmp` and is gone. Rebuilding it would close this.
+- **DECISION NEEDED — the elastic luminosity is 2.24% low everywhere.** Restoring runs 157 and 158
+  raises the elastic yield inside the g.s. cut from 199755 to 204234, **+2.24%**, with the shape
+  unchanged (per-bin ratios 1.019–1.026, flat). L scales with it, so **σ(p,d) is 2.19% high** as
+  published. `316.4` mb⁻¹ is hard-coded as a default in `pp/xsec_pd.C`, `pp/fit_pd_states.C`,
+  `pp/fit_pd_ps.C` and `working_point.sh` (as 168.3 = 316.4 × 500/940); on this measurement it
+  becomes **323.5** mb⁻¹ (and 172.1). NOT changed here — rescaling the physics is a deliberate act,
+  not a side effect of fixing a check.
+- **CLOSED 2026-08-19**: the elastic cache side of §3's cancellation is now MEASURED, not assumed.
+  `pp_kin.root` is rebuilt at `/mnt/f/a1975/caches/` by `pp/cache_pp_all.sh` — in the repo, not
+  `/tmp`. run_0148 caches 0 protons AND 0 deuterons, so it is lost from both sides by the same
+  `min(fit, FRIB)` truncation and the ratio is unbiased.
 - **MEASURED**: the `(p,d)` simulation is over-gained ~2.5x (117 vs 46 hits/track against run_0106).
   `(d,t)` uses a measured gain of 35000; `(p,d)` inherited 150000.
 - Spyral and ATTPCROOT differ by 2–3x in normalisation; Spyral has no channel-specific acceptance.
