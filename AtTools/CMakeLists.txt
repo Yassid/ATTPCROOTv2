@@ -4,6 +4,8 @@ ${ROOT_INCLUDE_DIR}
 ${Boost_INCLUDE_DIRS}
 ${CMAKE_SOURCE_DIR}
 ${CMAKE_SOURCE_DIR}/AtTools
+${catima_SOURCE_DIR}/include
+${catima_BINARY_DIR}/generated
 )
 
 
@@ -21,11 +23,14 @@ set(SRCS
 
   AtParsers.cxx
   AtELossManager.cxx
+  AtELossModel.cxx
+  AtELossCATIMA.cxx
   AtVirtualTerminal.cxx
   AtKinematics.cxx
   )
 
 Set(DEPENDENCIES
+  catima
   Base
   FairTools
   XMLParser

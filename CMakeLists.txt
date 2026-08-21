@@ -304,6 +304,41 @@ add_subdirectory (AtParameter)
 add_subdirectory (AtDigitization)
 add_subdirectory (AtS800)
 add_subdirectory (AtApollo)
+# ---------------------------------------------------------------------------
+# CATIMA -- energy loss / range, ported from the OpenKF-Claude branch so that
+# AtELossCATIMA is available here too. Prefers a source tree already staged at
+# build/_deps/catima-src (avoids needing the network) and falls back to git.
+# ---------------------------------------------------------------------------
+include(FetchContent)
+set(CATIMA_LOCAL_SOURCE "${CMAKE_BINARY_DIR}/_deps/catima-src")
+if(EXISTS "${CATIMA_LOCAL_SOURCE}/CMakeLists.txt")
+  message(STATUS "Using locally staged CATIMA source at ${CATIMA_LOCAL_SOURCE}")
+  FetchContent_Declare(catima SOURCE_DIR ${CATIMA_LOCAL_SOURCE})
+else()
+  message(STATUS "CATIMA source not staged; fetching from github")
+  FetchContent_Declare(catima
+    GIT_REPOSITORY https://github.com/hrosiak/catima.git
+    GIT_TAG master)
+endif()
+
+set(TESTS OFF CACHE BOOL "Disable CATIMA tests" FORCE)
+set(EXAMPLES OFF CACHE BOOL "Disable CATIMA examples" FORCE)
+set(APPS OFF CACHE BOOL "Disable CATIMA applications" FORCE)
+set(GENERATE_DATA OFF CACHE BOOL "Disable CATIMA data generator" FORCE)
+
+FetchContent_GetProperties(catima)
+if(NOT catima_POPULATED)
+  FetchContent_Populate(catima)
+  add_subdirectory(${catima_SOURCE_DIR} ${catima_BINARY_DIR})
+endif()
+if(TARGET catima)
+  # this branch builds with -Wshadow, which CATIMA does not survive quietly
+  target_compile_options(catima PRIVATE
+    $<$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>:-Wno-shadow>)
+  set(CATIMA_FOUND TRUE)
+  message(STATUS "CATIMA available as target 'catima'")
+endif()
+
 add_subdirectory (AtTools)
 
 # AtEventDisplay is now PCL-free: AtEventDrawTask no longer references the RANSAC / Hough /

@@ -8,6 +8,8 @@
 #pragma link C++ nestedtypedef;
 #pragma link C++ namespace AtTools;
 #pragma link C++ class AtTools::AtELossManager + ;
+#pragma link C++ class AtTools::AtELossModel - !;
+#pragma link C++ class AtTools::AtELossCATIMA - !;
 #pragma link C++ class AtTools::AtParsers + ;
 #pragma link C++ class AtTools::AtKinematics + ;
 #pragma link C++ class AtTools::AtVirtualTerminal + ;
