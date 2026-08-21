@@ -124,3 +124,33 @@ With B = 0 the beam flies straight and passes through the axis at the entrance w
 focused and steered, so where it approaches the axis is a property of the beam and not of
 the detector. The production value (1157 +- 6 mm) is stable run to run but must not be
 compared against the 1000 mm expected from the geometry.
+
+## alpha+alpha excitation function -- a negative result
+
+Thick-target inverse kinematics: the beam enters at 7.8 MeV and slows continuously, so
+the vertex position is an energy measurement and one run scans E_cm from 3.9 MeV to 0.
+Beam energy at the vertex comes from CATIMA (the port in 926468f8), He:CO2 90/10 at
+150 torr, rho = 7.27e-5 g/cm3. 1033 elastic events from runs 128-139, covering
+E_cm = 0.94 to 3.90 MeV.
+
+**What is validated.** The upper endpoint lands at **E_cm = 3.899 MeV** against the
+3.900 expected from the beam energy. That is a real end-to-end check of the chain --
+vertex reconstruction near the window, the entrance position, and the energy loss all
+have to be right for the endpoint to come out there.
+
+**What is NOT validated: there is no resonance signal here.** The yield peaks sharply
+at E_cm = 2.98 MeV, invitingly close to the 8Be 2+ at 3.03. It is an artifact:
+
+* the reconstructed vertex distribution peaks at z = 625 mm, and pushing that through
+  the energy-loss curve gives E_cm = 2.96 MeV -- the yield peak is just the vertex
+  distribution's image, not sigma(E);
+* the observed structure is ~0.3 MeV FWHM while the 2+ has Gamma = 1.5 MeV, so it is
+  five times too narrow to be that state.
+
+The z = 625 mm feature is an acceptance/trigger edge, not physics. **A raw thick-target
+yield is not a cross section**: it needs the detection efficiency as a function of
+vertex position and scattering angle, which means a simulation. Until that exists,
+no statement about resonances can be made from this data.
+
+`excitation.py` builds E_cm from `prod_results.pkl`; `eloss_alpha_heco2.txt` is the
+CATIMA table (regenerate with a short program against AtELossCATIMA).
