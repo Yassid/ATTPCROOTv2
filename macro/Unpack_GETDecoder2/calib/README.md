@@ -154,3 +154,29 @@ no statement about resonances can be made from this data.
 
 `excitation.py` builds E_cm from `prod_results.pkl`; `eloss_alpha_heco2.txt` is the
 CATIMA table (regenerate with a short program against AtELossCATIMA).
+
+## Energy deposition: use GetQHit(), not GetCharge()
+
+`AtHit` carries two charge observables and they behave oppositely along a track:
+
+* `GetCharge()` is the **peak** ADC amplitude minus baseline. Longitudinal diffusion spreads
+  the pulse in time over a long drift, so the height falls for the same deposited energy --
+  it is drift-distance dependent.
+* `GetQHit()` is the **integral** over time buckets, which is not.
+
+Checked on the run-128 beam tracks against the CATIMA energy-loss curve:
+
+| observable | correlation with dE/dx |
+|---|---|
+| `GetCharge()` (peak) | **-0.36** |
+| `GetQHit()` (integral) | **+0.78** |
+
+The peak amplitude *anti*-correlates: it falls where dE/dx rises, because drift attenuation
+runs opposite to the energy-loss trend along the beam. This initially looked like a genuine
+inconsistency in the reconstruction and it is not -- it is the wrong observable. With the
+integral, the beam's energy deposition follows the CATIMA curve. See
+`plots/charge_vs_dedx.png`.
+
+Use `GetQHit()` for dE/dx, particle ID, Bragg curves or energy from deposition. `GetCharge()`
+remains fine for thresholds, hit weighting in fits, and picking the beam cluster by relative
+brightness -- anywhere a monotonic proxy within a similar drift range is enough.
