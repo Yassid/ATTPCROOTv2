@@ -110,6 +110,18 @@ void fit_angles_ps_C14(TString cache = "plots/proton_kin_cat5_tc.root", Double_t
       F->SetParameter(NL + 1, h->Integral() * 0.05); F->SetParLimits(NL + 1, 0, 1e7);
       F->SetParameter(NL + 2, 2);     F->SetParameter(NL + 3, 0);
       TFitResultPtr r = h->Fit(F, "RQNSL");
+      // RETRY BEFORE GIVING UP. At 25-30 deg the first pass returned chi2/ndf 0.78 with sane
+      // VALUES but every error at ~12000 (and 590000 on the continuum) -- MIGRAD stopped somewhere
+      // HESSE could not be computed. Refitting FROM that minimum converges: the errors come back
+      // at 0.4-0.9 and the yields are unchanged. Dropping the bin was throwing away good data.
+      for (int pass = 0; pass < 3; ++pass) {
+         bool errBad = false;
+         for (int i = 0; i < NL; ++i)
+            if (F->GetParError(i) * SG[i] * std::sqrt(2 * TMath::Pi()) / h->GetBinWidth(1) > h->Integral())
+               errBad = true;
+         if (!errBad && r.Get() && r->CovMatrixStatus() >= 2) break;
+         r = h->Fit(F, "RQNSL");          // restarts from the current parameters
+      }
       // A CONVERGED FIT WITH A BROKEN COVARIANCE IS THE DANGEROUS CASE: at 25-30 deg every
       // component came back with an error of ~80000 on a yield of ~50, while chi2/ndf was 0.78 and
       // the VALUES were sane. One such bin sets the axis of every angular-distribution panel and
