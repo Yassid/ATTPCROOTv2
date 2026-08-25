@@ -63,6 +63,14 @@ namespace
 const int NP = 2;
 const char *PNAME[NP] = {"8.53 (8.317?)", "9.36 (blend?)"};
 const int PCOL[NP] = {kAzure + 2, kRed + 1};
+// Positions and widths of the two structures, measured on the ANGLE-INTEGRATED spectrum of the
+// production being analysed. These are NOT universal: they moved when the fitter changed.
+//   old matFX-off production : 8.533 / 0.162 and 9.363 / 0.299
+//   2026-08-25 CATIMA refit  : 8.349 / 0.142 and 9.178 / 0.296
+// The 8.3 width still matches the resolution model (0.142 +- 0.018 vs 0.159 predicted), so it is
+// still a single level; the upper one is still twice the resolution, so still a blend. Defaults
+// are the OLD values so an existing call reproduces its existing result -- pass the new ones
+// explicitly (mu1, sg1, mu2, sg2) for the CATIMA production.
 double gMu[NP] = {8.533, 9.363};
 double gSg[NP] = {0.162, 0.299};
 
@@ -83,8 +91,15 @@ void exc8_angdist_C14(TString cache = "plots/proton_kin_300gfx_ex.root",
                       Double_t cmMin = 20.0,
                       Double_t cmMax = 140.0, Double_t dcm = 20.0, Int_t minN = 25, Int_t nEx = 27, // 100 keV bins; see the binning note above
                       
-                      TString tag = "hi")
+                      TString tag = "hi",
+                      // measured positions/widths; <0 keeps the file-scope defaults above
+                      Double_t mu1 = -1, Double_t sg1 = -1, Double_t mu2 = -1, Double_t sg2 = -1)
 {
+   if (mu1 > 0) gMu[0] = mu1;
+   if (sg1 > 0) gSg[0] = sg1;
+   if (mu2 > 0) gMu[1] = mu2;
+   if (sg2 > 0) gSg[1] = sg2;
+   printf("  peaks fixed at: %.3f (sigma %.3f) and %.3f (sigma %.3f)\n", gMu[0], gSg[0], gMu[1], gSg[1]);
    gStyle->SetOptStat(0);
    TString here = gSystem->DirName(gInterpreter->GetCurrentMacroName());
 

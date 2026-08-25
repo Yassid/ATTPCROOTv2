@@ -29,7 +29,26 @@
 
 void fit_states_C14(TString cache = "plots/proton_kin_300_ukf.root", Double_t chi2Cut = 5.0, Double_t exLo = 5.6,
                     Double_t exHi = 10.2, Double_t sigmaScale = -1, Int_t nbins = 260, Double_t axLo = -2,
-                    Double_t axHi = 24)
+                    Double_t axHi = 24,
+                    // FIT THE GROUND STATE ON FORWARD ANGLES ONLY (Yassid, 2026-08-26).
+                    // The elastic peak broadens with angle -- sigma ~0.17 forward to ~0.9 backward
+                    // (09_extraction.tex) -- so a g.s. fit over all angles measures an
+                    // angle-AVERAGED blur, not the resolution, and its tails reach further under
+                    // the excited-state region than the true lineshape does. Both the zero-point
+                    // and sigma are carried into the excited fit, so that blur propagates.
+                    // Restricting the g.s. fit to theta_cm < gsCmMax gives the narrow forward
+                    // lineshape. The EXCITED-state histogram is NOT restricted: it keeps every
+                    // angle, so no excited yield is lost.
+                    // 1e9 = the historical behaviour (all angles).
+                    Double_t gsCmMax = 1e9,
+                    // TAKE THE ZERO-POINT FROM SOMEWHERE OTHER THAN THE GROUND STATE.
+                    // The g.s. Ex carries a theta_cm dependence the excited states do not, so the
+                    // offset it supplies depends on which angles it was fitted over -- restricting
+                    // the g.s. window to 30-60 deg moves it by 33 keV and swings the 8.317 yield by
+                    // 35 %. Pass the offset measured on an excited state instead (anchor6094_C14.C)
+                    // and the g.s. then sets only the RESOLUTION, which is what it is good for.
+                    // -1e9 = use the g.s. centroid, as before.
+                    Double_t offOverride = -1e9)
 {
    gStyle->SetOptStat(0);
    TString here = gSystem->DirName(gInterpreter->GetCurrentMacroName());
@@ -49,16 +68,30 @@ void fit_states_C14(TString cache = "plots/proton_kin_300_ukf.root", Double_t ch
    t->Draw("ex>>hEx", TString::Format("chi2ndf<%g", chi2Cut), "goff");
 
    // ---- 1. ground state alone: sets the zero-point and the resolution -------------------
+   // Fitted on its OWN histogram so the angular restriction cannot touch the excited states.
+   auto *hg = new TH1D("hGS", "g.s. window;E_{x} [MeV];counts", nbins, axLo, axHi);
+   hg->Sumw2();
+   TString gsSel = TString::Format("chi2ndf<%g", chi2Cut);
+   if (gsCmMax < 1e8) gsSel += TString::Format(" && thcm<%g", gsCmMax);
+   t->Draw("ex>>hGS", gsSel, "goff");
    TF1 gs("gs", "gaus(0)+pol1(3)", -1.2, 1.2);
-   gs.SetParameters(h->GetMaximum(), 0, 0.17, 0, 0);
+   gs.SetParameters(hg->GetMaximum(), 0, 0.17, 0, 0);
    gs.SetParNames("A_gs", "mu_gs", "sigma_gs", "bg0", "bg1");
-   h->Fit(&gs, "QRN");
-   const double off = gs.GetParameter(1);   // energy zero-point offset
+   hg->Fit(&gs, "QRN");
+   const double offGs = gs.GetParameter(1);
+   const double off = (offOverride > -1e8) ? offOverride : offGs; // energy zero-point offset
    const double sig = std::fabs(gs.GetParameter(2));
    printf("\n===== ground state =====\n");
-   printf("  centroid %+.4f MeV   sigma %.4f MeV (FWHM %.4f)   area %.0f\n", off, sig, 2.355 * sig,
-          gs.GetParameter(0) * sig * std::sqrt(2 * TMath::Pi()) / h->GetBinWidth(1));
+   if (gsCmMax < 1e8)
+      printf("  fitted on theta_cm < %g deg only  (%.0f of %.0f tracks, %.0f %%)\n", gsCmMax,
+             hg->Integral(), h->Integral(), 100.0 * hg->Integral() / std::max(1.0, h->Integral()));
+   printf("  centroid %+.4f MeV   sigma %.4f MeV (FWHM %.4f)   area %.0f%s\n", off, sig, 2.355 * sig,
+          gs.GetParameter(0) * sig * std::sqrt(2 * TMath::Pi()) / hg->GetBinWidth(1),
+          gsCmMax < 1e8 ? "  (in the restricted window)" : "");
    printf("  paper (Front.Phys.13:1539148) quotes sigma = 0.150 MeV, accuracy 30 keV\n");
+   if (offOverride > -1e8)
+      printf("  \033[1;33mzero-point OVERRIDDEN: %+.4f (from an excited state), not the g.s. %+.4f\033[0m\n",
+             off, offGs);
 
    // ---- 2. excited states: literature energies, shifted by the g.s. offset --------------
    struct Lvl { double e; const char *jp; bool c14; };
