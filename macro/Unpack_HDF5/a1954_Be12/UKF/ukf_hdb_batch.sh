@@ -7,7 +7,7 @@ source /home/yassid/fair_install/ATTPCROOTv2/build/config.sh >/dev/null 2>&1
 one(){ local r="$1"
   [ -f "$DIR/${r}_reco.root" ] || { echo "skip $r (no reco)"; return; }
   [ -f "$DIR/${r}_ukf.root" ] && { echo "skip $r (ukf exists)"; return; }
-  root -b -q -l "$HERE/pipeline/fitUKF_Be12.C(\"$r\",-1,\"$PARTS\",-1,2.85,6.5e-5,\"\",\"$DIR/\")" > "$LOG/${r}_ukf.log" 2>&1
+  root -b -q -l "$HERE/pipeline/fitUKF_Be12.C(\"$r\",-1,\"$PARTS\",-1,2.85,3.308e-5,\"\",\"$DIR/\")" > "$LOG/${r}_ukf.log" 2>&1
   echo "[$(date +%H:%M:%S)] ukf $r exit $?"; }
 export -f one; export DIR HERE PARTS LOG
 printf "%s\n" $RUNS | xargs -P "$NPAR" -I{} bash -c 'one "$@"' _ {}

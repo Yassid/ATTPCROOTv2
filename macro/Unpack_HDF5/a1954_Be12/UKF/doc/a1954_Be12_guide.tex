@@ -154,8 +154,8 @@ The geometry \code{.root} files are \emph{not} tracked in git. Build the 600~tor
 hydrogen geometry that GENFIT needs before the first GENFIT fit:
 
 \begin{lstlisting}
-cd $REPO && root -b -q geometry/ATTPC_H600torr.C
-# writes geometry/ATTPC_H600torr.root and ATTPC_H600torr_geomanager.root
+cd $REPO && root -b -q geometry/ATTPC_H300torr_RT.C
+# writes geometry/ATTPC_H300torr_RT.root and ATTPC_H300torr_RT_geomanager.root
 \end{lstlisting}
 
 \warn{Do \emph{not} fall back on \file{ATTPC_H1bar_geomanager.root}: a1954 ran at 600~torr,
@@ -186,7 +186,7 @@ Parameters    & \file{parameters/ATTPC.a1954_Be12.par} \\
 Parameter & Value & Comment \\
 \midrule
 \code{BField}        & 2.85 T   & sign is set in the macros, \emph{not} here \\
-\code{GasPressure}   & 600 torr & H$_2$ \\
+\code{GasPressure}   & 300 torr & H$_2$ \\
 \code{DriftVelocity} & 1.00 cm/$\mu$s & \emph{the} parameter to scan (Section~\ref{sec:driftv}) \\
 \code{SamplingRate}  & 3.0      & MHz \\
 \code{TBEntrance}    & 300      & beam entrance in time buckets \\
@@ -440,7 +440,7 @@ cd $HERE
 \subsection{UKF --- \texttt{fitUKF\_Be12.C}}
 
 \begin{lstlisting}
-root -b -q -l "$HERE/pipeline/fitUKF_Be12.C(\"run_0147\",-1,\"proton\",-1,2.85,6.5e-5,\
+root -b -q -l "$HERE/pipeline/fitUKF_Be12.C(\"run_0147\",-1,\"proton\",-1,2.85,3.308e-5,\
   \"\",\"/home/yassid/a1954_Be12_fit/in/\",0.5,0.1,1,10,\"/home/yassid/a1954_Be12_fit/\")"
 \end{lstlisting}
 
@@ -454,7 +454,7 @@ root -b -q -l "$HERE/pipeline/fitUKF_Be12.C(\"run_0147\",-1,\"proton\",-1,2.85,6
 3  & \code{particles}     & \code{"proton"} & comma list; one hypothesis per species (\code{proton}, \code{deuteron}, \code{triton}, \code{He3}, \code{alpha}) \\
 4  & \code{bFieldSign}    & $-1$ & \textbf{$-1$ = experimental handedness}, $+1$ = simulation \\
 5  & \code{bFieldMag}     & 2.85 & T \\
-6  & \code{gasDensity}    & 6.5e-5 & g/cm$^3$, feeds CATIMA \\
+6  & \code{gasDensity}    & 3.308e-5 & g/cm$^3$, feeds CATIMA (H$_2$ 300 torr) \\
 7  & \code{outSuffix}     & \code{""} & appended to the output name (use for scans) \\
 8  & \code{ioDir}         & reco dir & input directory \\
 9  & \code{measSigma}     & 0.5 & \textbf{per-cluster position $\sigma$ [mm]} \\
@@ -477,7 +477,7 @@ clean elastic locus. If fits diverge or the KE is unphysical, flip the sign firs
 \begin{lstlisting}
 source $REPO/build_genfit/config.sh          # <-- the GENFIT build
 root -b -q -l "$HERE/pipeline/fitGenfit_Be12.C(\"run_0147\",-1,\"<inDir>\",\"\",\"<outDir>\",\
-  -2.85,2,5,\"\",4.0,10.0,170.0,kTRUE,kFALSE,\"proton\",\"ATTPC_H600torr\")"
+  -2.85,2,5,\"\",4.0,10.0,170.0,kTRUE,kFALSE,\"proton\",\"ATTPC_H300torr_RT\")"
 \end{lstlisting}
 
 \begin{longtable}{@{}ll l p{6.1cm}@{}}
@@ -498,7 +498,7 @@ root -b -q -l "$HERE/pipeline/fitGenfit_Be12.C(\"run_0147\",-1,\"<inDir>\",\"\",
 13 & \code{matEffects}     & \code{kFALSE} & \textbf{set \code{kTRUE}} --- see below \\
 14 & \code{backwardSeedFix}& \code{kFALSE} & alternative backward-track seeding \\
 15 & \code{particle}       & \code{"proton"} & \code{proton}, \code{deuteron}, \code{triton} \\
-16 & \code{geoName}        & \code{ATTPC_H600torr} & must match the real gas density \\
+16 & \code{geoName}        & \code{ATTPC_H300torr_RT} & must match the real gas density \\
 \bottomrule
 \end{longtable}
 
@@ -782,7 +782,7 @@ Knob & a1954 & Effect / when to change \\
 \code{momSigmaFrac}   & 0.1     & Momentum-seed uncertainty. Raise if the seed is poor (short tracks) so the filter is not over-confident. \\
 \code{nIter}          & 1       & More iterations help when the seed is far from the solution; costs time linearly. \\
 \code{minClusters}    & 10      & Yield/quality trade-off. Lower to keep short backward recoils, at the price of poorly constrained fits. \\
-\code{gasDensity}     & 6.5e-5  & CATIMA density. \textbf{Inconsistency to resolve:} the geometry builder computes 6.616e-5 g/cm$^3$ for H$_2$ at 600 torr / 293 K, $\approx 2\,\%$ above this. \\
+\code{gasDensity}     & 3.308e-5  & CATIMA density, H$_2$ at 300 torr / 293~K. Matches \code{media.geo} \code{H\_300torr\_RT} exactly. \textbf{Everything produced before 2026-08-25 used 6.5e-5, i.e.\ twice the material.} \\
 \code{bFieldSign}     & $-1$    & Experimental handedness. \\
 \code{refTrack}       & false   & Do not re-attempt the unscented reference-track port; the UKF cannot match genfit's analytic-Jacobian transport. \\
 \code{SetEnableEnergyStraggling} & false & In the macro body. \\
@@ -805,7 +805,7 @@ Knob & Recommended & Effect / when to change \\
 \midrule
 \endhead
 \code{matEffects}   & \code{kTRUE} & \textbf{The important one.} False $\Rightarrow$ constant-momentum helix $\Rightarrow$ KE 30\,\% low below 6~MeV. \\
-\code{geoName}      & \code{ATTPC_H600torr} & Material effects are only as good as the density. \\
+\code{geoName}      & \code{ATTPC_H300torr_RT} & Material effects are only as good as the density. \\
 \code{measSigma}    & 4.0 mm & See Section \ref{sec:fit-tuning}. \\
 \code{minIter/maxIter} & 2 / 5 & More iterations for badly seeded tracks. \\
 \code{thetaMin}     & 10 ($pp$) / 5 ($pd$) & Rejects near-beam tracks; too high kills forward deuterons. \\
@@ -902,7 +902,7 @@ source /home/yassid/fair_install/FairSoft/install/bin/thisroot.sh
 source $REPO/build/config.sh
 export ROOT_INCLUDE_PATH=$REPO/build/include:/home/yassid/fair_install/FairRootInstall/include
 sudo mount -t drvfs F: /mnt/f                  # if F: is not mounted
-root -b -q $REPO/geometry/ATTPC_H600torr.C     # once per clone
+root -b -q $REPO/geometry/ATTPC_H300torr_RT.C     # once per clone
 
 # --- stage 1-2: reco + auxiliary streams ------------------------------------
 cd $HERE

@@ -3,7 +3,10 @@
 # browser explorer can switch between UKF and GENFIT on identical events/tracks.
 # thetaMin is lowered to 5 deg (default 10) because the (p,d) deuterons are FORWARD.
 # matEffects=kTRUE since the AtGenfitter dE/dx fix (5f87e625); geometry defaults to
-# ATTPC_H600torr. Output dir bumped so the pre-fix results stay available.
+# ATTPC_H300torr_RT (3.308e-5 g/cm3) as of 2026-08-25. NOTE: every (p,d) genfit set produced
+# before that date ran matEffects=kTRUE against ATTPC_H600torr, i.e. 2x the real material,
+# and unlike the (p,p') matFX-off sets that error was LIVE. Those results must be redone.
+# Output dir bumped so the pre-fix results stay available.
 #   ./genfit_pd_Be12.sh "run_0143 run_0147" 4
 RUNS="${1:-run_0143}"; NPAR="${2:-4}"
 REPO="/home/yassid/fair_install/ATTPCROOTv2-OpenKF"

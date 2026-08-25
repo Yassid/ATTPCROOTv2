@@ -17,7 +17,7 @@
 ///       Z,A       = charge/mass number stored in the JSON (for downstream particle mass)
 ///       sdMax,brMax = axis ranges (sqrtdEdx, Brho)
 ///       dataFile  = the persisted PID csv (default max-based; use *_integral.csv for integral scale)
-void draw_gate_Be12(TString name = "proton_Be12", double icLo = 625, double icHi = 750, double arclenMin = 0,
+void draw_gate_Be12(TString name = "proton_Be12", double icLo = 500, double icHi = 800, double arclenMin = 0,
                     int Z = 1, int A = 1, double sdMax = 55, double brMax = 2.5,
                     TString dataFile = "pid_Be12_data.csv")
 {

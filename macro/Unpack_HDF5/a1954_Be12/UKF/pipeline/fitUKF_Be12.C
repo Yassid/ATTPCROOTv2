@@ -9,8 +9,10 @@
 /// so Bz is flipped for exp data. bFieldSign = -1 (EXPERIMENTAL, default), +1 = sim.
 /// If fits diverge / give unphysical KE, try the other sign first (validated on a1975).
 ///
-/// gasDensity default 6.5e-5 g/cm^3 = H2 at 600 torr, ~293 K (a1954 target).
-/// (a1975 used 9.0e-5 for H2 at 1 bar; scaled by 600/760.)  << CONFIRM against run conditions.
+/// gasDensity default 3.308e-5 g/cm^3 = H2 at 300 torr, ~293 K (a1954 target, CONFIRMED
+/// 2026-08-25). It was 6.5e-5 (600 torr) up to and including the July 2026 production,
+/// i.e. TWICE the material -- the UKF eloss correction is live, so those fits are biased.
+/// Matches media.geo H_300torr_RT and the a1954 14C matFX refit (a1954_C14_fit_300torr).
 ///
 ///   root -b -q 'fitUKF_Be12.C("run_0142", -1, "proton", -1)'
 
@@ -65,7 +67,7 @@ std::unique_ptr<EventFit::AtFitterUKF> MakeHypothesis(const TString &name, int b
 } // namespace
 
 void fitUKF_Be12(TString fileName = "run_0142", Long64_t nEvents = -1, TString particles = "proton",
-                 Int_t bFieldSign = -1, Double_t bFieldMag = 2.85, Double_t gasDensity = 6.5e-5, TString outSuffix = "",
+                 Int_t bFieldSign = -1, Double_t bFieldMag = 2.85, Double_t gasDensity = 3.308e-5, TString outSuffix = "",
                  TString ioDir = "/home/yassid/a1954_Be12_reco/", Double_t measSigma = 0.5, Double_t momSigmaFrac = 0.1,
                  Int_t nIter = 1, Int_t minClusters = 10, TString outDir = "", Bool_t refTrack = false,
                  Double_t refInflation = 4.0)

@@ -75,8 +75,14 @@ Clean elastic-recoil locus — matches the a1975 result.
 
 1. **Beam energy** — `ex_Be12.C` defaults `Ebeam = 100 MeV` as a PLACEHOLDER. The
    absolute Ex scale depends on it. Set the real a1954 12Be beam energy.
-2. **Gas density for CATIMA** — `fitUKF_Be12.C` defaults 6.5e-5 g/cm³ (H2 @ 600 torr,
-   scaled from the a1975 1-bar value). Verify against run conditions.
+2. ~~**Gas density for CATIMA**~~ — **RESOLVED 2026-08-25: a1954 ran H2 at 300 torr,
+   rho = 3.308e-5 g/cm³, geometry `ATTPC_H300torr_RT`** (`media.geo` `H_300torr_RT`).
+   `fitUKF_Be12.C`, `fitGenfit_Be12.C` and all drivers now default to it, and
+   `ATTPC.a1954_Be12.par` reads `GasPressure 300 / Density 0.0331`.
+   Everything produced before that date used 6.5e-5 / `ATTPC_H600torr` — twice the
+   material. Live for the UKF (its eloss correction uses the density) and for the
+   (p,d) genfit set (`matEffects=kTRUE`); inert only for the (p,p') genfit set, which
+   ran `matEffects=kFALSE`.
 3. **Pad-time correction** — OFF (`applyTimeCorr=false`); the a1975 CSV is experiment-
    specific. Measure an a1954 pad-time table if needed.
 4. **No IC beam gate / no proton PID gate yet** — `ex_Be12.C` uses a fit-quality cut

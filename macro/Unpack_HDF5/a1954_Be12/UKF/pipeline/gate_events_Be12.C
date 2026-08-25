@@ -32,13 +32,19 @@ void gate_events_Be12(TString run, TString inDir = "/home/yassid/a1954_Be12_reco
                       double icHi = 900, Int_t icTbLo = 1050, Int_t icTbHi = 1250, double bField = 2.85,
                       TString protonGate = "/home/yassid/fair_install/ATTPCROOTv2-OpenKF/macro/Unpack_HDF5/a1954_Be12/"
                                            "UKF/pid/proton_12Be.json",
-                      double thMin = 90.0, double peakThr = 200, Int_t pkTbLo = 800, Int_t pkTbHi = 1500)
+                      double thMin = 90.0, double peakThr = 200, Int_t pkTbLo = 800, Int_t pkTbHi = 1500,
+                      // MUST MATCH the plane the gate was drawn on (pid/dump_pid_Be12.C). A gate
+                      // drawn at mp15 and applied at mp30 is a different cut, and it fails silently.
+                      Int_t minPoints = 30, double zTieTol = 0.0)
 {
    gSystem->Load("libAtTools.so"); gSystem->Load("libAtReconstruction.so");
    TString ff = inDir + run + "_FRIB.root", rf = inDir + run + "_slim.root";
    if (gSystem->AccessPathName(ff) || gSystem->AccessPathName(rf)) { printf("SKIP %s (missing)\n", run.Data()); return; }
    gSystem->mkdir(outDir.Data(), kTRUE);
    AtTools::AtSpyralPID spy; spy.SetBField(bField);
+   if (minPoints > 0) spy.SetMinPoints(minPoints);
+   if (zTieTol > 0) spy.SetZTieTolerance(zTieTol);
+   printf("AtSpyralPID: minPoints = %d, zTieTol = %g mm\n", minPoints, zTieTol);
    TCutG *pcut = LoadCut(protonGate.Data(), "pcut");
    if (!pcut) { printf("ERR: no proton gate\n"); return; }
 

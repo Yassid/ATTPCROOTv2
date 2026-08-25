@@ -19,7 +19,15 @@ void unpackReco_Be12(TString fileName = "run_0142", Long64_t nEvents = 0, Bool_t
                      TString filepath = "/media/yassid/NSCL_e15250/data/a1954_remerged/h5/", Bool_t doSC = false,
                      Bool_t applyTimeCorr = false, TString psaType = "multifit", Double_t primSigma = 0,
                      Double_t thr = 20, TString praType = "tc", int hdMcs = 20, int hdMs = 8, Double_t fitChi2 = 0,
-                     Double_t relErr = 0.1, TString parFile = "ATTPC.a1954_Be12.par", Bool_t doClean = kTRUE)
+                     Double_t relErr = 0.1, TString parFile = "ATTPC.a1954_Be12.par", Bool_t doClean = kTRUE,
+                     // PERSIST THE PID PLANE WITH THE RECONSTRUCTION (added 2026-08-25). Without
+                     // this the reco files carry only AtEventH + AtPatternEvent, and every PID
+                     // plane has to be RECOMPUTED from the pattern events -- 40 GB of re-reads to
+                     // draw one gate. With it, drawing a gate is a branch read.
+                     // pidMinPoints is the plane the persisted PID is computed on, and it CANNOT be
+                     // re-cut afterwards: any gate drawn later must be drawn on this same value.
+                     // AtSpyralPID's own default is 30; the rejection knee is at 15-20.
+                     Bool_t doPID = kTRUE, Int_t pidMinPoints = 30, Double_t pidZTieTol = 0.0)
 {
    gSystem->Load("libAtReconstruction.so");
    gSystem->Load("libAtTools.so");
@@ -150,6 +158,19 @@ void unpackReco_Be12(TString fileName = "run_0142", Long64_t nEvents = 0, Bool_t
    if (doClean)
       run->AddTask(cleanTask);
    run->AddTask(praTask);
+
+   // PID must run AFTER the PRA task: it consumes AtPatternEvent.
+   if (doPID) {
+      AtPIDTask *pidTask = new AtPIDTask();
+      pidTask->SetInputBranch("AtPatternEvent");
+      pidTask->SetOutputBranch("AtPIDEvent");
+      pidTask->SetMinPoints(pidMinPoints);
+      if (pidZTieTol > 0)
+         pidTask->SetZTieTolerance(pidZTieTol);
+      pidTask->SetPersistence(kTRUE);
+      run->AddTask(pidTask);
+      std::cout << "PID   : AtPIDTask persisted as AtPIDEvent, minPoints = " << pidMinPoints << std::endl;
+   }
 
    run->Init();
    auto numEvents = unpackTask->GetNumEvents();
