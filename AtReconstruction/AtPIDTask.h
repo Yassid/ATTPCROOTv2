@@ -40,6 +40,13 @@ public:
 
    void SetBField(Double_t b);
    void SetSmallPadRadius(Double_t r);
+   /// AtSpyralPID::fMinPoints defaults to 30 and, until 2026-08-25, AtPIDTask had no way to
+   /// change it -- so every persisted AtPIDEvent was frozen at 30 and could not be re-cut
+   /// downstream. That default is the documented cause of ~99.94 % of PID rejections (knee at
+   /// 15-20). Whatever value a production persists is the plane its gates must be drawn on.
+   void SetMinPoints(Int_t n) { fSpyralEst.SetMinPoints(n); }
+   /// 0 = exact-equality z-tie collapse (historical), which can make the arclength spline singular.
+   void SetZTieTolerance(Double_t t) { fSpyralEst.SetZTieTolerance(t); }
    void SetPersistence(Bool_t v) { fIsPersistence = v; }
    void SetInputBranch(TString n) { fInputBranchName = n; }
    void SetOutputBranch(TString n) { fOutputBranchName = n; }
