@@ -5,7 +5,9 @@
 ///     B = 2.85 T (28.5 kG),  H2 at 300 torr,  drift length 1000 mm
 ///     beam 14C at 161 MeV = 11.5 MeV/u
 ///
-/// GAS PRESSURE IS 300 torr (rho = 3.553e-5 g/cm3, geometry ATTPC_H300torr.root).
+/// GAS PRESSURE IS 300 torr AT ROOM TEMPERATURE: rho = 3.308e-5 g/cm3, geometry
+/// ATTPC_H300torr_RT.root (changed 2026-08-25; was ATTPC_H300torr.root = 3.553e-5, a 0 C value,
+/// which put 7.4 % too much material in the truth and disagreed with this sim's own digi par).
 /// Note that this CONTRADICTS parameters/ATTPC.a1954_C14.par, which says GasPressure 600,
 /// and it contradicts the production reconstruction, which corrected energy loss with
 /// 600-torr material in both fitters:
@@ -41,7 +43,15 @@
 /// produces events with no track and wastes the digitization (the slow step).
 void C14_pp_sim(Int_t nEvents = 2000, Double_t thetaMinCM = 5.0, Double_t thetaMaxCM = 120.0,
                 TString mcEngine = "TGeant4", Double_t bFieldkG = -28.5, TString outFile = "./data/attpcsim.root",
-                Double_t resEx = 0.0, UInt_t seed = 0)
+                Double_t resEx = 0.0, UInt_t seed = 0,
+                // TRANSPORT GAS. Changed 2026-08-25 from ATTPC_H300torr.root (3.553e-5) to the _RT
+                // variant (3.308e-5). Both are "H2 at 300 torr"; the first is at 0 C and the second
+                // at 293 K, and the a1954 gas is at ROOM TEMPERATURE. The old value put 7.4 % too
+                // much material in the TRUTH, and it also disagreed with this sim's own digitisation
+                // par (ATTPC.a1954_C14_sim.par: Density 0.0331 mg/cm3 = 3.31e-5) -- transport and
+                // digitisation were modelling different gases. Unlike a fitter geometry with
+                // material effects off, this is NEVER inert: it sets the generated energy loss.
+                TString geoFile = "ATTPC_H300torr_RT.root")
 {
    // RNG seed. There was NO seeding here, so parallel jobs would have produced byte-identical
    // events and any "added statistics" would have been a copy of the same sample. seed = 0 keeps
@@ -70,7 +80,8 @@ void C14_pp_sim(Int_t nEvents = 2000, Double_t thetaMinCM = 5.0, Double_t thetaM
    run->AddModule(cave);
 
    FairDetector *ATTPC = new AtTpc("ATTPC", kTRUE);
-   ATTPC->SetGeometryFileName("ATTPC_H300torr.root"); // 300 torr H2, rho = 3.553e-5 g/cm3
+   ATTPC->SetGeometryFileName(geoFile); // default ATTPC_H300torr_RT.root, rho = 3.308e-5 g/cm3
+   std::cout << "\033[1;33m[C14_pp_sim] transport gas geometry: " << geoFile << "\033[0m" << std::endl;
    run->AddModule(ATTPC);
 
    // -----   Magnetic field : 2.85 T, as in ATTPC.a1954_C14.par   -----------

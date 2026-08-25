@@ -23,8 +23,19 @@ void fitGenfit_C14(TString fileName = "run_0055", Long64_t nEvents = -1,
                     Double_t bField = -2.85, Int_t minIter = 2, Int_t maxIter = 5, TString pidGate = "",
                     Double_t measSigma = 4.0, Double_t thetaMinDeg = 10.0, Double_t thetaMaxDeg = 170.0,
                     Bool_t matEffects = kFALSE, Bool_t backwardSeedFix = kFALSE, TString particle = "proton",
-                    TString geoName = "ATTPC_H300torr", Bool_t matFallback = kTRUE,
-                    Bool_t backExtrap = kFALSE, Double_t manualElossDensity = 0.0, Int_t matA = 1)
+                    // ATTPC_H300torr is H2 at 300 torr and 0 C (3.553e-5). The a1954 gas is at ROOM
+                    // TEMPERATURE: ATTPC_H300torr_RT, 3.308e-5 -- 7.4 % less material, and the value
+                    // the adopted gf_xtr production already used for its manual eloss. Inert while
+                    // matEffects is off; LIVE the moment it is on, which is why the default moves.
+                    TString geoName = "ATTPC_H300torr_RT", Bool_t matFallback = kTRUE,
+                    Bool_t backExtrap = kFALSE, Double_t manualElossDensity = 0.0, Int_t matA = 1,
+                    // ---- CATIMA (added 2026-08-25) ------------------------------------------
+                    // Adopted setting on a1975 after the (d,t) A/B: catimaELoss ON, full range OFF
+                    // -- collapsed fits 2.51 % -> 1.08 % with energy scale and resolution unchanged.
+                    // Only reachable with matEffects = kTRUE; each flag warns rather than silently
+                    // doing nothing, so an inert run cannot pass for a valid arm of a comparison.
+                    Bool_t catimaELoss = kFALSE, Bool_t catimaELossFull = kFALSE,
+                    Bool_t catimaMSC = kFALSE, Bool_t catimaStraggling = kFALSE)
 {
    gSystem->Load("libAtReconstruction.so");
    FairLogger::GetLogger()->SetLogScreenLevel("WARNING");
@@ -103,10 +114,42 @@ void fitGenfit_C14(TString fileName = "run_0055", Long64_t nEvents = -1,
    fitter->SetBackExtrapToAxis(backExtrap);
    if (backExtrap)
       std::cout << "  Back-extrapolation to beam axis: ON" << std::endl;
-   if (manualElossDensity > 0) {
+   // DOUBLE-COUNT GUARD. SetManualELoss applies its own loss over the vertex gap
+   // UNCONDITIONALLY. With matEffects ON, extrapolateToLine already integrates that gap, so the
+   // two together count it TWICE -- measured on a1975 (d,t) as +9.5 % falling to +4.65 % once the
+   // manual term was dropped. The manual term is the matFX-OFF substitute for material effects,
+   // not a companion to them.
+   if (manualElossDensity > 0 && matEffects) {
+      std::cout << "\033[1;31mREFUSING manual eloss: matEffects is ON, so extrapolateToLine already "
+                   "integrates the vertex gap and this would count it twice. Ignored.\033[0m\n";
+   } else if (manualElossDensity > 0) {
       fitter->SetManualELoss(manualElossDensity, matA);
       std::cout << "  Manual CATIMA eloss over the vertex gap: rho=" << manualElossDensity
                 << " g/cm3, target A=" << matA << std::endl;
+   }
+   // ---- CATIMA material model ---------------------------------------------------------------
+   if (matEffects && geoName.Contains("H300torr") && !geoName.Contains("_RT"))
+      std::cout << "\033[1;31mWARNING: matEffects with " << geoName << " = 3.553e-5 g/cm3 (0 C). "
+                   "The a1954 gas is 3.308e-5 at room temperature: use ATTPC_H300torr_RT.\033[0m\n";
+   if (catimaMSC || catimaStraggling) {
+      if (!matEffects)
+         std::cout << "\033[1;31mWARNING: catima material flags set but matEffects is OFF -- inert.\033[0m\n";
+      fitter->SetCatimaMaterial(catimaMSC, catimaStraggling);
+      std::cout << "  \033[1;35mCATIMA material model: MSC " << (catimaMSC ? "ON" : "off")
+                << ", straggling " << (catimaStraggling ? "ON" : "off") << "\033[0m\n";
+   }
+   fitter->SetCatimaELoss(catimaELoss, catimaELossFull);
+   if (catimaELoss) {
+      if (!matEffects)
+         std::cout << "\033[1;31mWARNING: catimaELoss set but matEffects is OFF -- inert.\033[0m\n";
+      else
+         std::cout << "  \033[1;32mdE/dx from CATIMA"
+                   << (catimaELossFull ? " over the FULL range (Bethe-Bloch replaced too)"
+                                       : " below beta*gamma=0.05 (Bethe-Bloch kept above)")
+                   << ", per-step material\033[0m\n";
+   } else if (matEffects) {
+      std::cout << "\033[1;31mWARNING: matEffects ON with NO dE/dx source -- genfit applies zero "
+                   "stopping power below beta*gamma=0.05 (KE 1.17 MeV for a proton).\033[0m\n";
    }
    fitter->SetBackwardSeedFix(backwardSeedFix);
    // When a material-effects fit throws, the fitter retries it with material effects OFF.
