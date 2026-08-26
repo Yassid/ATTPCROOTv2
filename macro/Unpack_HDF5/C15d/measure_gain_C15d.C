@@ -135,7 +135,10 @@ void measure_gain_C15d(Double_t bLo = 0.30, Double_t bHi = 0.60,
                        TString inDir = "/home/yassid/C15d_reco/", TString outCsv = "gainmatch_C15d.csv",
                        Int_t minTracks = 200, Int_t nbins = 200, Double_t dLo = 0.0, Double_t dHi = 0.0,
                        Int_t minClusters = 0, Int_t estimator = 0, Int_t refRun = -1,
-                       TString plotDir = "plots/")
+                       TString plotDir = "plots/",
+                       /// Restrict to a run range. REQUIRED here: runs >=106 are a HYDROGEN target,
+                       /// so pooling them with the D2 runs would measure the target change as gain.
+                       Int_t runMin = 17, Int_t runMax = 103)
 {
    gSystem->mkdir(plotDir, kTRUE);
 
@@ -150,8 +153,15 @@ void measure_gain_C15d(Double_t bLo = 0.30, Double_t bHi = 0.60,
    TIter next(ls);
    while (auto *o = dynamic_cast<TSystemFile *>(next())) {
       TString n = o->GetName();
-      if (!o->IsDirectory() && n.EndsWith("_pid.root"))
-         files.push_back(inDir + n);
+      if (o->IsDirectory() || !n.EndsWith("_pid.root"))
+         continue;
+      TString digits = n;
+      digits.ReplaceAll("run_", "");
+      digits.ReplaceAll("_pid.root", "");
+      const Int_t rn = digits.Atoi();
+      if (rn < runMin || rn > runMax)
+         continue;
+      files.push_back(inDir + n);
    }
    if (files.empty()) {
       std::cout << "\033[1;31mERROR: no *_pid.root in " << inDir << " -- run reco_batch.sh first.\033[0m\n";
@@ -169,26 +179,39 @@ void measure_gain_C15d(Double_t bLo = 0.30, Double_t bHi = 0.60,
       TString sel = TString::Format("valid==1 && brho>%g && brho<%g", bLo, bHi);
       if (minClusters > 0)
          sel += TString::Format(" && nClusters>=%d", minClusters);
-      pool.Draw("dEdx>>hauto(400,0,0)", sel, "goff");
-      auto *ha = dynamic_cast<TH1 *>(gDirectory->Get("hauto"));
-      if (ha == nullptr || ha->GetEntries() < 10) {
+      // ★ TAKE THE MEDIAN FROM THE VALUES, NOT FROM AN AUTO-BINNED HISTOGRAM.
+      // `Draw("dEdx>>h(400,0,0)")` lets ROOT pick the range from the data, so ONE outlier track
+      // stretches the axis and every real track lands in the first few bins; GetQuantiles then
+      // returns a bin position, not a median. On the 105-run set that returned 4013 where the
+      // true median is ~250 -- a 16x error, which then set a dEdx axis 16x too wide and left the
+      // per-run peak unresolved. Sorting the values has no binning to get wrong.
+      // Two passes: the first counts, the second fills. SetEstimate must be called with a real
+      // size -- SetEstimate(-1) on a TChain leaves the buffer unallocated and GetV1() then hands
+      // back uninitialised memory, which shows up as a "median" of 3e-314 rather than an error.
+      const Long64_t nSel = pool.Draw("dEdx", sel, "goff");
+      if (nSel < 10) {
          std::cout << "\033[1;31mERROR: fewer than 10 tracks in Brho [" << bLo << "," << bHi
                    << "] across all runs. Wrong window?\033[0m\n";
          return;
       }
-      // Range the axis on the MEDIAN, not on a high quantile. dE/dx is Landau-distributed with a
-      // tail reaching several times the peak, so a 97 % quantile puts the upper edge ~4.5x the
-      // peak: the bins then straddle the peak (+-12 on ~313, i.e. 4 %) and that coarseness lands
-      // directly in the gain factor. 0 to 3x median keeps the whole peak with bins ~1.5 % of it.
-      double q[1];
-      const double p[1] = {0.5};
-      ha->GetQuantiles(1, q, const_cast<double *>(p));
+      pool.SetEstimate(nSel + 1);
+      pool.Draw("dEdx", sel, "goff");
+      const Double_t *vals = pool.GetV1();
+      if (vals == nullptr) {
+         std::cout << "\033[1;31mERROR: TChain::GetV1() is null after Draw.\033[0m\n";
+         return;
+      }
+      std::vector<double> v(vals, vals + nSel);
+      std::nth_element(v.begin(), v.begin() + v.size() / 2, v.end());
+      const double med = v[v.size() / 2];
+      // 0 to 3x median keeps the whole Landau peak with bins ~1.5 % of it. A high quantile would
+      // instead put the upper edge ~4.5x the peak, and that coarseness lands in the gain factor.
       dLo = 0.0;
-      dHi = 3.0 * q[0];
+      dHi = 3.0 * med;
    }
 
    std::cout << "\033[1;33m=== measure_gain_C15d ===\033[0m\n"
-             << "  runs cached : " << files.size() << "\n"
+             << "  runs        : " << files.size() << "  (range " << runMin << "-" << runMax << ")\n"
              << "  anchor      : most-probable dEdx, Brho in [" << bLo << ", " << bHi << "] T*m\n"
              << "  dEdx range  : [" << dLo << ", " << dHi << "] in " << nbins << " bins\n"
              << "  estimator   : " << kEstName[estimator < 0 || estimator > 3 ? 0 : estimator] << "\n"
@@ -318,6 +341,7 @@ void measure_gain_C15d(Double_t bLo = 0.30, Double_t bHi = 0.60,
    out << "# reference   : " << ref << (refRun > 0 ? Form(" (run %d)", refRun) : " (statistics-weighted pooled peak)")
        << "\n";
    out << "# estimator   : " << kEstName[estimator < 0 || estimator > 3 ? 0 : estimator] << "\n";
+   out << "# run range   : " << runMin << "-" << runMax << "\n";
    out << "# min tracks  : " << minTracks << " per run; thinner runs are interpolated in run number\n";
    out << "# apply       : dEdx *= factor, sqrt_dEdx *= sqrt(factor)\n";
    out << "run,factor,source,peak,ntracks\n";

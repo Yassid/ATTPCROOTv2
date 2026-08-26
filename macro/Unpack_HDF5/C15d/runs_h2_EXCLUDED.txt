@@ -1,0 +1,32 @@
+# a1975 H2-target runs in the 17-133 range. NOT part of the 15C+d analysis.
+# Kept only so the boundary is documented; see runs_d2.txt for why.
+run_0104
+run_0105
+run_0106
+run_0107
+run_0108
+run_0109
+run_0110
+run_0111
+run_0112
+run_0113
+run_0114
+run_0115
+run_0116
+run_0117
+run_0118
+run_0119
+run_0120
+run_0121
+run_0122
+run_0123
+run_0124
+run_0125
+run_0126
+run_0127
+run_0128
+run_0129
+run_0130
+run_0131
+run_0132
+run_0133

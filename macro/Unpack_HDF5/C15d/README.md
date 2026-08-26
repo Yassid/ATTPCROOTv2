@@ -15,10 +15,24 @@ source /home/yassid/fair_install/ATTPCROOTv2-OpenKF/build/config.sh
 | | |
 |---|---|
 | Raw HDF5 | `/media/yassid/Seagate Hub/ATTPC/Data/a1975/h5/run_XXXX.h5` |
-| Runs | 17–133, **105 usable** (`runs_d.txt`) |
+| Runs | **17–103, 75 runs** (`runs_d2.txt`) — the D2 target set |
 | Format | legacy remerged (`/get` + `/frib` + `/meta`) — `AtHDFUnpacker` reads it directly; no merger-format reader needed |
-| Excluded | **run_0090** (truncated HDF5, unreadable), **run_0047** (no `/frib`, so no IC) |
+| Excluded | **runs ≥106 — HYDROGEN target, see below** (`runs_h2_EXCLUDED.txt`); runs 104–105 (thin changeover); **run_0090** (truncated HDF5); **run_0047** has no `/frib`, so no IC |
 | Outputs | `~/C15d_reco`, `~/C15d_ic`, `~/C15d_fit` — symlinks onto the Seagate, so no path here contains a space |
+
+### ★ Runs ≥106 are a hydrogen target
+
+The D2 target set ends at run 103. Measured at the boundary:
+
+| | runs ≤103 | runs ≥106 | ratio |
+|---|---|---|---|
+| dE/dx median | 240–256 | 122–136 | **0.52** |
+| arclength median | 162–166 mm | 182–185 mm | 1.13 |
+
+H2 and D2 at equal pressure have the same number density and half the A, so H2 should give
+**0.500** of the dE/dx — and less stopping means longer tracks. Both are target changes, not gain.
+Every macro defaults to `runMin=17, runMax=103`; a gain match spanning that boundary would force
+the H2 runs onto the D2 scale and merge two different datasets.
 
 ## Working point
 
@@ -140,8 +154,31 @@ straddle it, and that coarseness lands straight in the factor), and it **interpo
 from measured neighbours with a `interp`/`held` label rather than silently assigning 1.0, which
 would leave a run unmatched inside a matched set and be invisible downstream.
 
-**The validity test on the full set:** genuine gain drift is *smooth* in run number. Scatter
-means the anchor is measuring estimator noise, not gain.
+### Result on the 75 D2 runs
+
+`gainmatch_C15d.csv`, 67 measured + 8 interpolated:
+
+```
+f = 0.874 (run 17)  ->  1.128 (run 100)      29 % monotonic drift
+mean |Δf| between consecutive runs = 0.0129,  max 0.0433
+```
+
+**The validity test passes**: genuine gain drift is smooth in run number, and here the
+step-to-step noise is ~20× smaller than the total drift. Scatter would have meant the anchor was
+measuring estimator noise instead.
+
+Applying it narrows the bands where a single band dominates — Bρ 0.25–0.30 by 11.1 %, 0.30–0.40
+by 7.7 %, 0.40–0.50 by 6.7 % — and does nothing at Bρ 0.15–0.20 where bands overlap.
+
+### The gain is applied at read time
+
+The 72 GB of reco holds **raw** dE/dx. `gain_C15d.h` loads the table and `mkpid_C15d.C` /
+`apply_gate_C15d.C` scale on the fly; `AtGainMatchTask` does the same inside a framework chain.
+The correction therefore stays re-derivable rather than frozen into the reco.
+
+⚠ **Anything that reads the caches and cuts on dE/dx must apply the same table.** A gate drawn on
+a matched plane and applied to raw values silently selects the wrong tracks. Both macros warn when
+a run has no table entry rather than passing it through as 1.0 unnoticed.
 
 ## Gates
 

@@ -1,0 +1,82 @@
+# C15d D2-TARGET run set: a1975 runs 17-103.
+# ★ Runs >=106 are a HYDROGEN target, NOT deuterium, and are excluded. Measured:
+#   dEdx median 240-256 (<=103) vs 122-136 (>=106), ratio 0.52, against 0.500 predicted
+#   for H2/D2 at equal pressure (same number density, half the A). Arclength also jumps
+#   162-166 mm -> 182-185 mm, i.e. less stopping. Both are target changes, not gain.
+# Runs 0104/0105 are thin changeover runs (22 and 47 tracks) and are excluded too.
+# EXCLUDED also: run_0090 (truncated HDF5). run_0047 has no /frib -> no IC.
+run_0017
+run_0018
+run_0019
+run_0020
+run_0021
+run_0022
+run_0023
+run_0024
+run_0025
+run_0026
+run_0027
+run_0028
+run_0029
+run_0030
+run_0031
+run_0032
+run_0033
+run_0034
+run_0035
+run_0036
+run_0037
+run_0038
+run_0039
+run_0040
+run_0041
+run_0042
+run_0043
+run_0044
+run_0045
+run_0046
+run_0047
+run_0048
+run_0057
+run_0058
+run_0059
+run_0060
+run_0061
+run_0063
+run_0064
+run_0065
+run_0066
+run_0067
+run_0068
+run_0069
+run_0070
+run_0071
+run_0072
+run_0073
+run_0074
+run_0076
+run_0077
+run_0078
+run_0079
+run_0080
+run_0082
+run_0083
+run_0084
+run_0085
+run_0086
+run_0087
+run_0088
+run_0089
+run_0091
+run_0092
+run_0093
+run_0094
+run_0095
+run_0096
+run_0097
+run_0098
+run_0099
+run_0100
+run_0101
+run_0102
+run_0103

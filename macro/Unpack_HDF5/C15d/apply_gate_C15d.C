@@ -1,24 +1,28 @@
 /// @file apply_gate_C15d.C
 /// @brief Apply a PID gate to the cached plane and write a per-track selection list.
 ///
-///   root -b -q 'apply_gate_C15d.C("~/attpc_spyral_1.1.1/15CdAnalysis/gates/p_gate.json")'
-///   root -b -q 'apply_gate_C15d.C("gates/p.json", "/home/yassid/C15d_reco/", "sel_p.root")'
+///   root -b -q 'apply_gate_C15d.C("gates/proton_C15d.json")'
+///   root -b -q 'apply_gate_C15d.C("gates/proton_C15d.json", "/home/yassid/C15d_reco/", "sel_p.root")'
 ///
 /// Reads every <run>_pid.root, tests each track against the polygon, and writes a `sel` tree
 /// of (run, event, trackID) for the ones inside. That triple is what makes the selection
 /// USABLE: the fitting stage can join on it and fit only the gated tracks, without recomputing
 /// AtSpyralPID over the multi-GB recos. A gate you can only draw is half a gate.
 ///
-/// Gate files are spyral_utils Cut2D JSON, so Spyral's own gates for this data load directly:
-///   ~/attpc_spyral_1.1.1/15CdAnalysis/gates/{p,d,t,3He,alpha}_gate.json
-/// That transfer is only valid because both planes are gain matched by the same factors.
+/// Gate files are spyral_utils Cut2D JSON, written by draw_gate_C15d.C on THIS plane. Applies the
+/// same per-run gain table the gate was drawn with, since the cached dE/dx is raw.
 ///
 /// The report breaks the yield down by run so a gate that only holds in part of the run set
 /// is visible immediately -- that is the signature of a gain-matching problem, and it would
 /// otherwise hide inside a healthy-looking total.
 
+#include "gain_C15d.h"
+
 void apply_gate_C15d(TString gateFile, TString inDir = "/home/yassid/C15d_reco/", TString outFile = "",
-                     Int_t minClusters = 0, Double_t maxVtxR = -1.0, Bool_t perRun = kTRUE)
+                     Int_t minClusters = 0, Double_t maxVtxR = -1.0, Bool_t perRun = kTRUE,
+                     /// MUST match the table the gate was DRAWN on. A gate drawn on a matched
+                     /// plane and applied to raw values selects the wrong tracks, silently.
+                     TString gainTable = "gainmatch_C15d.csv", Int_t runMin = 17, Int_t runMax = 103)
 {
    gSystem->Load("libAtTools.so");
 
@@ -46,6 +50,12 @@ void apply_gate_C15d(TString gateFile, TString inDir = "/home/yassid/C15d_reco/"
    while (auto *o = dynamic_cast<TSystemFile *>(next())) {
       TString name = o->GetName();
       if (!o->IsDirectory() && name.EndsWith("_pid.root")) {
+         TString d = name;
+         d.ReplaceAll("run_", "");
+         d.ReplaceAll("_pid.root", "");
+         const Int_t rn = d.Atoi();
+         if (rn < runMin || rn > runMax)
+            continue;
          ch.Add(inDir + name);
          ++nRuns;
       }
@@ -78,6 +88,9 @@ void apply_gate_C15d(TString gateFile, TString inDir = "/home/yassid/C15d_reco/"
    sel.Branch("event", &s_event, "event/I");
    sel.Branch("trackID", &s_track, "trackID/I");
 
+   auto gainMap = LoadGainTable_C15d(gainTable);
+   Long64_t nMissingGain = 0;
+
    std::map<int, std::pair<long, long>> perRunCounts; // run -> (in, considered)
    Long64_t nAll = 0, nCons = 0, nIn = 0;
 
@@ -93,7 +106,12 @@ void apply_gate_C15d(TString gateFile, TString inDir = "/home/yassid/C15d_reco/"
          continue;
       ++nCons;
       perRunCounts[run].second++;
-      if (!cut.IsInside(sqrtdEdx, brho))
+      bool missing = false;
+      const double gf = GainFactor_C15d(gainMap, run, missing);
+      if (missing)
+         ++nMissingGain;
+      const double sqrtdEdxMatched = sqrtdEdx * std::sqrt(gf);
+      if (!cut.IsInside(sqrtdEdxMatched, brho))
          continue;
       ++nIn;
       perRunCounts[run].first++;
@@ -116,6 +134,9 @@ void apply_gate_C15d(TString gateFile, TString inDir = "/home/yassid/C15d_reco/"
              << "  \033[1;32mIN GATE  : " << nIn << "  = " << (nCons ? 100.0 * nIn / nCons : 0.)
              << "% of considered\033[0m\n"
              << "  selection: " << outFile << "  (run, event, trackID)\n";
+   if (nMissingGain > 0)
+      std::cout << "\033[1;31m  WARNING: " << nMissingGain
+                << " considered tracks had no gain-table entry and were gated UNMATCHED.\033[0m\n";
 
    if (perRun && !perRunCounts.empty()) {
       std::cout << "\n  per-run yield (a gate that only holds over part of the run set is a "
