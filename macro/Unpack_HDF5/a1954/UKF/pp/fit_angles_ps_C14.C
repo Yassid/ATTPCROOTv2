@@ -30,10 +30,23 @@ double E[8]  = {6.091, 6.728, 7.012, 7.341, 8.317, 6.589, 6.903, 0};
 double SG[8];
 double shift = -0.011, muN = 9.178, sgN = 0.296;
 TH1D *hps = nullptr;
+// THE 6.903 IS NOT SEPARABLE FROM THE 7.012 AND MUST NOT BE FITTED FREELY.
+// They lie 0.109 MeV apart against a resolution sigma of 0.143 -- 0.76 sigma, which is one peak.
+// Released as a free component (nLevels = 8) the fit degenerates: 6.728 collapses to exactly zero
+// beyond 65 deg while 6.903 takes its strength, swapping bin to bin. So the 5-level fit's "7.012"
+// is really the 6.903+7.012 blend, and the question is not "what is each" -- unanswerable at this
+// resolution -- but "how much can the 7.012 be inflated". f903 answers that by TYING the 6.903
+// amplitude to a fixed fraction of the 7.012 one, adding no free parameter, and scanning it.
+// f903 = 0 reproduces the previous behaviour exactly.
+double f903 = 0.0, SG903 = 0.0;
+const double E903 = 6.903;
+int i7012 = 2;            // index of the 7.012 in the 5-level layout
 double model(double *x, double *p)
 {
    double s = p[NL + 2] + p[NL + 3] * x[0];
    for (int i = 0; i < NL; ++i) s += p[i] * std::exp(-0.5 * std::pow((x[0] - (E[i] + fa::shift)) / SG[i], 2));
+   if (f903 > 0 && i7012 < NL)
+      s += f903 * p[i7012] * std::exp(-0.5 * std::pow((x[0] - (E903 + fa::shift)) / SG903, 2));
    s += p[NL] * std::exp(-0.5 * std::pow((x[0] - muN) / sgN, 2));
    if (hps) s += p[NL + 1] * hps->Interpolate(x[0]);
    return s;
@@ -63,7 +76,10 @@ void fit_angles_ps_C14(TString cache = "plots/proton_kin_cat5_tc.root", Double_t
                        // the small-bin 1/sin(theta) approximation. L is measured on the elastic in
                        // the SAME vertex slab against the KD03 calculation; 53-56 counts/mb over
                        // theta_cm 92-118 for z 10-490 (2026-08-26).
-                       Double_t lumi = -1)
+                       Double_t lumi = -1,
+                       // Tie a 6.903 (0-) component to this fraction of the 7.012 amplitude and
+                       // refit. 0 = the previous behaviour. See the note in namespace fa.
+                       Double_t f903 = 0.0)
 {
    gStyle->SetOptStat(0);
    TString here = gSystem->DirName(gInterpreter->GetCurrentMacroName());
@@ -96,6 +112,14 @@ void fit_angles_ps_C14(TString cache = "plots/proton_kin_cat5_tc.root", Double_t
    static const int COL[10] = {kBlue + 1, kAzure + 7, kGreen + 2, kOrange + 7, kMagenta + 1,
                                kViolet + 1, kRed + 1, kCyan + 2, kGray + 2, kBlack};
    for (int i = 0; i < NL; ++i) fa::SG[i] = sig0 + dSig * (fa::E[i] - 6.094);
+   fa::f903 = f903;
+   fa::SG903 = sig0 + dSig * (fa::E903 - 6.094);
+   // the tie is only meaningful in the 5-level layout, where index 2 IS the 7.012
+   if (f903 > 0) {
+      if (NL != 5) { printf("\033[1;31m  f903 needs the 5-level layout (nLevels=5)\033[0m\n"); return; }
+      printf("\n  6.903 tied at %.2f x the 7.012 amplitude (sigma %.3f), no free parameter added\n",
+             f903, fa::SG903);
+   }
    const int NPAR = NL + 4;   // levels, 14N, PS, bg0, bg1
    int nb = (int)std::lround((exHi - exLo) / 0.05);
 
@@ -286,8 +310,8 @@ void fit_angles_ps_C14(TString cache = "plots/proton_kin_cat5_tc.root", Double_t
                          lumi > 0 ? "d#sigma/d#Omega [mb/sr]" : "yield/acc/sin#theta [arb.]"));
          g.Write(i < NL ? Form("lvl%d", i) : (i == NL ? "blend14N" : "continuum"));
       }
-      TNamed prov("provenance", Form("cache=%s accDir=%s lumi=%g nLevels=%d vz=%g-%g",
-                                     cache.Data(), accDir.Data(), lumi, nLevels, vzLo, vzHi));
+      TNamed prov("provenance", Form("cache=%s accDir=%s lumi=%g nLevels=%d vz=%g-%g f903=%g",
+                                     cache.Data(), accDir.Data(), lumi, nLevels, vzLo, vzHi, f903));
       prov.Write();
       fo.Close();
       printf("  wrote plots/fit_angles_ps_dist_%s.root (%d graphs + provenance)\n", tag.Data(), NL + 2);
