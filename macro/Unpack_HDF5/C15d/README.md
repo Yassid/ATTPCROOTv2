@@ -1,0 +1,182 @@
+# C15d — 15C + d, D2 target at 300 torr
+
+Self-contained workspace. It shares **no macro, no par file and no output directory** with
+any other analysis in this repo; the only framework additions it relies on are the new
+`AtGainMatchTask` (opt-in, see below) and the `ATTPC_D300torr_v2` geometry.
+
+Source the environment first:
+
+```bash
+source /home/yassid/fair_install/ATTPCROOTv2-OpenKF/build/config.sh
+```
+
+## Data and run set
+
+| | |
+|---|---|
+| Raw HDF5 | `/media/yassid/Seagate Hub/ATTPC/Data/a1975/h5/run_XXXX.h5` |
+| Runs | 17–133, **105 usable** (`runs_d.txt`) |
+| Format | legacy remerged (`/get` + `/frib` + `/meta`) — `AtHDFUnpacker` reads it directly; no merger-format reader needed |
+| Excluded | **run_0090** (truncated HDF5, unreadable), **run_0047** (no `/frib`, so no IC) |
+| Outputs | `~/C15d_reco`, `~/C15d_ic`, `~/C15d_fit` — symlinks onto the Seagate, so no path here contains a space |
+
+## Working point
+
+`parameters/ATTPC.C15d_D2_300torr.par`, taken from the Spyral configuration that produced
+the reference analysis (`15CdAnalysis/RunScript_d.py`) so both pipelines reconstruct z the
+same way: B = 2.85 T, E = 45000 V/m, drift length 1000 mm, micromegas TB 25, window TB 300,
+3.125 MHz (`SamplingRate 3` → 320 ns/TB). Drift velocity is then **not free**: 1.13636 cm/µs
+is forced by those anchors. Density 6.5643e-5 g/cm³ matches `media.geo`'s `TargetD2_300`
+exactly, so the UKF's CATIMA model and genfit's TGeo material describe the same gas.
+
+**Known difference from Spyral:** Spyral additionally applies a Garfield drift-field
+correction (`do_garfield_correction`, a (ρ,z) → Δρ/Δtrans/Δz grid). ATTPCROOT has no
+equivalent, so a residual z non-linearity between the two is expected and is not a bug.
+
+## Pipeline
+
+```bash
+# 1. geometry, once
+root -b -q ../../../geometry/ATTPC_D300torr_v2.C
+
+# 2. reco:  raw -> AtPatternEvent
+root -b -q 'unpackReco_C15d.C("run_0017", -1, false, "/home/yassid/C15d_reco/")'
+
+# 3a. GENFIT with the CATIMA material model (material effects ON by default)
+root -b -q 'fitGenfit_C15d.C("run_0017", -1, "/home/yassid/C15d_reco/", "", "/home/yassid/C15d_fit/")'
+
+# 3b. UKF, same reco and same PID plane -> a controlled comparison on the fitter alone
+root -b -q 'fitUKF_C15d.C("run_0017", -1, "proton", "/home/yassid/C15d_reco/", "/home/yassid/C15d_fit/")'
+```
+
+Ejectile defaults to the **proton**, i.e. the (d,p) channel. Both fitters take the species as
+arguments for (d,d) / (d,t).
+
+### GENFIT + CATIMA
+
+`fitGenfit_C15d.C` defaults to `matEffects = kTRUE` with `catimaMSC`, `catimaStraggling` and
+`catimaELoss` all on. Three things that silently defeat it:
+
+1. **The CATIMA flags are inert with `matEffects = kFALSE`** — the noise terms are never
+   reached, so an A/B against the material-effects-off configuration reads as a perfect null.
+2. **MSC and straggling must both be on**, or genfit's own model still handles the other term.
+3. **It needs a GenFit built with `-DGENFIT_USE_CATIMA=ON`.** Check:
+   `ldd $GENFIT/lib/libgenfit2.so | grep catima`. This install (`~/fair_install/GenFitInst`,
+   branch `catima-scattering`) links `~/fair_install/catima-inst`.
+
+`matFallback` defaults to **off** so a failed material-effects fit drops out instead of being
+silently refitted without material effects and kept.
+
+Backward tracks are kept (θ window 5–178°, `backwardSeedFix` on): in (d,p) inverse kinematics
+the proton goes largely backward. **The B sign is unverified for this run set** — it is an
+argument; pick it on the fitted vertex and a physical KE, not on χ² alone.
+
+## Gain matching — measured from this analysis's own data
+
+The micromegas/GET gain drifts run to run, so the same particle deposits a different measured
+charge in different runs. Uncorrected, one PID gate cannot serve the run set.
+
+**The correction** (`AtGainMatchTask`, opt-in FairTask, added *after* `AtPIDTask`):
+
+```
+dEdx *= f(run)        sqrtdEdx *= sqrt(f(run))
+```
+
+It modifies no existing framework class — it goes through `AtPIDEvent`'s public `Clear`/`Add`
+API — and it is generic: table path and run number are arguments, so any experiment needing gain
+matching can add it. Verified exact on run_0017: every track scaled by the table value and its
+square root, none lost.
+
+**The factors** (`measure_gain_C15d.C`) are measured here, from this plane. The anchor is a
+quantity that should be constant across runs, so any drift in it is gain:
+
+```
+sel(r)  = valid && brho in [bLo, bHi]
+peak(r) = location of the dE/dx distribution of sel(r)
+f(r)    = peak_ref / peak(r)
+```
+
+The Bρ window makes it **species-anchored**: inside a slice where one band dominates, the true
+dE/dx of those tracks is physics and does not depend on how many of them there were, so a run at
+a different rate or with a different overall species mix gives the same peak unless the gain
+moved. Anchoring on the median of *everything* fails exactly here — a run with more deuterons
+has a higher median for reasons that are not gain, and that shift would be absorbed into `f(r)`.
+
+**Choose the window off the plane first.** It must sit where a single band dominates; a window
+straddling two bands measures their ratio, not the gain, and looks perfectly smooth while being
+wrong. Profiling the cached plane in Bρ slices gives two clean candidates:
+
+| Bρ window | N | MPV | median | shape |
+|---|---|---|---|---|
+| 0.20–0.25 | 2806 | 23.67 | 25.78 | 9 peaks |
+| **0.25–0.30** | 2281 | 21.00 | 21.09 | **SINGLE** |
+| **0.30–0.40** | 2431 | 17.75 | 17.77 | **SINGLE** ← adopted |
+| 0.40–0.50 | 835 | 14.33 | 14.40 | 4 peaks |
+
+```bash
+root -b -q 'measure_gain_C15d.C(0.30, 0.40)'
+```
+
+### ★ Use a robust estimator, not the peak bin
+
+Measured on runs 17/19/20/21 (~790 tracks each, Bρ 0.30–0.40):
+
+| estimator | run 17 | run 19 | run 20 | run 21 | spread |
+|---|---|---|---|---|---|
+| max bin (MPV) | 303.6 | 308.3 | 284.8 | 341.3 | **20 %** |
+| median | 305.1 | 302.9 | 301.4 | 309.4 | 2.6 % |
+| interquartile truncated mean | 307.7 | 299.8 | 302.6 | 306.0 | 2.6 % |
+
+The real drift over those adjacent runs is ~2.6 %. The 20 % is pure estimator noise: the Landau
+peak is broad and flat, so on one run's statistics the highest bin wanders and a 3-point parabola
+happily refines the wrong bin. Fed into `f(run)` that becomes a 20 % per-run rescaling — it would
+smear the very bands the gain match exists to sharpen, while looking like a sound measurement.
+The default is therefore the **interquartile truncated mean** (`estimator=0`); median, peak bin
+and Landau fit are available for comparison.
+
+Two more things the macro does deliberately: it ranges the dE/dx axis on **3× the median** rather
+than a high quantile (a 97 % quantile puts the upper edge ~4.5× the peak and the bins then
+straddle it, and that coarseness lands straight in the factor), and it **interpolates** thin runs
+from measured neighbours with a `interp`/`held` label rather than silently assigning 1.0, which
+would leave a run unmatched inside a matched set and be invisible downstream.
+
+**The validity test on the full set:** genuine gain drift is *smooth* in run number. Scatter
+means the anchor is measuring estimator noise, not gain.
+
+## Gates
+
+Drawn on this plane, with `draw_gate_C15d.C` (interactive — run without `-b`), applied with
+`apply_gate_C15d.C`, which writes a `sel` tree of `(run, event, trackID)` so the selection can be
+used by the fitting stage without recomputing `AtSpyralPID`. A gate you can only draw is half a
+gate.
+
+Do not import a gate from another pipeline. Bρ reproduces between pipelines to well under a
+percent, but dE/dx does not — it is charge over arclength, and charge is not measured the same
+way. A foreign gate lands somewhere on this plane and returns a plausible-looking count for the
+wrong species.
+
+`apply_gate_C15d.C` reports the **per-run** in-gate fraction: a gate that holds over part of the
+run set and not the rest is a gain-matching failure, and it hides inside a healthy total.
+
+### Band identification — checked, not assumed
+
+At fixed Bρ every Z=1 species carries the same momentum, so the heavier ones are slower and sit
+higher in dE/dx by 1/β. That predicts the band spacing with no free parameter but one overall
+scale:
+
+| Bρ slice | N | observed ratios | predicted (d, t) |
+|---|---|---|---|
+| 0.70–0.90 | 1982 | 1.95, 3.00 | 1.95, 2.91 |
+| 0.90–1.20 | 2479 | 1.93 | 1.92 |
+
+So the dominant lowest band is **protons**, then **deuterons**, then **tritons**, and Bρ and
+dE/dx are internally consistent. (Leading-order 1/β only; the low-statistics slices are messier,
+and Bρ 0.45–0.55 shows a fourth peak at ratio 4.23 where a Z=2 alpha would predict 3.95 —
+suggestive but not established.)
+
+## Open
+
+- Reaction masses are not yet fixed anywhere in the workspace — the fitters only need the
+  ejectile. The excitation-energy step will need beam, target and residual.
+- No IC gate and no PID gate yet. Build both from the persisted (gain-matched) `AtPIDEvent`.
+- `run_0047` has no FRIB data, so it cannot receive an IC gate.

@@ -1,0 +1,69 @@
+################################################################################
+# 15C + d  --  D2 active target at 300 torr, room temperature
+#
+# NEW FILE for the C15d workspace (macro/Unpack_HDF5/C15d/). Nothing else reads it.
+#
+# Every electron-transport number below is TAKEN FROM THE SPYRAL CONFIGURATION that
+# produced the reference analysis (15CdAnalysis/RunScript_d.py), so the two pipelines
+# reconstruct z from the same working point and can be differenced directly:
+#
+#   magnetic_field        2.85  T        -> BField
+#   electric_field       45000  V/m      -> EField
+#   detector_length       1000  mm       -> ZPadPlane, DriftLength
+#   micromegas_time_bucket  25           -> the TB of the pad plane
+#   window_time_bucket     300           -> TBEntrance
+#   get_frequency        3.125  MHz      -> SamplingRate 3  (AtDigiPar maps 3 -> 320 ns/TB)
+#
+# DRIFT VELOCITY IS NOT A FREE PARAMETER once those are fixed. AtPSA::CalculateZGeo is
+#     z = ZPadPlane - (TBEntrance - peakTB) * TBTime * DriftVelocity / 100
+# so the pad plane sits at z = 0 only if
+#     (300 - 25) TB * 320 ns * dv = 1000 mm   ->   dv = 1.13636 cm/us
+# i.e. 3.6364 mm/TB. Changing any of ZPadPlane / TBEntrance / SamplingRate without
+# recomputing dv silently moves the pad plane off z = 0 and shifts every vertex.
+#
+# Spyral applies a Garfield drift-correction table on top of this (electrons_a2091.txt,
+# do_garfield_correction = True); ATTPCROOT has no equivalent, so a residual z
+# non-linearity between the two pipelines is EXPECTED and is not evidence of a bug.
+#
+# Density matches geometry/media.geo entry TargetD2_300 (6.5643e-5 g/cm3) EXACTLY, so
+# the UKF's CATIMA model and genfit's TGeo material describe the same gas. Do not edit
+# one without the other.
+################################################################################
+[AtDigiPar]
+PadPlaneX:Int_t                864   # mm
+PadPlaneZ:Int_t               1344   # mm
+PadSizeX:Int_t                   8   # mm
+PadSizeZ:Int_t                  12   # mm
+PadRows:Int_t                  108   #
+PadLayers:Int_t                112   #
+AnodeWirePlaneY:Double_t     -4.05   # mm
+GroundWirePlaneY:Double_t     -8.1   # mm
+GatingWirePlaneY:Double_t      -14   # mm
+EField:Double_t              45000   # V/m   (Spyral electric_field)
+NumTbs:Int_t                   512
+SamplingRate:Int_t               3   # -> 320 ns/TB, i.e. Spyral get_frequency 3.125 MHz
+DriftVelocity:Double_t     1.13636   # cm/us  FORCED by ZPadPlane/TBEntrance/SamplingRate, see header
+DriftLength:Double_t        1000.0   # mm
+YDivider:Int_t                1000   # Full drift length divided by this when finding clusters
+GasFile:Int_t                    2
+PadPlaneFile:Int_t               3
+PadShapeFile:Int_t               4
+BField:Double_t               2.85   # Tesla  (sign is a FITTER argument, not a par entry)
+TiltAng:Double_t               0.0   # Degrees
+TB0:Int_t                       25   # pad-plane TB; DEPRECATED and IGNORED, AtPSA recomputes it
+LorentzAngle:Double_t          0.0   # Lorentz Angle
+TBEntrance:Int_t               300   # Spyral window_time_bucket
+ZPadPlane:Double_t          1000.0   # mm  Spyral detector_length
+Density:Double_t           0.065643  # mg/cm3 == 6.5643e-5 g/cm3, D2 at 300 torr / 293 K
+ThetaPad:Double_t            110.9   # AT-TPC pad plane rotation
+ThetaRot:Double_t              0.0   # Second Lorentz Angle
+GasPressure:Double_t           300   # torr
+EIonize:Double_t            15.603   # eV
+Fano:Double_t                 0.24   #
+CoefL:Double_t              0.0009   # Longitudinal diffusion [cm^2/us]
+CoefT:Double_t              0.0009   # Transverse diffusion [cm^2/us]
+Gain:Double_t                10000   # Micromegas gain
+GETGain:Double_t              1000   # GET electronics gain [fC]
+PeakingTime:Int_t              720   # ns
+MaxRange:Double_t            500.0   # mm
+################################################################################
