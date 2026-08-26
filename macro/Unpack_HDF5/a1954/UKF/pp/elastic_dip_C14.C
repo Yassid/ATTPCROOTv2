@@ -121,6 +121,17 @@ void elastic_dip_C14(TString cache = "plots/proton_kin_cat5_s013.root",
       printf("  %-24s %7.1f  %+6.1f %10.2f %14.3f\n", pn[i], td, td - thDip, L, std::sqrt(r/m));
       GG.push_back(g); TD.push_back(td); LL.push_back(L); RR.push_back(std::sqrt(r/m));
    }
+   // Publish the per-potential luminosity. The consistent optical-model test needs each
+   // potential's OWN L, and re-deriving it there would mean a second copy of this extraction --
+   // exactly the kind of duplication that lets two numbers drift apart.
+   {
+      std::ofstream lo((here + "/plots/omp_luminosity.txt").Data());
+      lo << "# potential key, name, dip[deg], L[counts/mb], rms away from dip\n";
+      lo << "# measured by elastic_dip_C14.C; data dip at " << thDip << " deg\n";
+      for (int i = 0; i < NP; ++i)
+         lo << pk[i] << " " << pn[i] << " " << TD[i] << " " << LL[i] << " " << RR[i] << "\n";
+      printf("  wrote plots/omp_luminosity.txt\n");
+   }
 
    // ---- figures -----------------------------------------------------------------------------
    int col[NP] = {kBlack, kRed+1, kBlue+1, kGreen+2, kMagenta+1};

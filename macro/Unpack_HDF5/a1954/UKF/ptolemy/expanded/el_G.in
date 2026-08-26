@@ -1,0 +1,17 @@
+$============================================ ELab=11.58(p+14C)G
+reset
+CHANNEL p + 14C
+r0target
+ELAB = 11.581000
+JBIGA=0+
+$Becchetti and Greenlees (1969) E < 50 | 40 < A | http://dx.doi.org/10.1103/PhysRev.182.1190
+v    =  54.718    r0 =   1.170    a =   0.750
+vi   =   0.000   ri0 =   1.320   ai =   0.610
+vsi  =  10.526  rsi0 =   1.320  asi =   0.610
+vso  =   6.200  rso0 =   1.100  aso =   0.750
+vsoi =   0.000 rsoi0 =   0.000 asoi =   0.000  rc0 =   1.300
+ELASTIC SCATTERING
+;
+anglemin=0.000000 anglemax=180.000000 anglestep=1.000000
+;
+end $================================== end of input

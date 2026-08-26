@@ -1,0 +1,19 @@
+HEADER: 14C(P,P')14C* 2+ 7.012 MeV, OMP=M, INELOCA1  [consistent OMP test]
+JBIGA=0+
+REACTION: 14C(P, P)14C(2+ 7.012) ELAB=11.581
+BELX = 0.1
+PARAMETERSET INELOCA1
+LMAX=30
+INCOMING
+r0target
+v    =  52.119    r0 =   1.160    a =   0.750
+vi   =   2.242   ri0 =   1.370   ai =   0.790
+vsi  =   5.835  rsi0 =   1.370  asi =   0.790
+vso  =   6.040  rso0 =   1.064  aso =   0.780
+vsoi =   0.000 rsoi0 =   0.000 asoi =   0.000  rc0 =   1.250
+;
+OUTGOING
+;
+ANGLEMAX=180 ANGLESTEP=1
+;
+RETURN

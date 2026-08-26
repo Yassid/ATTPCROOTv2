@@ -1,0 +1,17 @@
+$============================================ ELab=11.58(p+14C)M
+reset
+CHANNEL p + 14C
+r0target
+ELAB = 11.581000
+JBIGA=0+
+$Menet et al. (1971) 30 <  E < 60 | 40 < A | http://dx/doi.org/10.1016/0092-640X(76)90007-3
+v    =  52.119    r0 =   1.160    a =   0.750
+vi   =   2.242   ri0 =   1.370   ai =   0.790
+vsi  =   5.835  rsi0 =   1.370  asi =   0.790
+vso  =   6.040  rso0 =   1.064  aso =   0.780
+vsoi =   0.000 rsoi0 =   0.000 asoi =   0.000  rc0 =   1.250
+ELASTIC SCATTERING
+;
+anglemin=0.000000 anglemax=180.000000 anglestep=1.000000
+;
+end $================================== end of input

@@ -1,0 +1,17 @@
+$============================================ ELab=11.58(p+14C)P
+reset
+CHANNEL p + 14C
+r0target
+ELAB = 11.581000
+JBIGA=0+
+$Perey (1963) E < 20 | 30 < A < 100 | http://dx/doi.org/10.1016/0092-640X(76)90007-3
+v    =  51.783    r0 =   1.250    a =   0.650
+vi   =   0.000   ri0 =   0.000   ai =   0.000
+vsi  =  13.500  rsi0 =   1.250  asi =   0.470
+vso  =   7.500  rso0 =   1.250  aso =   0.470
+vsoi =   0.000 rsoi0 =   0.000 asoi =   0.000  rc0 =   1.250
+ELASTIC SCATTERING
+;
+anglemin=0.000000 anglemax=180.000000 anglestep=1.000000
+;
+end $================================== end of input
