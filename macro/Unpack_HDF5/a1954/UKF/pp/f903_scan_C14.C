@@ -8,23 +8,27 @@
 /// B(E2), not a point, which is the honest form given the resolution.
 ///
 ///   root -b -q 'f903_scan_C14.C()'
-void f903_scan_C14(Double_t fitLo = 25, Double_t fitHi = 135)
+void f903_scan_C14(TString curve = "exc_7012_2p", TString tagPrefix = "f",
+                   Double_t fitLo = 25, Double_t fitHi = 135)
 {
    gStyle->SetOptStat(0);
    TString here = gSystem->DirName(gInterpreter->GetCurrentMacroName());
    TString pdir = here + "/../ptolemy/dat/";
    const int NF = 5;
    const double F[NF] = {0.0, 0.10, 0.20, 0.30, 0.50};
-   const char *TG[NF] = {"f00", "f010", "f020", "f030", "f050"};
+   const char *SUF[NF] = {"00", "010", "020", "030", "050"};
+   std::vector<TString> TGv;
+   for (int i = 0; i < NF; ++i) TGv.push_back(tagPrefix + SUF[i]);
 
    // the Ptolemy 7.012 curve and the BELX it was run at
    auto *gp = new TGraph();
-   { std::ifstream in((pdir + "exc_7012_2p.dat").Data()); double a, b;
+   { std::ifstream in((pdir + curve + ".dat").Data()); double a, b;
      while (in >> a >> b) if (b > 0) gp->SetPoint(gp->GetN(), a, b); }
    double belx = 0, bN, bC, Rd; int lx;
-   { std::ifstream bi((pdir + "exc_7012_2p.beta").Data()); std::string h; std::getline(bi, h);
+   { std::ifstream bi((pdir + curve + ".beta").Data()); std::string h; std::getline(bi, h);
      bi >> lx >> bN >> bC >> belx >> Rd; }
-   if (!gp->GetN() || belx <= 0) { printf("\033[1;31mno Ptolemy 7.012 curve\033[0m\n"); return; }
+   if (!gp->GetN() || belx <= 0) { printf("\033[1;31mno Ptolemy curve %s\033[0m\n", curve.Data()); return; }
+   printf("\n  DWBA curve: %s   (BELX %.3g e2 b^L)\n", curve.Data(), belx);
 
    const double WU = 0.05940 * std::pow(14.0, 4.0 / 3.0);   // e2 fm4
    const double LIT = 5 * 1.8 * WU;                          // ENSDF 1.8(3) W.u. DOWN -> UP
@@ -33,9 +37,9 @@ void f903_scan_C14(Double_t fitLo = 25, Double_t fitHi = 135)
           "f903", "sum sigma", "B(E2)up", "W.u.", "ratio EM", "rms", "d_h/d_EM");
    std::vector<double> fv, bv, rv, sv;
    for (int k = 0; k < NF; ++k) {
-      TFile *f = TFile::Open(here + "/plots/fit_angles_ps_dist_" + TG[k] + ".root");
+      TFile *f = TFile::Open(here + "/plots/fit_angles_ps_dist_" + TGv[k] + ".root");
       auto *gd = f && !f->IsZombie() ? (TGraphErrors *)f->Get("lvl2") : nullptr;   // 7.012
-      if (!gd) { printf("  %6.2f   missing %s\n", F[k], TG[k]); continue; }
+      if (!gd) { printf("  %6.2f   missing %s\n", F[k], TGv[k].Data()); continue; }
       double s = 0, tot = 0; int n = 0;
       for (int j = 0; j < gd->GetN(); ++j) {
          double x = gd->GetX()[j], y = gd->GetY()[j];
@@ -81,6 +85,6 @@ void f903_scan_C14(Double_t fitLo = 25, Double_t fitHi = 135)
    g2->SetMarkerStyle(21); g2->SetMarkerSize(1.6); g2->SetLineWidth(3);
    g2->SetMinimum(0); g2->SetMaximum(1.0); g2->Draw("ALP");
    TString out = "/home/yassid/a1954_analysis_runs/2026-08-25_C14_catima_refit/plots/06_ptolemy/";
-   c->SaveAs(out + "10_f903_scan.png");
-   printf("\n  wrote %s10_f903_scan.png\n\n", out.Data());
+   c->SaveAs(out + "10_f903_scan_" + tagPrefix + ".png");
+   printf("\n  wrote %s10_f903_scan_%s.png\n\n", out.Data(), tagPrefix.Data());
 }
