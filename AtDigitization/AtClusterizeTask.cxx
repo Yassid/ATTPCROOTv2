@@ -59,6 +59,28 @@ InitStatus AtClusterizeTask::Init()
 
    std::cout << "  Ionization energy of gas: " << fEIonize << " MeV" << std::endl;
    std::cout << "  Fano factor of gas: " << fFano << std::endl;
+   // Langevin drift vector, identical in form to AtPSA::CalcLorentzVector -- the forward
+   // model must apply exactly the shear the reconstruction removes. NOTE: the two are
+   // duplicated deliberately for now; they must be kept in sync, and would be better
+   // extracted into one shared helper.
+   {
+      Double_t B = fPar->GetBField();
+      Double_t Efield = fPar->GetEField();
+      Double_t tilt = fPar->GetTiltAngle() * TMath::Pi() / 180.0;
+      Double_t azim = fPar->GetThetaRot() * TMath::Pi() / 180.0;
+      Double_t thetaPad = fPar->GetThetaPad() * TMath::Pi() / 180.0;
+      Double_t ot = (Efield > 0) ? (B / Efield) * fVelDrift * 1E4 : 0.0;
+      Double_t front = fVelDrift / (1 + ot * ot);
+      Double_t st = TMath::Sin(tilt), ct = TMath::Cos(tilt);
+      Double_t sp = TMath::Sin(azim), cp = TMath::Cos(azim);
+      Double_t vx = front * (ot * (-st * sp) + ot * ot * ct * st * cp);
+      Double_t vy = front * (ot * (st * cp) + ot * ot * ct * st * sp);
+      fVdZ = front * (1 + ot * ot * ct * ct);
+      fVdX = vx * TMath::Cos(thetaPad) - vy * TMath::Sin(thetaPad);
+      fVdY = vx * TMath::Sin(thetaPad) + vy * TMath::Cos(thetaPad);
+      std::cout << "  Langevin drift vector (pad frame): (" << fVdX << ", " << fVdY << ", " << fVdZ
+                << ") cm/us,  omega*tau = " << ot << std::endl;
+   }
    std::cout << "  Drift velocity: " << fVelDrift << std::endl;
    std::cout << "  Longitudal coefficient of diffusion: " << fCoefT << std::endl;
    std::cout << "  Transverse coefficient of diffusion: " << fCoefL << std::endl;
@@ -213,7 +235,13 @@ void AtClusterizeTask::Exec(Option_t *option)
             propX = x_pre + stepX * charge + r * TMath::Cos(phi);
             propY = y_pre + stepY * charge + r * TMath::Sin(phi);
             driftLength = driftLength + (gRandom->Gaus(0, sigstrlong)); // mm
-            driftTime = ((driftLength / 10) / fVelDrift);               // us
+            // The electron travels along the Langevin drift vector, not straight down z:
+            // it crosses the gap at fVdZ and is carried sideways by fVdX, fVdY meanwhile.
+            // Reconstruction subtracts exactly this (AtPSA::CalculateXCorr/YCorr), so the
+            // residual against MC truth measures the correction.
+            driftTime = ((driftLength / 10) / fVdZ);                    // us
+            propX += fVdX * driftTime * 10.0;                           // cm/us * us -> mm
+            propY += fVdY * driftTime * 10.0;
             // NB: tTime in the simulation is 0 for the first simulation point
             // std::cout<<i<<"  "<<charge<<"  "<<" Drift velocity "<<fVelDrift
             // <<" driftTime : "<<driftTime<<" tTime "<<tTime<<"\n";

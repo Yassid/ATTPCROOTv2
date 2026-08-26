@@ -39,6 +39,13 @@ private:
    Double_t fVelDrift;    //!< Drift velocity of electron in gas. [mm/ns]
    Double_t fCoefT;       //!< Transversal diffusion coefficient. [mm^(-1/2)]
    Double_t fCoefL;       //!< Longitudinal diffusion coefficient. [mm^(-1/2)]
+
+   /// Langevin drift velocity components in the PAD frame, [cm/us]. The forward model has
+   /// to apply the same E x B lateral drift that AtPSA::CalcLorentzVector removes, or a
+   /// simulation cannot validate that correction -- there would be nothing to undo.
+   Double_t fVdX{0.};
+   Double_t fVdY{0.};
+   Double_t fVdZ{0.};
    Double_t fDetPadPlane; //!< Position of the pad plane with respect to the entrance [mm]
 
    AtGas *fGas;     //!< Gas parameter container.
