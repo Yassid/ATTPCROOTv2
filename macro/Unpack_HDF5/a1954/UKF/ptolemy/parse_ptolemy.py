@@ -35,12 +35,40 @@ def inelastic(path):
             on = True; continue
         if on:
             p = ln.split()
-            if len(p) >= 6:
+            # 9 columns for a single LX (L=1 states), 11 when two LX values are printed
+            if len(p) >= 9:
                 try:
-                    t = round(float(p[0]), 1)
-                    if t not in d: d[t] = float(p[1])   # first block wins
-                except ValueError: pass
+                    t, sig, err = round(float(p[0]), 1), float(p[1]), float(p[4])
+                except ValueError:
+                    continue
+                # Column 5 is the high-L truncation error. Ptolemy's inelastic routine has a
+                # numerical singularity at EXACTLY 90.00 deg: it returns a spike (5037 against a
+                # neighbouring 35) flagged by an error of ~200%, while every other angle sits
+                # below 1%. Dropping on the flag removes it without hand-picking an angle.
+                if err > 5.0: continue
+                if t not in d: d[t] = sig            # first block wins
     return d
+
+def deformation(txt):
+    """Pull LX, beta_nuclear, beta_coulomb, B(EL) and the real deformation radius out of the
+    'DEFORMATION PARAMETERS' block. The macros need beta_N and R to turn a fitted scale into a
+    deformation length, and reading them from the .out file is not an option -- outputs/ is
+    regenerable and untracked, so the numbers have to be carried into dat/."""
+    if 'DEFORMATION PARAMETERS' not in txt:
+        return None
+    lines = txt.split('DEFORMATION PARAMETERS', 1)[1].splitlines()
+    row, radius = None, None
+    for ln in lines[:14]:
+        p = ln.split()
+        if row is None and len(p) == 4:
+            try: row = (int(p[0]), float(p[1]), float(p[2]), float(p[3]))
+            except ValueError: pass
+        if radius is None and len(p) == 2 and p[0] == 'REAL':
+            try: radius = float(p[1])
+            except ValueError: pass
+    if row is None or radius is None:
+        return None
+    return dict(LX=row[0], betaN=row[1], betaC=row[2], BEL=row[3], Rdef=radius)
 
 here = sys.argv[1] if len(sys.argv) > 1 else os.path.dirname(os.path.abspath(__file__))
 n = 0
@@ -54,5 +82,10 @@ for f in sorted(os.listdir(os.path.join(here, 'outputs'))):
         print(f"  {f}: no cross section found"); continue
     with open(os.path.join(here, 'dat', f[:-4] + '.dat'), 'w') as o:
         for t in sorted(d): o.write(f"{t} {d[t]}\n")
+    df = deformation(txt)
+    if df:
+        with open(os.path.join(here, 'dat', f[:-4] + '.beta'), 'w') as o:
+            o.write("# LX betaNuclear betaCoulomb B(EL)[e2 barn^LX] Rdeformation[fm]\n")
+            o.write(f"{df['LX']} {df['betaN']} {df['betaC']} {df['BEL']} {df['Rdef']}\n")
     n += 1
 print(f"  parsed {n} outputs into dat/")

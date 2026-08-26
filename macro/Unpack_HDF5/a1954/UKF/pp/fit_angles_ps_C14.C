@@ -273,5 +273,24 @@ void fit_angles_ps_C14(TString cache = "plots/proton_kin_cat5_tc.root", Double_t
       g->Draw("AP");
    }
    ca->SaveAs(here + "/plots/fit_angles_ps_dist_" + tag + ".png");
+
+   // ---- keep the distributions, so a DWBA comparison need not re-fit the spectra ---------------
+   // Without this the numbers existed only in the printout and every downstream comparison
+   // (FRESCO, Ptolemy) had to be fed by hand, which is how a stale copy gets used.
+   if (accEx1 && !THd.empty()) {
+      TFile fo(here + "/plots/fit_angles_ps_dist_" + tag + ".root", "RECREATE");
+      for (int i = 0; i < NL + 2; ++i) {
+         if (D[i].size() != THd.size()) continue;
+         auto g = TGraphErrors(THd.size(), &THd[0], &D[i][0], nullptr, &ED[i][0]);
+         g.SetTitle(Form("%s;#theta_{cm} [deg];%s", NM[i],
+                         lumi > 0 ? "d#sigma/d#Omega [mb/sr]" : "yield/acc/sin#theta [arb.]"));
+         g.Write(i < NL ? Form("lvl%d", i) : (i == NL ? "blend14N" : "continuum"));
+      }
+      TNamed prov("provenance", Form("cache=%s accDir=%s lumi=%g nLevels=%d vz=%g-%g",
+                                     cache.Data(), accDir.Data(), lumi, nLevels, vzLo, vzHi));
+      prov.Write();
+      fo.Close();
+      printf("  wrote plots/fit_angles_ps_dist_%s.root (%d graphs + provenance)\n", tag.Data(), NL + 2);
+   }
    printf("\n  wrote plots/fit_angles_ps_fits_%s.png and plots/fit_angles_ps_dist_%s.png\n", tag.Data(), tag.Data());
 }
