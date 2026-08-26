@@ -1,0 +1,4 @@
+# Ptolemy's full text log is regenerable from the deck via run_ptolemy.sh; only the
+# parsed angular distributions are tracked, since the macros read those.
+outputs/
+__pycache__/

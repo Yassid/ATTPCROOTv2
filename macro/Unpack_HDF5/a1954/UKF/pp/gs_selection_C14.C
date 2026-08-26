@@ -60,7 +60,19 @@ void gs_selection_C14(TString rawCache = "plots/proton_kin_300gfx_nc.root",
       return h;
    };
    map2(tr, "hRaw", "BEFORE: E_{x} vs #theta_{cm} (raw)", 1);
-   map2(tc, "hCor", "AFTER: #theta' = #theta - 0.220#circ/MeV(KE-3.5)", 2);
+   // The correction actually applied lives in the CACHE, not here. This label was hardcoded at
+   // 0.220/MeV(KE-3.5) and so mis-described every cache carrying a different slope -- it read
+   // 0.220 while the data had 0.056. Take it from the corrected cache's own title instead.
+   TString corrLabel = "AFTER: #theta-corrected";
+   {
+      TFile *ftmp = TFile::Open(here + "/" + corrCache);
+      if (ftmp && !ftmp->IsZombie()) {
+         TNamed *n = (TNamed *)ftmp->Get("theta_corr");
+         if (n) corrLabel = TString("AFTER: ") + n->GetTitle();
+         ftmp->Close();
+      }
+   }
+   map2(tc, "hCor", corrLabel, 2);
 
    // ---- 3: locus before/after
    c1->cd(3);

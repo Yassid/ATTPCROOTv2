@@ -109,6 +109,10 @@ void apply_theta_corr_C14(TString inCache = "plots/proton_kin_300gfx.root", TStr
    }
    printf("  %lld tracks in -> %ld written, %ld dropped (corrected angle unphysical)\n", N, kept, dropped);
    printf("  mean |dtheta| %.2f deg, max %.2f deg\n", kept ? sumShift / kept : 0, maxShift);
+   // record the correction IN THE FILE, so downstream plots can label themselves correctly
+   TNamed corrTag(TString("theta_corr"),
+                  TString::Format("#theta' = #theta - %.3f#circ/MeV(KE-%.2f)", 360.0 / kcDenom, kcPivot));
+   corrTag.Write();
    nt->Write();
    fo.Close();
    fi->Close();

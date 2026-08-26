@@ -45,8 +45,25 @@ void fit_angles_ps_C14(TString cache = "plots/proton_kin_cat5_tc.root", Double_t
                        Double_t sig0 = 0.132, Double_t dSig = 0.0123, Double_t muN_ = 9.178,
                        Double_t sgN_ = 0.296, Double_t cmMin = 20, Double_t cmMax = 140,
                        Double_t dcm = 20, Int_t minN = 40, TString tag = "cat5",
-                       Int_t nLevels = 5, TString accDir = "/mnt/f/a1954_C14_acc_gf_nochi2/",
-                       Bool_t doAcc = kTRUE)
+                       Int_t nLevels = 5,
+                       // VERTEX WINDOW, and it MUST match the acceptance: the acceptance is a ratio
+                       // taken over a z slab, so the data has to be counted over the same slab.
+                       // Earlier runs applied NO vertex cut while using a full-length acceptance --
+                       // self-consistent, but not a choice, and inconsistent with the elastic chain.
+                       // 10-490 mm adopted (Yassid, 2026-08-26).
+                       Double_t vzLo = 10.0, Double_t vzHi = 490.0,
+                       // The acceptance must also carry the same chi2 cut as the data cache:
+                       // acc_*_nochi2 is the counterfactual with that selection REMOVED, and pairing
+                       // it with a chi2-cut cache under-corrects.
+                       TString accDir = "/mnt/f/a1954_C14_acc_catima_z10_490/",
+                       Bool_t doAcc = kTRUE,
+                       // ABSOLUTE NORMALISATION. lumi > 0 turns the yields into mb/sr:
+                       //     dsigma/dOmega = yield / acceptance / dOmega / L
+                       // with dOmega = 2pi(cos_lo - cos_hi), the EXACT solid angle of the bin, not
+                       // the small-bin 1/sin(theta) approximation. L is measured on the elastic in
+                       // the SAME vertex slab against the KD03 calculation; 53-56 counts/mb over
+                       // theta_cm 92-118 for z 10-490 (2026-08-26).
+                       Double_t lumi = -1)
 {
    gStyle->SetOptStat(0);
    TString here = gSystem->DirName(gInterpreter->GetCurrentMacroName());
@@ -99,7 +116,9 @@ void fit_angles_ps_C14(TString cache = "plots/proton_kin_cat5_tc.root", Double_t
       double lo = cmMin + b * dcm, hi = lo + dcm;
       auto *h = new TH1D(Form("hb%d", b), Form("%.0f-%.0f deg;E_{x} [MeV];counts", lo, hi), nb, exLo, exHi);
       h->Sumw2();
-      t->Draw(Form("ex>>hb%d", b), Form("chi2ndf<%g && thcm>=%g && thcm<%g", chi2Cut, lo, hi), "goff");
+      t->Draw(Form("ex>>hb%d", b),
+              Form("chi2ndf<%g && thcm>=%g && thcm<%g && vertexz>=%g && vertexz<=%g",
+                   chi2Cut, lo, hi, vzLo, vzHi), "goff");
       if (h->Integral() < minN) { printf("  %3.0f-%3.0f  | %4.0f | too few\n", lo, hi, h->Integral()); continue; }
       auto *F = new TF1(Form("F%d", b), fa::model, exLo, exHi, NPAR);
       for (int i = 0; i < NL; ++i) {
@@ -199,7 +218,11 @@ void fit_angles_ps_C14(TString cache = "plots/proton_kin_cat5_tc.root", Double_t
       for (int i = 0; i < NL; ++i) printf(" %10s |", JP[i]);
       printf("   acc\n");
       for (size_t k = 0; k < TH_.size(); ++k) {
-         double c = TH_[k], sn = std::sin(c * TMath::DegToRad());
+         double c = TH_[k];
+         // exact solid angle of the bin; sin(theta)*dtheta is the small-bin limit of this
+         double dOm = 2 * TMath::Pi() * (std::cos((c - dcm / 2) * TMath::DegToRad())
+                                       - std::cos((c + dcm / 2) * TMath::DegToRad()));
+         double sn = (lumi > 0) ? dOm * lumi : std::sin(c * TMath::DegToRad());
          double A1 = accEx1->GetBinContent(accEx1->FindBin(c));
          double A8 = accEx8 ? accEx8->GetBinContent(accEx8->FindBin(c)) : A1;
          if (A1 <= 0.05 || sn <= 1e-3) { printf("  %6.1f   acceptance %.3f -- DROPPED\n", c, A1); continue; }
@@ -210,7 +233,7 @@ void fit_angles_ps_C14(TString cache = "plots/proton_kin_cat5_tc.root", Double_t
             if (i >= NL) A = 1.0;                              // 14N and continuum: no level acceptance
             D[i].push_back(Y[i][k] / A / sn);
             ED[i].push_back(EY[i][k] / A / sn);
-            if (i < NL) printf(" %10.0f |", Y[i][k] / A / sn);
+            if (i < NL) printf(" %10.3f |", Y[i][k] / A / sn);
          }
          printf("  %.3f\n", A1);
       }
@@ -228,7 +251,7 @@ void fit_angles_ps_C14(TString cache = "plots/proton_kin_cat5_tc.root", Double_t
       auto *g = corr ? new TGraphErrors(THd.size(), &THd[0], &D[i][0], nullptr, &ED[i][0])
                      : new TGraphErrors(TH_.size(), &TH_[0], &Y[i][0], nullptr, &EY[i][0]);
       g->SetTitle(Form("%s;#theta_{cm} [deg];%s", NM[i],
-                       corr ? "yield / acc / sin#theta  [arb.]" : "counts per bin"));
+                       corr ? (lumi > 0 ? "d#sigma/d#Omega  [mb/sr]" : "yield / acc / sin#theta  [arb.]") : "counts per bin"));
       g->SetMarkerStyle(20); g->SetMarkerColor(COL[i < 7 ? i : 7 + (i - NL)]); g->SetLineColor(COL[i < 7 ? i : 7 + (i - NL)]);
       // LOG y. Points at or below zero cannot be drawn on a log axis, and silently vanishing is
       // worse than being told: they are removed from the graph and counted in the title.
@@ -243,7 +266,7 @@ void fit_angles_ps_C14(TString cache = "plots/proton_kin_cat5_tc.root", Double_t
       if (g->GetN() == 0) { continue; }
       if (nzero) g->SetTitle(Form("%s  [%d bin%s at zero not shown];#theta_{cm} [deg];%s", NM[i],
                                   nzero, nzero > 1 ? "s" : "",
-                                  corr ? "yield / acc / sin#theta  [arb.]" : "counts per bin"));
+                                  corr ? (lumi > 0 ? "d#sigma/d#Omega  [mb/sr]" : "yield / acc / sin#theta  [arb.]") : "counts per bin"));
       gPad->SetLogy();
       g->SetMinimum(0.5 * std::max(1e-3, ymin));
       g->SetMaximum(2.0 * ymax);
