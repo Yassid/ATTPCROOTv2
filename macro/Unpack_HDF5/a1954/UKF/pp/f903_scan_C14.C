@@ -70,7 +70,11 @@ void f903_scan_C14(TString curve = "exc_7012_2p", TString tagPrefix = "f",
    auto *c = new TCanvas("cf9", "", 1200, 500); c->Divide(2, 1);
    c->cd(1); gPad->SetGridx(); gPad->SetGridy();
    auto *g1 = new TGraph(fv.size(), &fv[0], &bv[0]);
-   g1->SetTitle("B(E2;0^{+}#rightarrow2^{+}) vs the tied 6.903 fraction;f_{903} = A(6.903)/A(7.012);B(E2)#uparrow [e^{2}fm^{4}]");
+   // ROOT splits SetTitle on ";" -- the one inside "B(E2;0+->2+)" was being read as the axis
+   // separator, so the plot came out titled "B(E2" with every axis label shifted by one: the
+   // y axis carried the x label and the real y label was dropped. No semicolon in the title text.
+   g1->SetTitle("B(E2) 0^{+}#rightarrow2^{+} vs the tied 6.903 fraction;"
+                "f_{903} = A(6.903)/A(7.012);B(E2)#uparrow [e^{2}fm^{4}]");
    g1->SetMarkerStyle(20); g1->SetMarkerSize(1.6); g1->SetLineWidth(3); g1->SetMinimum(0);
    g1->SetMaximum(1.2 * (*std::max_element(bv.begin(), bv.end()))); g1->Draw("ALP");
    auto *lb = new TLine(fv.front(), LIT, fv.back(), LIT);
