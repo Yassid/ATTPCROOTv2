@@ -126,11 +126,27 @@ void ch13_figs_C14(TString elFile = "plots/elastic_omp_omp.root",
       printf("  %-10s %3d %14.1f %10.3f %8.3f %8.3f\n", pl[i], Lm[i], sig, delta, beta, std::sqrt(r / m));
 
       c2c->cd(i + 1); gPad->SetLogy(); gPad->SetGridx(); gPad->SetGridy();
+      // DROP THE RAILED POINTS. Where a level is too weak to separate -- the 6.091 and the 6.728
+      // beyond ~105 deg in the 5 deg binning -- the amplitude is pushed onto its lower limit and
+      // comes back at ~1e-10 rather than exactly zero, so it survives the y > 0 filter upstream.
+      // Those points carry no information, they are already excluded from the normalisation by the
+      // fit range, and on a log axis they drag the frame down ten decades and flatten every real
+      // point into the top sliver. A point is called railed if it is below 1e-3 of the largest
+      // measured value for that level; the count is reported in the panel title so the removal is
+      // visible rather than silent.
+      double ypk = 0;
+      for (int j = 0; j < g->GetN(); ++j) ypk = std::max(ypk, g->GetY()[j]);
+      int nrail = 0;
+      for (int j = g->GetN() - 1; j >= 0; --j)
+         if (g->GetY()[j] <= 0 || g->GetY()[j] < 1e-3 * ypk) { g->RemovePoint(j); ++nrail; }
       double ymax = 0, ymin = 1e30;
       for (int j = 0; j < g->GetN(); ++j) if (g->GetY()[j] > 0) {
          ymax = std::max(ymax, g->GetY()[j] + g->GetEY()[j]); ymin = std::min(ymin, g->GetY()[j]); }
+      if (ymin > ymax) { ymin = 0.1; ymax = 1.0; }
       auto *f2 = gPad->DrawFrame(20, 0.4 * ymin, 145, 4.0 * ymax);
-      f2->SetTitle(Form("%s;#theta_{cm} [deg];d#sigma/d#Omega [mb/sr]", nm[i]));
+      f2->SetTitle(nrail ? Form("%s   [%d railed bin%s not shown];#theta_{cm} [deg];d#sigma/d#Omega [mb/sr]",
+                                nm[i], nrail, nrail > 1 ? "s" : "")
+                         : Form("%s;#theta_{cm} [deg];d#sigma/d#Omega [mb/sr]", nm[i]));
       auto *qq = new TGraph();
       for (int j = 0; j < gp->GetN(); ++j) { double x = gp->GetX()[j];
          if (x >= 20 && x <= 145) qq->SetPoint(qq->GetN(), x, k * gp->GetY()[j]); }
