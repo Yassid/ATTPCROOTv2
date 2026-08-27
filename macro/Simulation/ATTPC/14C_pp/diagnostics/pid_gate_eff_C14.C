@@ -26,8 +26,24 @@
 /// pattern-level tracks in events that produced one. This isolates the gate, which is the thing
 /// the acceptance omits -- it does not re-measure the reconstruction.
 ///
+/// MEASURED on gs_s1001 (8000 events), 2026-08-27:
+///     3295 events with a pattern, 3183 pattern tracks, 3051 with a valid PID estimate
+///     2826 inside the polygon (0.9263 of valid);  theta_lab > 90 keeps all of them
+///     eps(gate, per track)  = 0.9263
+///     eps(gate, per EVENT)  = 0.8577    <-- the number to compare
+/// The per-event value is the right one: the acceptance is defined per generated reaction and the
+/// luminosity counts beam particles. Against eps = L_elastic/L_scaler = 0.855 for
+/// Becchetti-Greenlees, that agrees to 0.3 %, so the whole elastic/scaler deficit is the PID gate
+/// and the trigger is consistent with unity. It also excludes Koning-Delaroche quantitatively:
+/// its eps = 0.59 would need the trigger to cost a further factor 0.69 on top of the gate.
+///
 ///   root -b -q 'pid_gate_eff_C14.C("/mnt/f/a1954_C14_acc_catima/gs_s1001_reco.root")'
-void pid_gate_eff_C14(TString recoFile, Double_t bField = -2.85, Double_t thMin = 90.0,
+/// *** THE FIELD SIGN IS +2.85 FOR SIMULATION, -2.85 FOR DATA. *** AtSpyralPID returns a SIGNED
+/// Brho, so passing the data value here puts every simulated track at negative Brho while the
+/// hand-drawn gate spans +0.040 to +0.964 -- and the efficiency comes back as a clean 0.0000,
+/// which reads as a result rather than as a bug. The default below is the SIMULATION value
+/// because that is what this macro is for.
+void pid_gate_eff_C14(TString recoFile, Double_t bField = +2.85, Double_t thMin = 90.0,
                       TString protonGate = "/home/yassid/fair_install/ATTPCROOTv2-OpenKF/macro/"
                                            "Unpack_HDF5/a1954/UKF/pid/proton_14C.json",
                       TString tag = "gs_s1001")
