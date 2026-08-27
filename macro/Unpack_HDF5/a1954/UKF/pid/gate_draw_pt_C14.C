@@ -88,9 +88,10 @@ public:
         fEbeam(eBeam), fFlip(flipPolar)
    {
       fH = new TH2F("hpt",
-                    Form("a1954 ^{12}Be Spyral PID, IC gated [%.0f,%.0f]  --  draw the TRITON gate"
+                    Form("a1954 ^{14}C Spyral PID, IC gated [%.0f,%.0f]  --  draw the TRITON gate"
                          ";#sqrt{dE/dx};B#rho [T#upointm]", icLo, icHi),
                     300, 0, xMax, 300, 0, yMax);
+      fXhi = xMax; fYhi = yMax;
       Load(cache);
       if (fOnLocus && fShowLocus)
          printf("=== %d tracks lie on the (p,t) g.s. locus (+-%.0f%%), drawn as red dots ===\n",
@@ -269,10 +270,12 @@ public:
    /// 14C(p,p') emerges at theta_lab < 90 deg, and 14C(p,t) tritons at 8-24 deg, so anything
    /// outside that is either a beam-like track, a fragment, or a piece of a track that
    /// pattern recognition split. Narrowing the window shows how much of the plane is which.
-   void ApplyAngle()
+   /// Refill the displayed plane from the points already in memory. Both the angle window and the
+   /// axis controls go through here, so the two cannot get out of step -- an earlier version had
+   /// the angle cut refill and the axis change rebuild, and a rebuild silently dropped the angle
+   /// cut that was showing on screen.
+   long FillPlane()
    {
-      if (fEThLo) fThLo = fEThLo->GetNumber();
-      if (fEThHi) fThHi = fEThHi->GetNumber();
       fH->Reset();
       long kept = 0;
       for (size_t i = 0; i < fX.size(); ++i) {
@@ -281,12 +284,57 @@ public:
          fH->Fill(fX[i], fY[i]);
          ++kept;
       }
+      return kept;
+   }
+
+   /// Rebuild the histogram on new limits or binning, then refill. The POINTS are untouched: this
+   /// only changes how they are displayed, so it is free to use as often as wanted and it can
+   /// never alter what a gate selects.
+   void ApplyAxes()
+   {
+      if (fEXlo) fXlo = fEXlo->GetNumber();
+      if (fEXhi) fXhi = fEXhi->GetNumber();
+      if (fEYlo) fYlo = fEYlo->GetNumber();
+      if (fEYhi) fYhi = fEYhi->GetNumber();
+      if (fENbx) fNbx = (int)fENbx->GetNumber();
+      if (fENby) fNby = (int)fENby->GetNumber();
+      if (fXhi <= fXlo || fYhi <= fYlo || fNbx < 1 || fNby < 1) {
+         printf("\033[1;33maxis limits must increase and bins must be >= 1 -- ignored\033[0m\n");
+         return;
+      }
+      TString ttl = fH->GetTitle();
+      delete fH;
+      fH = new TH2F("hpt", ttl, fNbx, fXlo, fXhi, fNby, fYlo, fYhi);
+      long kept = FillPlane();
+      printf("axes: x [%.2f, %.2f] / %d bins, y [%.3f, %.3f] / %d bins -- %ld tracks shown\n",
+             fXlo, fXhi, fNbx, fYlo, fYhi, fNby, kept);
+      Redraw();
+   }
+
+   void ApplyAngle()
+   {
+      if (fEThLo) fThLo = fEThLo->GetNumber();
+      if (fEThHi) fThHi = fEThHi->GetNumber();
+      long kept = FillPlane();
       printf("theta_lab in [%.1f, %.1f] deg : %ld of %zu tracks kept (%.1f%%)\n",
              fThLo, fThHi, kept, fX.size(), 100.0 * kept / std::max<size_t>(1, fX.size()));
       if (fLabel)
          fLabel->SetText(Form("  theta_lab %.0f-%.0f deg : %ld of %zu tracks (%.0f%%)",
                               fThLo, fThHi, kept, fX.size(), 100.0 * kept / std::max<size_t>(1, fX.size())));
       Redraw();
+   }
+
+   /// Back to the full plane, so a zoom can always be undone without restarting.
+   void ResetAxes()
+   {
+      fXlo = 0; fXhi = fXmax; fYlo = 0; fYhi = fYmax; fNbx = 300; fNby = 300;
+      if (fEXlo) fEXlo->SetNumber(fXlo);
+      if (fEXhi) fEXhi->SetNumber(fXhi);
+      if (fEYlo) fEYlo->SetNumber(fYlo);
+      if (fEYhi) fEYhi->SetNumber(fYhi);
+      if (fENbx) fENbx->SetNumber(fNbx);
+      if (fENby) fENby->SetNumber(fNby);
+      ApplyAxes();
    }
 
    void ToggleLocus()
@@ -441,6 +489,35 @@ private:
          bar->AddFrame(ba, new TGLayoutHints(kLHintsLeft, 5, 4, 4, 4));
       }
       main->AddFrame(bar, new TGLayoutHints(kLHintsTop | kLHintsExpandX));
+
+      // ---- second row: display limits and binning -------------------------------------------
+      // These change only how the points are drawn. The gate is stored as a polygon in physical
+      // units, so re-binning or re-ranging can never change what it selects.
+      auto *bar2 = new TGHorizontalFrame(main);
+      auto mkNum = [&](TGNumberEntry *&e, double v, double lo, double hi, int w, const char *lbl,
+                       TGNumberFormat::EStyle st) {
+         bar2->AddFrame(new TGLabel(bar2, lbl), new TGLayoutHints(kLHintsLeft | kLHintsCenterY, 8, 2, 4, 4));
+         e = new TGNumberEntry(bar2, v, 6, -1, st, TGNumberFormat::kNEAAnyNumber,
+                               TGNumberFormat::kNELLimitMinMax, lo, hi);
+         e->Resize(w, 22);
+         e->Connect("ValueSet(Long_t)", "PtGateDraw", this, "ApplyAxes()");
+         bar2->AddFrame(e, new TGLayoutHints(kLHintsLeft, 2, 2, 4, 4));
+      };
+      mkNum(fEXlo, fXlo, 0, 200, 70, "sqrt(dE/dx):", TGNumberFormat::kNESRealTwo);
+      mkNum(fEXhi, fXhi, 0, 200, 70, "to",           TGNumberFormat::kNESRealTwo);
+      mkNum(fENbx, fNbx, 1, 2000, 60, "bins",        TGNumberFormat::kNESInteger);
+      mkNum(fEYlo, fYlo, 0, 20, 70, "  Brho:",       TGNumberFormat::kNESRealThree);
+      mkNum(fEYhi, fYhi, 0, 20, 70, "to",            TGNumberFormat::kNESRealThree);
+      mkNum(fENby, fNby, 1, 2000, 60, "bins",        TGNumberFormat::kNESInteger);
+      {
+         auto *bx = new TGTextButton(bar2, "Apply axes");
+         bx->Connect("Clicked()", "PtGateDraw", this, "ApplyAxes()");
+         bar2->AddFrame(bx, new TGLayoutHints(kLHintsLeft, 8, 4, 4, 4));
+         auto *br = new TGTextButton(bar2, "Reset axes");
+         br->Connect("Clicked()", "PtGateDraw", this, "ResetAxes()");
+         bar2->AddFrame(br, new TGLayoutHints(kLHintsLeft, 4, 4, 4, 4));
+      }
+      main->AddFrame(bar2, new TGLayoutHints(kLHintsTop | kLHintsExpandX));
       fLabel = new TGLabel(main, "  Draw around the band high and right of the proton gate, then Locus check. "
                                  "[Locus dots on/off] marks tracks on the (p,t) g.s. curve.");
       main->AddFrame(fLabel, new TGLayoutHints(kLHintsTop | kLHintsExpandX, 6, 6, 2, 2));
@@ -464,6 +541,10 @@ private:
    TCanvas *fCanvas = nullptr;
    TGNumberEntry *fEThLo = nullptr, *fEThHi = nullptr;
    double fThLo = 0.0, fThHi = 180.0;
+   TGNumberEntry *fEXlo = nullptr, *fEXhi = nullptr, *fEYlo = nullptr, *fEYhi = nullptr;
+   TGNumberEntry *fENbx = nullptr, *fENby = nullptr;
+   double fXlo = 0.0, fXhi = 30.0, fYlo = 0.0, fYhi = 3.0;
+   int fNbx = 300, fNby = 300;
    TGLabel *fLabel = nullptr;
    TGTextEntry *fName = nullptr;
    std::vector<float> fX, fY, fPol;
