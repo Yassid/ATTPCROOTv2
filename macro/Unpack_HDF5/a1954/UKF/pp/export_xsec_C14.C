@@ -11,7 +11,11 @@
 ///
 ///   root -b -q 'export_xsec_C14.C()'
 void export_xsec_C14(TString outName = "a1954_14C_pp_cross_sections.txt",
-                     Double_t lumi = 72.5)
+                     Double_t lumi = 72.5,
+                     // The per-angle yield files, 10 deg and 20 deg binning. These were hardcoded;
+                     // they are arguments so the export can follow a different cache without an
+                     // edit. The defaults are the adopted production (cat5_s013).
+                     TString tag10 = "pr00", TString tag20 = "pr20")
 {
    TString here = gSystem->DirName(gInterpreter->GetCurrentMacroName());
    std::ofstream o((here + "/" + outName).Data());
@@ -84,7 +88,9 @@ void export_xsec_C14(TString outName = "a1954_14C_pp_cross_sections.txt",
    }
 
    // ---- inelastic, two binnings, already in mb/sr ----
-   const char *inFile[2] = {"plots/fit_angles_ps_dist_pr00.root", "plots/fit_angles_ps_dist_pr20.root"};
+   const TString inFileS[2] = {"plots/fit_angles_ps_dist_" + tag10 + ".root",
+                               "plots/fit_angles_ps_dist_" + tag20 + ".root"};
+   const char *inFile[2] = {inFileS[0].Data(), inFileS[1].Data()};
    const char *inBin[2]  = {"10 deg", "20 deg"};
    const char *lv[5]     = {"lvl0", "lvl1", "lvl2", "lvl3", "lvl4"};
    const char *lvName[5] = {"6.091 MeV 1-", "6.728 MeV 3-", "7.012 MeV 2+ (blend with 6.903)",

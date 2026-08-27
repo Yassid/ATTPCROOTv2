@@ -41,12 +41,24 @@ TH1D *hps = nullptr;
 double f903 = 0.0, SG903 = 0.0;
 const double E903 = 6.903;
 int i7012 = 2;            // index of the 7.012 in the 5-level layout
+// THE 6.589 0+ IS OMITTED BY THE 5-LEVEL FIT, AND IT IS NOT EMPTY.
+// The angle-integrated fit (fit_states_ps_C14.C, which uses 7 levels) gives it area 305 +- 17 --
+// an 18-sigma state 0.139 MeV below the 6.728, i.e. ~1 sigma of resolution away. Released freely
+// per angle it degenerates exactly as the 6.903 does (0 +- 87 in one bin, 37 +- 13 in another,
+// one bin losing its covariance altogether), so it gets the same treatment as the 6.903: TIE its
+// amplitude to a fixed fraction of the 6.728 and scan the fraction. No free parameter is added.
+// f589 = 0 reproduces the previous behaviour exactly. 305/1289 = 0.24 is the integrated value.
+double f589 = 0.0, SG589 = 0.0;
+const double E589 = 6.589;
+int i6728 = 1;            // index of the 6.728 in the 5-level layout
 double model(double *x, double *p)
 {
    double s = p[NL + 2] + p[NL + 3] * x[0];
    for (int i = 0; i < NL; ++i) s += p[i] * std::exp(-0.5 * std::pow((x[0] - (E[i] + fa::shift)) / SG[i], 2));
    if (f903 > 0 && i7012 < NL)
       s += f903 * p[i7012] * std::exp(-0.5 * std::pow((x[0] - (E903 + fa::shift)) / SG903, 2));
+   if (f589 > 0 && i6728 < NL)
+      s += f589 * p[i6728] * std::exp(-0.5 * std::pow((x[0] - (E589 + fa::shift)) / SG589, 2));
    s += p[NL] * std::exp(-0.5 * std::pow((x[0] - muN) / sgN, 2));
    if (hps) s += p[NL + 1] * hps->Interpolate(x[0]);
    return s;
@@ -79,7 +91,9 @@ void fit_angles_ps_C14(TString cache = "plots/proton_kin_cat5_tc.root", Double_t
                        Double_t lumi = -1,
                        // Tie a 6.903 (0-) component to this fraction of the 7.012 amplitude and
                        // refit. 0 = the previous behaviour. See the note in namespace fa.
-                       Double_t f903 = 0.0)
+                       Double_t f903 = 0.0,
+                       // tie the omitted 6.589 0+ to this fraction of the 6.728; see the note above
+                       Double_t f589 = 0.0)
 {
    gStyle->SetOptStat(0);
    TString here = gSystem->DirName(gInterpreter->GetCurrentMacroName());
@@ -119,6 +133,13 @@ void fit_angles_ps_C14(TString cache = "plots/proton_kin_cat5_tc.root", Double_t
       if (NL != 5) { printf("\033[1;31m  f903 needs the 5-level layout (nLevels=5)\033[0m\n"); return; }
       printf("\n  6.903 tied at %.2f x the 7.012 amplitude (sigma %.3f), no free parameter added\n",
              f903, fa::SG903);
+   }
+   fa::f589 = f589;
+   fa::SG589 = sig0 + dSig * (fa::E589 - 6.094);
+   if (f589 > 0) {
+      if (NL != 5) { printf("\033[1;31m  f589 needs the 5-level layout (nLevels=5)\033[0m\n"); return; }
+      printf("  6.589 tied at %.2f x the 6.728 amplitude (sigma %.3f), no free parameter added\n",
+             f589, fa::SG589);
    }
    const int NPAR = NL + 4;   // levels, 14N, PS, bg0, bg1
    int nb = (int)std::lround((exHi - exLo) / 0.05);
@@ -310,8 +331,8 @@ void fit_angles_ps_C14(TString cache = "plots/proton_kin_cat5_tc.root", Double_t
                          lumi > 0 ? "d#sigma/d#Omega [mb/sr]" : "yield/acc/sin#theta [arb.]"));
          g.Write(i < NL ? Form("lvl%d", i) : (i == NL ? "blend14N" : "continuum"));
       }
-      TNamed prov("provenance", Form("cache=%s accDir=%s lumi=%g nLevels=%d vz=%g-%g f903=%g",
-                                     cache.Data(), accDir.Data(), lumi, nLevels, vzLo, vzHi, f903));
+      TNamed prov("provenance", Form("cache=%s accDir=%s lumi=%g nLevels=%d vz=%g-%g f903=%g f589=%g",
+                                     cache.Data(), accDir.Data(), lumi, nLevels, vzLo, vzHi, f903, f589));
       prov.Write();
       fo.Close();
       printf("  wrote plots/fit_angles_ps_dist_%s.root (%d graphs + provenance)\n", tag.Data(), NL + 2);
