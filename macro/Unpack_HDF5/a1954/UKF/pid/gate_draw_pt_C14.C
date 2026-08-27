@@ -263,6 +263,32 @@ public:
    /// while placing vertices they sit exactly where the cursor needs to be and obscure the band
    /// being enclosed. The kinematic CURVE is a separate object and stays drawn either way, so
    /// turning these off does not remove the band's identity.
+   /// Refill the displayed plane from the points already in memory, keeping only tracks inside
+   /// the laboratory-angle window. This is a DISPLAY filter and a diagnostic: the clutter on the
+   /// plane is dominated by tracks the physics analysis never uses -- the recoil proton of
+   /// 14C(p,p') emerges at theta_lab < 90 deg, and 14C(p,t) tritons at 8-24 deg, so anything
+   /// outside that is either a beam-like track, a fragment, or a piece of a track that
+   /// pattern recognition split. Narrowing the window shows how much of the plane is which.
+   void ApplyAngle()
+   {
+      if (fEThLo) fThLo = fEThLo->GetNumber();
+      if (fEThHi) fThHi = fEThHi->GetNumber();
+      fH->Reset();
+      long kept = 0;
+      for (size_t i = 0; i < fX.size(); ++i) {
+         double thLab = fFlip ? 180.0 - fPol[i] : fPol[i];
+         if (thLab < fThLo || thLab > fThHi) continue;
+         fH->Fill(fX[i], fY[i]);
+         ++kept;
+      }
+      printf("theta_lab in [%.1f, %.1f] deg : %ld of %zu tracks kept (%.1f%%)\n",
+             fThLo, fThHi, kept, fX.size(), 100.0 * kept / std::max<size_t>(1, fX.size()));
+      if (fLabel)
+         fLabel->SetText(Form("  theta_lab %.0f-%.0f deg : %ld of %zu tracks (%.0f%%)",
+                              fThLo, fThHi, kept, fX.size(), 100.0 * kept / std::max<size_t>(1, fX.size())));
+      Redraw();
+   }
+
    void ToggleLocus()
    {
       fShowLocus = !fShowLocus;
@@ -391,6 +417,29 @@ private:
       fName = new TGTextEntry(bar, "triton_14C");
       fName->Resize(180, 22);
       bar->AddFrame(fName, new TGLayoutHints(kLHintsLeft, 2, 4, 4, 4));
+      // laboratory-angle window. Shown in the TRUE lab convention (180 - stored polar when
+      // flipPolar is set), because that is the frame the kinematics are quoted in: the (p,p')
+      // recoil proton lives below 90 deg and the (p,t) triton between 8 and 24.
+      bar->AddFrame(new TGLabel(bar, "  theta_lab:"),
+                    new TGLayoutHints(kLHintsLeft | kLHintsCenterY, 12, 2, 4, 4));
+      fEThLo = new TGNumberEntry(bar, 0.0, 5, -1, TGNumberFormat::kNESRealOne,
+                                 TGNumberFormat::kNEANonNegative,
+                                 TGNumberFormat::kNELLimitMinMax, 0.0, 180.0);
+      fEThLo->Resize(70, 22);
+      fEThLo->Connect("ValueSet(Long_t)", "PtGateDraw", this, "ApplyAngle()");
+      bar->AddFrame(fEThLo, new TGLayoutHints(kLHintsLeft, 2, 2, 4, 4));
+      bar->AddFrame(new TGLabel(bar, "to"), new TGLayoutHints(kLHintsLeft | kLHintsCenterY, 2, 2, 4, 4));
+      fEThHi = new TGNumberEntry(bar, 180.0, 5, -1, TGNumberFormat::kNESRealOne,
+                                 TGNumberFormat::kNEANonNegative,
+                                 TGNumberFormat::kNELLimitMinMax, 0.0, 180.0);
+      fEThHi->Resize(70, 22);
+      fEThHi->Connect("ValueSet(Long_t)", "PtGateDraw", this, "ApplyAngle()");
+      bar->AddFrame(fEThHi, new TGLayoutHints(kLHintsLeft, 2, 4, 4, 4));
+      {
+         auto *ba = new TGTextButton(bar, "Apply angle");
+         ba->Connect("Clicked()", "PtGateDraw", this, "ApplyAngle()");
+         bar->AddFrame(ba, new TGLayoutHints(kLHintsLeft, 5, 4, 4, 4));
+      }
       main->AddFrame(bar, new TGLayoutHints(kLHintsTop | kLHintsExpandX));
       fLabel = new TGLabel(main, "  Draw around the band high and right of the proton gate, then Locus check. "
                                  "[Locus dots on/off] marks tracks on the (p,t) g.s. curve.");
@@ -413,6 +462,8 @@ private:
    TH2F *fH = nullptr;
    TCutG *fNew = nullptr, *fRefP = nullptr, *fRefD = nullptr;
    TCanvas *fCanvas = nullptr;
+   TGNumberEntry *fEThLo = nullptr, *fEThHi = nullptr;
+   double fThLo = 0.0, fThHi = 180.0;
    TGLabel *fLabel = nullptr;
    TGTextEntry *fName = nullptr;
    std::vector<float> fX, fY, fPol;
