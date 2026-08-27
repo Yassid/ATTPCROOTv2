@@ -1,0 +1,19 @@
+HEADER: 14C(P,P')14C* 2+ 7.341 MeV, Perey, INELOCA1 -- MDA basis
+JBIGA=0+
+REACTION: 14C(P, P)14C(2+ 7.341) ELAB=11.581
+BELX = 0.1
+PARAMETERSET INELOCA1
+LMAX=30
+INCOMING
+r0target
+v    =  51.783    r0 =   1.250    a =   0.650
+vi   =   0.000   ri0 =   0.000   ai =   0.000
+vsi  =  13.500  rsi0 =   1.250  asi =   0.470
+vso  =   7.500  rso0 =   1.250  aso =   0.470
+vsoi =   0.000 rsoi0 =   0.000 asoi =   0.000  rc0 =   1.250
+;
+OUTGOING
+;
+ANGLEMAX=180 ANGLESTEP=1
+;
+RETURN
