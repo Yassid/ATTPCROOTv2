@@ -45,13 +45,17 @@
 /// guess -- which is exactly how a low-rigidity polygon got fitted for a whole night.
 /// Brho(theta_lab) for 14C(p,t)12C at Ebeam, so the tracks that MUST be selected can be marked
 /// on the PID plane itself. exStar lets a locus be drawn for an excited 12C state as well.
-static double ptBrhoAtC14(double thlab, double Eb = 159.75, double exStar = 0.0)
+/// Brho(theta_lab) for any two-body channel on the 14C beam. m3Amu/m4Amu default to the (p,t)
+/// triton and 12C; passing the deuteron and 13C draws the 14C(p,d)13C band instead, which is the
+/// contaminant sitting next to the tritons on this plane.
+static double ptBrhoAtC14(double thlab, double Eb = 159.75, double exStar = 0.0,
+                          double m3Amu = 3.016049, double m4Amu = 12.000000)
 {
    const double u = 931.49401;
    const double m1 = 14.003242 * u;   // 14C beam
    const double m2 = 1.007825 * u;    // proton target
-   const double m3 = 3.016049 * u;    // triton ejectile
-   const double m4 = 12.000000 * u + exStar;  // 12C residual
+   const double m3 = m3Amu * u;       // ejectile
+   const double m4 = m4Amu * u + exStar;      // residual
    double E1 = Eb + m1, pb = std::sqrt(E1 * E1 - m1 * m1), thr = thlab * TMath::DegToRad(), best = -1;
    for (double ke = 0.2; ke < 170; ke += 0.05) {
       double E3 = ke + m3, p3 = std::sqrt(E3 * E3 - m3 * m3), E4 = E1 + m2 - E3;
@@ -67,11 +71,12 @@ static double ptBrhoAtC14(double thlab, double Eb = 159.75, double exStar = 0.0)
 /// The locus as a curve, in whichever polar convention is asked for. flip = true means the stored
 /// polar angle is 180 - theta_lab, which is what the a1975 drawer assumed; it is an ARGUMENT here
 /// because the convention is exactly the kind of thing that is wrong silently.
-static TGraph *ptLocusGraph(bool flip, double Eb, double exStar, int colour)
+static TGraph *ptLocusGraph(bool flip, double Eb, double exStar, int colour,
+                            double m3Amu = 3.016049, double m4Amu = 12.000000)
 {
    auto *g = new TGraph();
    for (double th = 1; th <= 179; th += 1.0) {
-      double b = ptBrhoAtC14(th, Eb, exStar);
+      double b = ptBrhoAtC14(th, Eb, exStar, m3Amu, m4Amu);
       if (b <= 0) continue;
       g->SetPoint(g->GetN(), flip ? 180.0 - th : th, b);
    }
@@ -337,6 +342,14 @@ public:
       ApplyAxes();
    }
 
+   /// Show or hide the (p,d) deuteron band.
+   void ToggleDeuteron()
+   {
+      fShowDeut = !fShowDeut;
+      printf("deuteron (p,d) band %s\n", fShowDeut ? "ON (violet, dashed)" : "OFF");
+      Redraw();
+   }
+
    void ToggleLocus()
    {
       fShowLocus = !fShowLocus;
@@ -355,6 +368,13 @@ public:
          fOnLocus->SetMarkerStyle(20);
          fOnLocus->SetMarkerSize(0.45);
          fOnLocus->Draw("P same");
+      }
+      // the 14C(p,d)13C deuteron band, drawn so the triton gate can be placed AWAY from it rather
+      // than by eye. Deuterons are the natural contaminant here: same Z, so the same charge state,
+      // and a rigidity that runs through the same region of the plane.
+      if (fShowDeut) {
+         if (!fDeutLoc) fDeutLoc = ptLocusGraph(fFlip, fEbeam, 0.0, kViolet + 1, 2.014102, 13.003355);
+         if (fDeutLoc) { fDeutLoc->SetLineWidth(3); fDeutLoc->SetLineStyle(2); fDeutLoc->Draw("L same"); }
       }
       if (fRefP) fRefP->Draw("L");
       if (fRefD) fRefD->Draw("L");
@@ -453,10 +473,10 @@ private:
       main->SetWindowName("a1954 14C(p,t)12C PID  --  draw the triton gate");
       auto *bar = new TGHorizontalFrame(main);
       const char *lbl[] = {"Draw new gate", "Evaluate", "Locus check", "Locus dots on/off",
-                           "Save JSON", "Save PNG", "Redraw", "Quit"};
+                           "(p,d) band on/off", "Save JSON", "Save PNG", "Redraw", "Quit"};
       const char *slot[] = {"DrawGate()", "Evaluate()", "LocusCheck()", "ToggleLocus()",
-                            "Save()", "SavePNG()", "Redraw()", "Quit()"};
-      for (int i = 0; i < 8; ++i) {
+                            "ToggleDeuteron()", "Save()", "SavePNG()", "Redraw()", "Quit()"};
+      for (int i = 0; i < 9; ++i) {
          auto *b = new TGTextButton(bar, lbl[i]);
          b->Connect("Clicked()", "PtGateDraw", this, slot[i]);
          bar->AddFrame(b, new TGLayoutHints(kLHintsLeft, 5, 4, 4, 4));
@@ -519,7 +539,7 @@ private:
       }
       main->AddFrame(bar2, new TGLayoutHints(kLHintsTop | kLHintsExpandX));
       fLabel = new TGLabel(main, "  Draw around the band high and right of the proton gate, then Locus check. "
-                                 "[Locus dots on/off] marks tracks on the (p,t) g.s. curve.");
+                                 "Violet dashed = the (p,d) deuteron band: keep the gate off it.");
       main->AddFrame(fLabel, new TGLayoutHints(kLHintsTop | kLHintsExpandX, 6, 6, 2, 2));
       auto *ec = new TRootEmbeddedCanvas("ec", main, 1120, 800);
       main->AddFrame(ec, new TGLayoutHints(kLHintsExpandX | kLHintsExpandY));
@@ -541,6 +561,8 @@ private:
    TCanvas *fCanvas = nullptr;
    TGNumberEntry *fEThLo = nullptr, *fEThHi = nullptr;
    double fThLo = 0.0, fThHi = 180.0;
+   TGraph *fDeutLoc = nullptr;
+   bool fShowDeut = true;
    TGNumberEntry *fEXlo = nullptr, *fEXhi = nullptr, *fEYlo = nullptr, *fEYhi = nullptr;
    TGNumberEntry *fENbx = nullptr, *fENby = nullptr;
    double fXlo = 0.0, fXhi = 30.0, fYlo = 0.0, fYhi = 3.0;
