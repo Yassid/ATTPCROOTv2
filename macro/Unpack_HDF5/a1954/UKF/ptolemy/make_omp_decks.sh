@@ -17,7 +17,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PTOLEMY="${PTOLEMY:-/home/yassid/PtolemyCpp/ptolemy}"
 mkdir -p "$HERE/expanded"
 # level tag -> "Jpi Ex"
-declare -A LEVELS=( [6094_1m]="1- 6.094" [6728_3m]="3- 6.728" [7012_2p]="2+ 7.012" )
+declare -A LEVELS=( [6094_1m]="1- 6.094" [6728_3m]="3- 6.728" [7012_2p]="2+ 7.012" [8317_2p]="2+ 8.317" )
 for P in K V G P M; do
   printf '14C(p,p)14C  0+  none  0+  0.000  11.581MeV  %s\n' "$P" > "$HERE/expanded/el_$P.dwba"
   "$PTOLEMY" --create-infile "$HERE/expanded/el_$P.in" "$HERE/expanded/el_$P.dwba" >/dev/null 2>&1
