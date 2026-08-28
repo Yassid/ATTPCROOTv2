@@ -15,7 +15,8 @@
 //
 //   root -l 'rundigi_sim.C("./data/attpcsim_in.root")'
 void rundigi_sim(TString mcFile = "./data/attpcsim_in.root",
-                 TString outFile = "./data/output_digi.root")
+                 TString outFile = "./data/output_digi.root",
+                 Bool_t keepElectrons = kTRUE)
 {
    TStopwatch timer;
    timer.Start();
@@ -39,7 +40,9 @@ void rundigi_sim(TString mcFile = "./data/attpcsim_in.root",
 
    // ---- ionisation, diffusion and the Langevin drift -----------------------
    AtClusterizeTask *clusterizer = new AtClusterizeTask();
-   clusterizer->SetPersistence(kTRUE);   // keep the electrons: needed for the truth comparison
+   // The drifted-electron collection is ~90% of the output volume and is only needed for
+   // the truth-residual study. Bulk production for charge-spectrum work turns it off.
+   clusterizer->SetPersistence(keepElectrons);
 
    // ---- pad response and electronics --------------------------------------
    AtPulseTask *pulse = new AtPulseTask();
