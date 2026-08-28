@@ -251,9 +251,23 @@ suggestive but not established.)
 | | |
 |---|---|
 | IC beam window | `pid/ic_C15d.json`, **931–1413 ADC** (the 1168 peak), edges at 0.1% of peak height |
-| PID gate | `pid/proton_C15d.json`, 27 vertices, Z=1 A=1 |
-| Selection | 220,229 IC-gated tracks → **132,815 in gate (60.3%)** → `pid/sel_proton_C15d.root` |
-| Per-run yield | 58.5%–63.7% — flat, so the gain match is holding |
+| Proton gate | `pid/proton_C15d.json`, 21 vertices, Z=1 A=1 — **37,346 in gate (17.0%)**, per-run 14.1–18.8% |
+| Deuteron gate | `pid/deuteron_C15d.json`, 27 vertices, Z=1 A=2 — **132,815 (60.3%)**, per-run 58.5–63.7% |
+
+### ★ The brightest band is NOT the proton
+
+The proton is the **lowest** band; the brightest is the **deuteron**. In the Bρ 0.70–0.90 slice where
+the three Z=1 bands resolve, the peaks are 4.8 (p), 9.2 (d), 14.2 (t) and the *dominant* population
+sits at 8.6 — the deuteron. Reading "lowest" as "brightest" put the first gate on the wrong band,
+and only a band-position measurement caught it. To check which band a gate actually holds:
+
+```
+project the in-gate tracks onto sqrt(dE/dx) in Brho 0.70-0.90 and compare the peak
+against 4.8 / 9.2 / 14.2
+```
+
+Nothing sits *below* the proton: it is the lightest Z=1 species, so at fixed Bρ it has the lowest
+dE/dx. A gate whose band falls under another Z=1 gate's band means the other one is mislabelled.
 
 `apply_gate_C15d.C` reads `pid/points_C15d.root`, which already carries the gain match and the IC
 join with its length checks — deriving either again in the consumer would be two implementations

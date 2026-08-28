@@ -243,9 +243,45 @@ public:
          printf("no gate drawn -- nothing to save\n");
          return;
       }
-      FILE *f = fopen(fOut.Data(), "w");
+      // ★ THE FILENAME FOLLOWS THE NAME FIELD, so there is ONE source of truth. Previously the
+      // path came from the launcher argument while the name field was independent, so typing
+      // "proton_C15d" while the drawer had been opened for the deuteron wrote a gate called
+      // proton_C15d into deuteron_C15d.json -- with the deuteron's Z and A. Both files then
+      // disagreed with their own contents, and only a band-position measurement could tell which
+      // was which.
+      TString outPath = fOut;
+      TString typed = fName->GetText();
+      // ...and the SPECIES follows it too. Deriving the filename from the name while leaving Z/A
+      // on the launcher's value still lets proton_C15d.json be written with the deuteron's A=2,
+      // which is exactly the half-fix that hides the problem instead of removing it.
+      {
+         TString low = typed;
+         low.ToLower();
+         struct { const char *key; int Z, A; } kSpecies[] = {
+            {"proton", 1, 1}, {"deuteron", 1, 2}, {"triton", 1, 3}, {"3he", 2, 3}, {"alpha", 2, 4},
+            {"4he", 2, 4}};
+         for (auto &sp : kSpecies)
+            if (low.Contains(sp.key)) {
+               if (fZ != sp.Z || fA != sp.A) {
+                  printf("\033[1;33mnote: name '%s' implies Z=%d A=%d; overriding the Z=%d A=%d this "
+                         "drawer was opened with.\033[0m\n", typed.Data(), sp.Z, sp.A, fZ, fA);
+                  fZ = sp.Z;
+                  fA = sp.A;
+               }
+               break;
+            }
+      }
+      typed = typed.Strip(TString::kBoth);
+      if (typed.Length()) {
+         TString dirPart = gSystem->DirName(fOut.Data());
+         outPath = (dirPart.Length() && dirPart != ".") ? dirPart + "/" + typed + ".json" : typed + ".json";
+         if (outPath != fOut)
+            printf("\033[1;33mnote: writing to %s (from the name field), not %s\033[0m\n",
+                   outPath.Data(), fOut.Data());
+      }
+      FILE *f = fopen(outPath.Data(), "w");
       if (!f) {
-         printf("cannot write %s\n", fOut.Data());
+         printf("cannot write %s\n", outPath.Data());
          return;
       }
       // Z and A are NOT decoration: without them the loader cannot tell one polygon from another
@@ -268,8 +304,8 @@ public:
       }
       fprintf(f, "    ]\n}\n");
       fclose(f);
-      printf("saved %d vertices -> %s\n", np, fOut.Data());
-      fLabel->SetText(Form("  saved %d vertices -> %s", np, fOut.Data()));
+      printf("saved %d vertices (Z=%d A=%d) -> %s\n", np, fZ, fA, outPath.Data());
+      fLabel->SetText(Form("  saved %d vertices, Z=%d A=%d -> %s", np, fZ, fA, outPath.Data()));
    }
 
    void SavePNG()

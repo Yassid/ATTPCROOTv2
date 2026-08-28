@@ -39,8 +39,21 @@ cd "$HERE"
 }
 mkdir -p pid/plots
 
-echo "opening the gate drawer: gate=$NAME  IC=[$ICLO,$ICHI]  Ebeam=$EBEAM"
+# Overlay every gate already drawn EXCEPT the one being drawn now, so a new band is placed
+# relative to the ones already identified rather than by eye. The drawer takes two reference
+# slots, so the two most recently written are used.
+REFS=()
+for j in pid/*.json; do
+   [[ -e "$j" ]] || continue
+   [[ "$(basename "$j")" == "${NAME}.json" ]] && continue
+   [[ "$(basename "$j")" == ic_*.json ]] && continue     # the IC window is not a PID polygon
+   REFS+=("$j")
+done
+REF1="${REFS[0]:-}"; REF2="${REFS[1]:-}"
+
+echo "opening the gate drawer: gate=$NAME  Z=$Z A=$A  IC=[$ICLO,$ICHI]  Ebeam=$EBEAM"
+[[ -n "$REF1" ]] && echo "  overlaying for reference: $REF1 ${REF2:+and $REF2}"
 # ★ ROOT's interactive prompt QUITS ON STDIN EOF. Launched detached with stdin from /dev/null the
 # GUI appears and vanishes in the same second, which looks exactly like a crash. Keep stdin open.
 [[ -t 0 ]] || exec 0< <(while :; do sleep 3600; done)
-exec root -l "pid/gate_draw_C15d.C(\"pid/${NAME}.json\",\"pid/points_C15d.root\",\"\",\"\",60.0,2.0,${ICLO},${ICHI},$( [[ "$EBEAM" != 0 ]] && echo true || echo false ),${EBEAM},true,${Z},${A})"
+exec root -l "pid/gate_draw_C15d.C(\"pid/${NAME}.json\",\"pid/points_C15d.root\",\"${REF1}\",\"${REF2}\",60.0,2.0,${ICLO},${ICHI},$( [[ "$EBEAM" != 0 ]] && echo true || echo false ),${EBEAM},true,${Z},${A})"
