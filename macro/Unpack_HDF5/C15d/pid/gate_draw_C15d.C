@@ -279,6 +279,16 @@ public:
             printf("\033[1;33mnote: writing to %s (from the name field), not %s\033[0m\n",
                    outPath.Data(), fOut.Data());
       }
+      // ★ NEVER SILENTLY REPLACE A DIFFERENT GATE. Following the name field means a Save can now
+      // land on a file the drawer was not opened for -- which is how a triton polygon, saved once
+      // under the name "proton_C15d" while the name was being corrected, overwrote the real proton
+      // gate. The old polygon is kept as .bak and the replacement is announced.
+      if (!gSystem->AccessPathName(outPath.Data())) {
+         TString bak = outPath + ".bak";
+         gSystem->CopyFile(outPath.Data(), bak.Data(), kTRUE);
+         printf("\033[1;31mNOTE: %s already existed and has been REPLACED. Previous version kept as "
+                "%s -- check you did not mean a different file.\033[0m\n", outPath.Data(), bak.Data());
+      }
       FILE *f = fopen(outPath.Data(), "w");
       if (!f) {
          printf("cannot write %s\n", outPath.Data());

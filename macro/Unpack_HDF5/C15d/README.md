@@ -251,8 +251,13 @@ suggestive but not established.)
 | | |
 |---|---|
 | IC beam window | `pid/ic_C15d.json`, **931–1413 ADC** (the 1168 peak), edges at 0.1% of peak height |
-| Proton gate | `pid/proton_C15d.json`, 21 vertices, Z=1 A=1 — **37,346 in gate (17.0%)**, per-run 14.1–18.8% |
-| Deuteron gate | `pid/deuteron_C15d.json`, 27 vertices, Z=1 A=2 — **132,815 (60.3%)**, per-run 58.5–63.7% |
+| Proton gate | `pid/proton_C15d.json`, Z=1 A=1 — **37,346 (17.0%)**, band peak 4.12 |
+| Deuteron gate | `pid/deuteron_C15d.json`, Z=1 A=2 — **132,815 (60.3%)**, band peak 8.62 |
+| Triton gate | `pid/triton_C15d.json`, Z=1 A=3 — **21,676 (9.8%)**, band peak 12.88 |
+| Overlaps | p&d 173, d&t 656, p&t 0 — of 220,229 IC-gated tracks |
+
+Each gate's band peak is checked against the resolved references 4.8 / 9.2 / 14.2, so the label is
+verified rather than asserted.
 
 ### ★ The brightest band is NOT the proton
 
