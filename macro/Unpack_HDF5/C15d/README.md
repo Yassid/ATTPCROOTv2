@@ -182,7 +182,37 @@ a run has no table entry rather than passing it through as 1.0 unnoticed.
 
 ## Gates
 
-Drawn on this plane, with `draw_gate_C15d.C` (interactive — run without `-b`), applied with
+### Browser explorer (no X11)
+
+```bash
+root -b -q 'make_pid_explorer_html.C()'      # -> ~/C15d_pid_explorer.html, ~6.7 MB
+```
+
+One self-contained HTML file with the plane baked in — same idea as the a2091 kinematics explorer
+(`a2091/UKF/pp/make_explorer_html.C`), but showing the PID plane, because that is what exists at
+this stage and drawing gates on it is what blocks the analysis. No server, no X11, no CDN.
+
+Click **draw**, click round a band, and close the polygon (double-click, or click the first
+vertex). The page reports the in-gate count live and emits **spyral_utils Cut2D JSON** with Z/A —
+byte-compatible with `AtCut2D`, `draw_gate_C15d.C` and `apply_gate_C15d.C`. Save it as
+`gates/<name>.json`.
+
+Live controls: run range, `nClusters`, vertex R, axis ranges, binning, log z, and a
+**matched/raw toggle**. Raw dE/dx is baked in with the gain table beside it and the factor applied
+in the page, so the toggle is live and the underlying measurement is always present — the page
+cannot show a matched plane it cannot reproduce, and it says so in red when no table is loaded.
+
+It also plots the **per-run in-gate fraction** for the current gate, and flags a spread > 1.5× as a
+gain-matching problem rather than physics.
+
+Two things to know. The default axes (√dE/dx ≤ 60, Bρ ≤ 2) hold **87.5%** of tracks; Bρ carries a
+1/sin(polar) divergence for near-axis tracks, so 2.6% sit above 5 T·m — raise the y-max slider to
+see them. And the values are baked as scaled integers (√dE/dx ×100, Bρ ×1000), which is what keeps
+400k tracks to ~6.7 MB.
+
+### In ROOT
+
+`draw_gate_C15d.C` (interactive — run without `-b`), applied with
 `apply_gate_C15d.C`, which writes a `sel` tree of `(run, event, trackID)` so the selection can be
 used by the fitting stage without recomputing `AtSpyralPID`. A gate you can only draw is half a
 gate.

@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>C15d PID explorer</title>
+<style>
+:root{--bg:#12141a;--panel:#1b1e26;--edge:#2c313d;--fg:#e6e9ef;--dim:#9aa3b2;--acc:#5ec8f5;--warn:#ffb454;--bad:#ff6b6b;--ok:#7ee787}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:13px/1.45 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+header{padding:10px 16px;border-bottom:1px solid var(--edge);display:flex;gap:16px;align-items:baseline;flex-wrap:wrap}
+h1{font-size:15px;margin:0;font-weight:600}
+.sub{color:var(--dim);font-size:12px}
+main{display:flex;gap:14px;padding:14px;align-items:flex-start;flex-wrap:wrap}
+#plotwrap{position:relative;background:var(--panel);border:1px solid var(--edge);border-radius:6px;padding:8px}
+canvas{display:block;cursor:crosshair}
+aside{width:320px;min-width:280px;background:var(--panel);border:1px solid var(--edge);border-radius:6px;padding:12px}
+fieldset{border:1px solid var(--edge);border-radius:5px;margin:0 0 12px;padding:8px 10px}
+legend{color:var(--acc);font-size:11px;text-transform:uppercase;letter-spacing:.06em;padding:0 4px}
+label{display:flex;justify-content:space-between;align-items:center;gap:8px;margin:5px 0;color:var(--dim)}
+label span.v{color:var(--fg);font-variant-numeric:tabular-nums}
+input[type=range]{width:130px}
+input[type=number],input[type=text],select{background:#0e1015;color:var(--fg);border:1px solid var(--edge);border-radius:4px;padding:3px 5px;width:96px;font:inherit}
+button{background:#242a36;color:var(--fg);border:1px solid var(--edge);border-radius:4px;padding:5px 9px;cursor:pointer;font:inherit}
+button:hover{border-color:var(--acc)}
+button.on{background:var(--acc);color:#08121a;border-color:var(--acc);font-weight:600}
+.row{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+td{padding:2px 0;color:var(--dim)}td.n{text-align:right;color:var(--fg)}
+textarea{width:100%;height:120px;background:#0e1015;color:var(--fg);border:1px solid var(--edge);border-radius:4px;font:11px/1.35 ui-monospace,Menlo,Consolas,monospace;padding:6px}
+.note{color:var(--warn);font-size:11px;margin-top:6px}
+.bad{color:var(--bad)}.ok{color:var(--ok)}
+#tip{position:absolute;pointer-events:none;background:#0b0d12ee;border:1px solid var(--edge);border-radius:4px;padding:3px 6px;font-variant-numeric:tabular-nums;display:none}
+</style>
+</head>
+<body>
+<header>
+  <h1 id="ttl">C15d PID explorer</h1>
+  <span class="sub" id="hdr"></span>
+</header>
+<main>
+  <div id="plotwrap">
+    <canvas id="cv" width="820" height="640"></canvas>
+    <div id="tip"></div>
+  </div>
+  <aside>
+    <fieldset><legend>Gain</legend>
+      <div class="row">
+        <button id="bMatched" class="on">matched</button>
+        <button id="bRaw">raw</button>
+      </div>
+      <div class="note" id="gainNote"></div>
+    </fieldset>
+
+    <fieldset><legend>Cuts</legend>
+      <label>runs <span><input type="number" id="rlo" step="1"> – <input type="number" id="rhi" step="1"></span></label>
+      <label>nClusters ≥ <span class="v"><input type="number" id="ncmin" value="0" step="1" style="width:64px"></span></label>
+      <label>vertex R &lt; <span class="v"><input type="number" id="vrmax" value="-1" step="5" style="width:64px"> mm</span></label>
+      <div class="note">vertex R &lt; 0 disables that cut. `valid` is always required.</div>
+    </fieldset>
+
+    <fieldset><legend>View</legend>
+      <label>x max <span class="v"><input type="range" id="xmax" min="10" max="90" step="1"><b id="xmaxv"></b></span></label>
+      <label>y max <span class="v"><input type="range" id="ymax" min="5" max="30" step="1"><b id="ymaxv"></b></span></label>
+      <label>log z <span><input type="checkbox" id="logz" checked></span></label>
+      <label>bins <span class="v"><input type="range" id="bins" min="120" max="500" step="10"><b id="binsv"></b></span></label>
+    </fieldset>
+
+    <fieldset><legend>Gate</legend>
+      <div class="row">
+        <button id="bDraw">draw</button>
+        <button id="bUndo">undo</button>
+        <button id="bClear">clear</button>
+      </div>
+      <label>name <span><input type="text" id="gname" value="proton_C15d" style="width:150px"></span></label>
+      <label>Z, A <span><input type="number" id="gz" value="1" style="width:44px"><input type="number" id="ga" value="1" style="width:44px"></span></label>
+      <table id="stats"></table>
+      <div class="row"><button id="bJson">Cut2D JSON</button><button id="bCopy">copy</button></div>
+      <textarea id="json" spellcheck="false" placeholder="close the polygon (double-click or click the first vertex) to export"></textarea>
+      <div class="note">Save as <code>gates/&lt;name&gt;.json</code>, then
+        <code>apply_gate_C15d.C("gates/&lt;name&gt;.json")</code> for the exact per-track selection.</div>
+    </fieldset>
+
+    <fieldset><legend>Per-run in-gate fraction</legend>
+      <canvas id="prc" width="296" height="90"></canvas>
+      <div class="note" id="prnote">A gate that holds over part of the run set and not the rest is a
+        gain-matching failure, not physics.</div>
+    </fieldset>
+  </aside>
+</main>
+
+<script>
+const CFG = __CFG__;
+const D   = __DATA__;
+
+// Data are baked as scaled integers to keep the page small: sqrt(dE/dx) x100, Brho x1000,
+// vertex R x1. Raw values are stored and the gain factor applied HERE, so the matched/raw
+// toggle is live and the page always carries the underlying measurement.
+const N = D.sx.length;
+const SX=100, BY=1000;
+const gf = CFG.gain || {};          // run -> factor (empty object = no table)
+let matched = Object.keys(gf).length > 0;
+
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+const PAD={l:64,r:16,t:12,b:44};
+let XMAX=CFG.xmax, YMAX=CFG.ymax, NB=CFG.bins||300, LOGZ=true;
+let poly=[], drawing=false, closed=false;
+let lastGrid=null, lastCount={in:0,tot:0};
+
+const $=id=>document.getElementById(id);
+const px=x=>PAD.l+(x/XMAX)*(cv.width-PAD.l-PAD.r);
+const py=y=>cv.height-PAD.b-(y/YMAX)*(cv.height-PAD.t-PAD.b);
+const ux=p=>((p-PAD.l)/(cv.width-PAD.l-PAD.r))*XMAX;
+const uy=p=>((cv.height-PAD.b-p)/(cv.height-PAD.t-PAD.b))*YMAX;
+
+function xval(i){
+  const raw = D.sx[i]/SX;
+  if(!matched) return raw;
+  const f = gf[D.run[i]];
+  return f===undefined ? raw : raw*Math.sqrt(f);   // sqrt: the factor multiplies dE/dx
+}
+
+function pass(i){
+  if(D.run[i]<+$('rlo').value || D.run[i]>+$('rhi').value) return false;
+  if(D.nc[i] < +$('ncmin').value) return false;
+  const vr=+$('vrmax').value;
+  if(vr>0 && D.vr[i]>=vr) return false;
+  return true;
+}
+
+// ray casting, identical convention to AtCut2D::IsInside / spyral_utils Cut2D
+function inside(P,x,y){
+  let r=false;
+  for(let i=0,j=P.length-1;i<P.length;j=i++){
+    const xi=P[i][0],yi=P[i][1],xj=P[j][0],yj=P[j][1];
+    if(((yi>y)!==(yj>y)) && (x < (xj-xi)*(y-yi)/(yj-yi)+xi)) r=!r;
+  }
+  return r;
+}
+
+function render(){
+  const W=cv.width-PAD.l-PAD.r, H=cv.height-PAD.t-PAD.b;
+  const nx=NB, ny=Math.round(NB*H/W);
+  const g=new Float32Array(nx*ny);
+  let nIn=0,nTot=0, maxv=0;
+  const perRun={};
+  const useGate = closed && poly.length>=3;
+
+  for(let i=0;i<N;i++){
+    if(!pass(i)) continue;
+    const x=xval(i), y=D.by[i]/BY;
+    nTot++;
+    if(useGate){
+      const r=D.run[i];
+      if(!perRun[r]) perRun[r]=[0,0];
+      perRun[r][1]++;
+      if(inside(poly,x,y)){ nIn++; perRun[r][0]++; }
+    }
+    if(x<0||x>=XMAX||y<0||y>=YMAX) continue;
+    const bx=(x/XMAX*nx)|0, by=(y/YMAX*ny)|0;
+    const k=by*nx+bx; g[k]++; if(g[k]>maxv) maxv=g[k];
+  }
+  lastGrid={g,nx,ny,maxv}; lastCount={in:nIn,tot:nTot};
+
+  ctx.fillStyle='#12141a'; ctx.fillRect(0,0,cv.width,cv.height);
+  // heatmap
+  const img=ctx.createImageData(W,H);
+  const lm=LOGZ?Math.log10(maxv+1):maxv;
+  for(let p=0;p<W*H;p++){
+    const cx=(p%W), cy=(p/W)|0;
+    const bx=(cx/W*nx)|0, by=ny-1-((cy/H*ny)|0);
+    const v=g[by*nx+bx];
+    let t=0;
+    if(v>0) t=LOGZ?Math.log10(v+1)/lm:v/lm;
+    const c=viridis(t, v>0);
+    const o=p*4; img.data[o]=c[0]; img.data[o+1]=c[1]; img.data[o+2]=c[2]; img.data[o+3]=255;
+  }
+  ctx.putImageData(img,PAD.l,PAD.t);
+  axes();
+  drawPoly();
+  stats();
+  perRunPlot(perRun);
+}
+
+function viridis(t,on){
+  if(!on) return [18,20,26];
+  t=Math.max(0,Math.min(1,t));
+  const s=[[68,1,84],[59,82,139],[33,145,140],[94,201,98],[253,231,37]];
+  const f=t*(s.length-1), i=Math.min(s.length-2,f|0), u=f-i;
+  return [0,1,2].map(k=>Math.round(s[i][k]+(s[i+1][k]-s[i][k])*u));
+}
+
+function axes(){
+  ctx.strokeStyle='#2c313d'; ctx.fillStyle='#9aa3b2'; ctx.lineWidth=1;
+  ctx.font='11px ui-monospace,Menlo,Consolas,monospace';
+  ctx.strokeRect(PAD.l,PAD.t,cv.width-PAD.l-PAD.r,cv.height-PAD.t-PAD.b);
+  ctx.textAlign='center';
+  for(let k=0;k<=8;k++){ const x=XMAX*k/8;
+    ctx.beginPath();ctx.moveTo(px(x),cv.height-PAD.b);ctx.lineTo(px(x),cv.height-PAD.b+4);ctx.stroke();
+    ctx.fillText(x.toFixed(0),px(x),cv.height-PAD.b+16); }
+  ctx.textAlign='right';
+  for(let k=0;k<=6;k++){ const y=YMAX*k/6;
+    ctx.beginPath();ctx.moveTo(PAD.l,py(y));ctx.lineTo(PAD.l-4,py(y));ctx.stroke();
+    ctx.fillText(y.toFixed(2),PAD.l-7,py(y)+4); }
+  ctx.textAlign='center'; ctx.fillStyle='#e6e9ef';
+  ctx.fillText(matched?'√(dE/dx)   gain matched':'√(dE/dx)   RAW, gain not matched',
+               PAD.l+(cv.width-PAD.l-PAD.r)/2, cv.height-6);
+  ctx.save(); ctx.translate(14,PAD.t+(cv.height-PAD.t-PAD.b)/2); ctx.rotate(-Math.PI/2);
+  ctx.fillText('Bρ   (T m)',0,0); ctx.restore();
+}
+
+function drawPoly(){
+  if(!poly.length) return;
+  ctx.strokeStyle='#ff6b6b'; ctx.lineWidth=2; ctx.beginPath();
+  poly.forEach((p,i)=>{ const X=px(p[0]),Y=py(p[1]); i?ctx.lineTo(X,Y):ctx.moveTo(X,Y); });
+  if(closed) ctx.closePath();
+  ctx.stroke();
+  ctx.fillStyle='#ff6b6b';
+  poly.forEach(p=>{ ctx.beginPath(); ctx.arc(px(p[0]),py(p[1]),3,0,7); ctx.fill(); });
+}
+
+function stats(){
+  const t=$('stats'); const pc=lastCount.tot?100*lastCount.in/lastCount.tot:0;
+  t.innerHTML=`<tr><td>tracks shown</td><td class="n">${lastCount.tot.toLocaleString()}</td></tr>`+
+    (closed?`<tr><td>in gate</td><td class="n">${lastCount.in.toLocaleString()} (${pc.toFixed(1)}%)</td></tr>`:'');
+}
+
+function perRunPlot(pr){
+  const c=$('prc'), x=c.getContext('2d');
+  x.fillStyle='#1b1e26'; x.fillRect(0,0,c.width,c.height);
+  const runs=Object.keys(pr).map(Number).sort((a,b)=>a-b).filter(r=>pr[r][1]>=50);
+  if(!closed||runs.length<2){ $('prnote').textContent='Close a gate to see its per-run yield.'; return; }
+  const fr=runs.map(r=>100*pr[r][0]/pr[r][1]);
+  const lo=Math.min(...fr), hi=Math.max(...fr), r0=runs[0], r1=runs[runs.length-1];
+  x.strokeStyle='#5ec8f5'; x.lineWidth=1.5; x.beginPath();
+  runs.forEach((r,i)=>{ const X=6+(r-r0)/(r1-r0||1)*(c.width-12);
+    const Y=c.height-8-((fr[i]-lo)/((hi-lo)||1))*(c.height-20); i?x.lineTo(X,Y):x.moveTo(X,Y); });
+  x.stroke();
+  x.fillStyle='#9aa3b2'; x.font='10px ui-monospace,monospace';
+  x.fillText(hi.toFixed(1)+'%',4,10); x.fillText(lo.toFixed(1)+'%',4,c.height-2);
+  const spread=lo>0?hi/lo:0;
+  $('prnote').innerHTML=`runs ${r0}–${r1}, in-gate ${lo.toFixed(1)}–${hi.toFixed(1)}% `+
+    (spread>1.5?`<span class="bad">(spread ${spread.toFixed(2)}× — check the gain match)</span>`
+              :`<span class="ok">(flat, spread ${spread.toFixed(2)}×)</span>`);
+}
+
+// ---- interaction ----------------------------------------------------------
+cv.addEventListener('mousemove',e=>{
+  const r=cv.getBoundingClientRect(), X=e.clientX-r.left, Y=e.clientY-r.top;
+  const tip=$('tip');
+  if(X<PAD.l||Y>cv.height-PAD.b){ tip.style.display='none'; return; }
+  tip.style.display='block'; tip.style.left=(X+12)+'px'; tip.style.top=(Y-8)+'px';
+  tip.textContent=`√dE/dx ${ux(X).toFixed(2)}   Bρ ${uy(Y).toFixed(3)}`;
+});
+cv.addEventListener('mouseleave',()=>$('tip').style.display='none');
+
+cv.addEventListener('click',e=>{
+  if(!drawing) return;
+  const r=cv.getBoundingClientRect();
+  const x=ux(e.clientX-r.left), y=uy(e.clientY-r.top);
+  // clicking the first vertex closes the polygon, same as double-click
+  if(poly.length>=3){
+    const d=Math.hypot(px(poly[0][0])-(e.clientX-r.left), py(poly[0][1])-(e.clientY-r.top));
+    if(d<8){ closed=true; drawing=false; $('bDraw').classList.remove('on'); render(); emit(); return; }
+  }
+  poly.push([x,y]); render();
+});
+cv.addEventListener('dblclick',()=>{ if(drawing&&poly.length>=3){ closed=true; drawing=false;
+  $('bDraw').classList.remove('on'); render(); emit(); }});
+
+$('bDraw').onclick=()=>{ drawing=!drawing; closed=false; $('bDraw').classList.toggle('on',drawing); };
+$('bUndo').onclick=()=>{ poly.pop(); closed=false; render(); };
+$('bClear').onclick=()=>{ poly=[]; closed=false; $('json').value=''; render(); };
+$('bMatched').onclick=()=>{ if(!Object.keys(gf).length) return; matched=true; toggleGain(); };
+$('bRaw').onclick=()=>{ matched=false; toggleGain(); };
+function toggleGain(){ $('bMatched').classList.toggle('on',matched); $('bRaw').classList.toggle('on',!matched); render(); }
+
+function emit(){
+  const o={name:$('gname').value, xaxis:'sqrt_dEdx', yaxis:'brho',
+           vertices:poly.map(p=>[+p[0].toFixed(4),+p[1].toFixed(5)]),
+           Z:+$('gz').value, A:+$('ga').value};
+  $('json').value=JSON.stringify(o,null,4);
+}
+$('bJson').onclick=emit;
+$('bCopy').onclick=()=>{ emit(); $('json').select(); document.execCommand('copy'); };
+
+['rlo','rhi','ncmin','vrmax'].forEach(id=>$(id).addEventListener('change',render));
+$('xmax').addEventListener('input',e=>{XMAX=+e.target.value;$('xmaxv').textContent=XMAX;render();});
+$('ymax').addEventListener('input',e=>{YMAX=+e.target.value/10;$('ymaxv').textContent=YMAX.toFixed(1);render();});
+$('bins').addEventListener('input',e=>{NB=+e.target.value;$('binsv').textContent=NB;render();});
+$('logz').addEventListener('change',e=>{LOGZ=e.target.checked;render();});
+
+// ---- init -----------------------------------------------------------------
+$('ttl').textContent=CFG.tag||'C15d PID explorer';
+$('hdr').textContent=`${N.toLocaleString()} valid tracks · runs ${CFG.rmin}–${CFG.rmax}`+
+  (CFG.sub?` · ${CFG.sub}`:'');
+$('rlo').value=CFG.rmin; $('rhi').value=CFG.rmax;
+$('xmax').value=XMAX; $('xmaxv').textContent=XMAX;
+$('ymax').value=Math.round(YMAX*10); $('ymaxv').textContent=YMAX.toFixed(1);
+$('bins').value=NB; $('binsv').textContent=NB;
+$('gainNote').innerHTML = Object.keys(gf).length
+  ? `${CFG.gainName} · ${Object.keys(gf).length} runs. Applied here, not baked into the reco —
+     the cached dE/dx is raw. <b>Draw the gate on the same setting you will apply it with.</b>`
+  : `<span class="bad">No gain table baked in — this plane is RAW.</span> Per-run gain drift is
+     ~29 % over this run set, so bands are smeared and a gate drawn here will not transfer.`;
+toggleGain();
+render();
+</script>
+</body>
+</html>
