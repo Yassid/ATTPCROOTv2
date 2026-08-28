@@ -280,9 +280,47 @@ that can disagree. **Pass the same IC window the gate was drawn with**: a gate d
 single-beam plane and applied to the full cocktail counts tracks from a beam it never meant to
 select, and the number looks perfectly reasonable.
 
+## Fitting
+
+`fitGenfit_C15d.C` → `dump_kine_C15d.C` → a `kin` ntuple. **Use GENFIT+CATIMA, not the UKF.**
+
+The PID gate is applied by `dump_kine_C15d.C`, joining on `(run, event, trackID)` from
+`apply_gate_C15d.C` — **not** through `AtGenfitter::SetPIDGate`, which evaluates its own
+`AtSpyralPID` on raw dE/dx while every gate here is drawn on the gain-matched plane. Fit
+everything, select afterwards on the identity triple.
+
+### B-field sign: **Bz = −2.85 T**, settled
+
+run_0017, 3000 events, deuteron hypothesis, deuteron gate:
+
+| B | N | median KE | median θ | forward | median χ²/ndf |
+|---|---|---|---|---|---|
+| **−2.85** | 260 | **2.02 MeV** | 72.1° | 96.2% | **0.076** |
+| +2.85 | 252 | 0.04 MeV | 73.4° | 84.9% | 4.022 |
+
+`+2.85` produces 0.04 MeV deuterons — unphysical — and a 53× worse χ²/ndf.
+
+### Two traps found while wiring this up
+
+- **The vertex is meaningless unless back-extrapolation is on.** `backExtrap` defaults to `kFALSE`,
+  and then `GetKinematicsXtr()`'s position is unset — it came out identically 0 in the smoke test
+  while the *energy* from the same struct was fine, so the zeros look like a beam-axis vertex
+  rather than an unfilled field.
+- `ft->GetTrackMetadata()` returns a `unique_ptr`, so `auto *md = ...` fails to compile in cling.
+  Use `const auto &md`.
+
+θ is **not** folded into the forward hemisphere — backward tracks are physical for (d,p) — and
+`dirFwd` records the hemisphere so a backward population can be told from a mis-seeded forward one.
+Collapsed fits (ndf ≤ 0) are counted and dropped rather than passed through as physics.
+
 ## Open
 
-- Reaction masses are not yet fixed anywhere in the workspace — the fitters only need the
-  ejectile. The excitation-energy step will need beam, target and residual.
+- **Beam energy**: to be taken from the Spyral analysis. It is not in `RunScript_d.py`
+  (`InterpSolverPhase` takes no beam energy) — look in `~/spryal_notebook/*.ipynb`. Until it is
+  known the kinematic locus in the gate GUI stays disabled (`eBeam = 0` by design) and there is no
+  absolute excitation-energy scale.
+- **(d,p) with backward protons** is the next channel and the one needing care: backward tracks
+  have not been exercised with this GENFIT+CATIMA build, so the direction conventions need
+  checking. `fitGenfit_C15d.C` already defaults to a 5–178° θ window with `backwardSeedFix` on.
 - No IC gate and no PID gate yet. Build both from the persisted (gain-matched) `AtPIDEvent`.
 - `run_0047` has no FRIB data, so it cannot receive an IC gate.
