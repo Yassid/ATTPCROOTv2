@@ -54,7 +54,9 @@ TB0:Int_t                       25   # pad-plane TB; DEPRECATED and IGNORED, AtP
 LorentzAngle:Double_t          0.0   # Lorentz Angle
 TBEntrance:Int_t               300   # Spyral window_time_bucket
 ZPadPlane:Double_t          1000.0   # mm  Spyral detector_length
-Density:Double_t           0.065643  # mg/cm3 == 6.5643e-5 g/cm3, D2 at 300 torr / 293 K
+Density:Double_t           0.065643  # mg/cm3 == 6.5643e-5 g/cm3. D2, 300 torr, ~295.2 K (22 C) --
+                                     # NOT 293.15 K, which would be 6.6101e-5, a 0.7% difference that
+                                     # feeds dE/dx and the CATIMA energy loss. Matches media.geo TargetD2_300.
 ThetaPad:Double_t            110.9   # AT-TPC pad plane rotation
 ThetaRot:Double_t              0.0   # Second Lorentz Angle
 GasPressure:Double_t           300   # torr
