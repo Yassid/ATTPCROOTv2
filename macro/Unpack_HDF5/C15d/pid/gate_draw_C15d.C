@@ -94,9 +94,9 @@ static TGraph *dpLocusGraph(bool flip, double Eb, double exStar, int colour,
 class C15dGateDraw : public TObject {
 public:
    C15dGateDraw(TString outJson, TString cache, TString refP, TString refD, double xMax, double yMax,
-              double icLo, double icHi, bool showLocus, double eBeam, bool flipPolar)
+              double icLo, double icHi, bool showLocus, double eBeam, bool flipPolar, int Z, int A)
       : fOut(outJson), fXmax(xMax), fYmax(yMax), fIcLo(icLo), fIcHi(icHi), fShowLocus(showLocus),
-        fEbeam(eBeam), fFlip(flipPolar)
+        fEbeam(eBeam), fFlip(flipPolar), fZ(Z), fA(A)
    {
       fH = new TH2F("hpt",
                     Form("C15d PID, gain matched, %s  --  draw the gate"
@@ -250,9 +250,16 @@ public:
       }
       // Z and A are NOT decoration: without them the loader cannot tell one polygon from another
       // when several are open, and the wrong one gets applied.
-      fprintf(f, "{\n    \"name\": \"%s\",\n    \"xaxis\": \"sqrtdedx\",\n    \"yaxis\": \"brho\",\n",
+      // ★ Z, A AND THE AXIS NAME WERE HARDCODED TO THE a1954 (p,t) TRITON in the macro this was
+      // ported from, so the first gate drawn here saved as a triton with the wrong axis label
+      // while the plot on screen said proton. They are parameters now.
+      //
+      // xaxis is "sqrt_dEdx": that is the spyral_utils Cut2D spelling AtCut2D and
+      // apply_gate_C15d.C expect. "sqrtdedx" is a different string and makes the consumer warn
+      // that the gate may be for another observable.
+      fprintf(f, "{\n    \"name\": \"%s\",\n    \"xaxis\": \"sqrt_dEdx\",\n    \"yaxis\": \"brho\",\n",
               fName->GetText());
-      fprintf(f, "    \"Z\": 1,\n    \"A\": 3,\n    \"vertices\": [\n");
+      fprintf(f, "    \"Z\": %d,\n    \"A\": %d,\n    \"vertices\": [\n", fZ, fA);
       int np = fNew->GetN();
       for (int i = 0; i < np; ++i) {
          double x, y;
@@ -499,7 +506,11 @@ private:
          bar->AddFrame(b, new TGLayoutHints(kLHintsLeft, 5, 4, 4, 4));
       }
       bar->AddFrame(new TGLabel(bar, "name:"), new TGLayoutHints(kLHintsLeft | kLHintsCenterY, 12, 2, 4, 4));
-      fName = new TGTextEntry(bar, "triton_14C");
+      // Default the name to the output file's stem: a gate whose "name" says one species while
+      // its filename says another is how triton_14C_proton got written.
+      TString stem = gSystem->BaseName(fOut.Data());
+      stem.ReplaceAll(".json", "");
+      fName = new TGTextEntry(bar, stem.Data());
       fName->Resize(180, 22);
       bar->AddFrame(fName, new TGLayoutHints(kLHintsLeft, 2, 4, 4, 4));
       // laboratory-angle window. Shown in the TRUE lab convention (180 - stored polar when
@@ -586,6 +597,7 @@ private:
    int fNbx = 300, fNby = 300;
    TGLabel *fLabel = nullptr;
    TGTextEntry *fName = nullptr;
+   int fZ = 1, fA = 1;   ///< species written into the gate JSON
    std::vector<float> fX, fY, fPol;
    TGraph *fOnLocus = nullptr;
    double fLocusTol = 0.15;
@@ -607,7 +619,10 @@ void gate_draw_C15d(TString outJson = "pid/proton_C15d.json",
                        TString cache = "pid/points_C15d.root",
                        TString refP = "", TString refD = "",
                        double xMax = 60.0, double yMax = 2.0, double icLo = -1, double icHi = -1,
-                       bool showLocus = false, double eBeam = 0, bool flipPolar = true)
+                       bool showLocus = false, double eBeam = 0, bool flipPolar = true,
+                       /// Species written into the gate. Defaults to the PROTON, the (d,p) ejectile.
+                       ///   deuteron: Z 1 A 2      triton: Z 1 A 3      alpha: Z 2 A 4
+                       int Z = 1, int A = 1)
 {
-   new C15dGateDraw(outJson, cache, refP, refD, xMax, yMax, icLo, icHi, showLocus, eBeam, flipPolar);
+   new C15dGateDraw(outJson, cache, refP, refD, xMax, yMax, icLo, icHi, showLocus, eBeam, flipPolar, Z, A);
 }

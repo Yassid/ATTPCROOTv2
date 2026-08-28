@@ -2,7 +2,7 @@
 # Open the C15d gate drawer.
 #
 #   ./pid/open_gate_gui.sh                          # proton gate, no IC window, no locus
-#   ./pid/open_gate_gui.sh deuteron_C15d            # name the output gate
+#   ./pid/open_gate_gui.sh deuteron_C15d -1 -1 0 1 2  # name it, and say it is a deuteron
 #   ./pid/open_gate_gui.sh proton_C15d 1000 1300    # with an IC window
 #
 # Run it from the workspace root (macro/Unpack_HDF5/C15d), or from anywhere -- it cd's there
@@ -19,6 +19,8 @@ NAME="${1:-proton_C15d}"
 ICLO="${2:--1}"
 ICHI="${3:--1}"
 EBEAM="${4:-0}"          # 0 disables the kinematic locus; pass a real lab energy once calibrated
+Z="${5:-1}"              # species written into the gate JSON: proton by default
+A="${6:-1}"              #   deuteron 1 2   triton 1 3   alpha 2 4
 
 # config.sh reads unset variables: source it under `set +u` or it exits the shell silently.
 set +u
@@ -41,4 +43,4 @@ echo "opening the gate drawer: gate=$NAME  IC=[$ICLO,$ICHI]  Ebeam=$EBEAM"
 # ★ ROOT's interactive prompt QUITS ON STDIN EOF. Launched detached with stdin from /dev/null the
 # GUI appears and vanishes in the same second, which looks exactly like a crash. Keep stdin open.
 [[ -t 0 ]] || exec 0< <(while :; do sleep 3600; done)
-exec root -l "pid/gate_draw_C15d.C(\"pid/${NAME}.json\",\"pid/points_C15d.root\",\"\",\"\",60.0,2.0,${ICLO},${ICHI},$( [[ "$EBEAM" != 0 ]] && echo true || echo false ),${EBEAM},true)"
+exec root -l "pid/gate_draw_C15d.C(\"pid/${NAME}.json\",\"pid/points_C15d.root\",\"\",\"\",60.0,2.0,${ICLO},${ICHI},$( [[ "$EBEAM" != 0 ]] && echo true || echo false ),${EBEAM},true,${Z},${A})"

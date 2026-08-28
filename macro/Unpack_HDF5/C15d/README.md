@@ -241,6 +241,21 @@ dE/dx are internally consistent. (Leading-order 1/β only; the low-statistics sl
 and Bρ 0.45–0.55 shows a fourth peak at ratio 4.23 where a Z=2 alpha would predict 3.95 —
 suggestive but not established.)
 
+## Where it stands
+
+| | |
+|---|---|
+| IC beam window | `pid/ic_C15d.json`, **931–1413 ADC** (the 1168 peak), edges at 0.1% of peak height |
+| PID gate | `pid/proton_C15d.json`, 27 vertices, Z=1 A=1 |
+| Selection | 220,229 IC-gated tracks → **132,815 in gate (60.3%)** → `pid/sel_proton_C15d.root` |
+| Per-run yield | 58.5%–63.7% — flat, so the gain match is holding |
+
+`apply_gate_C15d.C` reads `pid/points_C15d.root`, which already carries the gain match and the IC
+join with its length checks — deriving either again in the consumer would be two implementations
+that can disagree. **Pass the same IC window the gate was drawn with**: a gate drawn on a
+single-beam plane and applied to the full cocktail counts tracks from a beam it never meant to
+select, and the number looks perfectly reasonable.
+
 ## Open
 
 - Reaction masses are not yet fixed anywhere in the workspace — the fitters only need the

@@ -18,15 +18,22 @@
 
 #include "gain_C15d.h"
 
-void apply_gate_C15d(TString gateFile, TString inDir = "/home/yassid/C15d_reco/", TString outFile = "",
+void apply_gate_C15d(TString gateFile, TString pointsFile = "pid/points_C15d.root", TString outFile = "",
                      Int_t minClusters = 0, Double_t maxVtxR = -1.0, Bool_t perRun = kTRUE,
                      /// MUST match the table the gate was DRAWN on. A gate drawn on a matched
                      /// plane and applied to raw values selects the wrong tracks, silently.
-                     TString gainTable = "gainmatch_C15d.csv", Int_t runMin = 17, Int_t runMax = 103)
+                     /// IC window. MUST MATCH THE ONE THE GATE WAS DRAWN WITH -- a gate drawn on a
+                     /// single-beam plane and applied to the full cocktail counts tracks from a beam
+                     /// it was never meant to select, and the number looks perfectly reasonable.
+                     Double_t icLo = -1, Double_t icHi = -1, Int_t runMin = 17, Int_t runMax = 103)
 {
    gSystem->Load("libAtTools.so");
 
-   gateFile = gSystem->ExpandPathName(gateFile);
+   // gSystem->ExpandPathName has TWO overloads: the char* one returns the expanded path, the
+   // TString one expands IN PLACE and returns a Bool_t error flag. Assigning that Bool_t back to
+   // the TString blanks it, and the caller then reports "cannot load" against an empty filename.
+
+   gSystem->ExpandPathName(gateFile);
    auto cut = AtTools::AtCut2D::LoadJSON(gateFile.Data());
    if (!cut.IsValid()) {
       std::cout << "\033[1;31mERROR: cannot load a valid gate from " << gateFile << "\033[0m\n";
@@ -38,48 +45,36 @@ void apply_gate_C15d(TString gateFile, TString inDir = "/home/yassid/C15d_reco/"
    if (cut.GetYAxis() != "brho")
       std::cout << "\033[1;33mWARNING: gate y-axis is '" << cut.GetYAxis() << "', not brho.\033[0m\n";
 
-   TChain ch("pid");
-   TSystemDirectory dir(inDir, inDir);
-   TList *files = dir.GetListOfFiles();
-   if (files == nullptr) {
-      std::cout << "\033[1;31mERROR: cannot list " << inDir << "\033[0m\n";
+   // The points file already carries the gain match and the IC join, with the length checks that
+   // join needs. Re-deriving either here would mean two implementations that can disagree.
+   if (gSystem->AccessPathName(pointsFile)) {
+      std::cout << "\033[1;31mERROR: " << pointsFile << " not found. Build it with "
+                   "pid/make_points_C15d.C().\033[0m\n";
       return;
    }
-   Int_t nRuns = 0;
-   TIter next(files);
-   while (auto *o = dynamic_cast<TSystemFile *>(next())) {
-      TString name = o->GetName();
-      if (!o->IsDirectory() && name.EndsWith("_pid.root")) {
-         TString d = name;
-         d.ReplaceAll("run_", "");
-         d.ReplaceAll("_pid.root", "");
-         const Int_t rn = d.Atoi();
-         if (rn < runMin || rn > runMax)
-            continue;
-         ch.Add(inDir + name);
-         ++nRuns;
-      }
-   }
-   if (nRuns == 0) {
-      std::cout << "\033[1;31mERROR: no *_pid.root in " << inDir << "\033[0m\n";
+   TFile *fin = TFile::Open(pointsFile);
+   TTree *ch = fin ? (TTree *)fin->Get("pts") : nullptr;
+   if (!ch) {
+      std::cout << "\033[1;31mERROR: no tree 'pts' in " << pointsFile << "\033[0m\n";
       return;
    }
 
-   Int_t run, event, trackID, valid, nClusters;
-   Double_t sqrtdEdx, brho, vtxR;
-   ch.SetBranchAddress("run", &run);
-   ch.SetBranchAddress("event", &event);
-   ch.SetBranchAddress("trackID", &trackID);
-   ch.SetBranchAddress("valid", &valid);
-   ch.SetBranchAddress("nClusters", &nClusters);
-   ch.SetBranchAddress("sqrtdEdx", &sqrtdEdx);
-   ch.SetBranchAddress("brho", &brho);
-   ch.SetBranchAddress("vtxR", &vtxR);
+   Int_t run, event, trackID, nclusters, npulse;
+   Float_t sqrtdedx, brho, ic, vtxr;
+   ch->SetBranchAddress("run", &run);
+   ch->SetBranchAddress("event", &event);
+   ch->SetBranchAddress("trackID", &trackID);
+   ch->SetBranchAddress("nclusters", &nclusters);
+   ch->SetBranchAddress("npulse", &npulse);
+   ch->SetBranchAddress("sqrtdedx", &sqrtdedx);
+   ch->SetBranchAddress("brho", &brho);
+   ch->SetBranchAddress("ic", &ic);
+   ch->SetBranchAddress("vtxr", &vtxr);
 
    if (outFile.Length() == 0) {
       TString base = gSystem->BaseName(gateFile);
       base.ReplaceAll(".json", "");
-      outFile = inDir + "sel_" + base + ".root";
+      outFile = TString("pid/sel_") + base + ".root";
    }
    TFile fo(outFile, "RECREATE");
    TTree sel("sel", "tracks inside the PID gate");
@@ -88,36 +83,33 @@ void apply_gate_C15d(TString gateFile, TString inDir = "/home/yassid/C15d_reco/"
    sel.Branch("event", &s_event, "event/I");
    sel.Branch("trackID", &s_track, "trackID/I");
 
-   auto gainMap = LoadGainTable_C15d(gainTable);
-   Long64_t nMissingGain = 0;
+   const bool icOn = (icLo >= 0 && icHi > icLo);
+   std::map<int, std::pair<long, long>> perRunCounts;
+   Long64_t nAll = 0, nCons = 0, nIn = 0, nNoIC = 0;
+   std::set<int> runsSeen;
 
-   std::map<int, std::pair<long, long>> perRunCounts; // run -> (in, considered)
-   Long64_t nAll = 0, nCons = 0, nIn = 0;
-
-   const Long64_t nEnt = ch.GetEntries();
-   for (Long64_t i = 0; i < nEnt; ++i) {
-      ch.GetEntry(i);
+   for (Long64_t i = 0; i < ch->GetEntries(); ++i) {
+      ch->GetEntry(i);
       ++nAll;
-      if (valid != 1)
+      if (run < runMin || run > runMax)
          continue;
-      if (minClusters > 0 && nClusters < minClusters)
+      if (minClusters > 0 && nclusters < minClusters)
          continue;
-      if (maxVtxR > 0 && vtxR >= maxVtxR)
+      if (maxVtxR > 0 && vtxr >= maxVtxR)
          continue;
+      if (icOn) {
+         if (ic < 0) { ++nNoIC; continue; }   // run without usable IC: cannot satisfy a window
+         if (ic < icLo || ic > icHi)
+            continue;
+      }
       ++nCons;
+      runsSeen.insert(run);
       perRunCounts[run].second++;
-      bool missing = false;
-      const double gf = GainFactor_C15d(gainMap, run, missing);
-      if (missing)
-         ++nMissingGain;
-      const double sqrtdEdxMatched = sqrtdEdx * std::sqrt(gf);
-      if (!cut.IsInside(sqrtdEdxMatched, brho))
+      if (!cut.IsInside(sqrtdedx, brho))
          continue;
       ++nIn;
       perRunCounts[run].first++;
-      s_run = run;
-      s_event = event;
-      s_track = trackID;
+      s_run = run; s_event = event; s_track = trackID;
       sel.Fill();
    }
 
@@ -127,16 +119,16 @@ void apply_gate_C15d(TString gateFile, TString inDir = "/home/yassid/C15d_reco/"
 
    std::cout << "\033[1;33m=== apply_gate_C15d : " << cut.GetName() << " ===\033[0m\n"
              << "  gate     : " << gateFile << "  (" << cut.GetVertices().size() << " vertices)\n"
-             << "  runs     : " << nRuns << "\n"
+             << "  runs     : " << runsSeen.size() << "\n"
              << "  tracks   : " << nAll << " total, " << nCons << " considered (valid"
              << (minClusters > 0 ? Form(" && nClusters>=%d", minClusters) : "")
              << (maxVtxR > 0 ? Form(" && vtxR<%g", maxVtxR) : "") << ")\n"
              << "  \033[1;32mIN GATE  : " << nIn << "  = " << (nCons ? 100.0 * nIn / nCons : 0.)
              << "% of considered\033[0m\n"
              << "  selection: " << outFile << "  (run, event, trackID)\n";
-   if (nMissingGain > 0)
-      std::cout << "\033[1;31m  WARNING: " << nMissingGain
-                << " considered tracks had no gain-table entry and were gated UNMATCHED.\033[0m\n";
+   std::cout << "  IC       : " << (icOn ? Form("[%.0f, %.0f]", icLo, icHi) : "OFF (all beam species)")
+             << (nNoIC ? Form("  -- %lld tracks dropped for having no usable IC", (long long)nNoIC) : "")
+             << "\n";
 
    if (perRun && !perRunCounts.empty()) {
       std::cout << "\n  per-run yield (a gate that only holds over part of the run set is a "

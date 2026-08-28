@@ -1,0 +1,8 @@
+{
+  "name": "ic_C15d",
+  "observable": "icmax",
+  "comment": "max of FRIB generic trace[0] over time buckets 1050-1250",
+  "singlePulse": true,
+  "icLo": 930.601,
+  "icHi": 1413.3
+}

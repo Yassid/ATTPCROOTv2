@@ -5,9 +5,9 @@
 /// window with two mouse clicks; writes a small JSON that the analysis reads.
 ///
 /// USAGE (interactively, NOT with -b):
-///   root -l 'pid/draw_icgate_C15d.C("ic_15C")'                 // pick with the mouse
-///   root -l 'pid/draw_icgate_C15d.C("ic_15C",1000,1270)'       // or set the window directly
-///   root -l 'pid/draw_icgate_C15d.C("ic_peak2",1280,1500)'     // the second peak
+///   root -l 'pid/draw_icgate_C15d.C("ic_C15d")'                // pick with the mouse
+///   root -l 'pid/draw_icgate_C15d.C("ic_C15d",931,1413)'      // or set the window directly
+///   root -l 'pid/draw_icgate_C15d.C("ic_peak2",1792,2400)'    // the second beam component
 ///
 /// HOW TO PICK: when the canvas appears, LEFT-CLICK once at the LOW edge of the window and
 /// once at the HIGH edge. Only the x positions are used, so the click height is irrelevant.
@@ -33,7 +33,7 @@
 ///
 /// Args: name         = gate name -> <name>.json
 ///       presetLo/Hi  = set the window non-interactively (both > 0 skips the mouse step)
-///       singlePulse  = use only npulse==1 events (pile-up rejected), as gate_events_C15.C does
+///       singlePulse  = use only npulse==1 events (pile-up rejected), as the analysis does
 ///       lo,hi        = x-axis display range
 
 void draw_icgate_C15d(TString name = "ic_C15d", double presetLo = -1, double presetHi = -1,
@@ -98,8 +98,8 @@ void draw_icgate_C15d(TString name = "ic_C15d", double presetLo = -1, double pre
       printf("\n\033[1;33m======================================================================\033[0m\n");
       printf("\033[1;32m Select the %s window:\033[0m\n", name.Data());
       printf("   * LEFT-CLICK at the LOW edge, then LEFT-CLICK at the HIGH edge\n");
-      printf("   * only the x position matters; peaks are at 1142 and 1372 ADC,\n");
-      printf("     the valley between them is near 1270-1290\n");
+      printf("   * only the x position matters; peaks are at 1168 and 2058 ADC,\n");
+      printf("     the valley between them is near 1792 and is essentially empty\n");
       printf("\033[1;33m======================================================================\033[0m\n\n");
 
       double xs[2] = {-1, -1};
@@ -139,7 +139,7 @@ void draw_icgate_C15d(TString name = "ic_C15d", double presetLo = -1, double pre
          printf("  The two edges are identical. Click ONCE at the low edge, then ONCE at the high\n"
                 "  edge (two separate single clicks, not a double-click).\n");
       printf("  You can always set the window directly instead:\n"
-             "    root -l 'pid/draw_icgate_C15d.C(\"%s\",1000,1270)'\n",
+             "    root -l 'pid/draw_icgate_C15d.C(\"%s\",931,1413)'\n",
              name.Data());
       return;
    }
@@ -148,14 +148,14 @@ void draw_icgate_C15d(TString name = "ic_C15d", double presetLo = -1, double pre
    double inW = h->Integral(h->FindBin(gLo), h->FindBin(gHi));
    // NB: bin range explicit. TH1::Integral() with no args honours SetRangeUser, so the
    // display zoom above would silently become the denominator (it reported 79.7% instead
-   // of the true 69.0% for the 1000-1270 window).
+   // of the true fraction for the chosen window).
    double tot = h->Integral(1, h->GetNbinsX());
    printf("\n\033[1;32m=== %s : IC in [%.0f, %.0f] ===\033[0m\n", name.Data(), gLo, gHi);
    printf("  events in window : %.0f  (%.1f%% of %s)\n", inW, 100.0 * inW / tot,
           singlePulse ? "single-pulse" : "all-IC");
    // Reference is the tallest bin INSIDE the window, not the global maximum: a window placed
-   // on the secondary 1372 peak must be judged against that peak's own height, otherwise the
-   // global 1142 peak makes any edge look negligible.
+   // on the secondary 2058 peak must be judged against that peak's own height, otherwise the
+   // global 1168 peak makes any edge look negligible.
    int bLo = h->FindBin(gLo), bHi = h->FindBin(gHi);
    int bpk = bLo; double pk = -1;
    for (int b = bLo; b <= bHi; b++) if (h->GetBinContent(b) > pk) { pk = h->GetBinContent(b); bpk = b; }
@@ -182,7 +182,7 @@ void draw_icgate_C15d(TString name = "ic_C15d", double presetLo = -1, double pre
    j << "}\n";
    j.close();
    printf("\n\033[1;32mSaved -> %s\033[0m\n", out.Data());
-   printf("  use with: gate_events_C15.C(..., icLo=%.0f, icHi=%.0f)\n", gLo, gHi);
+   printf("  use with: ./pid/open_gate_gui.sh <name> %.0f %.0f\n", gLo, gHi);
 
    // draw the chosen window on the spectrum for the record
    TCanvas *c2 = new TCanvas("cICsel", "IC gate", 1100, 750);

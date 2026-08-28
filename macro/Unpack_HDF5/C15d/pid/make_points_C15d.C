@@ -162,7 +162,14 @@ void make_points_C15d(TString inDir = "/home/yassid/C15d_reco/", TString outFile
          const double rel = nRef > 0 ? std::abs((double)icv.size() - nRef) / nRef : 1.0;
          // Exact equality when the reco count is known; 2 % otherwise, which covers only the
          // trailing-events-without-tracks slack in the fallback.
-         const bool ok = exact ? ((Long64_t)icv.size() == nRef) : (rel <= 0.02);
+         // ±1 event is a boundary artifact -- one stream stopping an event short of the other --
+         // and indices 0..min-1 still line up, so it is safe to join over the overlap. ANYTHING
+         // LARGER IS REFUSED, even 61 events on 25,000 (0.24 %): a surplus that is not at the end
+         // but interleaved shifts every later event, and there is no way to tell the two apart
+         // without event IDs, which the IC summary does not carry. Being wrong here selects the
+         // wrong beam silently, so the tolerance stays at what can be explained.
+         const Long64_t diff = std::abs((Long64_t)icv.size() - nRef);
+         const bool ok = exact ? (diff <= 1) : (rel <= 0.02);
          if (!ok) {
             std::cout << "\033[1;31m  run " << r << ": IC has " << icv.size() << " entries vs " << nRef
                       << (exact ? " reco events" : " (est.) events")
@@ -187,7 +194,7 @@ void make_points_C15d(TString inDir = "/home/yassid/C15d_reco/", TString outFile
          arclen = b_arc;
          vtxz = b_vz;
          vtxr = b_vr;
-         if (useIC) {
+         if (useIC && b_event >= 0 && b_event < (Long64_t)icv.size()) {
             ic = icv[b_event];
             npulse = npv[b_event];
          } else {

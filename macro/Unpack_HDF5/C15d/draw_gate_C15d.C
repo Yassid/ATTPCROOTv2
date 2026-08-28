@@ -49,7 +49,12 @@ void draw_gate_C15d(TString gateName = "proton_C15d", Int_t Z = 1, Int_t A = 1,
    h->Draw("colz");
 
    if (spyralOverlay.Length()) {
-      spyralOverlay = gSystem->ExpandPathName(spyralOverlay);
+      // gSystem->ExpandPathName has TWO overloads: the char* one RETURNS the expanded
+      // path, the TString one expands IN PLACE and returns a Bool_t error flag.
+
+      // Assigning that Bool_t back to the TString blanks it, and the caller then
+      // reports "cannot load" against an empty filename.
+      gSystem->ExpandPathName(spyralOverlay);
       auto ref = AtTools::AtCut2D::LoadJSON(spyralOverlay.Data());
       if (ref.IsValid()) {
          const auto &v = ref.GetVertices();
