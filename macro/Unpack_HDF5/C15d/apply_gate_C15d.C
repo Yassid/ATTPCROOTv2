@@ -25,7 +25,12 @@ void apply_gate_C15d(TString gateFile, TString pointsFile = "pid/points_C15d.roo
                      /// IC window. MUST MATCH THE ONE THE GATE WAS DRAWN WITH -- a gate drawn on a
                      /// single-beam plane and applied to the full cocktail counts tracks from a beam
                      /// it was never meant to select, and the number looks perfectly reasonable.
-                     Double_t icLo = -1, Double_t icHi = -1, Int_t runMin = 17, Int_t runMax = 103)
+                     Double_t icLo = -1, Double_t icHi = -1, Int_t runMin = 17, Int_t runMax = 103,
+                     /// The IC window was chosen on the SINGLE-PULSE spectrum and pid/ic_C15d.json
+                     /// records singlePulse: true, so applying the window without this condition is
+                     /// not the gate that was selected. gate_events_C15d.C requires it too; leaving
+                     /// them inconsistent makes the pre-fit and post-fit paths disagree by ~9 %.
+                     Bool_t requireSinglePulse = kTRUE)
 {
    gSystem->Load("libAtTools.so");
 
@@ -100,6 +105,8 @@ void apply_gate_C15d(TString gateFile, TString pointsFile = "pid/points_C15d.roo
       if (icOn) {
          if (ic < 0) { ++nNoIC; continue; }   // run without usable IC: cannot satisfy a window
          if (ic < icLo || ic > icHi)
+            continue;
+         if (requireSinglePulse && npulse != 1)
             continue;
       }
       ++nCons;
