@@ -10,7 +10,7 @@
 // the Lorentz/Langevin correction works -- something no amount of experimental data can
 // give, because there the truth is never known.
 //
-// Parameters are the calibrated ones from ATTPC.alpha_150torr.par (v_D = 2.251 cm/us,
+// Parameters are the calibrated ones from ATTPC.alpha_150torr_sim.par (v_D = 2.251 cm/us,
 // tilt 6.47 deg, ThetaRot -161.9, ThetaPad 110.9, E = 12 kV/m, B = 0.5691 T).
 //
 //   root -l 'rundigi_sim.C("./data/attpcsim_in.root")'
@@ -31,7 +31,7 @@ void rundigi_sim(TString mcFile = "./data/attpcsim_in.root",
    fRun->SetGeomFile(geomDir + "ATTPC_HeCO2_150torr_geomanager.root");
    fRun->SetOutputFile(outFile);
 
-   TString digiParFile = dir + "/parameters/ATTPC.alpha_150torr.par";
+   TString digiParFile = dir + "/parameters/ATTPC.alpha_150torr_sim.par";
    FairRuntimeDb *rtdb = fRun->GetRuntimeDb();
    FairParAsciiFileIo *parIo1 = new FairParAsciiFileIo();
    parIo1->open(digiParFile.Data(), "in");

@@ -9,6 +9,7 @@
 #include "AtTpcPoint.h"
 #include "AtVertexPropagator.h"
 #include "AtSimulatedPoint.h"
+#include "AtLangevin.h"   // shared with AtPSA -- see the header for why this must be one copy
 
 // STL class headers
 #include <cmath>
@@ -59,27 +60,14 @@ InitStatus AtClusterizeTask::Init()
 
    std::cout << "  Ionization energy of gas: " << fEIonize << " MeV" << std::endl;
    std::cout << "  Fano factor of gas: " << fFano << std::endl;
-   // Langevin drift vector, identical in form to AtPSA::CalcLorentzVector -- the forward
-   // model must apply exactly the shear the reconstruction removes. NOTE: the two are
-   // duplicated deliberately for now; they must be kept in sync, and would be better
-   // extracted into one shared helper.
+   // Single source of truth, shared with AtPSA::CalcLorentzVector (the reconstruction's
+   // reverse model). If these two ever disagree the truth residual stops being a test.
    {
-      Double_t B = fPar->GetBField();
-      Double_t Efield = fPar->GetEField();
-      Double_t tilt = fPar->GetTiltAngle() * TMath::Pi() / 180.0;
-      Double_t azim = fPar->GetThetaRot() * TMath::Pi() / 180.0;
-      Double_t thetaPad = fPar->GetThetaPad() * TMath::Pi() / 180.0;
-      Double_t ot = (Efield > 0) ? (B / Efield) * fVelDrift * 1E4 : 0.0;
-      Double_t front = fVelDrift / (1 + ot * ot);
-      Double_t st = TMath::Sin(tilt), ct = TMath::Cos(tilt);
-      Double_t sp = TMath::Sin(azim), cp = TMath::Cos(azim);
-      Double_t vx = front * (ot * (-st * sp) + ot * ot * ct * st * cp);
-      Double_t vy = front * (ot * (st * cp) + ot * ot * ct * st * sp);
-      fVdZ = front * (1 + ot * ot * ct * ct);
-      fVdX = vx * TMath::Cos(thetaPad) - vy * TMath::Sin(thetaPad);
-      fVdY = vx * TMath::Sin(thetaPad) + vy * TMath::Cos(thetaPad);
+      auto v = AtTools::LangevinDrift(fVelDrift, fPar->GetBField(), fPar->GetEField(),
+                                      fPar->GetTiltAngle(), fPar->GetThetaRot(), fPar->GetThetaPad());
+      fVdX = v.x; fVdY = v.y; fVdZ = v.z;
       std::cout << "  Langevin drift vector (pad frame): (" << fVdX << ", " << fVdY << ", " << fVdZ
-                << ") cm/us,  omega*tau = " << ot << std::endl;
+                << ") cm/us,  omega*tau = " << v.omegaTau << std::endl;
    }
    std::cout << "  Drift velocity: " << fVelDrift << std::endl;
    std::cout << "  Longitudal coefficient of diffusion: " << fCoefT << std::endl;

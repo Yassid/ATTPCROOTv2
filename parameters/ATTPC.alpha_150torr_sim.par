@@ -1,0 +1,59 @@
+################################################################################
+# Parameters used throughout ATTPCROOT software
+# Format:
+# parameter_name:parameter_type(Int_t-integer, Double_t-double) parameter_value
+# AtDigiPar
+#
+# SIMULATION parameter set. Identical to ATTPC.alpha_150torr.par for everything
+# measured from data; differs only in Gain and the diffusion coefficients, which
+# drive the digitisation and are not used when unpacking.
+#
+# Low-pressure (149-150 torr) Dec 2014 alpha runs: 114-241.
+# From the run log Alphas-Dec14-RunData.xlsx:
+#   He:CO2 at 149-150 torr, cathode 15 kV, ring 510 V, mesh 850/851 V,
+#   1.95 MeV/u 4He, solenoid 0.5691 T.
+# DriftVelocity is UNCHANGED from the 299.5 torr set: the cathode and ring were
+# halved along with the pressure, so E/p is 1.000 vs 1.002 V/cm/torr -- the same
+# reduced field, hence the same drift velocity.
+# LorentzAngle left at 0 for now (E || B in the AT-TPC); revisit for reconstruction.
+# Density scaled from the 299.5 torr value (0.145 -> 0.0727); unused by unpack+PSA.
+# Description of parameters
+################################################################################
+[AtDigiPar]
+PadPlaneX:Int_t                864   # mm
+PadPlaneZ:Int_t               1344   # mm
+PadSizeX:Int_t                   8   # mm
+PadSizeZ:Int_t                  12   # mm
+PadRows:Int_t                  108   #
+PadLayers:Int_t                112   #
+AnodeWirePlaneY:Double_t     -4.05   # mm
+GroundWirePlaneY:Double_t     -8.1   # mm
+GatingWirePlaneY:Double_t      -14   # mm
+EField:Double_t              12000   # V/m -- CALIBRATED from the beam geometry. Cathode 15 kV over the 1 m drift gives 15000; the ~20% difference is within GARFIELD-level accuracy and the beam axis-crossing strongly prefers this value
+NumTbs:Int_t                   512
+SamplingRate:Int_t             6.0   # Real value is 6.25 MHz
+DriftVelocity:Double_t        2.25   # cm/us -- measured: 2.251 +- 0.011 (run 100, B=0) and 2.253 (run 128)
+DriftLength:Double_t          1000   # mm //ATTPC : 1000 - Prototype : 500
+YDivider:Int_t                1000   # Full drift length will be divided by this number when finding cluster
+GasFile:Int_t                    2
+PadPlaneFile:Int_t               3
+PadShapeFile:Int_t               4   # might not be needed because the shape is simply rectangle
+BField:Double_t             0.5691   # Tesla
+TiltAng:Double_t              6.47   # Degrees -- measured from run 100 (magnet OFF): 6.47 +- 0.04
+TB0:Int_t                       98   # Time Bucket reference for micromegas position (DEPRECATED)
+LorentzAngle:Double_t          0.0   # Lorentz Angle
+TBEntrance:Int_t               320   # Beam position at detector entrance in TB. Measured from run 100 (B=0): the beam reaches its closest approach to the detector axis at tb 320, missing it by only 2.2 mm, so this is the entrance window. Was 280 -- an error of 40 tb = 144 mm in z.
+ZPadPlane:Double_t          1000.0   # Position of the micromegas pad plane
+Density:Double_t            0.0727   # Gas density (kg/m3 or mg/cm3)
+ThetaPad:Double_t            110.9   # AT-TPC pad plane rotation (fit of the Lorentz shear gives 112)
+ThetaRot:Double_t           -161.9   # Azimuth of B in the pad plane, deg. Measured from the run-100 (B=0) beam. 90 = the papers y-z-plane assumption
+GasPressure:Double_t           150   # Gas pressure in torr
+EIonize:Double_t            15.603   # Ionization energy of gas in eV
+CoefL:Double_t              0.0009   # Longitudinal diffusion [cm^2/us]. The experimental file says 0.025 labelled [cm^-0.5], but AtClusterizeTask consumes it as [cm^2/us].
+CoefT:Double_t              0.0009   # Transverse diffusion [cm^2/us], same caveat as CoefL.
+Gain:Double_t                 5000   # Micromegas gain. SIMULATION ONLY: the experimental file has 0.28, which is not a gain and makes the digitised ADC ~20000x too small. Unused when unpacking real data.
+MaxRange:Double_t           1032.0   # Maximum range from Beam energy in mm
+Fano:Double_t                 0.24   # Fano factor of the gas
+GETGain:Double_t              1000   # Gain of the GET electronics in fC
+PeakingTime:Int_t              720   # Electronic peaking time in ns
+################################################################################

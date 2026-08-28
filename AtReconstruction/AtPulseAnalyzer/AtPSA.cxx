@@ -17,6 +17,7 @@
 #include "AtRawEvent.h"
 #include "AtEvent.h"
 #include "AtDigiPar.h"
+#include "AtLangevin.h"
 #include "AtCalibration.h"
 #include "AtHit.h"
 #include "AtTpcPoint.h"
@@ -164,45 +165,18 @@ Double_t AtPSA::CalculateZCorr(Double_t zvalue, Int_t Tbz)
 
 void AtPSA::CalcLorentzVector()
 {
-   // Langevin drift velocity, eq. (4) of the AT-TPC commissioning paper
-   // (Bradt et al., NIM A 875 (2017) 65-79):
-   //
-   //   v_D = v/(1+wt^2) [ Ehat + wt (Ehat x Bhat) + wt^2 (Ehat.Bhat) Bhat ]
-   //
-   // The paper then specialises it with B = B[sin(t) yhat + cos(t) zhat], i.e. it assumes
-   // the tilt lies in the y-z plane. That is an assumption about the tilt's *azimuth*, and
-   // for the Dec 2014 data it is wrong: the beam (hence B) sits at ~-162 deg in the pad
-   // plane, so the specialised form put the shear ~110 deg away from where it belongs.
-   // Keeping the azimuth general, with Ehat = zhat and
-   //   Bhat = (sin(t)cos(p), sin(t)sin(p), cos(t)):
-   //   Ehat x Bhat = (-sin(t)sin(p), sin(t)cos(p), 0),  Ehat.Bhat = cos(t)
-   //
-   // fTiltAzim = 90 deg reproduces the paper's original expression exactly.
-   Double_t ot = (fBField / fEField) * fDriftVelocity * 1E4;
-   Double_t front = fDriftVelocity / (1 + ot * ot);
-   Double_t t = fTiltAng * TMath::Pi() / 180.0;
-   Double_t p = fTiltAzim * TMath::Pi() / 180.0;
-   Double_t st = TMath::Sin(t), ct = TMath::Cos(t);
-   Double_t sp = TMath::Sin(p), cp = TMath::Cos(p);
+   // Single source of truth, shared with AtClusterizeTask (the simulation's forward
+   // model). See AtParameter/AtLangevin.h for the physics and for why the pad-frame
+   // rotation and the general azimuth are both necessary.
+   auto v = AtTools::LangevinDrift(fDriftVelocity, fBField, fEField, fTiltAng, fTiltAzim,
+                                   fThetaPad * 180.0 / TMath::Pi());
+   fLorentzVector.SetXYZ(v.x, v.y, v.z);
 
-   Double_t x = front * (ot * (-st * sp) + ot * ot * ct * st * cp);
-   Double_t y = front * (ot * (st * cp) + ot * ot * ct * st * sp);
-   Double_t z = front * (1 + ot * ot * ct * ct);
-
-   // The drift vector above is in the field frame; the hit coordinates it will be applied
-   // to are pad coordinates, which are rotated from it by ThetaPad. Rotating here means
-   // CalculateXCorr/YCorr can stay as they are.
-   Double_t xr = x * TMath::Cos(fThetaPad) - y * TMath::Sin(fThetaPad);
-   Double_t yr = x * TMath::Sin(fThetaPad) + y * TMath::Cos(fThetaPad);
-
-   fLorentzVector.SetXYZ(xr, yr, z);
-
-   // CalcLorentzVector is called per event, so report the vector once and not 600k times.
    static bool reported = false;
    if (!reported) {
       reported = true;
-      std::cout << " ==== Lorentz drift vector (pad frame) : (" << xr << ", " << yr << ", " << z
-                << ") cm/us,  omega*tau = " << ot << std::endl;
+      std::cout << " ==== Lorentz drift vector (pad frame) : (" << v.x << ", " << v.y << ", " << v.z
+                << ") cm/us,  omega*tau = " << v.omegaTau << std::endl;
    }
 }
 
