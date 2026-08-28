@@ -1,3 +1,6 @@
 # generated products, all regenerable from the cached planes
 plots/
 *_partial.csv
+pid/points_C15d.root
+pid/sel_*.root
+pid/raw/
