@@ -1,5 +1,10 @@
 # C15d — 15C + d, D2 target at 300 torr
 
+**Beam is ¹⁵C** (confirmed 2026-08-28), so the channel is **¹⁵C(d,p)¹⁶C, Q = +2.026 MeV**. Note
+that `a1975/D2_UKF/README.md` describes the same run range as ¹⁶C(d,p)¹⁷C — that is a different
+reading of this dataset and is **not** what this workspace analyses. Do not "correct" the masses
+against it.
+
 Self-contained workspace. It shares **no macro, no par file and no output directory** with
 any other analysis in this repo; the only framework additions it relies on are the new
 `AtGainMatchTask` (opt-in, see below) and the `ATTPC_D300torr_v2` geometry.
