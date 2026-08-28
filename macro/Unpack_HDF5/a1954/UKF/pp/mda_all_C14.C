@@ -71,6 +71,9 @@ void mda_all_C14(TString cache = "plots/proton_kin_cat5_s013.root",
                  Double_t cmLo = 25, Double_t cmHi = 135, Double_t dcm = 10,
                  Double_t vzLo = 10, Double_t vzHi = 490, Double_t chi2Cut = 5.0,
                  Double_t lumi = 72.5, TString use = "0123",
+                 // which set of basis curves: mdaAll = Perey, mdaV = CH89. The multipole answer MUST
+                 // be checked against more than one potential -- see the retracted swap finding.
+                 TString basis = "mdaAll",
                  Int_t nBoot = 500, UInt_t seed = 20260828)
 {
    gStyle->SetOptStat(0);
@@ -92,7 +95,7 @@ void mda_all_C14(TString cache = "plots/proton_kin_cat5_s013.root",
    std::vector<int> col;
    for (int L = 0; L < 6; ++L) {
       if (!use.Contains(Form("%d", L))) continue;
-      auto *g = mall::rd(Form("%smdaAll_L%d.dat", pdir.Data(), L));
+      auto *g = mall::rd(Form("%s%s_L%d.dat", pdir.Data(), basis.Data(), L));
       if (!g->GetN()) { printf("\033[1;31mmissing basis L=%d\033[0m\n", L); return; }
       gL.push_back(g); Lid.push_back(L); col.push_back(colAll[L]);
    }
