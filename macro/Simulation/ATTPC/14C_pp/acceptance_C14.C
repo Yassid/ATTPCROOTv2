@@ -52,15 +52,22 @@ static std::tuple<double, double> acc_kine(double m1, double m2, double m3, doub
 void acceptance_C14(TString simFile, TString fitFile, TString tag = "gs", Double_t resEx = 0.0, Double_t Ebeam = 161.0,
                     Double_t chi2Cut = 5.0, Int_t nBins = 36, Double_t cmMax = 180.0, Double_t dThetaMax = 10.0,
                     Double_t keRatioMin = 0.5, Double_t keRatioMax = 2.0, Bool_t useXtr = kFALSE,
-                    Double_t zMin = -1e9, Double_t zMax = 1e9)
+                    Double_t zMin = -1e9, Double_t zMax = 1e9,
+                    // The reaction, in amu. Defaults are 14C(p,p'), so every existing caller is
+                    // unchanged; 14C(d,p)15C is (2.0141018, 1.007825, 15.0105993).
+                    Double_t mTargetAmu = 1.007825, Double_t mEjectAmu = 1.007825,
+                    Double_t mResidAmu = 14.003242)
 {
    gSystem->Load("libAtReconstruction.so");
    gSystem->Load("libAtSimulationData.so");
    gStyle->SetOptStat(0);
 
    const double u = 931.49401;
-   const double m_C14 = 14.003242 * u, m_p = 1.007825 * u;
-   const double m_resid = m_C14 + resEx; // the residual is left excited
+   const double m_C14 = 14.003242 * u;   // beam
+   const double m_tgt = mTargetAmu * u;  // target
+   const double m_ej = mEjectAmu * u;    // ejectile
+   const double m_p = m_ej;              // the truth-track mass
+   const double m_resid = mResidAmu * u + resEx; // the residual is left excited
 
    TFile *fs = TFile::Open(simFile);
    TFile *ff = TFile::Open(fitFile);
@@ -124,7 +131,7 @@ void acceptance_C14(TString simFile, TString fitFile, TString tag = "gs", Double
       // here: reco z tracks truth to about 15 mm below 600 mm.
       if (zT < zMin || zT > zMax)
          continue;
-      auto [exT, cmT] = acc_kine(m_C14, m_p, m_p, m_resid, Ebeam, thT, keT);
+      auto [exT, cmT] = acc_kine(m_C14, m_tgt, m_ej, m_resid, Ebeam, thT, keT);
       if (std::isnan(cmT))
          continue;
       ++nGen;

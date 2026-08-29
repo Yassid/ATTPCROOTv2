@@ -26,9 +26,26 @@
 
 #include "../AtBeamHole.h"
 
+/// PAD PLANE IS SWITCHABLE (added 2026-08-28 for the field x pitch study). padSize_mm <= 0, the
+/// default, keeps the real AT-TPC pad plane from Lookup20150611.xml and every existing caller
+/// therefore behaves exactly as before. A positive value builds a uniform square pad plane of
+/// that pitch with AtTpcSquareMap, sized to cover activeExtent_mm -- 2 mm over 500 mm gives
+/// 250 x 250 = 62500 pads against the AT-TPC's ~10240. Everything downstream goes through the
+/// AtMap interface, the beam-hole inhibition included, so nothing else changes.
+///
+/// !! THE HDBSCAN PARAMETERS ARE NOT RE-TUNED FOR A DIFFERENT PITCH !! epsilon = 10 mm and
+/// minClusterSize = 20 were set for 8 x 12 mm pads. At 2 mm pitch a track deposits several times
+/// as many hits and 10 mm spans five pads instead of one, so the finder sees a much denser cloud
+/// under an unchanged neighbourhood definition. Compare two pitches only after checking that
+/// pattern recognition is not the thing that changed (cluster_eval_C14.C).
+///
+/// @param persistRaw  write the AtRawEvent pad traces. kTRUE reproduces the historical behaviour
+///                    and costs ~4.7 GB per 8000 events; nothing downstream of PSA reads them, so
+///                    a production run that only needs AtPatternEvent should pass kFALSE.
 void run_reco_C14(TString mcFile = "./data/attpcsim.root", TString outputFile = "./data/sim_reco.root",
                   TString paramFile = "ATTPC.a1954_C14.par", Double_t thr = 20, Int_t hdMcs = 20, Int_t hdMs = 8,
-                  Int_t nEvents = 0, Double_t holeR = 30.0, TString joinMethod = "mover")
+                  Int_t nEvents = 0, Double_t holeR = 30.0, TString joinMethod = "mover",
+                  Double_t padSize_mm = -1.0, Double_t activeExtent_mm = 500.0, Bool_t persistRaw = kTRUE)
 {
    TString scriptfile = "Lookup20150611.xml";
    TString dir = getenv("VMCWORKDIR");
@@ -47,9 +64,21 @@ void run_reco_C14(TString mcFile = "./data/attpcsim.root", TString outputFile = 
    parIo1->open(digiParFile.Data(), "in");
    rtdb->setFirstInput(parIo1);
 
-   auto mapping = std::make_shared<AtTpcMap>();
-   mapping->ParseXMLMap(mapParFile.Data());
-   mapping->GeneratePadPlane();
+   std::shared_ptr<AtMap> mapping;
+   if (padSize_mm > 0) {
+      int nPad = (int)std::lround(activeExtent_mm / padSize_mm);
+      auto sq = std::make_shared<AtTpcSquareMap>(padSize_mm, nPad, nPad);
+      sq->GeneratePadPlane();
+      mapping = sq;
+      std::cout << "PADS  : square " << padSize_mm << " mm, " << nPad << " x " << nPad << " = " << nPad * nPad
+                << " pads over " << activeExtent_mm << " mm" << std::endl;
+   } else {
+      auto at = std::make_shared<AtTpcMap>();
+      at->ParseXMLMap(mapParFile.Data());
+      at->GeneratePadPlane();
+      mapping = at;
+      std::cout << "PADS  : AT-TPC pad plane from " << scriptfile << std::endl;
+   }
 
    // ---- BEAM HOLE ---------------------------------------------------------
    // a1954 has a 3 cm beam hole. Without it the sim digitizes the beam over a region the real
@@ -63,7 +92,7 @@ void run_reco_C14(TString mcFile = "./data/attpcsim.root", TString outputFile = 
    clusterizer->SetPersistence(kFALSE);
 
    AtPulseTask *pulse = new AtPulseTask(std::make_shared<AtPulse>(mapping));
-   pulse->SetPersistence(kTRUE);
+   pulse->SetPersistence(persistRaw);
    // Propagate MC truth (A, Z, trackID) onto every hit. Needed by gate_truth_C14.C to pick
    // out the recoil proton: without it the fitter treats the beam and the scattered 14C as
    // proton candidates too, which is what swamped the first closure attempt (6605 of 6771
