@@ -281,8 +281,39 @@ AtFittedTrack *AtGenfitter::GetFittedTrack(AtTrack *track, AtFitMetadata * /*fit
    const double s2 = fMeasSigmaMM * fMeasSigmaMM;
    genfit::TrackCand trackCand;
    fHitClusterArray->Clear("C");
+
+   // MEASUREMENT ORDER MUST FOLLOW THE DIRECTION OF TRAVEL, not the drift coordinate.
+   //
+   // genfit's getFittedState() with no argument returns TrackPoint 0, and fBackExtrapToAxis
+   // extrapolates from that state to the beam axis. The clusters used to be added in ascending
+   // z_lab whatever the track direction, while the seed is placed at the VERTEX -- which for a
+   // backward track is the HIGHEST z_lab, order.back(). Point 0 was therefore the STOPPING end:
+   // the momentum read out was the one the ejectile had after spending most of its energy, and
+   // the extrapolation to the axis started from the wrong end of the track and integrated the
+   // energy loss the wrong way along it.
+   //
+   // Forward tracks are byte-for-byte unchanged (addSeq == order when backwardSeed is false).
+   //
+   // Measured on 14C(d,p)15C at 2.85 T, backward protons at theta_lab 92-110 deg, where the
+   // ejectile spirals to a stop and loses a large part of its energy inside the chamber. Same
+   // reconstruction either side of this change, no truth match applied:
+   //
+   //     theta_lab      median KE_fit/KE_true   within 5 %   fits/truth protons
+   //       92-110  before     0.834               15.7 %        198/267
+   //       92-110  AFTER      0.999               88.4 %        233/267
+   //      110-140  before     0.893               39.3 %        140/157
+   //      110-140  AFTER      0.999               90.5 %        148/157
+   //
+   // and with a truth match the bias/spread goes -17.4 % / 19.1 % -> -0.1 % / 0.7 %, while
+   // forward tracks stay at -0.3 % / 3.4 %. Switching material effects OFF used to halve the
+   // bias, which was the clue: an energy loss integrated along a direction the track does not
+   // travel. Efficiency improves too, since fewer backward tracks are fitted to nonsense.
+   std::vector<int> addSeq(order.begin(), order.end());
+   if (backwardSeed)
+      std::reverse(addSeq.begin(), addSeq.end());
+
    for (int oi = 0; oi < n; ++oi) {
-      const int ci = order[oi];
+      const int ci = addSeq[oi];
       double Ldrift_cm = std::max(0.0, (fZPadPlane - pos[ci].Z()) / 10.0);   // drift distance (cm)
       double varT = s2 + fDiffTransMM * fDiffTransMM * Ldrift_cm;            // transverse (mm^2)
       double varZ = fZLongFactor * s2 + fDiffLongMM * fDiffLongMM * Ldrift_cm; // drift-z (mm^2)
