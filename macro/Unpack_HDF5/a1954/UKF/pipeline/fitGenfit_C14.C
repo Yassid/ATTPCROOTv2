@@ -35,7 +35,26 @@ void fitGenfit_C14(TString fileName = "run_0055", Long64_t nEvents = -1,
                     // Only reachable with matEffects = kTRUE; each flag warns rather than silently
                     // doing nothing, so an inert run cannot pass for a valid arm of a comparison.
                     Bool_t catimaELoss = kFALSE, Bool_t catimaELossFull = kFALSE,
-                    Bool_t catimaMSC = kFALSE, Bool_t catimaStraggling = kFALSE)
+                    Bool_t catimaMSC = kFALSE, Bool_t catimaStraggling = kFALSE,
+                    // ---- RANGE CONSTRAINT (exposed 2026-08-29) ------------------------------
+                    // For a track that STOPS in the gas, the path length measures the energy far
+                    // better than the curvature does. That matters for backward (d,p) protons:
+                    // they spiral several turns, shed a large part of their energy on the way, and
+                    // the pattern circle then returns the AVERAGE radius rather than the one at the
+                    // vertex -- 0.895 of truth, which is 0.80 in energy and exactly the -20 % bias
+                    // those tracks show. AtGenfitter has had the machinery (containment + a Bragg
+                    // dQ/dx test + straggling errors) all along; it was simply not reachable from
+                    // here. rangeDensity is g/cm3 and rangeMatA is 1 for H2, 2 for D2.
+                    Bool_t rangeConstraint = kFALSE, Double_t rangeDensity = 0.0, Int_t rangeMatA = 2,
+                    // ---- FIRST-ARC SEED (exposed 2026-08-29) --------------------------------
+                    // The default seed takes the momentum from GetGeoRadius(), a single circle
+                    // fitted to the WHOLE track. For a backward proton that spirals to a stop that
+                    // circle is the average of a tightening spiral -- measured at 0.895 of the
+                    // radius at the vertex, i.e. 0.80 in energy, which is the -20 % bias those
+                    // tracks carry. AtSpyralPID instead fits the circle to the FIRST ARC and
+                    // regresses rho against z, which is the radius the analysis actually wants.
+                    // Building the estimator needs no PID gate despite what the header says.
+                    Bool_t seedFromSpyral = kFALSE)
 {
    gSystem->Load("libAtReconstruction.so");
    FairLogger::GetLogger()->SetLogScreenLevel("WARNING");
@@ -151,7 +170,21 @@ void fitGenfit_C14(TString fileName = "run_0055", Long64_t nEvents = -1,
       std::cout << "\033[1;31mWARNING: matEffects ON with NO dE/dx source -- genfit applies zero "
                    "stopping power below beta*gamma=0.05 (KE 1.17 MeV for a proton).\033[0m\n";
    }
+   // A non-owning observer: `fitter` is moved into the task below, so anything read afterwards has
+   // to go through this or it dereferences a moved-from unique_ptr (it crashed the first time).
+   auto *fitterObs = fitter.get();
+   if (seedFromSpyral) {
+      fitter->SetSeedFromSpyral(kTRUE);
+      std::cout << "  SEED FROM SPYRAL: circle on the first arc, polar from a rho-vs-z regression\n";
+   }
    fitter->SetBackwardSeedFix(backwardSeedFix);
+   if (rangeConstraint) {
+      if (!(rangeDensity > 0))
+         std::cout << "\033[1;31mWARNING: rangeConstraint on with density " << rangeDensity
+                   << " -- the range<->energy table needs a real gas density, constraint will be inert.\033[0m\n";
+      fitter->SetRangeConstraint(kTRUE, rangeDensity, rangeMatA);
+      std::cout << "  RANGE CONSTRAINT on: rho = " << rangeDensity << " g/cm3, matA = " << rangeMatA << "\n";
+   }
    // When a material-effects fit throws, the fitter retries it with material effects OFF.
    // Those tracks come from a different model and are marked in AtFitTrackMetadata
    // (GetMatEffects()==false, GetMatEffectsFallback()==true) so they can be filtered out.
@@ -187,4 +220,11 @@ void fitGenfit_C14(TString fileName = "run_0055", Long64_t nEvents = -1,
    run->Run(0, nEvents < 0 ? 0 : nEvents);
    t.Stop();
    std::cout << "\n\033[1;32mDone.\033[0m " << outputFile << "  (Real " << t.RealTime() << " s)\n";
+   // Say what the range constraint actually did. Without this the constraint can be enabled, run,
+   // and change nothing, with no way to tell whether it was rejected by containment, by the Bragg
+   // test, or never reached at all -- which is exactly what happened the first time it was tried.
+   if (rangeConstraint && fitterObs)
+      std::cout << "  range constraint: contained " << fitterObs->GetNRangeContained() << ", applied "
+                << fitterObs->GetNRangeApplied() << ", failed the Bragg test " << fitterObs->GetNRangeBraggFail()
+                << "\n";
 }
