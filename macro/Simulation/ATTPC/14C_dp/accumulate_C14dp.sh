@@ -56,6 +56,8 @@ GEO=ATTPC_D300torr_v2
 
 BTAG=$(awk -v b="$BT" 'BEGIN{printf "b%03d", b*100}')
 PTAG=$(awk -v p="$PAD" 'BEGIN{ if (p>0) printf "%gmm", p; else printf "attpc" }')
+# default measurement sigma for THIS pad plane (see the note at the genfit call)
+MSDEF=$(awk -v p="$PAD" 'BEGIN{ print (p>0 && p<4) ? 0.35 : 0.6 }')
 CFG="${BTAG}_${PTAG}"
 SIMDIR="$ROOTDIR/sims_$BTAG"
 OUT="$ROOTDIR/$CFG"
@@ -136,11 +138,15 @@ else
   # backward-going track into the forward hemisphere. The (p,p') campaign never noticed because
   # its recoil protons never pass theta_lab 90 deg; here the whole point is the ones that do. The
   # first (d,p) run left it kFALSE and got ZERO reconstructed protons below theta_cm 45 deg.
-  # MEASSIGMA: 0.6 mm, not the 4.0 inherited from (p,p'). Measured on this channel -- chi2/ndf
+  # MEASSIGMA IS PER PAD PLANE, not global. chi2/ndf implies the real hit residuals are
+  # 0.59-0.64 mm on the AT-TPC plane and 0.32-0.35 mm on the 2 mm plane -- finer pads really do
+  # localise better, so one value cannot be right for both. Measured from
+  # measSigma*sqrt(chi2/ndf) per configuration (dp_perbin_C14.C, panel B).
+  # Previously (0.6 mm everywhere): 0.6 mm, not the 4.0 inherited from (p,p'). Measured -- chi2/ndf
   # scales as 1/measSigma^2 (0.015 / 0.055 / 0.207 / 0.548 / 2.111 at 4.0 / 2.0 / 1.0 / 0.6 / 0.3),
   # so the real fit residuals are ~0.45 mm and 4 mm left chi2/ndf at 0.015, making the quality cut
   # meaningless. 0.6 puts chi2/ndf at 0.55 and gives the best energy spread (1.00 % -> 0.84 %).
-  root -b -q -l "$UKF/pipeline/fitGenfit_C14.C(\"$JC\",-1,\"$OUT/\",\"\",\"$OUT/\",$BNEG,2,5,\"\",${MEASSIGMA:-0.6},10.0,170.0,kTRUE,kTRUE,\"proton\",\"$GEO\",kFALSE,kTRUE,0.0,1,kTRUE,kFALSE,kFALSE,kFALSE)" > "$OUT/${JC}_fit.log" 2>&1
+  root -b -q -l "$UKF/pipeline/fitGenfit_C14.C(\"$JC\",-1,\"$OUT/\",\"\",\"$OUT/\",$BNEG,2,5,\"\",${MEASSIGMA:-$MSDEF},10.0,170.0,kTRUE,kTRUE,\"proton\",\"$GEO\",kFALSE,kTRUE,0.0,1,kTRUE,kFALSE,kFALSE,kFALSE)" > "$OUT/${JC}_fit.log" 2>&1
   [ -s "$OUT/${JC}_genfit.root" ] || { echo "$JC FIT_FAILED"; exit 1; }
   grep -q "dE/dx from CATIMA" "$OUT/${JC}_fit.log" || { echo "$JC CATIMA_NOT_ENABLED"; exit 1; }
 fi
