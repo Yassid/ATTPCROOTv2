@@ -1,0 +1,416 @@
+<title>14C(d,p) Kinematics Explorer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+:root{
+  --ground:#F7F8FA; --surface:#FFFFFF; --surface2:#EEF1F5;
+  --ink:#12161C; --muted:#5C6672; --faint:#8A94A1;
+  --grid:#E2E6EC; --edge:#D3DAE3;
+  --accent:#E8830C; --accent-soft:rgba(232,131,12,.14);
+  --plot-bg:#FFFFFF; --pt:#1C6FA8;
+  --d0:#DCE9F4; --d1:#8FC2E6; --d2:#3E8FC6; --d3:#0B3D66;
+  --good:#2E7D5B; --warn:#B4531A;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ground:#0E1116; --surface:#161B22; --surface2:#1C232C;
+    --ink:#E6EDF3; --muted:#8B98A5; --faint:#6B7885;
+    --grid:#232B35; --edge:#2C353F;
+    --accent:#FFA733; --accent-soft:rgba(255,167,51,.16);
+    --plot-bg:#0B0E13; --pt:#5FB0E5;
+    --d0:#13293D; --d1:#1E5B8C; --d2:#3E90CC; --d3:#6FC0F0;
+    --good:#4FBF8B; --warn:#E08B4A;
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0E1116; --surface:#161B22; --surface2:#1C232C;
+  --ink:#E6EDF3; --muted:#8B98A5; --faint:#6B7885;
+  --grid:#232B35; --edge:#2C353F;
+  --accent:#FFA733; --accent-soft:rgba(255,167,51,.16);
+  --plot-bg:#0B0E13; --pt:#5FB0E5;
+  --d0:#13293D; --d1:#1E5B8C; --d2:#3E90CC; --d3:#6FC0F0;
+  --good:#4FBF8B; --warn:#E08B4A;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--ground); color:var(--ink);
+  font-family:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  font-size:14px; line-height:1.45;
+}
+.num{font-family:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,monospace; font-variant-numeric:tabular-nums}
+header{
+  padding:14px 20px 12px; border-bottom:1px solid var(--edge); background:var(--surface);
+  display:flex; align-items:baseline; gap:14px; flex-wrap:wrap;
+}
+h1{font-size:15px; font-weight:600; margin:0; letter-spacing:-.01em}
+.sub{color:var(--muted); font-size:12.5px}
+.spacer{flex:1}
+button,select,input[type=number]{
+  font:inherit; color:var(--ink); background:var(--surface2);
+  border:1px solid var(--edge); border-radius:6px; padding:5px 9px;
+}
+button{cursor:pointer}
+button:hover{border-color:var(--accent)}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--accent); outline-offset:1px}
+.bar{
+  display:flex; gap:16px; align-items:center; flex-wrap:wrap;
+  padding:10px 20px; border-bottom:1px solid var(--edge); background:var(--surface);
+}
+.grp{display:flex; align-items:center; gap:7px}
+.grp>label{color:var(--muted); font-size:12px; white-space:nowrap}
+input[type=range]{accent-color:var(--accent); width:118px}
+main{
+  display:grid; grid-template-columns:minmax(0,1.55fr) minmax(310px,1fr);
+  gap:16px; padding:16px 20px 22px; align-items:start;
+}
+@media (max-width:900px){ main{grid-template-columns:minmax(0,1fr)} }
+.card{background:var(--surface); border:1px solid var(--edge); border-radius:9px; overflow:hidden}
+.card h2{
+  font-size:12px; font-weight:600; margin:0; padding:9px 13px; color:var(--muted);
+  border-bottom:1px solid var(--edge); letter-spacing:.05em; text-transform:uppercase;
+}
+.canwrap{position:relative; background:var(--plot-bg)}
+canvas{display:block; width:100%; touch-action:none}
+#kin{cursor:crosshair}
+.badge{
+  position:absolute; left:12px; bottom:12px; padding:6px 10px; border-radius:6px;
+  background:var(--accent-soft); border:1px solid var(--accent); color:var(--ink);
+  font-size:11.5px; pointer-events:none; max-width:min(94%,460px);
+}
+.hint{position:absolute; right:12px; top:10px; color:var(--faint); font-size:11px; pointer-events:none}
+.stats{display:grid; grid-template-columns:1fr 1fr; gap:1px; background:var(--edge)}
+.stat{background:var(--surface); padding:10px 13px}
+.stat .k{color:var(--muted); font-size:11px; letter-spacing:.03em}
+.stat .v{font-size:19px; font-weight:600; margin-top:1px}
+.note{padding:11px 13px; color:var(--muted); font-size:12px; border-top:1px solid var(--edge)}
+.axisbar{
+  display:flex; gap:10px; align-items:center; flex-wrap:wrap;
+  padding:8px 13px; border-bottom:1px solid var(--edge); background:var(--surface2); font-size:12px;
+}
+.axisbar label{color:var(--muted)}
+.axisbar input[type=number]{padding:3px 6px; background:var(--surface)}
+.axisbar input.rng{width:5.2em}
+.axisbar input.bins{width:4.2em}
+.chk{display:flex; align-items:center; gap:5px; color:var(--muted); cursor:pointer}
+.chk input{accent-color:var(--accent)}
+.warnrow{color:var(--warn); font-weight:500}
+table{border-collapse:collapse; width:100%; font-size:12px}
+th,td{text-align:right; padding:4px 13px; border-bottom:1px solid var(--grid)}
+th:first-child,td:first-child{text-align:left}
+th{color:var(--muted); font-weight:500}
+tbody tr:last-child td{border-bottom:none}
+</style>
+
+<header>
+  <h1>14C(d,p)<sup>15</sup>C Kinematics Explorer</h1>
+  <span class="sub">drag a box on the kinematics to restrict the E<sub>x</sub> spectrum to that region</span>
+  <span class="spacer"></span>
+  <button id="themeBtn" title="Toggle light/dark">◐ theme</button>
+</header>
+
+<div class="bar">
+  <div class="grp"><label for="cfg">config</label><select id="cfg"></select></div>
+  <div class="grp"><label for="lev">level</label><select id="lev"></select></div>
+  <div class="grp"><label for="xaxis">x axis</label><select id="xaxis">
+    <option value="0">θ_lab reconstructed</option>
+    <option value="3">θ_lab true</option>
+    <option value="4">θ_cm true</option>
+  </select></div>
+  <div class="grp"><label for="chi2">χ²/ndf &lt;</label>
+    <input type="range" id="chi2" min="0.5" max="60" step="0.5" value="5">
+    <span class="num" id="chi2v" style="width:3.4em">5.0</span></div>
+  <div class="grp"><label for="vzlo">vertex z</label>
+    <input class="num" type="number" id="vzlo" value="0" step="10" style="width:5.4em">
+    <span style="color:var(--muted)">–</span>
+    <input class="num" type="number" id="vzhi" value="1000" step="10" style="width:5.4em">
+    <span style="color:var(--muted); font-size:12px">mm</span></div>
+  <span class="spacer"></span>
+  <button id="back">← undo zoom</button>
+  <button id="reset">reset</button>
+</div>
+
+<main>
+  <section class="card">
+    <h2>Kinematics — <span id="kinttl"></span></h2>
+    <div class="axisbar">
+      <label class="chk"><input type="checkbox" id="kAuto" checked> auto range</label>
+      <label for="kxlo">θ</label>
+      <input class="num rng" type="number" id="kxlo" step="1"><span style="color:var(--muted)">–</span>
+      <input class="num rng" type="number" id="kxhi" step="1"><span style="color:var(--muted)">deg</span>
+      <label for="kylo">KE</label>
+      <input class="num rng" type="number" id="kylo" step="1"><span style="color:var(--muted)">–</span>
+      <input class="num rng" type="number" id="kyhi" step="1"><span style="color:var(--muted)">MeV</span>
+    </div>
+    <div class="canwrap">
+      <canvas id="kin" height="560"></canvas>
+      <div class="hint">drag to zoom · double-click to reset</div>
+      <div class="badge" id="badge"></div>
+    </div>
+  </section>
+
+  <div style="display:flex; flex-direction:column; gap:16px">
+    <section class="card">
+      <h2>Excitation energy of the selection</h2>
+      <div class="axisbar">
+        <label class="chk"><input type="checkbox" id="exAuto" checked> auto range</label>
+        <label for="exlo">E<sub>x</sub></label>
+        <input class="num rng" type="number" id="exlo" step="0.1"><span style="color:var(--muted)">–</span>
+        <input class="num rng" type="number" id="exhi" step="0.1"><span style="color:var(--muted)">MeV</span>
+        <label for="exbins">bins</label>
+        <input class="num bins" type="number" id="exbins" value="64" min="8" max="400" step="8">
+      </div>
+      <div class="canwrap"><canvas id="ex" height="238"></canvas></div>
+      <div class="stats">
+        <div class="stat"><div class="k">events</div><div class="v num" id="sN">–</div></div>
+        <div class="stat"><div class="k">median E<sub>x</sub></div><div class="v num" id="sMed">–</div></div>
+        <div class="stat"><div class="k">σ = IQR/1.349</div><div class="v num" id="sSig">–</div></div>
+        <div class="stat"><div class="k">truth E<sub>x</sub></div><div class="v num" id="sTruth">–</div></div>
+      </div>
+      <div class="note" id="exnote"></div>
+    </section>
+
+    <section class="card">
+      <h2>This selection vs the whole sample</h2>
+      <table><thead><tr><th>region</th><th>n</th><th>median</th><th>σ</th></tr></thead>
+        <tbody id="cmp"></tbody></table>
+      <div class="note">σ uses the interquartile range, not an RMS, so a fit-failure tail cannot inflate it.</div>
+    </section>
+  </div>
+</main>
+
+<script>
+const RAW = __DATA__;
+const F = 7; // thReco keReco exReco thTrue cmTrue chi2ndf zReco
+const LEVNAME = {gs:"ground state", ex0740:"0.740 MeV", ex3103:"3.103 MeV"};
+const LEVEX   = {gs:0.0, ex0740:0.740, ex3103:3.103};
+const CFGNAME = {b285_attpc:"2.85 T · AT-TPC", b285_2mm:"2.85 T · 2 mm",
+                 b400_attpc:"4 T · AT-TPC",    b400_2mm:"4 T · 2 mm",
+                 b700_attpc:"7 T · AT-TPC",    b700_2mm:"7 T · 2 mm"};
+// decode base64 -> Float32Array
+for (const s of RAW){
+  const bin = atob(s.b64); const buf = new ArrayBuffer(bin.length);
+  const u8 = new Uint8Array(buf);
+  for (let i=0;i<bin.length;i++) u8[i]=bin.charCodeAt(i);
+  s.a = new Float32Array(buf); delete s.b64;
+}
+const cfgs = [...new Set(RAW.map(s=>s.cfg))];
+const levs = [...new Set(RAW.map(s=>s.lev))];
+const $ = id=>document.getElementById(id);
+
+cfgs.forEach(c=>{ const o=document.createElement("option"); o.value=c; o.textContent=CFGNAME[c]||c; $("cfg").appendChild(o); });
+levs.forEach(l=>{ const o=document.createElement("option"); o.value=l; o.textContent=LEVNAME[l]||l; $("lev").appendChild(o); });
+{ const o=document.createElement("option"); o.value="__all"; o.textContent="all three levels"; $("lev").appendChild(o); }
+
+let view=null, stack=[], drag=null;
+
+function active(){
+  const c=$("cfg").value, l=$("lev").value;
+  return RAW.filter(s=>s.cfg===c && (l==="__all" || s.lev===l));
+}
+function xcol(){ return +$("xaxis").value; }
+
+// pass every event of the active samples to cb(x, ke, ex, passCuts)
+function forEach(cb){
+  const xc=xcol(), chi2max=+$("chi2").value, vlo=+$("vzlo").value, vhi=+$("vzhi").value;
+  for(const s of active()){
+    const a=s.a;
+    for(let i=0;i<s.n;i++){
+      const o=i*F, ch=a[o+5], vz=a[o+6];
+      const ok = ch<chi2max && vz>=vlo && vz<=vhi;
+      cb(a[o+xc], a[o+1], a[o+2], ok, s.lev);
+    }
+  }
+}
+function quant(v,p){ if(!v.length) return NaN; const k=Math.min(v.length-1,Math.max(0,Math.floor(p*(v.length-1)))); return v[k]; }
+
+function autoView(){
+  let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;
+  forEach((x,ke,ex,ok)=>{ if(!ok) return; if(x<x0)x0=x; if(x>x1)x1=x; if(ke<y0)y0=ke; if(ke>y1)y1=ke; });
+  if(x0>x1){ x0=0;x1=180;y0=0;y1=50; }
+  const px=(x1-x0)*.04||1, py=(y1-y0)*.04||1;
+  return {x0:x0-px, x1:x1+px, y0:Math.max(0,y0-py), y1:y1+py};
+}
+
+function fit(c){ const r=c.getBoundingClientRect(), d=window.devicePixelRatio||1;
+  if(c.width!==Math.round(r.width*d)){ c.width=Math.round(r.width*d); c.height=Math.round(c.getAttribute("height")*d); }
+  const g=c.getContext("2d"); g.setTransform(d,0,0,d,0,0); return {g,w:r.width,h:+c.getAttribute("height")}; }
+
+const cs=()=>getComputedStyle(document.documentElement);
+const PAD={l:56,r:12,t:12,b:40};
+
+function drawKin(){
+  const {g,w,h}=fit($("kin")); const S=cs();
+  g.clearRect(0,0,w,h);
+  g.fillStyle=S.getPropertyValue("--plot-bg"); g.fillRect(0,0,w,h);
+  const iw=w-PAD.l-PAD.r, ih=h-PAD.t-PAD.b;
+  const X=v=>PAD.l+(v-view.x0)/(view.x1-view.x0)*iw;
+  const Y=v=>PAD.t+ih-(v-view.y0)/(view.y1-view.y0)*ih;
+  // grid + axes
+  g.strokeStyle=S.getPropertyValue("--grid"); g.lineWidth=1; g.fillStyle=S.getPropertyValue("--muted");
+  g.font='11px "IBM Plex Mono",monospace'; g.textAlign="center"; g.textBaseline="top";
+  const tx=ticks(view.x0,view.x1), ty=ticks(view.y0,view.y1);
+  for(const t of tx){ const x=X(t); g.beginPath(); g.moveTo(x,PAD.t); g.lineTo(x,PAD.t+ih); g.stroke();
+                      g.fillText(fmt(t),x,PAD.t+ih+7); }
+  g.textAlign="right"; g.textBaseline="middle";
+  for(const t of ty){ const y=Y(t); g.beginPath(); g.moveTo(PAD.l,y); g.lineTo(PAD.l+iw,y); g.stroke();
+                      g.fillText(fmt(t),PAD.l-7,y); }
+  // points, coloured by |Ex - Ex_true| so an artifact stands out from the locus
+  let n=0, nsel=0;
+  const cols=[S.getPropertyValue("--d3"),S.getPropertyValue("--d2"),S.getPropertyValue("--d1"),S.getPropertyValue("--d0")];
+  g.globalAlpha=.55;
+  forEach((x,ke,ex,ok,lev)=>{
+    if(!ok) return; n++;
+    const px=X(x), py=Y(ke);
+    if(px<PAD.l||px>PAD.l+iw||py<PAD.t||py>PAD.t+ih) return;
+    nsel++;
+    const d=Math.abs(ex-(LEVEX[lev]??0));
+    g.fillStyle = d<0.15?cols[0] : d<0.4?cols[1] : d<1.0?cols[2] : cols[3];
+    g.fillRect(px-1,py-1,2.2,2.2);
+  });
+  g.globalAlpha=1;
+  // axis labels
+  g.fillStyle=S.getPropertyValue("--muted"); g.font='12px "IBM Plex Sans",sans-serif';
+  g.textAlign="center"; g.textBaseline="bottom";
+  const xl=["θ_lab reconstructed [deg]","","","θ_lab true [deg]","θ_cm true [deg]"][xcol()];
+  g.fillText(xl,PAD.l+iw/2,h-6);
+  g.save(); g.translate(13,PAD.t+ih/2); g.rotate(-Math.PI/2); g.textBaseline="top";
+  g.fillText("proton KE [MeV]",0,0); g.restore();
+  // drag rectangle
+  if(drag&&drag.cur){
+    const x0=Math.min(drag.x,drag.cur.x), x1=Math.max(drag.x,drag.cur.x);
+    const y0=Math.min(drag.y,drag.cur.y), y1=Math.max(drag.y,drag.cur.y);
+    g.fillStyle=S.getPropertyValue("--accent-soft"); g.fillRect(x0,y0,x1-x0,y1-y0);
+    g.strokeStyle=S.getPropertyValue("--accent"); g.lineWidth=1.5; g.strokeRect(x0,y0,x1-x0,y1-y0);
+  }
+  $("badge").innerHTML = `<b class="num">${nsel.toLocaleString()}</b> of ${n.toLocaleString()} events in view · `
+    + `θ <span class="num">${fmt(view.x0)}–${fmt(view.x1)}</span>°, `
+    + `KE <span class="num">${fmt(view.y0)}–${fmt(view.y1)}</span> MeV`;
+}
+
+function drawEx(){
+  const {g,w,h}=fit($("ex")); const S=cs();
+  g.clearRect(0,0,w,h);
+  g.fillStyle=S.getPropertyValue("--plot-bg"); g.fillRect(0,0,w,h);
+  // collect Ex of events inside the current view
+  const sel=[], all=[];
+  forEach((x,ke,ex,ok)=>{ if(!ok) return; all.push(ex);
+    if(x>=view.x0&&x<=view.x1&&ke>=view.y0&&ke<=view.y1) sel.push(ex); });
+  sel.sort((a,b)=>a-b); all.sort((a,b)=>a-b);
+  const stat=v=>({n:v.length, med:quant(v,.5), sig:(quant(v,.75)-quant(v,.25))/1.349});
+  const ss=stat(sel), sa=stat(all);
+  $("sN").textContent   = ss.n.toLocaleString();
+  $("sMed").textContent = ss.n?ss.med.toFixed(3)+" MeV":"–";
+  $("sSig").textContent = ss.n>8?ss.sig.toFixed(3)+" MeV":"–";
+  const lv=$("lev").value;
+  $("sTruth").textContent = lv==="__all" ? "mixed" : (LEVEX[lv].toFixed(3)+" MeV");
+  $("cmp").innerHTML =
+    `<tr><td>in view</td><td class="num">${ss.n.toLocaleString()}</td><td class="num">${ss.n?ss.med.toFixed(3):"–"}</td><td class="num">${ss.n>8?ss.sig.toFixed(3):"–"}</td></tr>`
+  + `<tr><td>whole sample</td><td class="num">${sa.n.toLocaleString()}</td><td class="num">${sa.n?sa.med.toFixed(3):"–"}</td><td class="num">${sa.n>8?sa.sig.toFixed(3):"–"}</td></tr>`;
+  if(!sel.length){ $("exnote").textContent="No events in view."; return; }
+  // Range: auto frames on the DATA (a fixed window hides shape in a sparse selection), but the
+  // axis is overridable -- pinning it is the only way to compare two selections like for like.
+  let lo,hi;
+  if($("exAuto").checked){
+    lo=quant(sel,.005); hi=quant(sel,.995);
+    if(!(hi>lo)){ lo-=.5; hi+=.5; }
+    const padx=(hi-lo)*.08; lo-=padx; hi+=padx;
+    $("exlo").value=lo.toFixed(2); $("exhi").value=hi.toFixed(2);   // reflect, so manual starts here
+  } else {
+    lo=+$("exlo").value; hi=+$("exhi").value;
+    if(!(hi>lo)){ lo=-1; hi=1; $("exlo").value=lo; $("exhi").value=hi; }
+  }
+  const NB=Math.max(8,Math.min(400,+$("exbins").value||64)), bins=new Float64Array(NB);
+  for(const v of sel){ let b=Math.floor((v-lo)/(hi-lo)*NB); if(b>=0&&b<NB) bins[b]++; }
+  const mx=Math.max(...bins)||1;
+  const iw=w-PAD.l-PAD.r, ih=h-PAD.t-PAD.b;
+  const X=v=>PAD.l+(v-lo)/(hi-lo)*iw, Y=v=>PAD.t+ih-v/mx*ih;
+  g.strokeStyle=S.getPropertyValue("--grid"); g.lineWidth=1;
+  g.font='11px "IBM Plex Mono",monospace'; g.fillStyle=S.getPropertyValue("--muted");
+  g.textAlign="center"; g.textBaseline="top";
+  for(const t of ticks(lo,hi)){ const x=X(t); g.beginPath(); g.moveTo(x,PAD.t); g.lineTo(x,PAD.t+ih); g.stroke(); g.fillText(fmt(t),x,PAD.t+ih+7); }
+  // bars
+  g.fillStyle=S.getPropertyValue("--d2");
+  for(let b=0;b<NB;b++){ if(!bins[b]) continue;
+    const x=X(lo+(b/NB)*(hi-lo)), x2=X(lo+((b+1)/NB)*(hi-lo));
+    g.fillRect(x,Y(bins[b]),Math.max(1,x2-x-.6),PAD.t+ih-Y(bins[b])); }
+  // truth marker
+  if(lv!=="__all"){ const xt=X(LEVEX[lv]);
+    if(xt>=PAD.l&&xt<=PAD.l+iw){ g.strokeStyle=S.getPropertyValue("--accent"); g.lineWidth=1.5;
+      g.setLineDash([4,3]); g.beginPath(); g.moveTo(xt,PAD.t); g.lineTo(xt,PAD.t+ih); g.stroke(); g.setLineDash([]); } }
+  g.fillStyle=S.getPropertyValue("--muted"); g.font='12px "IBM Plex Sans",sans-serif';
+  g.textAlign="center"; g.textBaseline="bottom"; g.fillText("E_x [MeV]",PAD.l+iw/2,h-6);
+  const shift = lv==="__all" ? null : ss.med-LEVEX[lv];
+  let out=0; for(const v of sel) if(v<lo||v>hi) out++;
+  // the statistics above are over the SELECTION, not over the drawn axis -- say so when they differ
+  const outMsg = out ? ` <span class="warnrow">${out.toLocaleString()} event${out===1?"":"s"} outside the axis`
+                       + ` (still counted in the statistics above).</span>` : "";
+  $("exnote").innerHTML = (shift===null
+    ? "Mixed levels: the truth marker is suppressed."
+    : `Offset from truth <b class="num ${Math.abs(shift)>0.15?"warnrow":""}">${shift>=0?"+":""}${shift.toFixed(3)} MeV</b>. `
+      + `Dashed line marks the true E<sub>x</sub>.`) + outMsg;
+}
+
+function ticks(a,b){
+  const span=b-a; if(!(span>0)) return [a];
+  const raw=span/6, p=Math.pow(10,Math.floor(Math.log10(raw))), n=raw/p;
+  const step=(n<1.5?1:n<3?2:n<7?5:10)*p;
+  const out=[]; for(let t=Math.ceil(a/step)*step; t<=b+1e-9; t+=step) out.push(t);
+  return out;
+}
+function fmt(v){ const a=Math.abs(v); return a>=100?v.toFixed(0):a>=10?v.toFixed(1):a>=1?v.toFixed(2):v.toFixed(3); }
+
+function redraw(){
+  $("kinttl").textContent = (CFGNAME[$("cfg").value]||$("cfg").value) + " · "
+    + ($("lev").value==="__all"?"all levels":LEVNAME[$("lev").value]);
+  // Axes follow the drag-zoom while "auto range" is on; unticking it hands control to the
+  // number fields, which is what you need to hold two selections on identical axes.
+  if($("kAuto").checked){
+    $("kxlo").value=(+view.x0).toFixed(1); $("kxhi").value=(+view.x1).toFixed(1);
+    $("kylo").value=(+view.y0).toFixed(1); $("kyhi").value=(+view.y1).toFixed(1);
+  } else {
+    const x0=+$("kxlo").value, x1=+$("kxhi").value, y0=+$("kylo").value, y1=+$("kyhi").value;
+    if(x1>x0 && y1>y0) view={x0,x1,y0,y1};
+  }
+  drawKin(); drawEx();
+}
+function resetView(){ stack=[]; view=autoView(); redraw(); }
+
+// ---- interaction: rubber-band zoom on the kinematics canvas
+const kin=$("kin");
+function toData(e){
+  const r=kin.getBoundingClientRect();
+  return {x:e.clientX-r.left, y:e.clientY-r.top};
+}
+kin.addEventListener("pointerdown",e=>{ const p=toData(e); drag={x:p.x,y:p.y,cur:null}; kin.setPointerCapture(e.pointerId); });
+kin.addEventListener("pointermove",e=>{ if(!drag) return; drag.cur=toData(e); drawKin(); });
+kin.addEventListener("pointerup",e=>{
+  if(!drag) return; const p=toData(e); const w=kin.getBoundingClientRect().width, h=+kin.getAttribute("height");
+  const iw=w-PAD.l-PAD.r, ih=h-PAD.t-PAD.b;
+  const inv=(px,py)=>({x:view.x0+(px-PAD.l)/iw*(view.x1-view.x0), y:view.y0+(PAD.t+ih-py)/ih*(view.y1-view.y0)});
+  const dx=Math.abs(p.x-drag.x), dy=Math.abs(p.y-drag.y);
+  if(dx>6&&dy>6){
+    const a=inv(Math.min(drag.x,p.x),Math.max(drag.y,p.y)), b=inv(Math.max(drag.x,p.x),Math.min(drag.y,p.y));
+    stack.push(view); view={x0:a.x,x1:b.x,y0:a.y,y1:b.y};
+  }
+  drag=null; redraw();
+});
+kin.addEventListener("dblclick",resetView);
+$("back").onclick=()=>{ if(stack.length){ view=stack.pop(); redraw(); } };
+$("reset").onclick=resetView;
+for(const id of ["cfg","lev","xaxis"]) $(id).onchange=resetView;
+$("chi2").oninput=()=>{ $("chi2v").textContent=(+$("chi2").value).toFixed(1); redraw(); };
+for(const id of ["vzlo","vzhi","exlo","exhi","exbins","kxlo","kxhi","kylo","kyhi"]) $(id).oninput=redraw;
+$("exAuto").onchange=redraw;
+$("kAuto").onchange=()=>{ if($("kAuto").checked){ view=autoView(); stack=[]; } redraw(); };
+$("themeBtn").onclick=()=>{
+  const cur=document.documentElement.getAttribute("data-theme");
+  const dark=cur?cur==="dark":matchMedia("(prefers-color-scheme:dark)").matches;
+  document.documentElement.setAttribute("data-theme",dark?"light":"dark");
+  try{localStorage.setItem("dpexp-theme",dark?"light":"dark")}catch(_){}
+  redraw();
+};
+try{ const t=localStorage.getItem("dpexp-theme"); if(t) document.documentElement.setAttribute("data-theme",t); }catch(_){}
+addEventListener("resize",()=>{ if(view) redraw(); });
+resetView();
+</script>
