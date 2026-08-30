@@ -55,7 +55,6 @@ void dp_specmat_C14(TString smDir = "/mnt/f/a1954_C14dp_sm", TString simDir = "/
 
    const double u = 931.49401, mp = 1.007825 * u, ZPAD = 1000.0, R2D = 57.29577951;
    const char *levs[3] = {"gs", "ex0740", "ex3103"};
-   const char *seeds[3] = {"s8001", "s8002", "s8003"};
    const double levEx[3] = {0.0, 0.740, 3.103};
    const int col[3] = {kAzure + 2, kOrange + 7, kGreen + 3};
 
@@ -65,7 +64,11 @@ void dp_specmat_C14(TString smDir = "/mnt/f/a1954_C14dp_sm", TString simDir = "/
 
    for (int L = 0; L < 3; ++L) {
       TString rf = smDir + "/" + levs[L] + "/reco.root";
-      TString sf = simDir + "/" + TString(levs[L]) + "_" + seeds[L] + "_sim.root";
+      // GLOB for the sim rather than hardcoding a seed: the seed differs per field
+      // (s800x at 2.85 T, s810x at 4 T, s820x at 7 T), and a hardcoded one silently reports
+      // every sample as missing when the macro is pointed at another field.
+      TString sf = gSystem->GetFromPipe("ls " + simDir + "/" + TString(levs[L]) + "_*_sim.root 2>/dev/null | head -1");
+      sf = sf.Strip(TString::kBoth);
       TFile *fr = TFile::Open(rf);
       TFile *fs = TFile::Open(sf);
       if (!fr || fr->IsZombie() || !fs || fs->IsZombie()) {
@@ -105,7 +108,7 @@ void dp_specmat_C14(TString smDir = "/mnt/f/a1954_C14dp_sm", TString simDir = "/
          // TRUE rMax: the largest excursion of the MC trajectory from the beam axis.
          // This is the quantity d_max estimates -- NOT p_T/(0.3B), which is the vertex radius and
          // is systematically larger because the spiral tightens as the proton slows.
-         double rMaxTrue = 0;
+         double dmaxTrue = 0; // max excursion from the beam axis = the quantity d_max measures
          if (pts)
             for (int k = 0; k < pts->GetEntriesFast(); ++k) {
                // NOTE: the branch is called "AtTpcPoint" but the objects in it are AtMCPoint.
@@ -115,9 +118,9 @@ void dp_specmat_C14(TString smDir = "/mnt/f/a1954_C14dp_sm", TString simDir = "/
                auto *q = (AtMCPoint *)pts->At(k);
                if (!q || q->GetTrackID() != protonId)
                   continue;
-               rMaxTrue = std::max(rMaxTrue, 10.0 * std::hypot(q->GetX(), q->GetY())); // cm -> mm
+               dmaxTrue = std::max(dmaxTrue, 10.0 * std::hypot(q->GetX(), q->GetY())); // cm -> mm
             }
-         if (rMaxTrue <= 0)
+         if (dmaxTrue <= 0)
             continue;
 
          // ---- measured, from the hit cloud only ----
@@ -175,9 +178,9 @@ void dp_specmat_C14(TString smDir = "/mnt/f/a1954_C14dp_sm", TString simDir = "/
 
          gdm[L].push_back(dmax);
          gth[L].push_back(thG);
-         tdm[L].push_back(rMaxTrue * 2.0); // truth plane drawn in the same units as d_max
+         tdm[L].push_back(dmaxTrue); // same quantity, same units, no factor of 2
          tth[L].push_back(thT);
-         rDm[L].push_back(dmax / (2 * rMaxTrue));
+         rDm[L].push_back(dmax / dmaxTrue);
          rTh[L].push_back(thG / thT);
       }
       printf("  %-7s  %5zu tracks\n", levs[L], gdm[L].size());
@@ -230,8 +233,8 @@ void dp_specmat_C14(TString smDir = "/mnt/f/a1954_C14dp_sm", TString simDir = "/
    gPad->SetGrid();
    frameOn(tth, tdm, x0, x1, y0, y1);
    auto *fB = gPad->DrawFrame(x0, y0, x1, y1,
-                              "B  the same plane from TRUTH (2#times r_{max} of the MC trajectory)"
-                              ";#theta_{lab} true [deg];2 r_{max} true [mm]");
+                              "B  the same plane from TRUTH (d_{max} of the MC trajectory)"
+                              ";#theta_{lab} true [deg];d_{max} true [mm]");
    fB->GetXaxis()->SetTitleSize(0.042);
    fB->GetYaxis()->SetTitleSize(0.042);
    for (int L = 0; L < 3; ++L) {
@@ -246,7 +249,7 @@ void dp_specmat_C14(TString smDir = "/mnt/f/a1954_C14dp_sm", TString simDir = "/
    // C: closure on d_max. a1975 got 1.007 +- 5 % against the integrator's rMax.
    c->cd(3);
    gPad->SetGrid();
-   auto *hD = new TH1D("hD", "C  closure: d_{max} / 2r_{max}^{true};d_{max} / 2r_{max}^{true};tracks", 90, 0.6, 1.4);
+   auto *hD = new TH1D("hD", "C  closure: d_{max} / d_{max}^{true};d_{max} / d_{max}^{true};tracks", 90, 0.85, 1.15);
    for (int L = 0; L < 3; ++L)
       for (double v : rDm[L]) hD->Fill(v);
    hD->SetLineColor(kAzure + 2);
@@ -272,7 +275,7 @@ void dp_specmat_C14(TString smDir = "/mnt/f/a1954_C14dp_sm", TString simDir = "/
       aD.insert(aD.end(), rDm[L].begin(), rDm[L].end());
       aT.insert(aT.end(), rTh[L].begin(), rTh[L].end());
    }
-   printf("\n  d_max / 2r_max(true) : median %.3f   IQR/1.349 %.3f\n", sm_q(aD, .5),
+   printf("\n  d_max / d_max(true) : median %.3f   IQR/1.349 %.3f\n", sm_q(aD, .5),
           (sm_q(aD, .75) - sm_q(aD, .25)) / 1.349);
    printf("  theta_geo / theta_true: median %.3f   IQR/1.349 %.3f\n", sm_q(aT, .5),
           (sm_q(aT, .75) - sm_q(aT, .25)) / 1.349);
