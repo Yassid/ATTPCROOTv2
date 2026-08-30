@@ -3,7 +3,7 @@
 #
 #   ./run_C14dp_campaign.sh [-j N] [nEvents]
 #
-# Twelve samples, six generations (both pitches of a field read the same sims, so a pitch
+# 18 samples, 9 generations (both pitches of a field read the same sims, so a pitch
 # difference is the pad plane and nothing else). Levels: the 1/2+ ground state and the 5/2+ at
 # 0.740 MeV, which are the only two bound states of 15C.
 #
@@ -19,7 +19,7 @@ mkdir -p "$ROOTDIR"
 MASTER="$ROOTDIR/campaign.log"
 say() { echo "[$(date +%F' '%H:%M:%S)] $*" | tee -a "$MASTER"; }
 
-STATES="gs:1 ex0740:2"
+STATES="gs:1 ex0740:2 ex3103:3"
 FIELDS="2.85:0 4.0:1 7.0:2"
 PADS="-1 2.0"
 
@@ -45,8 +45,8 @@ run_wave() {
    say "=== wave $label finished ==="
 }
 say "########## (d,p) campaign start (-j $JOBS, $NEV events/sample) ##########"
-run_wave 1 "gs"
-run_wave 2 "ex0740"
+run_wave 1 "gs ex0740"
+run_wave 2 "ex3103"
 say "########## (d,p) campaign done ##########"
 for cfg in b285_attpc b285_2mm b400_attpc b400_2mm b700_attpc b700_2mm; do
    n=$(ls "$ROOTDIR/$cfg"/*.marker 2>/dev/null | wc -l)

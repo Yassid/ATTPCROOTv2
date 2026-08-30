@@ -28,9 +28,16 @@ PAD=${3:?need the pad pitch in mm, or -1 for the real AT-TPC pad plane}
 SEED=${4:?need a seed}
 NEV=${5:-8000}
 
+# 15C has only TWO BOUND states -- the 1/2+ ground state and the 5/2+ at 0.740 -- because
+# S_n = 1.218 MeV. The two higher entries are known but UNBOUND levels: a real 15C would emit a
+# neutron. They are simulated anyway because the two-body proton kinematics are well defined and
+# the proton is the only thing measured, so they are valid for a detector-response study. They are
+# NOT a prediction of a bound spectrum.
 case "$STATE" in
-   gs)     EX=0.0   ;;
-   ex0740) EX=0.740 ;;
+   gs)     EX=0.0   ;;   # 1/2+  bound
+   ex0740) EX=0.740 ;;   # 5/2+  bound
+   ex3103) EX=3.103 ;;   # unbound, detector response only
+   ex4657) EX=4.657 ;;   # unbound, detector response only
    *) echo "unknown state '$STATE'"; exit 2 ;;
 esac
 
@@ -129,7 +136,11 @@ else
   # backward-going track into the forward hemisphere. The (p,p') campaign never noticed because
   # its recoil protons never pass theta_lab 90 deg; here the whole point is the ones that do. The
   # first (d,p) run left it kFALSE and got ZERO reconstructed protons below theta_cm 45 deg.
-  root -b -q -l "$UKF/pipeline/fitGenfit_C14.C(\"$JC\",-1,\"$OUT/\",\"\",\"$OUT/\",$BNEG,2,5,\"\",4.0,10.0,170.0,kTRUE,kTRUE,\"proton\",\"$GEO\",kFALSE,kTRUE,0.0,1,kTRUE,kFALSE,kFALSE,kFALSE)" > "$OUT/${JC}_fit.log" 2>&1
+  # MEASSIGMA: 0.6 mm, not the 4.0 inherited from (p,p'). Measured on this channel -- chi2/ndf
+  # scales as 1/measSigma^2 (0.015 / 0.055 / 0.207 / 0.548 / 2.111 at 4.0 / 2.0 / 1.0 / 0.6 / 0.3),
+  # so the real fit residuals are ~0.45 mm and 4 mm left chi2/ndf at 0.015, making the quality cut
+  # meaningless. 0.6 puts chi2/ndf at 0.55 and gives the best energy spread (1.00 % -> 0.84 %).
+  root -b -q -l "$UKF/pipeline/fitGenfit_C14.C(\"$JC\",-1,\"$OUT/\",\"\",\"$OUT/\",$BNEG,2,5,\"\",${MEASSIGMA:-0.6},10.0,170.0,kTRUE,kTRUE,\"proton\",\"$GEO\",kFALSE,kTRUE,0.0,1,kTRUE,kFALSE,kFALSE,kFALSE)" > "$OUT/${JC}_fit.log" 2>&1
   [ -s "$OUT/${JC}_genfit.root" ] || { echo "$JC FIT_FAILED"; exit 1; }
   grep -q "dE/dx from CATIMA" "$OUT/${JC}_fit.log" || { echo "$JC CATIMA_NOT_ENABLED"; exit 1; }
 fi
