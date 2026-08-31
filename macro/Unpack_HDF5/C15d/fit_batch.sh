@@ -1,18 +1,23 @@
 #!/usr/bin/env bash
 # C15d: GENFIT+CATIMA fitting over the D2 run set, one species hypothesis per pass. Resumable.
 #
-#   ./fit_batch.sh [nparallel] [species] [runlist] [nEvents]
+#   ./fit_batch.sh [nparallel] [species] [runlist] [nEvents] [gate] [backExtrap]
 #     species: d (deuteron, default) | p (proton) | t (triton)
+#     gate   : a PID gate JSON -> the run is reduced BEFORE fitting. Empty = fit everything.
 #
 # Per run: fit -> <run>_genfit_<sp>.root, then flatten to <run>_kin_<sp>.root. Both are skipped if
 # they already exist, so re-running continues where it stopped.
 #
-# ★ THE FIT IS UNGATED AND THE KIN NTUPLE HOLDS EVERY FITTED TRACK. The PID gate is applied later,
-# by joining the kin ntuple on (run, event, trackID). Two reasons:
-#   - AtGenfitter::SetPIDGate runs its OWN AtSpyralPID on RAW dE/dx, while every gate in this
-#     workspace is drawn on the gain-matched plane. An in-fit gate would silently select a
-#     different set of tracks than the one that was drawn.
-#   - fitting once and gating many times means a gate can be revised without refitting.
+# ★ GATE BEFORE FITTING. With a gate, pid/gate_events_C15d.C first reduces the run to IC-passing
+# events holding only gated tracks, and the fit runs on that: 617 proton tracks on run_0026 against
+# 17,043 ungated, i.e. ~28x less fitting. The (d,d') pass was run ungated and did not need to be.
+#
+# The gate is NOT passed to AtGenfitter::SetPIDGate, which runs its own AtSpyralPID on RAW dE/dx
+# while every gate here is drawn on the gain-matched plane -- measured, that selects 4,217 tracks
+# where the plane selects 2,606. gate_events_C15d.C instead tests the polygon against the persisted
+# AtPIDEvent, which IS the plane, and reproduces it to the track.
+#
+# The kin ntuple still holds every track that was fitted, so downstream cuts stay free.
 #
 # ★ USE GENFIT+CATIMA, NOT THE UKF (project decision). Material effects are ON by default in
 # fitGenfit_C15d.C with the CATIMA MSC, straggling and dE/dx backends, and matFallback OFF so a
@@ -33,6 +38,11 @@ NPAR="${1:-8}"
 SPECIES="${2:-d}"
 RUNLIST="${3:-$HERE/runs_d2.txt}"
 NEVENTS="${4:--1}"
+# Gate BEFORE fitting. With a gate, each run is first reduced to IC-passing events holding only
+# gated tracks (pid/gate_events_C15d.C), and the fit runs on that -- roughly an order of magnitude
+# less fitting. Empty = fit everything, which is what the (d,d') pass did.
+GATE="${5:-}"
+BACKEXTRAP="${6:-kTRUE}"
 
 case "$SPECIES" in
    p) PDG=2212;       MASS=1.00782503207; ZED=1;;
@@ -64,6 +74,8 @@ echo "  species  : $SPECIES  (pdg $PDG, m $MASS u, Z $ZED)"
 echo "  runs     : ${#RUNS[@]} from $(basename "$RUNLIST")"
 echo "  parallel : $NPAR"
 echo "  B        : $BFIELD T"
+echo "  gate     : ${GATE:-none (fitting everything)}"
+echo "  backExtr : $BACKEXTRAP"
 echo "  out      : $FIT_DIR"
 echo "  free     : $(df -BG --output=avail "$FIT_DIR" | tail -1 | tr -d ' G') GB (guard ${MIN_FREE_GB})"
 echo
@@ -76,8 +88,25 @@ do_fit() {
    local kin="$FIT_DIR/${run}_kin_${SPECIES}.root"
    local log="$LOG_DIR/${run}_fit_${SPECIES}.log"
    local reco="$RECO_DIR/${run}_reco.root"
+   local recoDir="$RECO_DIR/"
 
    [[ -s "$reco" ]] || { echo "[$run] no reco, skipping"; return 0; }
+
+   # ---- optional pre-fit gating -------------------------------------------------------------
+   if [[ -n "$GATE" ]]; then
+      local gdir="$FIT_DIR/in_${SPECIES}"
+      local gated="$gdir/${run}_reco.root"
+      if [[ ! -s "$gated" ]]; then
+         mkdir -p "$gdir"
+         root -b -q "$HERE/pid/gate_events_C15d.C(\"$run\",\"$GATE\",\"$RECO_DIR/\",\"$gdir/\")" \
+            >"$LOG_DIR/${run}_gate_${SPECIES}.log" 2>&1 || true
+      fi
+      if [[ ! -s "$gated" ]]; then
+         echo "[$run] no gated events (see $LOG_DIR/${run}_gate_${SPECIES}.log)"
+         return 0
+      fi
+      recoDir="$gdir/"
+   fi
 
    local free_gb
    free_gb=$(df -BG --output=avail "$FIT_DIR" | tail -1 | tr -d ' G')
@@ -90,7 +119,7 @@ do_fit() {
       # killed job must never leave one under its final name.
       local part="$FIT_DIR/.part/$run"
       rm -rf "$part"; mkdir -p "$part"
-      if root -b -q "$HERE/fitGenfit_C15d.C(\"$run\", $NEVENTS, \"$RECO_DIR/\", \"\", \"$part/\", $BFIELD, 2, 5, \"\", 4.0, 5.0, 178.0, kTRUE, kTRUE, $PDG, $MASS, $ZED, \"$SPECIES\")" \
+      if root -b -q "$HERE/fitGenfit_C15d.C(\"$run\", $NEVENTS, \"$recoDir\", \"\", \"$part/\", $BFIELD, 2, 5, \"\", 4.0, 5.0, 178.0, kTRUE, kTRUE, $PDG, $MASS, $ZED, \"$SPECIES\", \"_reco\", \"ATTPC_D300torr_v2_geomanager.root\", \"ATTPC.C15d_D2_300torr.par\", 6.5643e-5, 2, kFALSE, kTRUE, kTRUE, kTRUE, kFALSE, $BACKEXTRAP)" \
             >"$log" 2>&1 && [[ -s "$part/${run}_genfit_${SPECIES}.root" ]]; then
          mv -f "$part/${run}_genfit_${SPECIES}.root" "$fit"
          rm -rf "$part"
@@ -115,7 +144,7 @@ do_fit() {
    fi
 }
 export -f do_fit
-export HERE RECO_DIR FIT_DIR LOG_DIR MIN_FREE_GB NEVENTS SPECIES PDG MASS ZED BFIELD
+export HERE RECO_DIR FIT_DIR LOG_DIR MIN_FREE_GB NEVENTS SPECIES PDG MASS ZED BFIELD GATE BACKEXTRAP
 
 printf '%s\n' "${RUNS[@]}" | xargs -P "$NPAR" -I{} bash -c 'do_fit "$@"' _ {}
 
