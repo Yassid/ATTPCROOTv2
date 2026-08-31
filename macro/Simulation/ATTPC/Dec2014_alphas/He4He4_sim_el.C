@@ -1,10 +1,18 @@
-void He4He4_sim_el(Int_t nEvents = 10000, TString mcEngine = "TGeant4")
+// seed = 0 keeps the original time-seeded behaviour. Pass a NON-ZERO seed when running
+// several streams in parallel: the time-based seed has one-second granularity, so two
+// streams launched in the same second draw byte-identical events and the extra CPU buys
+// no extra statistics at all. An explicit seed also makes a run reproducible.
+void He4He4_sim_el(Int_t nEvents = 10000, TString mcEngine = "TGeant4", UInt_t seed = 0)
 {
 
-   srand( (unsigned)time( NULL ) );
-   UInt_t seed=(float) rand()/RAND_MAX * 100000;
+   if (seed == 0) {
+      srand((unsigned)time(NULL));
+      seed = (float)rand() / RAND_MAX * 100000;
+   }
    gRandom->SetSeed(seed);
-  
+   std::cout << " ==== Generator seed : " << seed << std::endl;
+
+
    TString dir = getenv("VMCWORKDIR");
 
    // Output file name

@@ -423,6 +423,31 @@ root -l -b -q 'He4He4_sim_el.C(4000)'
 > also expected, not a bug: vertices are spread along a beam that has already slowed, so a
 > late vertex gives products of only tens of keV.
 
+#### Running in parallel
+
+For the statistics the trigger study needs, use the driver rather than a loop:
+
+```bash
+bash bulk_sim.sh 8 5000 ~/dec2014_sim_bulk     # 8 streams x 5000 = 40000 events
+```
+
+It generates, digitises and dumps the per-event charge in one pass, then concatenates the
+streams into `qtot_sim_bulk.txt`. Two reasons it cannot be a simple `for` loop in one
+directory:
+
+- **Both macros write `./data/attpcsim_in.root` by name.** Streams sharing a working
+  directory overwrite each other's files mid-run. Each stream gets its own directory.
+- **The default seed comes from `time(NULL)`**, which has one-second granularity — streams
+  launched together would draw *byte-identical* events and the extra CPU would buy no extra
+  statistics at all. `He4He4_sim_el.C` now takes an explicit seed as its third argument
+  (`0` keeps the old time-seeded behaviour), and the driver gives each stream a distinct
+  one. The seed is echoed as `==== Generator seed : N`, so a run can be reproduced.
+
+> **Do not put `set -u` in a script that sources `setup_fr19port.sh`.** That script, and
+> FairSoft's `thisroot.sh` underneath it, reference unset variables as a matter of course,
+> so `set -u` kills the shell *at the source line* — before anything is echoed. The symptom
+> is a script that produces no output whatsoever and creates none of its directories.
+
 ### 5.3 Digitise
 
 ```bash
