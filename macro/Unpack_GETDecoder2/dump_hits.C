@@ -86,8 +86,11 @@ void dump_hits(TString inFile, TString outFile, TString mode = "hits", Int_t nEv
                 << Form("%.3f,%.3f,%.3f", pc.X(), pc.Y(), pc.Z()) << ","
                 << Form("%.4g,%.4g", hit->GetCharge(), hit->GetQHit()) << "\n";
       }
+      // Two columns: summed charge and hit multiplicity. The multiplicity is what
+      // distinguishes a genuine low-charge event from a nearly-empty one, and matching this
+      // layout keeps the file readable by the scripts written against the original dumps.
       if (!hitMode)
-         out << Form("%.6g", qSum) << "\n";
+         out << Form("%.6g %d", qSum, nHits) << "\n";
 
       if (i % 2000 == 0)
          std::cout << "  " << i << " / " << nRun << std::endl;

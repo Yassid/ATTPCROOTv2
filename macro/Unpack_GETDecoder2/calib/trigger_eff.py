@@ -10,12 +10,26 @@ Normalisation is taken on the bulk (1.2-3.0e5) rather than on total area, so the
 experimental pile-up tail -- events with a second beam particle, which the simulation does
 not produce -- cannot distort the low-charge comparison.
 """
+import sys, os
 import numpy as np, matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-e = np.loadtxt("qtot_exp_128.txt"); s = np.loadtxt("qtot_sim.txt")
-qe, qs = e[:, 0], s[:, 0]
+# usage: trigger_eff.py [exp.txt] [sim.txt] [out.png]
+EXP = sys.argv[1] if len(sys.argv) > 1 else "qtot_exp_128.txt"
+SIM = sys.argv[2] if len(sys.argv) > 2 else "qtot_sim.txt"
+OUT = sys.argv[3] if len(sys.argv) > 3 else "/home/yassid/dec2014_calib/plots/trigger_efficiency.png"
+
+
+def charges(path):
+    """First column is the summed charge; a second column (hit multiplicity) is optional."""
+    a = np.loadtxt(path)
+    return a[:, 0] if a.ndim > 1 else a
+
+
+qe, qs = charges(EXP), charges(SIM)
+print(f"experiment {len(qe)} events from {os.path.basename(EXP)}")
+print(f"simulation {len(qs)} events from {os.path.basename(SIM)}")
 bins = np.logspace(3.8, 6.0, 22); cen = np.sqrt(bins[1:] * bins[:-1])
 he, _ = np.histogram(qe, bins=bins); hs, _ = np.histogram(qs, bins=bins)
 m = (cen > 1.2e5) & (cen < 3.0e5)
@@ -43,12 +57,12 @@ a.errorbar(cen[ok], r, yerr=re, fmt="o-", color="tab:green")
 a.axhline(1, color="k", ls="--")
 a.set_xscale("log"); a.set_ylim(0, 2.2)
 a.set_xlabel(r"$\Sigma Q_{hit}$  [ADC]"); a.set_ylabel("experiment / simulation")
-a.set_title("Ratio = trigger efficiency\nrises 0.16 -> 1 over $7\\times10^3$ to $6\\times10^4$")
+a.set_title("Ratio = trigger efficiency")
 a.grid(alpha=.3)
 fig.suptitle("Trigger efficiency from the charge-spectrum comparison, run 128 vs simulation\n"
              "the simulation has no trigger, so the deficit at low charge measures it",
              fontsize=12)
 fig.tight_layout()
-fig.savefig("/home/yassid/dec2014_calib/plots/trigger_efficiency.png", dpi=110, bbox_inches="tight")
-print("wrote plots/trigger_efficiency.png")
+fig.savefig(OUT, dpi=110, bbox_inches="tight")
+print("wrote", OUT)
 print(f"bulk normalisation factor applied to simulation: {k:.3f}")

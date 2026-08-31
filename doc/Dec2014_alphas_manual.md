@@ -511,11 +511,45 @@ at a time.
 Normalisation is taken on the bulk (1.2–3.0e5), *not* on total area, precisely so the pile-up
 tail cannot distort the low-charge comparison.
 
-> **This is not yet a usable efficiency curve.** Between 3e4 and 1.3e5 the ratio sits at
-> 0.75–0.85 rather than climbing cleanly to 1, and above 1e5 it scatters between 0.5 and 2.0
-> on only ~2000 effective simulated reactions. Whether the sub-unity plateau is real or an
-> artefact of the normalisation window needs more statistics. **Do not use it to correct
-> anything yet.** ~40 000 events (about an hour) should settle it.
+> **This is not a usable efficiency curve, and more statistics will not make it one.**
+> See below.
+
+#### Why the normalisation is not valid (40 000-event test)
+
+The 4000-event version left it open whether the sub-unity plateau and the scatter above
+1e5 were statistical. Ten times the statistics settled it: **they are systematic.** The
+ratio in the normalisation window reproduces to two decimals — 1.91 / 1.05 / 0.48 at 40k
+against 1.99 / 1.04 / 0.48 at 4k — instead of averaging out. Noise would have shrunk by
+√10.
+
+The cause is that the two spectra have **different shapes in the very window used to
+normalise them** (`charge_shapes.py`, `plots/charge_shapes.png`):
+
+- **experiment** — sharply peaked at 1.8e5, with a second bump near 3.6e5
+- **simulation** — nearly flat, rising to a hard edge at ~3.3e5, then nothing
+
+The second experimental bump is **beam pile-up**, and the evidence is quantitative: its
+charge is **2.01×** the main peak while its hit count is only **1.40×**. A second beam
+particle doubles the deposited charge but lands on largely the *same* pads, since both
+follow the beam axis. 7.1 % of experimental events sit above 4e5 ADC against 0.005 % of
+simulated ones.
+
+The shape difference itself has a likely cause worth checking before any repair:
+`AtVertexPropagator` forces a reaction at a **uniformly distributed vertex**, so the charge
+deposited before it is uniform too — hence a flat spectrum. Real triggered events are
+dominated by beam crossing the full length without reacting, which deposits a *fixed*
+charge — hence a sharp peak. If so, the simulated sample composition is an artefact of the
+generator rather than a prediction, and no normalisation window can be correct.
+
+What survives: the **shape** of the low-charge turn-on, which is stable between 4k and 40k
+(0.16, 0.22, 0.35, 0.37, 0.40, 0.54, 0.74, 0.85 from 7.1e3 to 3.9e4). Its **absolute
+scale** is undetermined.
+
+> **A correction to the earlier claim.** The 4000-event run was reported as showing the
+> absolute charge scale agreeing to ~7 %. That was a comparison of *medians of two
+> differently shaped distributions* and is much weaker than it sounded. The defensible
+> statement is the charge **per hit**, which cancels track-length differences: sim/exp =
+> **1.13**. So the micromegas gain is roughly right; the event-level spectra are not.
 
 ---
 
@@ -552,7 +586,10 @@ Ordered by how much time each one cost.
 - **Energy reconstruction** is not done. The range route is broken by the `arc_length`
   estimator; the curvature route `p = 0.3qBR` is preferred and the validated simulation can
   now check it against truth momenta.
-- **Trigger efficiency** needs ~10× the statistics before it can correct anything (§5.5).
+- **Trigger efficiency** is blocked on a *systematic*, not on statistics (§5.5). The
+  40 000-event test showed the two charge spectra have different shapes in the
+  normalisation window. Next step: check whether the simulated vertex distribution is the
+  cause, by comparing a non-reacting beam-only sample against the data's main peak.
 - **Pile-up** is absent from the simulation, so the high-charge region cannot be compared.
 - **`ThetaPad`/`ThetaRot` degeneracy** unresolved (§3.8).
 - **Bradt thesis eq. 3.14** (detector → beam frame, left-handed) not implemented.
@@ -582,7 +619,8 @@ Ordered by how much time each one cost.
 | `plot_production.py`, `plot_opening.py` | production plots |
 | `excitation.py` | excitation function via CATIMA energy loss |
 | `kinematics.py` | acceptance-independent closure test |
-| `trigger_eff.py` | trigger turn-on from charge spectra |
+| `trigger_eff.py` | trigger turn-on from charge spectra (takes exp/sim/out paths) |
+| `charge_shapes.py` | why the normalisation is not valid; the pile-up signature (§5.5) |
 | `view_event.py`, `analyse_event.py`, `vertex_tangent.py`, `validate130.py` | single-event tools |
 | `eloss_alpha_heco2.txt` | CATIMA α energy loss, He:CO₂ 90-10 @ 150 torr |
 
@@ -599,7 +637,8 @@ Ordered by how much time each one cost.
 
 | Macro | Purpose |
 |---|---|
-| `He4He4_sim_el.C` | α+α elastic generator + Geant4 |
+| `He4He4_sim_el.C` | α+α elastic generator + Geant4 (3rd arg = RNG seed) |
+| `bulk_sim.sh` | N parallel generate→digitise→dump streams |
 | `rundigi_sim.C` | clusterize → pulse → PSA |
 | `resdir.C` | **direction** validation of the correction vs MC truth (§3.6, §5.4) |
 | `res.C`, `res2.C`, `res3.C`, `res4.C` | earlier position-residual versions, kept for reference |
