@@ -58,14 +58,14 @@ GroundWirePlaneY:Double_t     -8.1   # mm
 GatingWirePlaneY:Double_t      -14   # mm
 EField:Double_t                 14000   # V/m -- the field this v_d was computed AT. The old par said 5000 V/m
 NumTbs:Int_t                   512
-SamplingRate:Int_t                  6   # MHz; 512 tb / 6 MHz = 85.3 us, and the 100 cm drift takes 75.7 us
-DriftVelocity:Double_t         1.3202   # cm/us  MAGBOLTZ, 3He+5%CO2 300 torr 50 V/cm, B = 3.8 T (+-0.05%)
+SamplingRate:Int_t                  6   # MHz; 512 tb / 6 MHz = 85.3 us, and the 100 cm drift takes 75.8 us
+DriftVelocity:Double_t         1.3196   # cm/us  MAGBOLTZ, 3He+5%CO2 300 torr 50 V/cm, B = 2.85 T (+-0.04%)
 DriftLength:Double_t          1000   # mm //ATTPC : 1000 - Prototype : 500
 YDivider:Int_t                1000   # Full drift length will be divided by this number when finding cluster
 GasFile:Int_t                    2
 PadPlaneFile:Int_t               3
 PadShapeFile:Int_t               4   # might not be needed because the shape is simply rectangle
-BField:Double_t                   3.8   # Tesla
+BField:Double_t                  2.85   # Tesla
 TiltAng:Double_t               0.0   # Degrees
 TB0:Int_t                       98   # Time Bucket reference for micromegas position (DEPRECATED)
 LorentzAngle:Double_t          0.0   # Lorentz Angle
@@ -77,8 +77,8 @@ ThetaRot:Double_t              0.0   # Second Lorentz Angle
 GasPressure:Double_t           300   # Gas pressure in torr
 EIonize:Double_t              40.9   # eV. ESTIMATED, ignores Penning transfer -- see the header
 Fano:Double_t                 0.17   # Fano factor, helium
-CoefL:Double_t            0.000570815   # cm^2/us  from D_L = 294.1 um/sqrt(cm)
-CoefT:Double_t            5.91462e-05   # cm^2/us  from D_T = 94.7 um/sqrt(cm)
+CoefL:Double_t             0.00060951   # cm^2/us  from D_L = 303.9 um/sqrt(cm)
+CoefT:Double_t            0.000103307   # cm^2/us  from D_T = 125.1 um/sqrt(cm)
 Gain:Double_t               150000   # NOT tuned for this gas -- carried over from a1975
 GETGain:Double_t              1000   # Gain of the GET electronics in fC
 PeakingTime:Int_t              720   # Electronic peaking time in ns

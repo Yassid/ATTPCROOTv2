@@ -34,7 +34,17 @@ case "$STATE" in
 esac
 
 BKG=$(awk -v b="$BT" 'BEGIN{printf "%.1f", -10*b}')
-PAR=$(awk -v b="$BT" 'BEGIN{print (b>3.0)?"ATTPC.46Ar_3Hed_sim_B38.par":"ATTPC.46Ar_3Hed_sim.par"}')
+# PAR IS SELECTED BY FIELD, AND AN UNKNOWN FIELD IS A HARD ERROR. Each field now has its own
+# par because DriftVelocity and CoefL/CoefT come from a Magboltz 300 torr scan AT THAT FIELD
+# (make_3Hed_pars.sh) rather than being the H2 placeholders shared by every arm. A ?: fallback
+# to the 2.85 T file would silently run a 2.0 T sim on 2.85 T transport and present as valid.
+case "$(awk -v b="$BT" 'BEGIN{printf "%.2f", b}')" in
+   2.00) PAR=ATTPC.46Ar_3Hed_sim_B20.par  ;;
+   2.85) PAR=ATTPC.46Ar_3Hed_sim_B285.par ;;
+   3.80) PAR=ATTPC.46Ar_3Hed_sim_B38.par  ;;
+   *) echo "no par for B = $BT T -- add it to make_3Hed_pars.sh and re-run that script"; exit 2 ;;
+esac
+[ -f "$REPO/parameters/$PAR" ] || { echo "MISSING PAR $PAR -- run make_3Hed_pars.sh"; exit 2; }
 mkdir -p "$OUT" "$SIMDIR"
 set +u; source "$REPO/build/config.sh" >/dev/null 2>&1; set -u
 export ROOT_INCLUDE_PATH="$REPO/build/include:$HOME/fair_install/FairRootInstall/include"
