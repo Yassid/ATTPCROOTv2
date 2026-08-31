@@ -3,29 +3,33 @@
 #
 # NEW FILE for the C15d workspace (macro/Unpack_HDF5/C15d/). Nothing else reads it.
 #
-# * THE DRIFT WORKING POINT IS MEASURED, NOT INHERITED. An earlier version of this file took it
-# from Spyral's window_time_bucket = 300 and micromegas_time_bucket = 25 and was WRONG BY 0.575.
-# Measured instead with drift_check_C15d.C over six runs:
+# * THE DRIFT WORKING POINT. Two EXTERNAL facts fix it, because this data cannot:
+#     sampling 3.125 MHz (320 ns/TB)   -- confirmed from the DAQ
+#     beam energy ~190 MeV             -- run log
+# Together they force dv = 0.556 cm/us: 1000 mm / (320 ns * 0.556 cm/us) = 562 time buckets, and
+# the 15C(d,d) elastic ridge then returns ~192 MeV. Pad plane at TB 20, so the entrance is 582.
 #
-#     pad plane   time bucket  20.2   (sharp lower edge of the hit-time distribution)
-#     window      time bucket 498.5   (latest-arriving charge per track piles up and stops)
-#     full drift        478.3 TB = 1000 mm  ->  2.091 mm per time bucket
+# * TBEntrance 582 IS BEYOND THE 512-SAMPLE RECORD, ON PURPOSE. The window is never sampled: the
+# drift takes 562 buckets and the DAQ stores 512, so charge from the far end arrives after the
+# record closes. That is why the latest-arriving charge per track SPIKES ~8x against the record end
+# and stops -- DAQ truncation, not the chamber. Any window TB read off this data is therefore a
+# LOWER bound, mm/TB an UPPER bound, and a ridge beam energy a LOWER bound. Taking the apparent
+# edge at face value gave dv 1.307 and 163 MeV; it is an artifact.
 #
-# * SamplingRate MUST BE 6, NOT 3. AtDigiPar::GetTBTime() maps 6 -> 160 ns (6.25 MHz) and 3 -> 320.
-# Spyral's config says get_frequency = 3.125, and the a2091 par literally reads
-#     SamplingRate:Int_t 3.125 # a2091 (real value 6.25 MHz)
-# which AtDigiPar truncates to 3 and so reconstructs at 320 ns. Taking 3.125 at face value is how
-# this file got 320 ns and a drift velocity a factor two off.
+# * WHAT WAS TRIED AND IS EXCLUDED, at 320 ns and a 1000 mm chamber:
+#     dv 1.136 (Spyral's implied value) -> 3.635 mm/TB -> 275 TB -> ridge gives  88 MeV
+#     dv 0.653 (apparent record edge)   -> 2.090 mm/TB -> 479 TB -> ridge gives 161 MeV
+#     dv 0.556 (ADOPTED)                -> 1.779 mm/TB -> 562 TB -> ridge gives 192 MeV
+# Spyral has NO drift velocity at all: its z is (window_tb - tb)/(window_tb - mm_tb) * length, so
+# its 300/25 anchors imply 3.635 mm/TB, the first row above.
 #
-# The measurement fixes the PRODUCT dv * TBTime. The split comes from the sampling frequency:
-# at 160 ns, dv = 1.307 cm/us -- and a2091 uses 1.30 for the SAME detector at the same 300 torr and
-# 45 kV/m, with H2 and D2 having near-identical electron transport. At 320 ns it would have to be
-# 0.653, half the sibling value with nothing to justify it.
+# * OPEN QUESTION worth revisiting: 0.556 cm/us is LOW. a2091 uses 1.30 for H2 at the same 300 torr
+# and 45 kV/m, and H2/D2 electron transport is nearly identical. So either the field for these runs
+# was not 45 kV/m, or the 1000 mm drift length is wrong, or dv really is this low. The working
+# point is consistent with the two external facts either way, but the gas physics is not yet.
 #
-# CONSISTENCY: (498 - 20) TB * 160 ns * 1.307 cm/us = 999.5 mm = the drift length. Changing any of
-# SamplingRate, DriftVelocity, TBEntrance or ZPadPlane without re-checking that product moves the
-# pad plane off z = 0 and rescales every angle, energy and excitation energy COHERENTLY -- which is
-# exactly why the previous error survived every kinematic cross-check.
+# * KEEP THIS BLOCK ABOVE [AtDigiPar]. A standalone comment line INSIDE the section makes
+# FairParAsciiFileIo stop parsing there and everything after it reads as zero, silently.
 #
 # Density matches geometry/media.geo entry TargetD2_300 (6.5643e-5 g/cm3) EXACTLY, so
 # the UKF's CATIMA model and genfit's TGeo material describe the same gas. Do not edit
@@ -43,8 +47,8 @@ GroundWirePlaneY:Double_t     -8.1   # mm
 GatingWirePlaneY:Double_t      -14   # mm
 EField:Double_t              45000   # V/m   (Spyral electric_field)
 NumTbs:Int_t                   512
-SamplingRate:Int_t               6   # -> 160 ns/TB = 6.25 MHz. NOT 3: see the header.
-DriftVelocity:Double_t       1.307   # cm/us  MEASURED (drift_check_C15d.C), not derived
+SamplingRate:Int_t               3   # -> 320 ns/TB = 3.125 MHz, CONFIRMED from the DAQ
+DriftVelocity:Double_t       0.556   # cm/us  set by 3.125 MHz + Ebeam ~190; see header
 DriftLength:Double_t        1000.0   # mm
 YDivider:Int_t                1000   # Full drift length divided by this when finding clusters
 GasFile:Int_t                    2
@@ -54,7 +58,7 @@ BField:Double_t               2.85   # Tesla  (sign is a FITTER argument, not a 
 TiltAng:Double_t               0.0   # Degrees
 TB0:Int_t                       20   # pad-plane TB, MEASURED; DEPRECATED and IGNORED anyway
 LorentzAngle:Double_t          0.0   # Lorentz Angle
-TBEntrance:Int_t               498   # MEASURED: latest-arriving charge piles up here
+TBEntrance:Int_t               582   # = TB0 + 562; BEYOND the 512 record, never sampled
 ZPadPlane:Double_t          1000.0   # mm  Spyral detector_length
 Density:Double_t           0.065643  # mg/cm3 == 6.5643e-5 g/cm3. D2, 300 torr, ~295.2 K (22 C) --
 ThetaPad:Double_t            110.9   # AT-TPC pad plane rotation
