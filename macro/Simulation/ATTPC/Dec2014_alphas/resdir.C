@@ -12,11 +12,20 @@
 //   * the CORRECTED direction error must be small and flat in drift.
 // If the uncorrected error does not grow, the setup is wrong again and the result should
 // be discarded rather than reinterpreted.
-void resdir(){
-  TFile*fs=TFile::Open("data/attpcsim_in.root"); TTree*ts=(TTree*)fs->Get("cbmsim");
+// Both files are needed: the TRUTH points live in the Geant4 output, the reconstructed
+// hits in the digitised one, and they are matched entry by entry. The MC linkage itself is
+// automatic -- AtPSAtask picks up the AtTpcPoint branch from the IO manager and hands it to
+// the PSA, so no extra flag is required when digitising.
+void resdir(TString digiFile = "data/digi.root", TString simFile = "data/attpcsim_in.root"){
+  TFile*fs=TFile::Open(simFile); TTree*ts=fs?(TTree*)fs->Get("cbmsim"):nullptr;
+  if(!ts){ printf("ERROR cannot read %s\n",simFile.Data()); return; }
   TClonesArray*pts=nullptr; ts->SetBranchAddress("AtTpcPoint",&pts);
-  TFile*fd=TFile::Open("data/digi_driftON.root"); TTree*td=(TTree*)fd->Get("cbmsim");
+  TFile*fd=TFile::Open(digiFile); TTree*td=fd?(TTree*)fd->Get("cbmsim"):nullptr;
+  if(!td){ printf("ERROR cannot read %s\n",digiFile.Data()); return; }
   TClonesArray*ev=nullptr; td->SetBranchAddress("AtEventH",&ev);
+  if(td->GetEntries()!=ts->GetEntries())
+    printf("WARNING entry counts differ (%lld digi vs %lld sim) -- they are matched by "
+           "index, so these must be the same run\n",td->GetEntries(),ts->GetEntries());
   const double ZPAD=1000.;
   const int NB=6; std::vector<double> EU[NB],EC[NB];
 

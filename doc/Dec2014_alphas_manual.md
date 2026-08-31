@@ -202,9 +202,14 @@ residual is measured against a truth no experiment can supply.
 
 | drift [mm] | N tracks | uncorrected | corrected |
 |---|---|---|---|
-| 255 | 40 | 3.60° | 1.79° |
-| 595 | 94 | 3.70° | 1.31° |
-| 935 | 143 | **4.73°** | **0.22°** |
+| 85 | 56 | 3.65° | 1.89° |
+| 255 | 620 | 3.55° | 1.64° |
+| 425 | 480 | 3.47° | 1.47° |
+| 595 | 1137 | 3.84° | 1.29° |
+| 765 | 1716 | 4.61° | 0.68° |
+| 935 | 1737 | **4.73°** | **0.16°** |
+
+(5000 events; an earlier 1000-event run gave 4.73 / 0.22 at full drift.)
 
 What makes this convincing is the *quantitative* prediction: a transverse v_xy alongside a
 drift v_z tilts an apparent track by exactly `atan(v_xy/v_z) = 4.716°`, so the uncorrected
@@ -468,8 +473,15 @@ This is the run that produced the table in §3.6 — the only test of the correc
 access to a truth the experiment cannot supply.
 
 ```bash
-root -l -b -q 'resdir.C("./data/digi.root")'
+root -l -b -q 'resdir.C("data/digi.root","data/attpcsim_in.root")'
 ```
+
+**Both files are required.** The truth points live in the Geant4 output and the
+reconstructed hits in the digitised one, and they are matched **entry by entry** — so the
+two must be the same run, or the comparison is meaningless. The macro warns if the entry
+counts differ. The MC linkage itself is automatic: `AtPSAtask` picks up the `AtTpcPoint`
+branch from the IO manager and hands it to the PSA, so no extra flag is needed when
+digitising, and `keepElectrons` may stay `kFALSE`.
 
 `resdir.C` compares **track directions**, binned by drift distance: reconstructed direction
 vs the MC truth direction, with and without the correction. Read §3.6 before interpreting
