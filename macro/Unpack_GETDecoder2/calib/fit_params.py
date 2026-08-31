@@ -1,3 +1,4 @@
+import os
 #!/usr/bin/env python3
 """Fit v_D (and optionally omega*tau, tilt) from the alpha+alpha opening angle.
 
@@ -14,7 +15,7 @@ constrains the shear independently of v_D.
 import math, pickle, sys, warnings
 import numpy as np
 warnings.filterwarnings("ignore")
-sys.path.insert(0, "/home/yassid/dec2014_calib")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from cluster_tracks import fit_line, vertex_from_tracks
 
 TB_NS = 160.0

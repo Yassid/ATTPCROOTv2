@@ -1,3 +1,4 @@
+import os
 #!/usr/bin/env python3
 """Full calibration chain for one run: v_D from the 90 deg peak, then the tilt.
 
@@ -17,7 +18,7 @@ then measures the mechanical tilt directly at that v_D.
 import argparse, csv, math, pickle, sys, warnings
 import numpy as np
 warnings.filterwarnings("ignore")
-sys.path.insert(0, "/home/yassid/dec2014_calib")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from cluster_tracks import cluster, fit_line, vertex_from_tracks, closest_approach
 
 TB_NS, TB0 = 160.0, 2.2

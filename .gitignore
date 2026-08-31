@@ -61,3 +61,10 @@ macro/Unpack_GETDecoder2/event.dat
 
 # Simulation output (GB-scale, regenerable from the macros)
 macro/Simulation/ATTPC/Dec2014_alphas/data/
+
+# python bytecode from the calib analysis scripts
+__pycache__/
+*.pyc
+
+# machine-specific run lists (absolute paths); regenerate with calib/make_links.sh
+runfiles/NSCL/Dec2014_alphas/

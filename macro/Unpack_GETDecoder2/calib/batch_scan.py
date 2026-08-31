@@ -1,3 +1,4 @@
+import os
 #!/usr/bin/env python3
 """Cluster every event of run_0128 and collect alpha+alpha elastic candidates.
 
@@ -12,7 +13,7 @@ arms) so the geometry can be recomputed for any (v_D, E, tilt) afterwards.
 import csv, math, sys, pickle, warnings
 import numpy as np
 warnings.filterwarnings("ignore")
-sys.path.insert(0, "/home/yassid/dec2014_calib")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from cluster_tracks import cluster, fit_line, vertex_from_tracks, closest_approach
 
 V_REF = 2.25

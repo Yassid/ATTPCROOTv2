@@ -1,3 +1,4 @@
+import os
 #!/usr/bin/env python3
 """Verify the corrected production output across runs 128-139.
 
@@ -13,7 +14,7 @@ things the correction is supposed to deliver, per run:
 import math, pickle, sys, warnings
 import numpy as np
 warnings.filterwarnings("ignore")
-sys.path.insert(0, "/home/yassid/dec2014_calib")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from batch_scan import load_all, analyse
 from cluster_tracks import fit_line, vertex_from_tracks
 

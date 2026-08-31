@@ -1,3 +1,4 @@
+import os
 #!/usr/bin/env python3
 """Opening-angle distributions vs drift velocity, and vs drift distance.
 
@@ -15,7 +16,7 @@ warnings.filterwarnings("ignore")
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-sys.path.insert(0, "/home/yassid/dec2014_calib")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from fit_params import event_geometry, peak_near
 
 cands = pickle.load(open("/home/yassid/dec2014_calib/candidates.pkl", "rb"))
