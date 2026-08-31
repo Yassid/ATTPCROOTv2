@@ -3,7 +3,7 @@
 #
 # NEW FILE for the C15d workspace (macro/Unpack_HDF5/C15d/). Nothing else reads it.
 #
-# ★ THE DRIFT WORKING POINT IS MEASURED, NOT INHERITED. An earlier version of this file took it
+# * THE DRIFT WORKING POINT IS MEASURED, NOT INHERITED. An earlier version of this file took it
 # from Spyral's window_time_bucket = 300 and micromegas_time_bucket = 25 and was WRONG BY 0.575.
 # Measured instead with drift_check_C15d.C over six runs:
 #
@@ -11,7 +11,7 @@
 #     window      time bucket 498.5   (latest-arriving charge per track piles up and stops)
 #     full drift        478.3 TB = 1000 mm  ->  2.091 mm per time bucket
 #
-# ★ SamplingRate MUST BE 6, NOT 3. AtDigiPar::GetTBTime() maps 6 -> 160 ns (6.25 MHz) and 3 -> 320.
+# * SamplingRate MUST BE 6, NOT 3. AtDigiPar::GetTBTime() maps 6 -> 160 ns (6.25 MHz) and 3 -> 320.
 # Spyral's config says get_frequency = 3.125, and the a2091 par literally reads
 #     SamplingRate:Int_t 3.125 # a2091 (real value 6.25 MHz)
 # which AtDigiPar truncates to 3 and so reconstructs at 320 ns. Taking 3.125 at face value is how
@@ -57,8 +57,6 @@ LorentzAngle:Double_t          0.0   # Lorentz Angle
 TBEntrance:Int_t               498   # MEASURED: latest-arriving charge piles up here
 ZPadPlane:Double_t          1000.0   # mm  Spyral detector_length
 Density:Double_t           0.065643  # mg/cm3 == 6.5643e-5 g/cm3. D2, 300 torr, ~295.2 K (22 C) --
-                                     # NOT 293.15 K, which would be 6.6101e-5, a 0.7% difference that
-                                     # feeds dE/dx and the CATIMA energy loss. Matches media.geo TargetD2_300.
 ThetaPad:Double_t            110.9   # AT-TPC pad plane rotation
 ThetaRot:Double_t              0.0   # Second Lorentz Angle
 GasPressure:Double_t           300   # torr
@@ -70,4 +68,3 @@ Gain:Double_t                10000   # Micromegas gain
 GETGain:Double_t              1000   # GET electronics gain [fC]
 PeakingTime:Int_t              720   # ns
 MaxRange:Double_t            500.0   # mm
-################################################################################

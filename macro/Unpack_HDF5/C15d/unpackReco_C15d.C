@@ -133,6 +133,28 @@ void unpackReco_C15d(TString fileName = "run_0017", Long64_t nEvents = 1000, Boo
    praTask->SetOutputBranch("AtPatternEvent");
    praTask->SetPersistence(true);
 
+   // ★ PAR SANITY CHECK. A single standalone comment line inside the [AtDigiPar] block makes
+   // FairParAsciiFileIo stop parsing there, and everything after it silently reads as 0 -- the PSA
+   // then prints "Sampling Rate : -1 ns, Drift Velocity : 0" and every hit z collapses to ~0, which
+   // looks like data rather than a broken file. Refuse to run instead of producing that.
+   {
+      auto *dp = dynamic_cast<AtDigiPar *>(rtdb->getContainer("AtDigiPar"));
+      rtdb->initContainers(0);
+      if (dp == nullptr || dp->GetTBTime() <= 0 || dp->GetDriftVelocity() <= 0 ||
+          dp->GetTBEntrance() <= 0 || dp->GetZPadPlane() <= 0) {
+         std::cout << cRED << "ERROR: " << digiParFile << " did not parse.\n"
+                   << "  TBTime=" << (dp ? dp->GetTBTime() : -1)
+                   << " dv=" << (dp ? dp->GetDriftVelocity() : -1)
+                   << " TBEntrance=" << (dp ? dp->GetTBEntrance() : -1)
+                   << " ZPadPlane=" << (dp ? dp->GetZPadPlane() : -1) << "\n"
+                   << "  Check for standalone comment lines INSIDE the [AtDigiPar] block."
+                   << cNORMAL << std::endl;
+         return;
+      }
+      std::cout << cGREEN << "  par OK: " << dp->GetTBTime() << " ns, dv " << dp->GetDriftVelocity()
+                << " cm/us, entrance TB " << dp->GetTBEntrance() << cNORMAL << "\n";
+   }
+
    run->AddTask(unpackTask);
    run->AddTask(psaTask);
    run->AddTask(SCTask);
