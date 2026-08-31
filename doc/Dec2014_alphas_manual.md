@@ -467,31 +467,144 @@ costs ~6 MB **per event**. With it off, 4000 events digitise in ~7 min into 82 M
 
 Uses `ATTPC.alpha_150torr_sim.par` (see §2).
 
-### 5.4 Validate the Lorentz correction against truth
+### 5.4 Validating the Lorentz reconstruction — the full recipe
 
-This is the run that produced the table in §3.6 — the only test of the correction that has
-access to a truth the experiment cannot supply.
+This is the single most important check in the analysis, so it is written out end to end.
+Everything needed is here; §3 gives the physics behind it.
+
+#### 5.4.0 Why it needs the simulation at all
+
+**The data has no truth.** Nothing in an experimental file says where the ionisation
+*really* was, so no experimental quantity can tell you whether a position correction
+recovered it. The simulation supplies that truth: events go
+
+```
+Geant4 truth  ->  Langevin drift (AtClusterizeTask)  ->  digitisation  ->  AtPSASimple2
+```
+
+and the last step is **the same PSA the real data goes through**, with the same threshold.
+The correction is applied on the way out, and the question is whether it returns what went
+in.
+
+This only means something because the forward drift and the reverse correction call **one**
+shared helper, `AtTools::LangevinDrift` (§3.3). If they were separate copies, the residual
+would measure the difference *between the copies* and would look perfect no matter how
+wrong the physics was. **If you ever split them, this test stops being a test.**
+
+#### 5.4.1 Generate and digitise
+
+Any sample of a few thousand events is enough; 5000 gives ~1700 tracks in the deepest
+drift bin.
+
+```bash
+cd $VMCWORKDIR/macro/Simulation/ATTPC/Dec2014_alphas
+root -l -b -q 'He4He4_sim_el.C(5000)'
+root -l -b -q 'rundigi_sim.C("./data/attpcsim_in.root","./data/digi.root",kFALSE)'
+```
+
+`keepElectrons` may stay `kFALSE` — the drifted-electron collection is not used here, and
+it costs ~6 MB per event. The MC linkage is automatic: `AtPSAtask` picks up the
+`AtTpcPoint` branch from the IO manager and hands it to the PSA, so there is no flag to
+set.
+
+#### 5.4.2 Run the comparison
 
 ```bash
 root -l -b -q 'resdir.C("data/digi.root","data/attpcsim_in.root")'
 ```
 
-**Both files are required.** The truth points live in the Geant4 output and the
-reconstructed hits in the digitised one, and they are matched **entry by entry** — so the
-two must be the same run, or the comparison is meaningless. The macro warns if the entry
-counts differ. The MC linkage itself is automatic: `AtPSAtask` picks up the `AtTpcPoint`
-branch from the IO manager and hands it to the PSA, so no extra flag is needed when
-digitising, and `keepElectrons` may stay `kFALSE`.
+**Both files are required, and they must be the same run.** The truth points live in the
+Geant4 output, the reconstructed hits in the digitised one, and the macro matches them
+**entry by entry** — pair up two different runs and you are comparing unrelated events. It
+warns if the entry counts differ.
 
-`resdir.C` compares **track directions**, binned by drift distance: reconstructed direction
-vs the MC truth direction, with and without the correction. Read §3.6 before interpreting
-the output — in particular, do not substitute a hit-to-point distance metric, and fix the
-pass criterion (uncorrected error must *grow* with drift) before looking.
+#### 5.4.3 Fix the pass criterion *before* looking
 
-`res.C`/`res2.C`/`res3.C` are earlier position-residual versions kept for reference;
-`res4.C` tests whether the middle-drift residual is an artefact of labelling a hit by
-`MCSimPoint[0]` when several MC points hit the same pad. It is not: `<points/hit> = 1.0`,
-so the weighted centroid equals `MCSimPoint[0]` exactly, and that hypothesis is refuted.
+Write this down first. It is the difference between a measurement and a rationalisation:
+
+- the **uncorrected** direction error must **grow** with drift distance, because the shear
+  is proportional to drift time;
+- the **corrected** error must be small, and must shrink as drift grows.
+
+If the uncorrected error does not grow, the setup is wrong — **discard the run and find the
+bug; do not reinterpret the numbers.** Two earlier attempts got the *z* convention
+backwards, and the second was written up as a code bug in `AtClusterizeTask` that did not
+exist (retracted in `71df2f1f`).
+
+#### 5.4.4 Read the output
+
+```
+RES  drift[mm]    Ntrk    uncorr[deg] corrected[deg]
+RES         85      56           3.65           1.89
+RES        255     620           3.55           1.64
+RES        425     480           3.47           1.47
+RES        595    1137           3.84           1.29
+RES        765    1716           4.61           0.68
+RES        935    1737           4.73           0.16
+```
+
+Both halves of the criterion are met. But the check that makes it *convincing* is
+quantitative, not just "the residual is small":
+
+> A transverse drift `v_xy` alongside a longitudinal `v_z` tilts an apparent track by
+> exactly `atan(v_xy/v_z)`. For the calibrated parameters that is
+> **atan(0.1844/2.2348) = 4.716°** (§3.5), so the uncorrected error is *required* to
+> converge to that value at full drift.
+
+It measures **4.73°** — agreement to 0.3 %. The correction then removes it to **0.16°**.
+That number is predicted from the parameter file alone, with nothing fitted, which is why
+it is worth more than the size of the residual.
+
+The corrected error being larger at short drift (1.89° at 85 mm vs 0.16° at 935 mm) is
+**not** a weakness: there is simply less shear to remove there, so the fixed
+pad-granularity noise dominates.
+
+#### 5.4.5 Use directions, never hit-to-point distances
+
+A hit sits at a **pad centre**. For an oblique track the true ionisation point can be most
+of a pad away however perfect the correction is, so hit-to-point distance has a floor set
+by geometry rather than by the drift model. That floor made an earlier version of this test
+look like a *failure* at middle drift — residuals of 60–90 mm against a shear of only
+26–36 mm present there. It was granularity, not a defect.
+
+Fitting a direction over many hits averages the granularity down, and direction is the
+observable every physics result here rests on anyway.
+
+`res.C`, `res2.C`, `res3.C` are the earlier position-residual versions, kept only for
+reference. `res4.C` tests whether the middle-drift residual came from labelling a hit by
+`MCSimPoint[0]` when several MC points share a pad. It did not: `<points/hit> = 1.0`, so
+the weighted centroid equals `MCSimPoint[0]` exactly, and that hypothesis is refuted.
+
+#### 5.4.6 A cross-check on real data, with no simulation
+
+The above validates the *physics*. To check that the code applied the arithmetic you think
+it did — on the actual production files — dump the hits (§4.4) and compare
+`PositionCorr − Position` against the closed form:
+
+```python
+tbZero = 320 - 1000*100/(160*2.25)                   # = 42.22
+t      = (tb - tbZero) * 160e-3                      # us
+dx_pred, dy_pred = -0.182718*t*10, -0.024625*t*10    # mm
+```
+
+On run 128 this closes to **max |applied − predicted| = 0.0011 mm over 19 465 hits**.
+
+The two checks answer different questions and you want both: this one says the code does
+what the formula says, §5.4.4 says the formula is right.
+
+#### 5.4.7 If it fails
+
+In order of how often each has actually been the cause:
+
+1. **Every event empty** — the file was written by the other branch (`AtEvent` ClassDef 3
+   vs 6). Silent; check this first.
+2. **The uncorrected error is flat in drift** — the forward drift is not being applied.
+   Confirm `AtClusterizeTask` logs a non-zero `v_xy`, and that `BField` and `EField` are
+   non-zero in the *simulation* parameter file.
+3. **Both errors are large** — check `ThetaPad`/`ThetaRot` (§3.8). They are degenerate, so
+   changing one alone silently breaks the correction.
+4. **The corrected error exceeds the uncorrected one** — a sign convention; the forward and
+   reverse steps are adding rather than cancelling.
 
 ### 5.5 Trigger efficiency
 
