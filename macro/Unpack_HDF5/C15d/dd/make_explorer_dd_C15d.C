@@ -120,7 +120,11 @@ void make_explorer_dd_C15d(TString cache = "", TString outHtml = "", TString tag
       std::cerr << "WARNING: third cache unusable (" << cacheThird << ") -- skipping it\n";
 
    // JSON keys for the three slots. A missing/short CSV falls back to the historical names.
-   TString sn[3] = {"ukf", "genfit", "third"};
+   // ★ NOT "ukf". This workspace fits with GENFIT+CATIMA only -- the UKF is deliberately not used
+   // here -- and the inherited default named the first slot "ukf", which is what the page prints on
+   // its selector button. A plot labelled with a fitter that never touched the data is exactly the
+   // kind of thing that survives into a talk.
+   TString sn[3] = {"genfit_catima", "genfit_nomat", "third"};
    if (setNamesCSV.Length()) {
       std::unique_ptr<TObjArray> parts(setNamesCSV.Tokenize(","));
       for (int i = 0; i < 3 && i < parts->GetEntries(); ++i) {
