@@ -54,7 +54,7 @@ void fitGenfit_C14(TString fileName = "run_0055", Long64_t nEvents = -1,
                     // tracks carry. AtSpyralPID instead fits the circle to the FIRST ARC and
                     // regresses rho against z, which is the radius the analysis actually wants.
                     // Building the estimator needs no PID gate despite what the header says.
-                    Bool_t seedFromSpyral = kFALSE)
+                    Bool_t seedFromSpyral = kFALSE, Bool_t useClusterOrder = kFALSE)
 {
    gSystem->Load("libAtReconstruction.so");
    FairLogger::GetLogger()->SetLogScreenLevel("WARNING");
@@ -178,6 +178,8 @@ void fitGenfit_C14(TString fileName = "run_0055", Long64_t nEvents = -1,
       std::cout << "  SEED FROM SPYRAL: circle on the first arc, polar from a rho-vs-z regression\n";
    }
    fitter->SetBackwardSeedFix(backwardSeedFix);
+   // keep the PRA cluster order (pair with arc-walk) instead of re-sorting by drift z
+   fitter->SetUseClusterOrder(useClusterOrder);
    if (rangeConstraint) {
       if (!(rangeDensity > 0))
          std::cout << "\033[1;31mWARNING: rangeConstraint on with density " << rangeDensity

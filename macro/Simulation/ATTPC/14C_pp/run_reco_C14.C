@@ -45,7 +45,8 @@
 void run_reco_C14(TString mcFile = "./data/attpcsim.root", TString outputFile = "./data/sim_reco.root",
                   TString paramFile = "ATTPC.a1954_C14.par", Double_t thr = 20, Int_t hdMcs = 20, Int_t hdMs = 8,
                   Int_t nEvents = 0, Double_t holeR = 30.0, TString joinMethod = "mover",
-                  Double_t padSize_mm = -1.0, Double_t activeExtent_mm = 500.0, Bool_t persistRaw = kTRUE)
+                  Double_t padSize_mm = -1.0, Double_t activeExtent_mm = 500.0, Bool_t persistRaw = kTRUE,
+                  Bool_t useArcWalk = kFALSE, Int_t arcWalkKNN = 10)
 {
    TString scriptfile = "Lookup20150611.xml";
    TString dir = getenv("VMCWORKDIR");
@@ -132,6 +133,14 @@ void run_reco_C14(TString mcFile = "./data/attpcsim.root", TString outputFile = 
    praTask->SetInputBranch("AtEventClean");
    praTask->SetOutputBranch("AtPatternEvent");
    praTask->SetPersistence(kTRUE);
+   // arc-walk orders clusters by a kNN walk over the hits instead of by the drift coordinate.
+   // Meant for tracks nearly perpendicular to the beam, where the z advance per cluster drops
+   // below the z noise. NOTE: AtGenfitter must ALSO be told to keep that order
+   // (SetUseClusterOrder), otherwise it re-sorts the measurements by z and discards it.
+   if (useArcWalk) {
+      praTask->SetUseArcWalk(kTRUE);
+      praTask->SetArcWalkKNN(arcWalkKNN);
+   }
 
    fRun->AddTask(clusterizer);
    fRun->AddTask(pulse);

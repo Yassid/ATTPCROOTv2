@@ -88,6 +88,7 @@ public:
    /// momentum pointing into the track (-z_lab). Forward tracks are unchanged. Default
    /// off, so the validated forward (p,d)/(p,p) pipelines are byte-for-byte preserved.
    void SetBackwardSeedFix(Bool_t on) { fBackwardSeedFix = on; }
+   void SetUseClusterOrder(Bool_t on) { fUseClusterOrder = on; }
 
    /// Back-extrapolate the vertex-end state to the beam axis before reading position and
    /// momentum off it. genfit's getFittedState() with no argument is the FIRST MEASUREMENT
@@ -330,6 +331,12 @@ private:
    Bool_t fInit{kFALSE};
 
    Bool_t fBackwardSeedFix{kFALSE};    // seed backward (GeoTheta>90) tracks from the far end (see setter)
+   /// Keep the cluster array order from the pattern recognition instead of re-sorting the
+   /// measurements by the drift coordinate z. The z sort assumes the helix advances monotonically
+   /// in z along the trajectory; that fails for tracks nearly PERPENDICULAR to the beam, where the
+   /// advance per cluster falls below the z noise and below one time bucket, so the sort orders
+   /// noise. Pair with AtPRA::SetUseArcWalk(true), whose kNN walk orders without reference to z.
+   Bool_t fUseClusterOrder{kFALSE};
    Bool_t fBackExtrapToAxis{kFALSE};   // extrapolate the vertex-end state to the beam axis (see setter)
    std::unique_ptr<AtTools::AtELossModel> fManualELoss; // optional hand-applied dE/dx over the vertex gap
    Bool_t fMatEffectsFallback{kTRUE};  // retry a failed matFX fit without material effects (flagged; see setter)

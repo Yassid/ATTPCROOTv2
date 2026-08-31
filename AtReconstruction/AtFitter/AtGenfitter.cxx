@@ -220,7 +220,14 @@ AtFittedTrack *AtGenfitter::GetFittedTrack(AtTrack *track, AtFitMetadata * /*fit
    // the old vertex->outward index heuristic scrambled them and the fit diverged).
    std::vector<int> order(n);
    for (int i = 0; i < n; ++i) order[i] = i;
-   std::sort(order.begin(), order.end(), [&](int a, int b) { return pos[a].Z() < pos[b].Z(); });
+   // With fUseClusterOrder the incoming cluster order is kept as-is. The z sort below assumes the
+   // helix advances monotonically in z ALONG the trajectory; true for a normal spiral, false for
+   // tracks nearly PERPENDICULAR to the beam, where the advance per cluster (0.22 mm in the
+   // 88-92 deg bin at 7 T) is below both the cluster z noise and one time bucket, so the sort
+   // orders noise and the filter integrates along a scrambled sequence. Pair this with
+   // AtPRA::SetUseArcWalk(true), whose kNN walk orders clusters without reference to z.
+   if (!fUseClusterOrder)
+      std::sort(order.begin(), order.end(), [&](int a, int b) { return pos[a].Z() < pos[b].Z(); });
 
    // vertex = highest z_digi end (= lowest z_lab, i.e. order.front() after the ascending
    // z sort) -- the deterministic AT-TPC convention used by PRA/the validated UKF. Using
