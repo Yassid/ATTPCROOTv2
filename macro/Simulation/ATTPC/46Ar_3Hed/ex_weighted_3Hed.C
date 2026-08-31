@@ -36,7 +36,7 @@
 ///
 ///   root -b -q 'ex_weighted_3Hed.C()'
 
-void ex_weighted_3Hed(TString dir = "/mnt/f/ar46_3hed", TString png = "plots/ex_weighted_slices.png",
+void ex_weighted_3Hed(TString dir = "/mnt/f/ar46_3hed_OLD_2.85T_placeholder", TString png = "plots/ex_weighted_slices.png",
                       Int_t minPoints = 15,
                       Double_t bField = 2.85, Double_t dThetaMax = 10.0, Double_t driftLength = 100.0,
                       Double_t rate = 500.0, Double_t days = 7.0, Double_t nTarget = 9.4e20, UInt_t seed = 20260813)

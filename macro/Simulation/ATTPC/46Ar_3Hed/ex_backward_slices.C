@@ -23,7 +23,7 @@
 ///   root -b -q 'ex_backward_slices.C(5)'     // 8 panels, same range
 
 void ex_backward_slices(Double_t width = 10.0, Double_t thLo = 100.0, Double_t thHi = 140.0,
-                        TString dir = "/mnt/f/ar46_3hed", TString png = "", Int_t minPoints = 15,
+                        TString dir = "/mnt/f/ar46_3hed_OLD_2.85T_placeholder", TString png = "", Int_t minPoints = 15,
                         Double_t bField = 2.85, Double_t dThetaMax = 10.0, Double_t driftLength = 100.0,
                         Double_t rate = 500.0, Double_t days = 7.0, Double_t nTarget = 9.4e20,
                         UInt_t seed = 20260813)

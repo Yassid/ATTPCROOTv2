@@ -33,8 +33,8 @@ say() { echo "[$(date +%F' '%H:%M:%S)] $*" | tee -a "$MASTER"; }
 # field : output dir : sim dir (where _sim.root lives / goes) : par suffix
 CFG=(
   "2.0:/mnt/f/ar46_3hed_mb_B20:/mnt/f/ar46_3hed_mb_B20:B20"
-  "2.85:/mnt/f/ar46_3hed_mb_B285:/mnt/f/ar46_3hed:B285"
-  "3.8:/mnt/f/ar46_3hed_mb_B38:/mnt/f/ar46_3hed_B38:B38"
+  "2.85:/mnt/f/ar46_3hed_mb_B285:/mnt/f/ar46_3hed_OLD_2.85T_placeholder:B285"
+  "3.8:/mnt/f/ar46_3hed_mb_B38:/mnt/f/ar46_3hed_OLD_3.8T_placeholder:B38"
 )
 
 # Refuse to start unless every par exists AND actually carries Magboltz numbers. A par still

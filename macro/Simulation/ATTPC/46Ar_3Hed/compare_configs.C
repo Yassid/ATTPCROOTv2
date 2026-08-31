@@ -2,8 +2,8 @@
 /// @brief Field x pad-pitch comparison: Ex resolution and PID efficiency vs theta_lab, all four
 /// configurations on one set of axes.
 ///
-///   A  2.85 T, AT-TPC pad plane      /mnt/f/ar46_3hed
-///   B  3.80 T, AT-TPC pad plane      /mnt/f/ar46_3hed_B38
+///   A  2.85 T, AT-TPC pad plane      /mnt/f/ar46_3hed_OLD_2.85T_placeholder
+///   B  3.80 T, AT-TPC pad plane      /mnt/f/ar46_3hed_OLD_3.8T_placeholder
 ///   C  2.85 T, 2 mm square pads      /mnt/f/ar46_3hed_2mm
 ///   D  3.80 T, 2 mm square pads      /mnt/f/ar46_3hed_B38_2mm
 ///
@@ -66,10 +66,10 @@ void compare_configs(TString tags = "gs_s3001,gs_s3002", TString png = "plots/co
    // assumes one directory holds both silently reports those configurations as missing.
    struct Cfg { const char *label; const char *dir; const char *simDir; double bfield; int col; int mrk; };
    std::vector<Cfg> cfg = {
-      {"2.85 T, AT-TPC pads", "/mnt/f/ar46_3hed", "/mnt/f/ar46_3hed", 2.85, kBlack, 20},
-      {"3.80 T, AT-TPC pads", "/mnt/f/ar46_3hed_B38", "/mnt/f/ar46_3hed_B38", 3.80, kAzure + 2, 21},
-      {"2.85 T, 2 mm pads", "/mnt/f/ar46_3hed_2mm", "/mnt/f/ar46_3hed", 2.85, kRed + 1, 22},
-      {"3.80 T, 2 mm pads", "/mnt/f/ar46_3hed_B38_2mm", "/mnt/f/ar46_3hed_B38", 3.80, kGreen + 2, 23},
+      {"2.85 T, AT-TPC pads", "/mnt/f/ar46_3hed_OLD_2.85T_placeholder", "/mnt/f/ar46_3hed_OLD_2.85T_placeholder", 2.85, kBlack, 20},
+      {"3.80 T, AT-TPC pads", "/mnt/f/ar46_3hed_OLD_3.8T_placeholder", "/mnt/f/ar46_3hed_OLD_3.8T_placeholder", 3.80, kAzure + 2, 21},
+      {"2.85 T, 2 mm pads", "/mnt/f/ar46_3hed_2mm", "/mnt/f/ar46_3hed_OLD_2.85T_placeholder", 2.85, kRed + 1, 22},
+      {"3.80 T, 2 mm pads", "/mnt/f/ar46_3hed_B38_2mm", "/mnt/f/ar46_3hed_OLD_3.8T_placeholder", 3.80, kGreen + 2, 23},
    };
 
    const double lo = 58, hi = 138, wid = 10;

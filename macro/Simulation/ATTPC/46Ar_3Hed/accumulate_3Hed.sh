@@ -20,7 +20,7 @@
 #   reco / pid  -- output exists, is non-empty, and its log carries the completion line.
 set -eo pipefail
 STATE=${1:?need a state: gs | 360 | 2020}; SEED=${2:?need a seed}
-NEV=${3:-12000}; OUT=${4:-/mnt/f/ar46_3hed}
+NEV=${3:-12000}; OUT=${4:-/mnt/f/ar46_3hed_OLD_2.85T_placeholder}
 BT=${5:-2.85}          # tesla; the generator wants kG and the DATA sign convention (negative)
 PAD=${6:--1}           # mm; <=0 keeps the real AT-TPC pad plane
 SIMDIR=${7:-$OUT}      # generation depends on the FIELD only, so a 2 mm run reuses the sims

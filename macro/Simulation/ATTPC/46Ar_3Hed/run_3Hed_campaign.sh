@@ -1,11 +1,21 @@
 #!/usr/bin/env bash
+# ============================================================================================
+# OBSOLETE 2026-08-31 -- DO NOT RUN. Kept only as the record of the August pad-pitch campaign.
+#
+# Configurations C and D wrote to /mnt/f/ar46_3hed_2mm and /mnt/f/ar46_3hed_B38_2mm, which have
+# been DELETED: the 2 mm pad plane is dropped because the real AT-TPC plane WITH the beam hole is
+# required so a telescope can sit behind it for the heavy fragment. Configurations A and B used
+# the placeholder gas transport, since replaced per field from Magboltz.
+#
+# The live driver is run_3Hed_bcompare.sh (2.0 / 2.85 / 3.8 T, ground state, real transport).
+# ============================================================================================
 # The field x pad-pitch matrix for 46Ar(3He,d)47K, run end to end.
 #
 #   ./run_3Hed_campaign.sh [-j N]
 #
 #   config              B [T]   pads      sims from              output
-#   A (already done)     2.85   AT-TPC    /mnt/f/ar46_3hed       /mnt/f/ar46_3hed
-#   B                    3.80   AT-TPC    generated here         /mnt/f/ar46_3hed_B38
+#   A (already done)     2.85   AT-TPC    /mnt/f/ar46_3hed_OLD_2.85T_placeholder       /mnt/f/ar46_3hed_OLD_2.85T_placeholder
+#   B                    3.80   AT-TPC    generated here         /mnt/f/ar46_3hed_OLD_3.8T_placeholder
 #   C                    2.85   2 mm      A's sims (reused)      /mnt/f/ar46_3hed_2mm
 #   D                    3.80   2 mm      B's sims (reused)      /mnt/f/ar46_3hed_B38_2mm
 #
@@ -38,10 +48,10 @@ run_cfg() { # name  BT  PAD  SIMDIR  OUT
 }
 
 say "########## campaign start (-j $JOBS) ##########"
-run_cfg B 3.8  -1  /mnt/f/ar46_3hed_B38      /mnt/f/ar46_3hed_B38
-run_cfg C 2.85 2.0 /mnt/f/ar46_3hed          /mnt/f/ar46_3hed_2mm
-run_cfg D 3.8  2.0 /mnt/f/ar46_3hed_B38      /mnt/f/ar46_3hed_B38_2mm
+run_cfg B 3.8  -1  /mnt/f/ar46_3hed_OLD_3.8T_placeholder      /mnt/f/ar46_3hed_OLD_3.8T_placeholder
+run_cfg C 2.85 2.0 /mnt/f/ar46_3hed_OLD_2.85T_placeholder          /mnt/f/ar46_3hed_2mm
+run_cfg D 3.8  2.0 /mnt/f/ar46_3hed_OLD_3.8T_placeholder      /mnt/f/ar46_3hed_B38_2mm
 say "########## campaign done ##########"
-for d in /mnt/f/ar46_3hed /mnt/f/ar46_3hed_B38 /mnt/f/ar46_3hed_2mm /mnt/f/ar46_3hed_B38_2mm; do
+for d in /mnt/f/ar46_3hed_OLD_2.85T_placeholder /mnt/f/ar46_3hed_OLD_3.8T_placeholder /mnt/f/ar46_3hed_2mm /mnt/f/ar46_3hed_B38_2mm; do
    say "$(basename "$d"): $(ls "$d"/*.marker 2>/dev/null | wc -l)/6 complete"
 done

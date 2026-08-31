@@ -69,7 +69,7 @@ TGraph *ar46_locus(double Ex, double Tb, int color, int style)
    return g;
 }
 
-void kinematics_3Hed(TString dir = "/mnt/f/ar46_3hed",
+void kinematics_3Hed(TString dir = "/mnt/f/ar46_3hed_OLD_2.85T_placeholder",
                      TString tags = "gs_s3001,gs_s3002,360_s3011,360_s3012,2020_s3021,2020_s3022",
                      TString png = "plots/kinematics_3Hed.png", Int_t minPoints = 15,
                      Double_t bField = 2.85, Double_t dThetaMax = 10.0, Double_t driftLength = 100.0)

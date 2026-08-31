@@ -22,8 +22,12 @@
 /// so the beam energy at the vertex needs zUse = driftLength - z_reco. The sign is not assumed:
 /// it is measured per configuration from the correlation and printed.
 ///
-///   root -b -q 'ex_genfit_3Hed.C()'                                  // both AT-TPC configs
-///   root -b -q 'ex_genfit_3Hed.C("gs_s3001,gs_s3002")'               // ground state only
+/// The defaults are the CURRENT three-field ground-state comparison (2.0 / 2.85 / 3.8 T on real
+/// per-field Magboltz transport). Note simDirs: the 2.85 and 3.8 T arms re-reconstruct from sims
+/// that live in the OLD placeholder directories, because generation depends on the B field and
+/// never on the .par, so those sims stayed valid when the transport was corrected.
+///
+///   root -b -q 'ex_genfit_3Hed.C()'                                  // the adopted comparison
 #include <algorithm>
 #include <vector>
 
@@ -41,15 +45,17 @@ static double iqrOf(std::vector<double> v)
    return v[(size_t)(0.75 * v.size())] - v[(size_t)(0.25 * v.size())];
 }
 
-void ex_genfit_3Hed(TString tags = "gs_s3001,gs_s3002,360_s3011,360_s3012,2020_s3021,2020_s3022",
-                    TString dirs = "/mnt/f/ar46_3hed,/mnt/f/ar46_3hed_B38", TString names = "2.85 T,3.80 T",
+void ex_genfit_3Hed(TString tags = "gs_s3001,gs_s3002",
+                    TString dirs = "/mnt/f/ar46_3hed_mb_B20,/mnt/f/ar46_3hed_mb_B285,/mnt/f/ar46_3hed_mb_B38",
+                    TString names = "2.0 T,2.85 T,3.8 T",
                     Double_t dThetaMax = 10.0, Double_t driftLength = 100.0, Bool_t useXtr = kTRUE,
                     Double_t chi2Max = -1.0,
                     // The _mb_ arms at 2.85 and 3.8 T re-reconstruct from sims that live in the
                     // OLD directories (generation depends on the field, not the .par, so it is
                     // reused). Their _sim.root is therefore NOT next to their fit. Empty = same
                     // directory as the fit.
-                    TString simDirs = "")
+                    TString simDirs = "/mnt/f/ar46_3hed_mb_B20,/mnt/f/ar46_3hed_OLD_2.85T_placeholder,"
+                                      "/mnt/f/ar46_3hed_OLD_3.8T_placeholder")
 {
    gSystem->Load("libAtReconstruction.so");
    gSystem->Load("libAtSimulationData.so");

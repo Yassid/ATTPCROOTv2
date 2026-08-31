@@ -26,7 +26,7 @@
 /// pre-fit kinematics need, plus enough to go back to the track it came from.
 
 void pid_points_3Hed(Int_t minPoints = 15, TString outFile = "",
-                     TString simDir = "/mnt/f/ar46_3hed",
+                     TString simDir = "/mnt/f/ar46_3hed_OLD_2.85T_placeholder",
                      TString tags = "gs_s3001,gs_s3002,360_s3011,360_s3012,2020_s3021,2020_s3022",
                      Double_t bField = 2.85)
 {

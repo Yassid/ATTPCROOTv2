@@ -29,7 +29,7 @@
 /// at 0.957 MeV/cm that is 3.3 MeV of beam energy, the right size to explain the Ex offset. Pass
 /// the measured bias to test that attribution. Do not leave it non-zero in production -- it tunes
 /// the answer on the truth.
-void ex_fit_3Hed(TString tag = "gs_s3001", Double_t exTrue = 0.0, TString dir = "/mnt/f/ar46_3hed",
+void ex_fit_3Hed(TString tag = "gs_s3001", Double_t exTrue = 0.0, TString dir = "/mnt/f/ar46_3hed_OLD_2.85T_placeholder",
                  TString png = "plots/ex_fit_3Hed.png", Double_t dThetaMax = 10.0, Double_t driftLength = 100.0,
                  Double_t zShift = 0.0)
 {

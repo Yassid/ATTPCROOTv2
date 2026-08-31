@@ -60,11 +60,11 @@
 /// gate drawn on the mp15 plane would be applied to mp30 observables inside the fitter. Since the
 /// PID is fit-independent, the honest order is: fit everything, gate afterwards.
 ///
-///   root -b -q 'fitGenfitter_Ar46.C("gs_s3001", 500, "/mnt/f/ar46_3hed/", "_probe")'   // quick
-///   root -b -q 'fitGenfitter_Ar46.C("gs_s3001", -1, "/mnt/f/ar46_3hed/")'              // full
+///   root -b -q 'fitGenfitter_Ar46.C("gs_s3001", 500, "/mnt/f/ar46_3hed_OLD_2.85T_placeholder/", "_probe")'   // quick
+///   root -b -q 'fitGenfitter_Ar46.C("gs_s3001", -1, "/mnt/f/ar46_3hed_OLD_2.85T_placeholder/")'              // full
 
 void fitGenfitter_Ar46(TString fileName = "gs_s3001", Long64_t nEvents = -1,
-                       TString ioDir = "/mnt/f/ar46_3hed/", TString outSuffix = "", TString outDir = "",
+                       TString ioDir = "/mnt/f/ar46_3hed_OLD_2.85T_placeholder/", TString outSuffix = "", TString outDir = "",
                        Double_t bField = -2.85, Int_t minIter = 2, Int_t maxIter = 5, TString pidGate = "",
                        // 0.6 mm, not 4.0: see the header. This is the AT-TPC-plane value; a 2 mm
                        // plane would want ~0.35, but that configuration is parked.

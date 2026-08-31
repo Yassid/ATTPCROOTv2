@@ -17,7 +17,7 @@
 /// B FIELD: 2.85 T, AtPIDTask's own default and the value in the par. The rigidity scale of the
 /// plane follows from it, so if the field changes, the gate must be redrawn.
 ///
-///   root -b -q 'pidPass_Ar46.C("gs_s3001","/mnt/f/ar46_3hed/","/mnt/f/ar46_3hed/")'
+///   root -b -q 'pidPass_Ar46.C("gs_s3001","/mnt/f/ar46_3hed_OLD_2.85T_placeholder/","/mnt/f/ar46_3hed_OLD_2.85T_placeholder/")'
 
 void pidPass_Ar46(TString fileName = "gs_s3001", TString inDir = "./data/", TString outDir = "./data/",
                   Double_t bField = 2.85, TString paramFile = "ATTPC.46Ar_3Hed_sim.par")

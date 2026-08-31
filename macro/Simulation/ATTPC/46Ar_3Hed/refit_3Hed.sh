@@ -15,7 +15,7 @@ export VMCWORKDIR=$PWD
 source build/config.sh >/dev/null 2>&1
 
 TAGS="gs_s3001 gs_s3002 360_s3011 360_s3012 2020_s3021 2020_s3022"
-for cfg in "/mnt/f/ar46_3hed/:-2.85" "/mnt/f/ar46_3hed_B38/:-3.80"; do
+for cfg in "/mnt/f/ar46_3hed_OLD_2.85T_placeholder/:-2.85" "/mnt/f/ar46_3hed_OLD_3.8T_placeholder/:-3.80"; do
   DIR=${cfg%%:*}; BF=${cfg##*:}
   for t in $TAGS; do
     OUT="$DIR${t}_genfitter_d.root"; LOG="$DIR${t}_fit.log"

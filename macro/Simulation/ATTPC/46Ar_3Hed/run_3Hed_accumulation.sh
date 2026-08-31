@@ -39,7 +39,7 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 #   SIMDIR  where the sims live/go       PAD  pad pitch in mm, <=0 = real AT-TPC plane
 # Generation depends on the FIELD ONLY, so the 2 mm configurations point SIMDIR at the sims the
 # corresponding field already produced instead of regenerating them.
-OUT=${OUT:-/mnt/f/ar46_3hed}
+OUT=${OUT:-/mnt/f/ar46_3hed_OLD_2.85T_placeholder}
 BT=${BT:-2.85}
 PAD=${PAD:--1}
 SIMDIR=${SIMDIR:-$OUT}

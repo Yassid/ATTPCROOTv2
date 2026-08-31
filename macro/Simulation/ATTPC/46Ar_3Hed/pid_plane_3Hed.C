@@ -5,7 +5,7 @@
 /// reconstruction found, from every sample given, with nothing removed.
 ///
 ///   root -b -q 'pid_plane_3Hed.C()'                                    // all six default samples
-///   root -b -q 'pid_plane_3Hed.C("/mnt/f/ar46_3hed","gs_s3001")'       // one sample
+///   root -b -q 'pid_plane_3Hed.C("/mnt/f/ar46_3hed_OLD_2.85T_placeholder","gs_s3001")'       // one sample
 ///
 /// WHAT TO EXPECT ON IT. Measured on a 400-entry probe sample (g.s., seed 7001):
 ///   - the deuteron band at Brho 0.47 to 1.56 T*m, sqrt(dE/dx) 2.5 to 9.6. The rigidity range is
@@ -40,9 +40,9 @@
 /// pid_points_3Hed.C and it reads that instead, at whatever cut that file was built with -- which
 /// is the only way to see the theta_lab 77-104 deg band at all. The title records which.
 ///
-///   root -b -q 'pid_plane_3Hed.C("/mnt/f/ar46_3hed","","plots/pid_mp15.png","plots/pid_points_mp15.root")'
+///   root -b -q 'pid_plane_3Hed.C("/mnt/f/ar46_3hed_OLD_2.85T_placeholder","","plots/pid_mp15.png","plots/pid_points_mp15.root")'
 
-void pid_plane_3Hed(TString dir = "/mnt/f/ar46_3hed",
+void pid_plane_3Hed(TString dir = "/mnt/f/ar46_3hed_OLD_2.85T_placeholder",
                     TString tags = "gs_s3001,gs_s3002,360_s3011,360_s3012,2020_s3021,2020_s3022",
                     TString png = "plots/pid_plane_3Hed.png", TString pointsFile = "")
 {
