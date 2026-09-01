@@ -100,9 +100,12 @@
   <header>
     <div class="eyebrow">AT-TPC · NSCL · December 2014 · run 128</div>
     <h1>Beam-frame event viewer</h1>
-    <p class="sub">The same three point sets the ROOT display draws, in the browser. Drag to
-    rotate, scroll to zoom. Projection is <b>orthographic</b> — a perspective view would
-    distort the very angles this page exists to judge.</p>
+    <p class="sub">Every dot is one pad hit. The three colours are <b>the same hits three
+    times over</b> — not three tracks. Red is where the raw reconstruction puts them, blue
+    is after the E×B correction, green is blue rotated so the beam lands on the detector
+    axis. Each cloud carries its fitted line; the dashed lines are the beam direction and
+    the detector axis, drawn through the same point so only the angle between them matters.
+    <b>Blue should lie along amber. Green should lie along grey.</b></p>
   </header>
 
   <div class="stage">
@@ -170,7 +173,7 @@ const LAYERS = [
   {k:"vol", nm:"Active volume",   v:"--axis", on:true},
 ];
 
-let yaw = -0.62, pitch = 0.30, zoom = 1, idx = 3;
+let yaw = -Math.PI/2, pitch = 0.16, zoom = 1, idx = 3;
 
 // ---- projection ---------------------------------------------------------------------
 // Orthographic on purpose. Detector coords are mm with z along the drift; centre the scene
@@ -234,16 +237,8 @@ function draw(){
 
   if(LAYERS.find(l=>l.k==="vol").on) volume();
 
-  if(LAYERS.find(l=>l.k==="ax").on){
-    // Drawn from the beam's own start point: only the DIRECTION is meaningful, and
-    // anchoring at the coordinate origin makes the comparison unreadable.
-    const p0=[e.cor[0][0], e.cor[0][1], 0], L=1200, B=DATA.beam;
-    line(p0,[p0[0],p0[1],p0[2]+L], col("--axis"), 1.4, [7,5]);
-    line(p0,[p0[0]+B[0]/B[2]*L, p0[1]+B[1]/B[2]*L, p0[2]+L], col("--beam"), 1.6);
-  }
-
-  // Painter's algorithm across all visible sets at once, so depth reads correctly where
-  // the three clouds interleave.
+  // Points first, fitted lines on top. Painter's algorithm across all visible sets at
+  // once, so depth reads correctly where the three clouds interleave.
   const pool=[];
   for(const L of LAYERS){
     if(!L.on || !(L.k in e)) continue;
@@ -252,11 +247,47 @@ function draw(){
   }
   pool.sort((A,B)=>A[0]-B[0]);
   for(const [,X,Y,c,q] of pool){
-    const r = 1.7 + Math.min(2.6, Math.log10(1+q)*0.85);
-    ctx.fillStyle=c; ctx.globalAlpha=.9;
+    const r = 1.6 + Math.min(2.4, Math.log10(1+q)*0.8);
+    ctx.fillStyle=c; ctx.globalAlpha=.62;
     ctx.beginPath(); ctx.arc(X,Y,r,0,6.283); ctx.fill();
   }
   ctx.globalAlpha=1;
+
+  // Fit each visible cloud and draw its own line. Comparing SLOPES of drawn lines is
+  // something the eye can actually do; comparing the slope of a scatter against a
+  // reference drawn from an arbitrary anchor is not, which is what the first version
+  // asked of the reader.
+  const fits={};
+  for(const L of LAYERS){
+    if(!L.on || !(L.k in e)) continue;
+    const d=dirOf(e[L.k]); if(!d) continue;
+    let mz=0,mx=0,my=0; const P=e[L.k];
+    for(const q of P){mx+=q[0];my+=q[1];mz+=q[2];}
+    const n=P.length; mx/=n; my/=n; mz/=n;
+    let z0=1e9,z1=-1e9; for(const q of P){z0=Math.min(z0,q[2]);z1=Math.max(z1,q[2]);}
+    fits[L.k]={d,mx,my,mz,z0,z1};
+    const A=[mx+d.a*(z0-mz), my+d.b*(z0-mz), z0];
+    const B=[mx+d.a*(z1-mz), my+d.b*(z1-mz), z1];
+    line(A,B,col(L.v),2.2);
+  }
+
+  if(LAYERS.find(l=>l.k==="ax").on && fits.cor){
+    // Reference directions drawn THROUGH the corrected cloud's own centre, so only the
+    // angle between lines matters and the anchor cannot mislead.
+    const f=fits.cor, B=DATA.beam, L=(f.z1-f.z0)/2+120;
+    const c=[f.mx,f.my,f.mz];
+    line([c[0],c[1],c[2]-L],[c[0],c[1],c[2]+L], col("--axis"), 1.5, [8,6]);
+    line([c[0]-B[0]/B[2]*L, c[1]-B[1]/B[2]*L, c[2]-L],
+         [c[0]+B[0]/B[2]*L, c[1]+B[1]/B[2]*L, c[2]+L], col("--beam"), 1.8, [8,6]);
+  }
+
+  // In-scene labels: without them the orientation has to be inferred from the cylinder.
+  ctx.save();
+  ctx.font='11px ui-monospace,monospace'; ctx.fillStyle=col("--faint");
+  const lab=(p,t)=>{const P=proj(p); ctx.fillText(t,P[0]+6,P[1]-4);};
+  lab([0,0,1080],"z  drift \u2192 pad plane");
+  lab([330,0,0],"x"); lab([0,330,0],"y");
+  ctx.restore();
 
   // readout
   const rows=[["raw","--raw","Raw"],["cor","--cor","Corrected"],["det","--det","De-tilted"]];
