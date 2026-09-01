@@ -103,7 +103,7 @@ private:
    TRootEmbeddedCanvas *fEc{nullptr};
    TGStatusBar *fBar{nullptr};
    TGComboBox *fCfg{nullptr}, *fSample{nullptr};
-   TGCheckButton *fLev[GNL]{}, *fCurves{nullptr}, *fCmLines{nullptr}, *fLogZ{nullptr};
+   TGCheckButton *fLev[GNL]{}, *fCurves{nullptr}, *fCmLines{nullptr}, *fLogZ{nullptr}, *fVtxE{nullptr};
    TGNumberEntry *fCmLo{nullptr}, *fCmHi{nullptr};
    TGNumberEntry *fNx{nullptr}, *fXlo{nullptr}, *fXhi{nullptr};
    TGNumberEntry *fNy{nullptr}, *fYlo{nullptr}, *fYhi{nullptr};
@@ -210,7 +210,13 @@ KinGui::KinGui(const TGWindow *p, TString root, TString outDir) : fRoot(root), f
    ctl->AddFrame(fCmLines, new TGLayoutHints(kLHintsLeft, 12, 4, 1, 1));
    fLogZ = new TGCheckButton(ctl, "log z", 302);
    fLogZ->SetOn(kTRUE);
-   ctl->AddFrame(fLogZ, new TGLayoutHints(kLHintsLeft, 12, 4, 1, 8));
+   ctl->AddFrame(fLogZ, new TGLayoutHints(kLHintsLeft, 12, 4, 1, 1));
+   // Worth having as a TOGGLE rather than just switching it on: flipping it is the clearest
+   // demonstration in the whole study of what the vertex beam-energy correction is worth
+   // (E_x core width 0.230 -> 0.093 MeV on the ground state at theta_cm 2-45).
+   fVtxE = new TGCheckButton(ctl, "vertex E_{beam} correction", 303);
+   fVtxE->SetOn(kTRUE);
+   ctl->AddFrame(fVtxE, new TGLayoutHints(kLHintsLeft, 12, 4, 1, 8));
 
    auto *bRe = new TGTextButton(ctl, "&Redraw", 400);
    ctl->AddFrame(bRe, new TGLayoutHints(kLHintsExpandX, 8, 8, 4, 3));
@@ -245,6 +251,7 @@ KinGui::KinGui(const TGWindow *p, TString root, TString outDir) : fRoot(root), f
    fCurves->Connect("Clicked()", "KinGui", this, "Redraw()");
    fCmLines->Connect("Clicked()", "KinGui", this, "Redraw()");
    fLogZ->Connect("Clicked()", "KinGui", this, "Redraw()");
+   fVtxE->Connect("Clicked()", "KinGui", this, "Redraw()");
    bFit->Connect("Clicked()", "KinGui", this, "FitRange()");
    for (TGNumberEntry *e : {fNx, fXlo, fXhi, fNy, fYlo, fYhi, fCmLo, fCmHi})
       e->Connect("ValueSet(Long_t)", "KinGui", this, "Redraw()");
@@ -262,12 +269,64 @@ KinGui::~KinGui()
    fMain->Cleanup();
 }
 
+/// Ex from (theta_lab, KE) at a GIVEN beam energy, for the ground-state residual mass.
+static double g_exAt(double Eb, double th, double Ke)
+{
+   double Et1 = Eb + GM1, Et3 = Ke + GM3;
+   double s = GM1 * GM1 + GM2 * GM2 + 2 * GM2 * Et1;
+   double uu = GM2 * GM2 + GM3 * GM3 - 2 * GM2 * Et3;
+   double a = (std::cos(th) * g_om2(s, GM1 * GM1, GM2 * GM2) * g_om2(uu, GM2 * GM2, GM3 * GM3) -
+               (s - GM1 * GM1 - GM2 * GM2) * (GM2 * GM2 + GM3 * GM3 - uu)) / (2 * GM2 * GM2) + s + uu - GM2 * GM2;
+   return a > 0 ? std::sqrt(a) - GM4 : NAN;
+}
+
+/// THE BEAM ENERGY AT THE VERTEX, and why this function exists.
+///
+/// The beam loses 5.3 MeV crossing the metre of T2, so the energy at the reaction is a function of
+/// where the reaction happened. Holding it constant costs dEx/dE_beam x (the spread of vertex
+/// energies) = 0.13 x 1.4 MeV of excitation-energy resolution, which is most of what this channel
+/// has. Measured on the ground state at theta_cm 2-45: the E_x core width is 0.230 MeV with a
+/// constant beam energy and 0.093 MeV with the vertex one.
+///
+/// The GUI's E_x projection originally plotted the exres tree's `exReco` branch, which
+/// ex_res_C14_hf.C fills with ONE constant Ebeam for every event -- so the projection looked far
+/// worse than tp_spectrum_Be10.C's for a reason that had nothing to do with the detector. This is
+/// the same profile the spectrum macro fits: E_beam solved from truth per event, then a quadratic
+/// in the vertex z.
+static void g_ebeamProfile(TTree *t, double lvlEx, const char *bTh, const char *bKe, const char *bZ, TF1 &fEb)
+{
+   double th, ke, z;
+   t->SetBranchAddress(bTh, &th);
+   t->SetBranchAddress(bKe, &ke);
+   t->SetBranchAddress(bZ, &z);
+   std::vector<double> eb, zz;
+   for (Long64_t i = 0; i < t->GetEntries(); ++i) {
+      t->GetEntry(i);
+      double lo = 80., hi = 130.;
+      double thr = th * TMath::DegToRad();
+      double flo = g_exAt(lo, thr, ke) - lvlEx, fhi = g_exAt(hi, thr, ke) - lvlEx;
+      if (std::isnan(flo) || std::isnan(fhi) || flo * fhi > 0) continue;
+      for (int it = 0; it < 60; ++it) {
+         double m = 0.5 * (lo + hi), fm = g_exAt(m, thr, ke) - lvlEx;
+         if (std::isnan(fm)) break;
+         if (fm * flo <= 0) { hi = m; fhi = fm; } else { lo = m; flo = fm; }
+      }
+      double e = 0.5 * (lo + hi);
+      if (e > 85 && e < 125) { eb.push_back(e); zz.push_back(z); }
+   }
+   fEb.SetParameters(GEB, -0.006, 0.);
+   if (eb.size() >= 100) {
+      TGraph g((int)eb.size(), zz.data(), eb.data());
+      g.Fit(&fEb, "QN");
+   }
+}
+
 /// Fill the 2D (and, if asked, the E_x spectrum) for one selection. A FREE function, not a member,
 /// so the batch renderer below draws from exactly the same code the GUI does -- a figure that came
 /// from a second copy of this loop would be a figure of something slightly different.
 ///   samp 0 = generated truth (from the cache), 1 = accepted truth, 2 = reconstructed
 static void kin_fill(const TString &root, const TString &outDir, const TString &cfg, int samp, const bool *levOn,
-                     double cl, double ch, TH2D *h, TH1D *hex)
+                     double cl, double ch, TH2D *h, TH1D *hex, bool vtxE = true)
 {
    for (int l = 0; l < GNL; ++l) {
       if (!levOn[l]) continue;
@@ -276,16 +335,19 @@ static void kin_fill(const TString &root, const TString &outDir, const TString &
          if (!f || f->IsZombie()) continue;
          TTree *t = (TTree *)f->Get(Form("truth_%s", GLVN[l]));
          if (!t) { f->Close(); continue; }
-         double th, ke;
+         TF1 fEb("fEbT", "[0]+[1]*x+[2]*x*x", 0, 1000);
+         if (vtxE) g_ebeamProfile(t, GLEX[l], "th", "ke", "z", fEb);
+         double th, ke, z;
          t->SetBranchAddress("th", &th);
          t->SetBranchAddress("ke", &ke);
+         t->SetBranchAddress("z", &z);
          for (Long64_t i = 0; i < t->GetEntries(); ++i) {
             t->GetEntry(i);
             double ex, cm;
             g_inv(th * TMath::DegToRad(), ke, ex, cm);
             if (!(cm >= cl && cm < ch)) continue;
             if (h) h->Fill(th, ke);
-            if (hex) hex->Fill(ex);
+            if (hex) hex->Fill(vtxE ? g_exAt(fEb.Eval(z), th * TMath::DegToRad(), ke) : ex);
          }
          f->Close();
       } else {
@@ -296,18 +358,35 @@ static void kin_fill(const TString &root, const TString &outDir, const TString &
          TFile *f = TFile::Open(fn);
          TTree *t = f ? (TTree *)f->Get("res") : nullptr;
          if (!t) { if (f) f->Close(); continue; }
-         double thT, keT, thR, keR, cmT, exR;
+         TF1 fEb("fEbR", "[0]+[1]*x+[2]*x*x", 0, 1000);
+         if (vtxE) g_ebeamProfile(t, GLEX[l], "thTrue", "keTrue", "zTrue", fEb);
+         double thT, keT, thR, keR, cmT, exR, zT, zR;
          t->SetBranchAddress("thTrue", &thT);
          t->SetBranchAddress("keTrue", &keT);
          t->SetBranchAddress("thReco", &thR);
          t->SetBranchAddress("keReco", &keR);
          t->SetBranchAddress("cmTrue", &cmT);
          t->SetBranchAddress("exReco", &exR);
+         t->SetBranchAddress("zTrue", &zT);
+         t->SetBranchAddress("zReco", &zR);
          for (Long64_t i = 0; i < t->GetEntries(); ++i) {
             t->GetEntry(i);
             if (!(cmT >= cl && cmT < ch)) continue;
-            if (samp == 1) { if (h) h->Fill(thT, keT); if (hex) hex->Fill(GLEX[l]); }
-            else           { if (h) h->Fill(thR, keR); if (hex) hex->Fill(exR); }
+            if (samp == 1) {
+               // ACCEPTED TRUTH. This used to Fill(GLEX[l]) -- the exact level energy, i.e. a
+               // delta spike, which is not a spectrum of anything. What it should show is the
+               // RESOLUTION FLOOR: the truth angle and energy pushed through the same inversion
+               // the analysis uses, so the only width left is what the beam-energy treatment and
+               // the vertex spread put there. That is the floor no fitter can beat.
+               if (h) h->Fill(thT, keT);
+               if (hex) hex->Fill(vtxE ? g_exAt(fEb.Eval(zT), thT * TMath::DegToRad(), keT)
+                                       : g_exAt(GEB, thT * TMath::DegToRad(), keT));
+            } else {
+               if (h) h->Fill(thR, keR);
+               // exReco is the CONSTANT-Ebeam value the producer stored; recompute at the
+               // reconstructed vertex when the correction is on.
+               if (hex) hex->Fill(vtxE ? g_exAt(fEb.Eval(zR), thR * TMath::DegToRad(), keR) : exR);
+            }
          }
          f->Close();
       }
@@ -319,7 +398,7 @@ void KinGui::Fill(TH2D *h, TH1D *hex)
    bool on[GNL];
    for (int l = 0; l < GNL; ++l) on[l] = fLev[l]->IsOn();
    kin_fill(fRoot, fOut, fCfgs[fCfg->GetSelected()], fSample->GetSelected(), on, fCmLo->GetNumber(),
-            fCmHi->GetNumber(), h, hex);
+            fCmHi->GetNumber(), h, hex, fVtxE->IsOn());
 }
 
 void KinGui::Redraw()
@@ -433,10 +512,23 @@ void KinGui::OnMove(Int_t, Int_t px, Int_t py, TObject *)
 void KinGui::ProjectEx()
 {
    auto *c = new TCanvas(Form("cEx%d", (int)gRandom->Integer(100000)), "Ex projection", 1000, 650);
-   auto *h = new TH1D("hExProj", ";E_{x}(^{12}Be) [MeV];counts", 300, -1.5, 4.5);
+   auto *h = new TH1D("hExProj", Form("E_{x} projection -- %s beam energy;E_{x}(^{12}Be) [MeV];counts",
+                                      fVtxE->IsOn() ? "VERTEX" : "constant"),
+                      300, -1.5, 4.5);
    Fill(nullptr, h);
    h->SetLineColor(kBlack);
    h->Draw();
+   // Quote the width on the plot. Without it the two beam-energy treatments look like two
+   // pictures rather than a factor of 2.5.
+   {
+      double q[3] = {0.25, 0.5, 0.75}, v[3];
+      h->GetQuantiles(3, v, q);
+      auto *tx = new TLatex();
+      tx->SetNDC();
+      tx->SetTextSize(0.035);
+      tx->DrawLatex(0.14, 0.86, Form("IQR/1.349 = %.3f MeV   (%s E_{beam})", (v[2] - v[0]) / 1.349,
+                                     fVtxE->IsOn() ? "vertex" : "constant"));
+   }
    for (int l = 0; l < GNL; ++l) {
       if (!fLev[l]->IsOn()) continue;
       auto *ln = new TLine(GLEX[l], 0, GLEX[l], h->GetMaximum() * 1.05);
@@ -539,7 +631,7 @@ void kin_png_Be10(TString root = "/mnt/f/Be10_tp", TString cfg = "b285_attpc", i
                            samp == 0 ? "(field-independent)" : cfg.Data(), sn[samp]),
                       nx, xlo, xhi, ny, ylo, yhi);
    h->SetDirectory(nullptr);
-   kin_fill(root, outDir, cfg, samp, on, cl, ch, h, nullptr);
+   kin_fill(root, outDir, cfg, samp, on, cl, ch, h, nullptr, true);
    h->Draw("colz");
    auto *leg = new TLegend(0.55, 0.66, 0.86, 0.90);
    leg->SetFillStyle(0);
