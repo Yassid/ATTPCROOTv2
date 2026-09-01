@@ -170,6 +170,18 @@ TargetD2_300  2  2.0141  2.0141  1.  1.  0.065643e-3 0.5 0.5
 		   1  1   20  .001
 		   0
 
+// T2 at 300 torr, 293.15 K -- the 10Be(t,p)12Be counterpart of TargetD2_300, added 2026-08-31.
+// rho = (300/760 atm) * 6.0320986 g/mol / (82.05736 * 293.15) = 9.89854e-5 g/cm3, the IDEAL-GAS
+// value at room temperature. Note this is 0.7 % ABOVE the same-recipe value for TargetD2_300
+// (6.5643e-5 against an ideal-gas 6.6100e-5): the D2 entry carries a small legacy offset which is
+// deliberately NOT propagated here, and the digitisation par is set to 9.89854e-5 to match, so
+// transport and digitisation model the same gas.
+// SAME molecular number density as H2/D2 at 300 torr, hence the same ELECTRON density: the beam
+// energy loss per metre is the H2/D2 one scaled by Z_beam^2 only.
+TargetT2_300  2  3.0160493  3.0160493  1.  1.  0.0989854e-3 0.5 0.5
+		   1  1   20  .001
+		   0
+
 TargetD2_05  2  2.0141  2.0141  1.  1.  0.08165e-3 0.5 0.5
 		   1  1   20  .001
 		   0

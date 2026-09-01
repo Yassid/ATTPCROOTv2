@@ -56,14 +56,18 @@ void acceptance_C14(TString simFile, TString fitFile, TString tag = "gs", Double
                     // The reaction, in amu. Defaults are 14C(p,p'), so every existing caller is
                     // unchanged; 14C(d,p)15C is (2.0141018, 1.007825, 15.0105993).
                     Double_t mTargetAmu = 1.007825, Double_t mEjectAmu = 1.007825,
-                    Double_t mResidAmu = 14.003242)
+                    Double_t mResidAmu = 14.003242,
+                    // BEAM mass, in amu. Was hard-coded at 14C until 2026-08-31; it is a trailing
+                    // argument with the old value as its default, so every existing caller is
+                    // byte-identical. 10Be(t,p)12Be passes 10.0135341.
+                    Double_t mBeamAmu = 14.003242)
 {
    gSystem->Load("libAtReconstruction.so");
    gSystem->Load("libAtSimulationData.so");
    gStyle->SetOptStat(0);
 
    const double u = 931.49401;
-   const double m_C14 = 14.003242 * u;   // beam
+   const double m_C14 = mBeamAmu * u;    // beam (name kept; it is whatever mBeamAmu says)
    const double m_tgt = mTargetAmu * u;  // target
    const double m_ej = mEjectAmu * u;    // ejectile
    const double m_p = m_ej;              // the truth-track mass

@@ -69,14 +69,17 @@ static double exr_quantile(std::vector<double> &v, double q)
 void ex_res_C14_hf(TString simFile, TString fitFile, TString tag, Double_t resEx = 0.0, Double_t Ebeam = 159.75,
                    Double_t chi2Cut = 5.0, Bool_t useXtr = kTRUE, TString outDir = "./", Double_t dThetaMax = 10.0,
                    Double_t keRatioMin = 0.5, Double_t keRatioMax = 2.0, Double_t mTargetAmu = 1.007825,
-                   Double_t mEjectAmu = 1.007825, Double_t mResidAmu = 14.003242)
+                   Double_t mEjectAmu = 1.007825, Double_t mResidAmu = 14.003242,
+                   // BEAM mass in amu; trailing with the old hard-coded 14C value as default, so
+                   // existing callers are unchanged. 10Be(t,p)12Be passes 10.0135341.
+                   Double_t mBeamAmu = 14.003242)
 {
    gSystem->Load("libAtReconstruction.so");
    gSystem->Load("libAtSimulationData.so");
    gStyle->SetOptStat(0);
 
    const double u = 931.49401;
-   const double m_C14 = 14.003242 * u;            // beam
+   const double m_C14 = mBeamAmu * u;             // beam (name kept; it is whatever mBeamAmu says)
    const double m_tgt = mTargetAmu * u;           // target
    const double m_ej = mEjectAmu * u;             // ejectile (the track that is fitted)
    const double m_r0 = mResidAmu * u;             // residual, ground state
