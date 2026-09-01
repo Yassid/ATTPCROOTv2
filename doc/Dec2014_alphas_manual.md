@@ -38,7 +38,40 @@ The event display is built PCL-free: `AtEventDisplay` is no longer gated behind
 `PCL_FOUND`, and the RANSAC/Hough drawing paths were removed from `AtEventDrawTask`. You
 do **not** need PCL to visualise events.
 
-### 1.3 Python
+### 1.3 Building with GENFIT
+
+GENFIT is **already wired into this branch** — `AtGenfit`, `AtSpacePointMeasurement` and
+`AtFitterTask` are compiled into `libAtReconstruction` whenever CMake finds GENFIT2, and
+CATIMA is built here too (`AtTools/AtELossCATIMA`). No source port is needed. What was
+missing was purely the configure line: the default `build/` was made without GENFIT2, and a
+naive reconfigure fails on HDF5 rather than on GENFIT.
+
+Use a **separate build tree**, so the working PCL-free build is not disturbed:
+
+```bash
+mkdir -p build_genfit && cd build_genfit
+cmake -DGENFIT=/home/yassid/fair_install/GenFitInst \
+      -DHDF5_DIR=/home/yassid/fair_install/hdf5-1.10.4-inst/share/cmake/hdf5 ..
+make -j10
+```
+
+Verify rather than assume — the classes are inside `libAtReconstruction`, so there is no
+`libAtFitter` to look for:
+
+```bash
+ldd lib/libAtReconstruction.so | grep genfit     # -> libgenfit2.so.2.2
+root -l -b -q -e 'gSystem->Load("libgenfit2"); gSystem->Load("libAtReconstruction");
+                  printf("%p\n",(void*)TClass::GetClass("AtFITTER::AtGenfit"));'
+```
+
+Both `AtFITTER::AtGenfit` and `genfit::Track` resolve at runtime, with 138 genfit symbols
+exported.
+
+> `-DHDF5_DIR` is not optional. Without it the configure dies with
+> `Could NOT find HDF5 (missing: HDF5_LIBRARIES HDF5_INCLUDE_DIRS)` — which looks like an
+> unrelated failure and hides the fact that GENFIT itself is found perfectly well.
+
+### 1.4 Python
 
 The analysis scripts need `numpy`, `scipy`, `matplotlib` and **`sklearn` ≥ 1.3** (for
 `sklearn.cluster.HDBSCAN`, which is part of scikit-learn — *not* the standalone `hdbscan`
@@ -52,7 +85,7 @@ PY=/home/yassid/attpc_spyral/.venv/bin/python     # sklearn 1.5.0, numpy 1.26.4,
 
 Any Python ≥3.9 environment with those four packages works; nothing here is Spyral-specific.
 
-### 1.4 Directory layout
+### 1.5 Directory layout
 
 | Path | Contents |
 |---|---|
@@ -646,6 +679,22 @@ The last row is the result: the magnitude is predicted from `BField`, `EField` a
 **0.6 %**. The residual 1.22° is consistent with the reference axis itself being uncertain
 by ~1.5°, so it bounds the correction's error rather than measuring a defect.
 
+![Rotate-to-beam-axis test](figs/beam_frame.png)
+
+*Left: mean beam trajectory over ~2200 events of run 128 (x projection). The Lorentz
+correction (blue) brings the beam onto the measured **B** direction (orange); rotating by
+the tilt then brings it onto the detector axis (green). Mean trajectories rather than one
+event, because the per-event direction scatters by ~5° from beam divergence and fit noise.
+Right: the same as full 3D angles — corrected and de-tilted, the beam sits 0.99° from the
+detector axis.*
+
+![Event display with the beam-frame overlay](figs/viewer_beamframe.png)
+
+*The event display (`run_eve_Dec2014_alphas.C`): red raw hits, blue Lorentz-corrected, green
+the same hits rotated onto the detector axis; orange the beam direction, grey the detector
+axis. The three sets differ by a few degrees and overlap at this zoom — the display is for
+inspecting single events interactively, not for reading angles off.*
+
 > **Use the empirical reference, not the parameter file.** At B = 0 there is no shear, so
 > the raw run-100 beam direction *is* the beam axis, and no angle convention can be got
 > wrong. Building the reference from `TiltAng`/`ThetaRot`/`ThetaPad` instead gave an axis
@@ -746,6 +795,13 @@ at a time.
 
 Normalisation is taken on the bulk (1.2–3.0e5), *not* on total area, precisely so the pile-up
 tail cannot distort the low-charge comparison.
+
+![Charge spectra](figs/charge_shapes.png)
+
+*Why the trigger normalisation is not valid. Left: the two spectra have different shapes
+inside the shaded normalisation window. Centre: the experiment peaks at 1.8e5 with a second
+bump at exactly twice that; the simulation is flat to a hard kinematic edge. Right: the
+pile-up signature — 2.01x the charge but only 1.40x the hits.*
 
 > **This is not a usable efficiency curve, and more statistics will not make it one.**
 > See below.

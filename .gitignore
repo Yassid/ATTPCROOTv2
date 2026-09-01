@@ -68,3 +68,6 @@ __pycache__/
 
 # machine-specific run lists (absolute paths); regenerate with calib/make_links.sh
 runfiles/NSCL/Dec2014_alphas/
+
+# second build tree, configured with GENFIT2 (see doc section 1.3)
+build_genfit/

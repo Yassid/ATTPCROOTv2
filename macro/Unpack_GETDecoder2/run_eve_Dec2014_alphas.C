@@ -17,7 +17,15 @@
 // parsed. Do not add #includes or gSystem->Load calls here -- see rootlogon.C for why.
 void run_eve_Dec2014_alphas(TString InputDataFile = "/home/yassid/dec2014_alphas_reco/lowP/alpha_run_0128_hits.root",
                             TString OutputDataFile = "/tmp/dec2014_alphas_display.root",
-                            TString parameterFile = "ATTPC.alpha_150torr.par")
+                            TString parameterFile = "ATTPC.alpha_150torr.par",
+                            // Beam axis MEASURED from run 100 (B=0), not the parameter-file
+                            // TiltAng/ThetaRot. Rotating by the measured values puts the
+                            // corrected beam 0.99 deg from the detector axis; the parameter
+                            // values leave 1.91 deg, because ThetaPad/ThetaRot are
+                            // individually mis-assigned (manual 5.4.8). For de-tilting, use
+                            // what was measured.
+                            Double_t tiltDeg = 5.44, Double_t azimDeg = -173.2,
+                            TString snapshot = "")
 {
    FairLogger *fLogger = FairLogger::GetLogger();
    fLogger->SetLogToScreen(kTRUE);
@@ -50,6 +58,26 @@ void run_eve_Dec2014_alphas(TString InputDataFile = "/home/yassid/dec2014_alphas
    // found in that case, which only disables the pad-trace canvases.
    eve->SetRawEventBranch("AtRawEvent");
 
+   // Beam-frame overlay. Passed in rather than read from the parameter file, which cling
+   // cannot open here (see the note above). Defaults match ATTPC.alpha_150torr.par.
+   eve->SetTilt(tiltDeg, azimDeg);
+
    eveMan->AddTask(eve);
    eveMan->Init();
+
+   // Optional headless snapshot: draw one event and write a PNG, for putting figures in the
+   // manual without a human at the keyboard.
+   if (snapshot.Length() > 0) {
+      eveMan->RunEvent();
+      gEve->Redraw3D(kTRUE);
+      // Side view: drift along the horizontal, so the tilt between the three point sets
+      // and the two reference axes is visible at a glance.
+      gEve->GetDefaultGLViewer()->SetStyle(TGLRnrCtx::kFill);
+      gEve->GetDefaultGLViewer()->SetCurrentCamera(TGLViewer::kCameraOrthoZOY);
+      gEve->GetDefaultGLViewer()->CurrentCamera().Reset();
+      gEve->GetDefaultGLViewer()->RequestDraw();
+      gSystem->ProcessEvents();
+      gEve->GetDefaultGLViewer()->SavePicture(snapshot);
+      std::cout << " wrote snapshot " << snapshot << std::endl;
+   }
 }

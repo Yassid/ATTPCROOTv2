@@ -24,6 +24,10 @@
 #include "TEveBoxSet.h"
 #include "TEveGeoShape.h"
 #include "TEveLine.h"
+#include "TVector3.h"
+#include "AtDigiPar.h"
+#include "FairRuntimeDb.h"
+#include "FairRun.h"
 #include "TEveManager.h"
 #include "TEvePointSet.h"
 #include "TEveTrans.h"
@@ -168,6 +172,21 @@ InitStatus AtEventDrawTask::Init()
       break;
    }
 
+   // Tilt parameters for the beam-frame overlay. Optional: if AtDigiPar is unavailable the
+   // display still works, it just cannot draw the de-tilted view.
+   if (FairRun::Instance() && FairRun::Instance()->GetRuntimeDb()) {
+      auto *par = dynamic_cast<AtDigiPar *>(FairRun::Instance()->GetRuntimeDb()->getContainer("AtDigiPar"));
+      if (par && !fHasTilt) {
+         fTiltAng = par->GetTiltAngle();
+         fThetaRot = par->GetThetaRot();
+         fHasTilt = (fTiltAng != 0.);
+         std::cout << cGREEN << " Beam-frame overlay: tilt " << fTiltAng << " deg, azimuth "
+                   << fThetaRot << " deg" << cNORMAL << std::endl;
+      }
+   }
+   if (!fHasTilt)
+      std::cout << cRED << " No AtDigiPar tilt: the de-tilted overlay will not be drawn\n" << cNORMAL;
+
    gROOT->Reset();
    FairRootManager *ioMan = FairRootManager::Instance();
    fEventManager = AtEventManager::Instance();
@@ -284,6 +303,30 @@ void AtEventDrawTask::Exec(Option_t *option)
    }
 }
 
+// Rotate a pad-frame position so that the BEAM lands on the detector axis -- i.e. undo the
+// mechanical tilt. This is the transformation behind calib/rotate_to_beam.py, where a
+// corrected event rotated this way puts the beam on axis to 1.2 deg while an uncorrected
+// one misses by 5.9 deg.
+//
+// The beam direction is taken as (sin t cos p, sin t sin p, cos t) with t = TiltAng and
+// p = ThetaRot read as a PAD-frame azimuth. That reading is the one that matches the
+// measured B = 0 beam axis (1.56 deg away, against 10.43 deg for the alternative); see
+// AtLangevin.h and manual section 5.4.8 for why the two angles are individually ambiguous.
+TVector3 AtEventDrawTask::RotateToAxis(const TVector3 &v) const
+{
+   if (!fHasTilt)
+      return v;
+   const Double_t d = TMath::Pi() / 180.0;
+   const Double_t t = fTiltAng * d, p = fThetaRot * d;
+   TVector3 b(TMath::Sin(t) * TMath::Cos(p), TMath::Sin(t) * TMath::Sin(p), TMath::Cos(t));
+   TVector3 axis = b.Cross(TVector3(0, 0, 1));
+   if (axis.Mag() < 1e-9)
+      return v;
+   TVector3 out(v);
+   out.Rotate(TMath::ACos(b.Z()), axis.Unit()); // rotate b onto +z, carrying v with it
+   return out;
+}
+
 void AtEventDrawTask::DrawHitPoints()
 {
 
@@ -367,6 +410,19 @@ void AtEventDrawTask::DrawHitPoints()
    fHitSet->SetMarkerStyle(fHitStyle);
    std::cout << cBLUE << " Number of hits : " << nHits << cNORMAL << std::endl;
 
+   // Beam-frame overlay: corrected hits, and the same hits with the tilt rotated out.
+   // Drawn together with the raw ones so the effect of the correction is visible in a
+   // single picture rather than by flipping a toggle.
+   fHitSetCorr = new TEvePointSet("HitCorrected", nHits, TEvePointSelectorConsumer::kTVT_XYZ);
+   fHitSetCorr->SetMarkerColor(kAzure + 1);
+   fHitSetCorr->SetMarkerSize(fHitSize);
+   fHitSetCorr->SetMarkerStyle(fHitStyle);
+
+   fHitSetRot = new TEvePointSet("HitOnDetectorAxis", nHits, TEvePointSelectorConsumer::kTVT_XYZ);
+   fHitSetRot->SetMarkerColor(kGreen + 2);
+   fHitSetRot->SetMarkerSize(fHitSize);
+   fHitSetRot->SetMarkerStyle(fHitStyle);
+
    // 3D visualization of the Minimized data
 
    Int_t nHitsMin = 0; // Initialization of the variable to ensure a non-NULL pointer
@@ -408,6 +464,13 @@ void AtEventDrawTask::DrawHitPoints()
                                positioncorr.Z() / 10.); // Convert into ccm
          fHitSet->SetPointId(new TNamed(Form("Corrected Hit %d", iHit), ""));
          Atbin = fPadPlane->Fill(positioncorr.X(), positioncorr.Y(), hit.GetCharge());
+      }
+
+      // Always fill the overlay sets, whichever the toggle shows.
+      fHitSetCorr->SetNextPoint(positioncorr.X() / 10., positioncorr.Y() / 10., positioncorr.Z() / 10.);
+      if (fHasTilt) {
+         TVector3 rot = RotateToAxis(positioncorr);
+         fHitSetRot->SetNextPoint(rot.X() / 10., rot.Y() / 10., rot.Z() / 10.);
       }
 
       /*std::cout<<"  --------------------- "<<std::endl;
@@ -584,6 +647,35 @@ void AtEventDrawTask::DrawHitPoints()
 
       gEve->AddElement(fHitSet);
       gEve->AddElement(fhitBoxSet);
+
+      // Corrected hits, and the same hits de-tilted onto the detector axis.
+      if (fHitSetCorr && fHitSetCorr->Size() > 0)
+         gEve->AddElement(fHitSetCorr);
+      if (fHasTilt && fHitSetRot && fHitSetRot->Size() > 0)
+         gEve->AddElement(fHitSetRot);
+
+      // Reference axes, in cm: the detector axis, and the beam (== B) tilted away from it.
+      // Drawn over the full drift length so the tilt is visible at a glance.
+      const Double_t zLo = 0., zHi = 100.;
+      fDetAxis = new TEveLine("DetectorAxis");
+      fDetAxis->SetLineColor(kGray + 1);
+      fDetAxis->SetLineWidth(2);
+      fDetAxis->SetNextPoint(0., 0., zLo);
+      fDetAxis->SetNextPoint(0., 0., zHi);
+      gEve->AddElement(fDetAxis);
+
+      if (fHasTilt) {
+         const Double_t d = TMath::Pi() / 180.0;
+         const Double_t t = fTiltAng * d, ph = fThetaRot * d;
+         TVector3 bdir(TMath::Sin(t) * TMath::Cos(ph), TMath::Sin(t) * TMath::Sin(ph), TMath::Cos(t));
+         bdir *= (zHi - zLo) / bdir.Z();
+         fBeamAxis = new TEveLine("BeamAxis");
+         fBeamAxis->SetLineColor(kOrange + 7);
+         fBeamAxis->SetLineWidth(2);
+         fBeamAxis->SetNextPoint(0., 0., zLo);
+         fBeamAxis->SetNextPoint(bdir.X(), bdir.Y(), zLo + bdir.Z());
+         gEve->AddElement(fBeamAxis);
+      }
 
       // Adding pattern rec. results (the Hough / RANSAC / tracking-analysis overlays that
       // were drawn here need the PCL-only classes and have been removed).

@@ -76,6 +76,17 @@ public:
    void SetEventBranch(TString branchName);
 
    static void SelectPad(const char *rawevt);
+   /// Tilt for the beam-frame overlay, in degrees. Set this from the macro: the display
+   /// cannot open a parameter file (FairParAsciiFileIo is an incomplete type in cling once
+   /// the Eve dictionaries are loaded), so AtDigiPar is only used when it happens to be
+   /// available. azimDeg is the beam azimuth in the PAD plane -- see AtLangevin.h.
+   void SetTilt(Double_t tiltDeg, Double_t azimDeg)
+   {
+      fTiltAng = tiltDeg;
+      fThetaRot = azimDeg;
+      fHasTilt = (tiltDeg != 0.);
+   }
+
    void DrawWave(Int_t PadNum);
    void SetMultiHit(Int_t hitMax);
    void SetAlgorithm(Int_t val) { fRANSACAlg = val; };
@@ -148,6 +159,23 @@ private:
 
    TEvePointSet *fHitSet;
    TEvePointSet *fHitSetMin;
+
+   // Beam-frame overlay. The display used to TOGGLE between raw and corrected hits, so the
+   // two could never be compared in one picture. These are drawn together instead:
+   //   fHitSetCorr  Lorentz/tilt-corrected hits (GetPositionCorr)
+   //   fHitSetRot   the same hits rotated onto the detector axis -- the "as if the detector
+   //                had never been tilted" view that validates the correction on data
+   //   fBeamAxis    the beam direction (== B), tilted by TiltAng from the pad-plane normal
+   //   fDetAxis     the detector axis itself, for reference
+   TEvePointSet *fHitSetCorr = nullptr;
+   TEvePointSet *fHitSetRot = nullptr;
+   TEveLine *fBeamAxis = nullptr;
+   TEveLine *fDetAxis = nullptr;
+
+   Double_t fTiltAng = 0.;  ///< deg, from AtDigiPar
+   Double_t fThetaRot = 0.; ///< deg, azimuth of the beam in the PAD plane (see AtLangevin.h)
+   Bool_t fHasTilt = kFALSE;
+   TVector3 RotateToAxis(const TVector3 &v) const;
 
    TEvePointSet *fHitSetMC[5];    // For MC results
    TEvePointSet *fHitSetTFHC[20]; // for TrackFinderHC
