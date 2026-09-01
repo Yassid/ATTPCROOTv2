@@ -1,0 +1,14 @@
+{
+  "name": "all_C15d",
+  "xaxis": "sqrt_dEdx",
+  "yaxis": "brho",
+  "Z": 1,
+  "A": 2,
+  "comment": "Deliberately permissive: a rectangle covering the whole PID plane, so apply_gate_C15d.C can be run for the IC window ALONE. apply_gate requires a species gate, and passing this one isolates the effect of the ion-chamber beam selection from any PID selection. NOT a physics gate -- never quote a yield through it.",
+  "vertices": [
+    [0.0, 0.0],
+    [200.0, 0.0],
+    [200.0, 20.0],
+    [0.0, 20.0]
+  ]
+}

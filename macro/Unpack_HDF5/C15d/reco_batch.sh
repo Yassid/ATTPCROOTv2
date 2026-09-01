@@ -35,8 +35,14 @@ set -eo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/../../.." && pwd)"
 
-NPAR="${1:-8}"
-RUNLIST="${2:-$HERE/runs_d.txt}"
+NPAR="${1:-16}"
+# runs_d2.txt, NOT runs_d.txt. runs_d.txt is the original list and still carries the 28 runs
+# >=106, which were later established to be a HYDROGEN target (dE/dx ratio 0.52 against 0.500
+# predicted for H2/D2, and arclength jumping 162-166 -> 182-185 mm). runs_d2.txt is the curated
+# D2-only set written once that was known. Leaving the default on the stale list reconstructed
+# all 28 hydrogen runs, and because they are the LARGEST files a downstream `ls -S | head` then
+# fitted 7 of them as deuterium -- which put the (d,d) beam energy at 54 MeV instead of 190.
+RUNLIST="${2:-$HERE/runs_d2.txt}"
 NEVENTS="${3:--1}"
 
 RECO_DIR="${C15D_RECO:-/home/yassid/C15d_reco}"

@@ -234,6 +234,8 @@ footer{
       <div class="pair"><input type="number" id="thLo" step="1" value="0"><input type="number" id="thHi" step="1" value="180"></div>
       <div class="row"><label>KE [MeV]</label></div>
       <div class="pair"><input type="number" id="keLo" step="0.5" value="0"><input type="number" id="keHi" step="0.5" value="1000"></div>
+      <div class="row" id="rowIcLab"><label>IC window [ADC]</label></div>
+      <div class="pair" id="rowIc"><input type="number" id="icLo" step="10" value="-1"><input type="number" id="icHi" step="10" value="4000"></div>
       <div class="row" id="rowVzLab"><label>vertex z [mm]</label></div>
       <div class="pair" id="rowVz"><input type="number" id="vzLo" step="10" value="-100"><input type="number" id="vzHi" step="10" value="1100"></div>
     </div>
@@ -421,11 +423,20 @@ const $ = id => document.getElementById(id);
 const IDS = ['ebeam','chi2','thLo','thHi','keLo','keHi','exBins','exLo','exHi','fitLo','fitHi',
              'thBins','thMin','thMax','keBins','keMin','keMax','cmBins','etExBins','cmLo','cmHi','slBins',
              'vzLo','vzHi','vzBins','vzExBins',
+             'icLo','icHi',
              'kcDenom','kcPivot'];
 
 /* vertex z is only meaningful if the cache actually carries it: ex_C15.C hardcoded 0
    before 2026-07-26, and old caches have no column at all. Detect a flat/absent
    column once and hide the whole z UI rather than drawing a misleading single stripe. */
+/* The ion-chamber value is optional: caches built before the IC join carry no column, and a
+   window control that filters on a missing value would silently empty every panel. Detect it
+   once, and hide the control entirely when it is absent. */
+const HAS_IC = FITTERS.some(f => {
+  const v = SETS[f] && SETS[f].ic;
+  return !!(v && v.length && v.some(x => x >= 0));
+});
+
 const HAS_VZ = FITTERS.some(f => {
   const v = SETS[f] && SETS[f].vz;
   if (!v || !v.length) return false;
@@ -506,7 +517,17 @@ function pass(d, i, s) {
   return d.c2[i] <= s.chi2
       && thCorr(s, d.th[i], d.ke[i]) >= s.thLo && thCorr(s, d.th[i], d.ke[i]) <= s.thHi
       && d.ke[i] >= s.keLo && d.ke[i] <= s.keHi
-      && (!HAS_VZ || !d.vz || (d.vz[i] >= s.vzLo && d.vz[i] <= s.vzHi));
+      && (!HAS_VZ || !d.vz || (d.vz[i] >= s.vzLo && d.vz[i] <= s.vzHi))
+      // A track whose run had no ion chamber carries ic = -1. It CANNOT satisfy a window, so it
+      // is dropped whenever one is active -- the same rule apply_gate_C15d.C uses. Treating -1 as
+      // "no information, keep it" would quietly mix ungated beam into a gated sample.
+      // Single pulse rides WITH the window, never separately: pid/ic_C15d.json records
+      // singlePulse: true and apply_gate_C15d.C enforces it whenever the window is on, so a page
+      // that applied the window without it would report a different number from the batch path
+      // for the same window -- the two have already had to be reconciled once.
+      && (!HAS_IC || !d.ic || s.icLo < 0
+          || (d.ic[i] >= 0 && d.ic[i] >= s.icLo && d.ic[i] <= s.icHi
+              && (!d.np || d.np[i] === 1)));
 }
 
 /** Ex histogram only, for a named fitter -- used for the comparison overlay */
@@ -1233,6 +1254,12 @@ function init() {
   // no usable vertex z in this cache -> drop the panel and its controls entirely
   if (!HAS_VZ) {
     for (const id of ['cardVz','rowVz','rowVzLab','rowVzBins','rowVzExBins','lblVzMap'])
+      { const e = $(id); if (e) e.style.display = 'none'; }
+  }
+
+  // same for the ion chamber: no column -> no control, rather than one that filters on nothing
+  if (!HAS_IC) {
+    for (const id of ['rowIc','rowIcLab'])
       { const e = $(id); if (e) e.style.display = 'none'; }
   }
 

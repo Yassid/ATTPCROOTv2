@@ -21,7 +21,13 @@
 /// assignment or the seeding is wrong, and folding would hide it.
 
 void kin_dd_C15d(TString fitDir = "/home/yassid/C15d_fit/", TString selFile = "pid/sel_deuteron_C15d.root",
-                 TString outDir = "dd/plots/", Double_t chi2Cut = 5.0, Double_t keMax = 60.0)
+                 TString outDir = "dd/plots/", Double_t chi2Cut = 5.0, Double_t keMax = 60.0,
+                 /// The IC value is carried THROUGH to the ntuple, not cut on here, so the beam
+                 /// window can be moved in the viewer instead of being frozen at cache-build time.
+                 /// Every earlier IC decision was baked into a selection file, which meant changing
+                 /// the window cost a full rebuild and there was no way to see what a window was
+                 /// actually selecting before committing to it.
+                 TString pointsFile = "pid/points_C15d.root")
 {
    gSystem->mkdir(outDir, kTRUE);
 
@@ -45,6 +51,34 @@ void kin_dd_C15d(TString fitDir = "/home/yassid/C15d_fit/", TString selFile = "p
       }
       fs->Close();
       std::cout << "  selection : " << keep.size() << " gated deuteron tracks\n";
+   }
+
+   // ---- IC join ------------------------------------------------------------------------------
+   // Same (run, event, trackID) key as the selection above. npulse rides along because the IC
+   // window was chosen on the single-pulse spectrum, so a viewer that lets the window move has to
+   // be able to reproduce the single-pulse condition too.
+   std::map<Long64_t, std::pair<float, int>> icMap;
+   if (pointsFile.Length() && !gSystem->AccessPathName(pointsFile)) {
+      TFile *fp = TFile::Open(pointsFile);
+      TTree *tp = fp ? (TTree *)fp->Get("pts") : nullptr;
+      if (tp) {
+         Int_t pr, pe, pt, pn;
+         Float_t pic;
+         tp->SetBranchAddress("run", &pr);
+         tp->SetBranchAddress("event", &pe);
+         tp->SetBranchAddress("trackID", &pt);
+         tp->SetBranchAddress("npulse", &pn);
+         tp->SetBranchAddress("ic", &pic);
+         for (Long64_t i = 0; i < tp->GetEntries(); ++i) {
+            tp->GetEntry(i);
+            icMap[key(pr, pe, pt)] = {pic, pn};
+         }
+      }
+      fp->Close();
+      std::cout << "  IC join   : " << icMap.size() << " tracks carry an IC value\n";
+   } else {
+      std::cout << "\033[1;33m  IC join   : " << pointsFile
+                << " not found -- ic will be -1 and the viewer's IC control stays disabled\033[0m\n";
    }
 
    TChain ch("kin");
@@ -75,6 +109,10 @@ void kin_dd_C15d(TString fitDir = "/home/yassid/C15d_fit/", TString selFile = "p
    dd.Branch("theta", &thX, "theta/D");
    dd.Branch("vz", &vz, "vz/D");
    dd.Branch("chi2ndf", &c2, "chi2ndf/D");
+   Float_t icv = -1;
+   Int_t npul = 0;
+   dd.Branch("ic", &icv, "ic/F");
+   dd.Branch("npulse", &npul, "npulse/I");
 
    Long64_t nAll = 0, nSel = 0, nBack = 0;
    for (Long64_t i = 0; i < ch.GetEntries(); ++i) {
@@ -89,6 +127,11 @@ void kin_dd_C15d(TString fitDir = "/home/yassid/C15d_fit/", TString selFile = "p
       if (thX > 90)
          ++nBack;
       h->Fill(thX, keX);
+      {
+         auto it = icMap.find(key(run, event, track));
+         icv = (it == icMap.end()) ? -1.f : it->second.first;
+         npul = (it == icMap.end()) ? 0 : it->second.second;
+      }
       dd.Fill();
    }
    fo.cd();

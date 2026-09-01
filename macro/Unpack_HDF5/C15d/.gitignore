@@ -4,3 +4,7 @@ plots/
 pid/points_C15d.root
 pid/sel_*.root
 pid/raw/
+plots_*/
+*.json.bak
+.overnight_DONE
+.overnight_runs.txt

@@ -91,6 +91,32 @@ static TGraph *dpLocusGraph(bool flip, double Eb, double exStar, int colour,
    return g;
 }
 
+
+/// Ejectile and residual masses for the species the drawer is gating, so [Locus check] compares a
+/// band against ITS OWN channel. Everything below hangs off one fact: the compound is 15C + d, so
+/// Z = 6+1 = 7 and A = 15+2 = 17, and fixing the ejectile fixes the residual.
+///     ejectile p (1,1) -> 16C      d (1,2) -> 15C      t (1,3) -> 14C
+///              3He (2,3) -> 14B    alpha (2,4) -> 13B
+/// Before this, every locus used the (d,p) proton/16C default whatever species was being drawn --
+/// so checking a deuteron gate against "the locus" silently checked it against the proton channel.
+static void c15dChannelMasses(int Z, int A, double &m3Amu, double &m4Amu)
+{
+   struct E { int Z, A; double m3, m4; };
+   static const E tab[] = {
+      {1, 1, 1.00782503, 16.0147413},   // (d,p)  -> 16C
+      {1, 2, 2.01410178, 15.0105993},   // (d,d)  -> 15C  (elastic)
+      {1, 3, 3.01604928, 14.0032420},   // (d,t)  -> 14C
+      {2, 3, 3.01602932, 14.025404},    // (d,3He)-> 14B
+      {2, 4, 4.00260325, 13.017780},    // (d,a)  -> 13B
+   };
+   for (const auto &e : tab)
+      if (e.Z == Z && e.A == A) { m3Amu = e.m3; m4Amu = e.m4; return; }
+   // unknown ejectile: fall back to the mass number, which is right to ~0.1 % and better than
+   // silently drawing the proton channel
+   m3Amu = A;
+   m4Amu = 17 - A;
+}
+
 class C15dGateDraw : public TObject {
 public:
    C15dGateDraw(TString outJson, TString cache, TString refP, TString refD, double xMax, double yMax,
@@ -98,6 +124,9 @@ public:
       : fOut(outJson), fXmax(xMax), fYmax(yMax), fIcLo(icLo), fIcHi(icHi), fShowLocus(showLocus),
         fEbeam(eBeam), fFlip(flipPolar), fZ(Z), fA(A)
    {
+      c15dChannelMasses(fZ, fA, fM3, fM4);
+      printf("channel: ejectile Z=%d A=%d (m3 %.6f u), residual m4 %.6f u\n", fZ, fA, fM3, fM4);
+
       fH = new TH2F("hpt",
                     Form("C15d PID, gain matched, %s  --  draw the gate"
                          ";#sqrt{dE/dx};B#rho [T#upointm]",
@@ -208,13 +237,13 @@ public:
       // conventions are drawn because which one the data uses is exactly what silently goes wrong
       // -- solid is the convention in use (flipPolar), dashed is the other one. If the selection
       // follows the DASHED curve, the flipPolar argument is set the wrong way round.
-      auto *gUse = dpLocusGraph(fFlip, fEbeam, 0.0, kRed + 1);
-      auto *gAlt = dpLocusGraph(!fFlip, fEbeam, 0.0, kGray + 2);
+      auto *gUse = dpLocusGraph(fFlip, fEbeam, 0.0, kRed + 1, fM3, fM4);
+      auto *gAlt = dpLocusGraph(!fFlip, fEbeam, 0.0, kGray + 2, fM3, fM4);
       gAlt->SetLineStyle(2);
       gAlt->Draw("L same");
       gUse->Draw("L same");
       // 12C 3.368 MeV 2+ : the first excited state, so the g.s. band can be told from its neighbour
-      auto *gEx = dpLocusGraph(fFlip, fEbeam, 3.368, kMagenta + 1);
+      auto *gEx = dpLocusGraph(fFlip, fEbeam, 3.368, kMagenta + 1, fM3, fM4);
       gEx->SetLineStyle(7);
       gEx->Draw("L same");
       auto *leg = new TLegend(0.60, 0.72, 0.88, 0.88);
@@ -433,7 +462,7 @@ public:
       // than by eye. Deuterons are the natural contaminant here: same Z, so the same charge state,
       // and a rigidity that runs through the same region of the plane.
       if (fShowDeut) {
-         if (!fDeutLoc) fDeutLoc = dpLocusGraph(fFlip, fEbeam, 0.0, kViolet + 1, 2.014102, 13.003355);
+         if (!fDeutLoc) fDeutLoc = dpLocusGraph(fFlip, fEbeam, 0.0, kViolet + 1, 2.01410178, 15.0105993);
          if (fDeutLoc && fDeutLoc->GetN() > 1) { fDeutLoc->SetLineWidth(3); fDeutLoc->SetLineStyle(2); fDeutLoc->Draw("L same"); }
       }
       // An empty TGraph makes TGraphPainter print "illegal number of points (0)" on every
@@ -462,9 +491,20 @@ private:
          return;
       }
       float x, y, pol, ic = -1;
+      int npulse = 1;
       t->SetBranchAddress("sqrtdedx", &x);
       t->SetBranchAddress("brho", &y);
       t->SetBranchAddress("polar", &pol);
+      // ★ SINGLE PULSE, to match apply_gate_C15d.C. The IC window was chosen on the single-pulse
+      // spectrum and pid/ic_C15d.json records singlePulse: true, so a drawer that applies the
+      // window WITHOUT this condition shows a plane 8.2 % larger than the one the gate is later
+      // applied to (361340 against 333849 tracks) -- the extra being pile-up. The gate would then
+      // be drawn against a background that is not there at application time. apply_gate and
+      // gate_events already had to be reconciled over exactly this; the drawer was still the odd
+      // one out.
+      const bool hasNP = t->GetBranch("npulse") != nullptr;
+      if (hasNP)
+         t->SetBranchAddress("npulse", &npulse);
       // NO ic BRANCH MEANS NO IC CUT, not an IC of -1. Left as it was, a points file without the
       // branch put every track at ic = -1, outside any window, and the drawer opened on an empty
       // plane reporting "0 inside IC (0.0%)" -- which reads as "this beam has no such particles"
@@ -491,6 +531,10 @@ private:
          // but it must be counted rather than vanish.
          if (icCutOn && hasIC && ic < 0)
             continue;
+         // Same condition the applier uses, and only when the IC window is actually on: with the
+         // window disabled the drawer is deliberately showing the raw plane.
+         if (icCutOn && hasNP && npulse != 1)
+            continue;
          ++nCut;
          fX.push_back(x);
          fY.push_back(y);
@@ -498,14 +542,18 @@ private:
          fH->Fill(x, y);
          // mark the tracks sitting on the (d,p) g.s. locus. Whether the stored polar is theta_lab
          // or 180 - theta_lab is a CONVENTION, so it is an argument rather than an assumption.
-         double b = dpBrhoC15d(fFlip ? 180.0 - pol : pol, fEbeam);
+         double b = dpBrhoC15d(fFlip ? 180.0 - pol : pol, fEbeam, 0.0, fM3, fM4);
          if (b > 0 && std::fabs(y - b) / b < fLocusTol) {
             if (!fOnLocus) fOnLocus = new TGraph();
             fOnLocus->SetPoint(fOnLocus->GetN(), x, y);
          }
       }
-      printf("=== %s: %ld tracks, %ld inside IC [%.0f,%.0f] (%.1f%%) ===\n", cache.Data(), nAll, nCut,
-             fIcLo, fIcHi, nAll ? 100.0 * nCut / nAll : 0.0);
+      printf("=== %s: %ld tracks, %ld inside IC [%.0f,%.0f]%s (%.1f%%) ===\n", cache.Data(), nAll, nCut,
+             fIcLo, fIcHi, (fIcLo >= 0 && fIcHi > fIcLo && hasNP) ? " and single-pulse" : "",
+             nAll ? 100.0 * nCut / nAll : 0.0);
+      if (fIcLo >= 0 && fIcHi > fIcLo && !hasNP)
+         printf("\033[1;33mno npulse branch -- pile-up NOT removed, so this plane is wider than the "
+                "one apply_gate_C15d.C will select on\033[0m\n");
       f->Close();
    }
 
@@ -514,9 +562,22 @@ private:
    TCutG *LoadRef(TString ref, int colour, const char *what)
    {
       if (ref.IsNull()) return nullptr;
-      std::ifstream in(ref.Data());
-      if (!in) { printf("no %s at %s (skipped)\n", what, ref.Data()); return nullptr; }
-      std::string s((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+      // Read with C stdio. Two cling limitations rule out the obvious C++ idioms here:
+      //   * std::string s((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+      //     fails to COMPILE ("no matching conversion for functional-style cast"), taking the
+      //     whole macro down so the GUI never appears;
+      //   * the ostringstream/rdbuf replacement compiles but fails to LINK at run time with
+      //     "symbol '__clang_call_terminate' unresolved", killing the drawer after the plane has
+      //     already been read -- which looks like a GUI crash rather than an I/O problem.
+      // fread has neither failure mode.
+      FILE *fp = fopen(ref.Data(), "rb");
+      if (fp == nullptr) { printf("no %s at %s (skipped)\n", what, ref.Data()); return nullptr; }
+      std::string s;
+      char buf[4096];
+      size_t got = 0;
+      while ((got = fread(buf, 1, sizeof(buf), fp)) > 0)
+         s.append(buf, got);
+      fclose(fp);
       auto p = s.find('[', s.find("vertices"));
       if (p == std::string::npos) return nullptr;
       std::vector<double> v;
@@ -540,7 +601,17 @@ private:
    void MakeGui()
    {
       auto *main = new TGMainFrame(gClient->GetRoot(), 1150, 900);
-      main->SetWindowName("a1954 14C(p,t)12C PID  --  draw the triton gate");
+      // Title follows the species the drawer was OPENED with, never a hardcoded one. The old
+      // fixed "14C(p,t)12C -- triton gate" text survived the port from a1954 and said triton
+      // whatever Z/A was passed, which is the same class of mislabelling that already caused a
+      // proton gate to be saved under the deuteron name.
+      main->SetWindowName(Form("C15d PID  --  draw the %s gate (Z=%d A=%d)",
+                               (fZ == 1 && fA == 1)   ? "proton"
+                               : (fZ == 1 && fA == 2) ? "deuteron"
+                               : (fZ == 1 && fA == 3) ? "triton"
+                               : (fZ == 2 && fA == 4) ? "alpha"
+                                                      : "selected",
+                               fZ, fA));
       auto *bar = new TGHorizontalFrame(main);
       const char *lbl[] = {"Draw new gate", "Evaluate", "Locus check", "Locus dots on/off",
                            "(p,d) band on/off", "Save JSON", "Save PNG", "Redraw", "Quit"};
@@ -644,6 +715,7 @@ private:
    TGLabel *fLabel = nullptr;
    TGTextEntry *fName = nullptr;
    int fZ = 1, fA = 1;   ///< species written into the gate JSON
+   double fM3 = 1.00782503, fM4 = 16.0147413; ///< ejectile/residual for THIS species' locus
    std::vector<float> fX, fY, fPol;
    TGraph *fOnLocus = nullptr;
    double fLocusTol = 0.15;

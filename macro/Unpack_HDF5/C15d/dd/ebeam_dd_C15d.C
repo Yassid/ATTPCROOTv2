@@ -42,7 +42,16 @@ double Trecoil(double thDeg, double Ebeam)
 
 void ebeam_dd_C15d(TString kinFile = "dd/plots/dd_kin_C15d.root", TString outDir = "dd/plots/",
                    Double_t thLo = 42, Double_t thHi = 78, Double_t thStep = 2.0,
-                   Double_t seedTheta = 50.0, Double_t keMinUse = 2.0)
+                   Double_t seedTheta = 50.0,
+                   /// ★ KE FLOOR, and it must sit ABOVE the low-energy bulk. At 2.0 the per-slice
+                   /// ridge finder locks onto that bulk instead of the elastic ridge and walks the
+                   /// beam energy down to the floor of its own scan range -- it reported 20 MeV on
+                   /// a sample whose ridge is at 188, with a chi2/ndf of 30-40 that looked like a
+                   /// bad fit rather than the wrong peak. The estimate climbs 20 -> 46 -> 143 ->
+                   /// 163 -> 173 as the floor is raised and only converges past ~24 MeV, where it
+                   /// gives 186-191 and agrees with the locus-count estimator. The bulk peaks near
+                   /// 4 MeV but its tail reaches ~20, so a floor of a few MeV is not enough.
+                   Double_t keMinUse = 24.0)
 {
    gSystem->mkdir(outDir, kTRUE);
    if (gSystem->AccessPathName(kinFile)) {

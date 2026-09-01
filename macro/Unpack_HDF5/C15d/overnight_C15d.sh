@@ -57,7 +57,13 @@ root -b -q 'mkpid_C15d.C("/home/yassid/C15d_reco/","plots/",340,0,85,300,0,2.5,"
 grep -E "tracks|selected|wrote" "$LOG/overnight_plane.log" | tail -3 || true
 
 say "stage 5/6  GENFIT+CATIMA deuteron fits, ungated, subset"
-ls -S /home/yassid/C15d_reco/*_reco.root 2>/dev/null | head -12 | xargs -n1 basename | sed 's/_reco.root//' > "$HERE/.overnight_runs.txt"
+# D2 ONLY. Sorting by size and taking the top 12 selects the HYDROGEN runs (>=106), which are
+# the largest files on disk -- 7 of the 12 came out H2 the first time this ran, and fitting a
+# D2/H2 mixture as one channel put the (d,d) elastic ridge at 54 MeV instead of 190. Filter on
+# the run number FIRST, then take the largest of what remains.
+ls -S /home/yassid/C15d_reco/*_reco.root 2>/dev/null \
+   | xargs -r -n1 basename | sed 's/_reco.root//' \
+   | awk -F_ '$2+0 <= 103' | head -12 > "$HERE/.overnight_runs.txt"
 while read -r r; do
    [[ -n "$r" ]] || continue
    [[ -s "/home/yassid/C15d_fit/${r}_kin_d.root" ]] && continue
