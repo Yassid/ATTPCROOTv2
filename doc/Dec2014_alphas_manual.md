@@ -675,6 +675,48 @@ angles are individually mis-assigned. **Do not "fix" one without refitting the o
 Caveat: run 100 is 300 torr and run 128 is 150 torr. The tilt is mechanical and the beam
 line common, so the axis should not move, but that has not been demonstrated independently.
 
+#### 5.4.9 `TBEntrance` confirmed, and the sharpest test of the correction
+
+`verify_production.py` reports the beam crossing the detector axis at 1157 ± 6 mm where the
+origin puts it at 1000 — an apparent 157 mm systematic. Since the vertex position *is* the
+beam energy in thick-target kinematics, that would have biased the whole excitation
+function, so it was worth chasing.
+
+**It was a method artefact.** That estimate, and a second one giving 846 mm, both
+extrapolated a closest-approach point *per event* from a short lever arm: a small slope
+error moves the crossing a long way, and the per-event distribution has an IQR of ~400 mm.
+A median of fragile numbers is still fragile.
+
+Fitting each event's beam line and then averaging the **line parameters** — evaluating the
+closest approach once, at the end — gives (`find_tbentrance.py`):
+
+| run | | `TBEntrance` | miss distance |
+|---|---|---|---|
+| 100 | magnet **off** | **320 ± 4** | 12.5 mm |
+| 128 | corrected | **319 ± 10** | 16.3 mm |
+| 128 | *uncorrected* — control | 100 ± 25 | 81 mm |
+
+**`TBEntrance` = 320 is correct as it stands**, confirmed to ±4 tb (±15 mm) on a run where
+B = 0 and no drift correction has to be trusted. The energy scale of the excitation function
+is not biased.
+
+The control row is also the **sharpest demonstration of the drift correction so far**:
+without it, the beam's closest approach lands 220 tb (~790 mm) from where the magnet-off run
+puts it and misses the axis by 81 mm. With it, 319 ± 10 against 320 ± 4 — agreement to one
+time bucket, with nothing tuned to achieve it.
+
+> **Do not average positions in bins of drift time and fit that.** It looks more robust than
+> per-event fitting and is badly biased: at a given tb the events do not all contain the
+> same track, so the mean is diluted toward the pad-plane centre and the slope shrinks. That
+> version returned a beam polar angle of **3.72°** where every other method gives ~6.4°, and
+> an implied shift of +580 mm. Regression dilution — average the fit *parameters*, never the
+> data being fitted.
+
+Caveat: the polar angle from this particular estimator also runs low (6.10° on run 100)
+because a median over events including some contaminated fits shrinks the slope. Quote
+angles from the clustered fit in `verify_production.py` instead. The closest-approach
+comparison between runs is unaffected, since the same shrinkage applies to all three rows.
+
 ### 5.5 Trigger efficiency
 
 The simulation has **no trigger**, so comparing total charge per event between simulation and
@@ -818,6 +860,7 @@ Ordered by how much time each one cost.
 | `trigger_eff.py` | trigger turn-on from charge spectra (takes exp/sim/out paths) |
 | `charge_shapes.py` | why the normalisation is not valid; the pile-up signature (§5.5) |
 | `rotate_to_beam.py` | validates the correction on **real data** (§5.4.8) |
+| `find_tbentrance.py` | confirms the longitudinal origin (§5.4.9) |
 | `view_event.py`, `analyse_event.py`, `vertex_tangent.py`, `validate130.py` | single-event tools |
 | `eloss_alpha_heco2.txt` | CATIMA α energy loss, He:CO₂ 90-10 @ 150 torr |
 
