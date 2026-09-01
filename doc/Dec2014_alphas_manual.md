@@ -249,8 +249,15 @@ On run 128 this closes to **max |applied − predicted| = 0.0011 mm over 19 465 
 ### 3.8 Known limitation
 
 `ThetaPad` and `ThetaRot` are **not individually identified** — only their net effect is
-constrained by the data. Changing `ThetaPad` alone silently breaks the correction. Resolving
-the degeneracy needs the pad-map geometry and has not been done.
+constrained by the data. Changing `ThetaPad` alone silently breaks the correction.
+
+**Partially resolved** by the beam-axis test in §5.4.8: measured against the B = 0 beam,
+`ThetaRot` behaves as a **pad-frame** azimuth (1.56° away) rather than a field-frame one
+rotated by `ThetaPad` (10.43° away). `AtLangevin.h` documents it as pad-frame but rotates by
+`ThetaPad` anyway, and `ThetaPad` — itself fitted to the shear — absorbs the difference. The
+net correction is therefore right while the two angles are individually mis-assigned. **Do
+not "fix" one without refitting the other.** A clean separation still needs the pad-map
+geometry.
 
 ---
 
@@ -778,7 +785,9 @@ Ordered by how much time each one cost.
   normalisation window. Next step: check whether the simulated vertex distribution is the
   cause, by comparing a non-reacting beam-only sample against the data's main peak.
 - **Pile-up** is absent from the simulation, so the high-charge region cannot be compared.
-- **`ThetaPad`/`ThetaRot` degeneracy** unresolved (§3.8).
+- **`ThetaPad`/`ThetaRot` degeneracy** — partially resolved (§3.8, §5.4.8): `ThetaRot` is a
+  pad-frame azimuth, and `ThetaPad` absorbs the mis-assignment. A clean separation still
+  needs the pad-map geometry.
 - **Bradt thesis eq. 3.14** (detector → beam frame, left-handed) not implemented.
 - **Angular distributions per reaction energy** vs published data — blocked on acceptance.
 - **GENFIT port** deferred; its precision cannot yet be exploited.
@@ -808,6 +817,7 @@ Ordered by how much time each one cost.
 | `kinematics.py` | acceptance-independent closure test |
 | `trigger_eff.py` | trigger turn-on from charge spectra (takes exp/sim/out paths) |
 | `charge_shapes.py` | why the normalisation is not valid; the pile-up signature (§5.5) |
+| `rotate_to_beam.py` | validates the correction on **real data** (§5.4.8) |
 | `view_event.py`, `analyse_event.py`, `vertex_tangent.py`, `validate130.py` | single-event tools |
 | `eloss_alpha_heco2.txt` | CATIMA α energy loss, He:CO₂ 90-10 @ 150 torr |
 
