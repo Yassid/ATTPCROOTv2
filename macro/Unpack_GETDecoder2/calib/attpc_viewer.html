@@ -1,4 +1,4 @@
-<title>AT-TPC Dec 2014 — beam-frame event viewer</title>
+<title>AT-TPC Dec 2014 — event viewer</title>
 <style>
   :root{
     --ground:#0e1418; --panel:#151d23; --panel2:#1b262d; --rule:#24323b;
@@ -99,7 +99,7 @@
 <div class="wrap">
   <header>
     <div class="eyebrow">AT-TPC · NSCL · December 2014 · run 128</div>
-    <h1>Beam-frame event viewer</h1>
+    <h1>Event viewer: detector frame vs solenoid frame</h1>
     <p class="sub">Ten α+α elastic candidates from run 128, clustered into a <b>beam</b>
     track (amber) and <b>two arms</b> (blue, green) leaving a fitted <b>vertex</b> (red
     ring). Every dot is one pad hit; positions are Lorentz-corrected. Toggle
@@ -134,11 +134,11 @@
           <button class="v" data-view="beam">down beam</button>
           <button class="v" data-view="iso">iso</button>
         </div>
-        <button class="v" id="tilt" style="width:100%;margin-top:6px">de-tilt: off</button>
+        <button class="v" id="tilt" style="width:100%;margin-top:6px">frame: detector</button>
       </div>
 
       <div class="block">
-        <div class="blabel">This event · angle from detector axis</div>
+        <div class="blabel">This event</div>
         <table class="read" id="read"></table>
       </div>
 
@@ -174,10 +174,35 @@ const LAYERS = [
   {k:"a1",   nm:"Arm 1",          v:"--arm1",  on:true},
   {k:"a2",   nm:"Arm 2",          v:"--arm2",  on:true},
   {k:"vx",   nm:"Vertex",         v:"--vtx",   on:true},
-  {k:"ax",   nm:"Detector axis",  v:"--axis",  on:true},
+  {k:"ax",   nm:"Both axes",      v:"--axis",  on:true},
   {k:"vol",  nm:"Active volume",  v:"--axis",  on:true},
 ];
-let deTilt = false, refit = true;   // rotate the event so the beam lies on the detector axis
+// FRAME. Two consistent frames, never mixed:
+//   detector  -- pad coordinates. Cylinder is axis-aligned; the BEAM is tilted.
+//   solenoid  -- the beam/B frame. The beam runs along the frame axis and the DETECTOR is
+//                tilted, which is what is physically true: the TPC is mounted at an angle
+//                inside the solenoid.
+// Rotating only the hits (what this did before) drew hits in one frame and geometry in the
+// other, which is why the tilt never looked like a tilt of the detector.
+let deTilt = false, refit = true;
+
+// Rodrigues rotation taking the beam direction onto +z. Same matrix the analysis uses.
+const RMAT = (function(b){
+  const v=[b[1]*1-0*b[2], 0*b[0]-b[0]*1, 0], c=b[2];   // b x z, and b.z
+  const s=Math.hypot(v[0],v[1],v[2]);
+  if(s<1e-12) return [[1,0,0],[0,1,0],[0,0,1]];
+  const K=[[0,-v[2],v[1]],[v[2],0,-v[0]],[-v[1],v[0],0]];
+  const M=[[1,0,0],[0,1,0],[0,0,1]], k=(1-c)/(s*s);
+  const KK=[[0,0,0],[0,0,0],[0,0,0]];
+  for(let i=0;i<3;i++)for(let j=0;j<3;j++)for(let m=0;m<3;m++) KK[i][j]+=K[i][m]*K[m][j];
+  const R=[[0,0,0],[0,0,0],[0,0,0]];
+  for(let i=0;i<3;i++)for(let j=0;j<3;j++) R[i][j]=M[i][j]+K[i][j]+KK[i][j]*k;
+  return R;
+})(DATA.beam);
+
+const ap = (M,p) => M ? [M[0][0]*p[0]+M[0][1]*p[1]+M[0][2]*p[2],
+                         M[1][0]*p[0]+M[1][1]*p[1]+M[1][2]*p[2],
+                         M[2][0]*p[0]+M[2][1]*p[1]+M[2][2]*p[2]] : p;   // rotate the event so the beam lies on the detector axis
 
 let yaw = -Math.PI/2, pitch = 0.16, zoom = 1, idx = 1;
 
@@ -218,13 +243,13 @@ function line(a,b,color,w,dash){
   ctx.beginPath(); ctx.moveTo(A[0],A[1]); ctx.lineTo(B[0],B[1]); ctx.stroke(); ctx.restore();
 }
 
-function volume(){
+function volume(M){
   const R=275, z0=0, z1=1000, N=48, c=col("--axis");
   ctx.save(); ctx.globalAlpha=.30; ctx.strokeStyle=c; ctx.lineWidth=1;
   for(const z of [z0,z1]){
     ctx.beginPath();
     for(let i=0;i<=N;i++){
-      const t=i/N*Math.PI*2, P=proj([R*Math.cos(t),R*Math.sin(t),z]);
+      const t=i/N*Math.PI*2, P=proj(ap(M,[R*Math.cos(t),R*Math.sin(t),z]));
       i?ctx.lineTo(P[0],P[1]):ctx.moveTo(P[0],P[1]);
     }
     ctx.stroke();
@@ -232,7 +257,7 @@ function volume(){
   ctx.globalAlpha=.18;
   for(let i=0;i<8;i++){
     const t=i/8*Math.PI*2;
-    const A=proj([R*Math.cos(t),R*Math.sin(t),z0]), B=proj([R*Math.cos(t),R*Math.sin(t),z1]);
+    const A=proj(ap(M,[R*Math.cos(t),R*Math.sin(t),z0])), B=proj(ap(M,[R*Math.cos(t),R*Math.sin(t),z1]));
     ctx.beginPath(); ctx.moveTo(A[0],A[1]); ctx.lineTo(B[0],B[1]); ctx.stroke();
   }
   ctx.restore();
@@ -246,7 +271,8 @@ function draw(){
   ctx.clearRect(0,0,cv.width,cv.height);
   ctx.fillStyle = col("--panel"); ctx.fillRect(0,0,cv.width,cv.height);
 
-  if(LAYERS.find(l=>l.k==="vol").on) volume();
+  const M = deTilt ? RMAT : null;      // geometry transform for the active frame
+  if(LAYERS.find(l=>l.k==="vol").on) volume(M);
 
   const SETS=[["beam","--beamc","qb"],["a1","--arm1","q1"],["a2","--arm2","q2"]];
 
@@ -279,9 +305,12 @@ function draw(){
   }
 
   if(LAYERS.find(l=>l.k==="ax").on){
-    // Detector axis: the actual x=y=0 line, not a direction through the event. The point
-    // of this page is partly that the beam does NOT sit on it.
-    line([0,0,0],[0,0,1050], col("--axis"), 1.5, [9,7]);
+    // Both reference axes, each carried into the active frame. The angle between them IS
+    // the detector tilt, and it stays visible whichever frame you are in -- what changes is
+    // which one looks straight.
+    const B=DATA.beam, L=1050;
+    line(ap(M,[0,0,0]), ap(M,[0,0,L]), col("--axis"), 1.6, [9,7]);
+    line(ap(M,[0,0,0]), ap(M,[B[0]/B[2]*L, B[1]/B[2]*L, L]), col("--beamc"), 1.4, [4,5]);
   }
 
   if(LAYERS.find(l=>l.k==="vx").on){
@@ -344,7 +373,8 @@ LAYERS.forEach((L,i)=>{
 
 const VIEWS={side:[-Math.PI/2,0], top:[-Math.PI/2,Math.PI/2], beam:[0,0], iso:[-0.62,0.30]};
 document.getElementById("tilt").onclick=function(){
-  deTilt=!deTilt; refit=true; this.textContent="de-tilt: "+(deTilt?"on":"off"); draw();
+  deTilt=!deTilt; refit=true;
+  this.textContent="frame: "+(deTilt?"solenoid (beam)":"detector"); draw();
 };
 document.querySelectorAll("button.v").forEach(b=>{
   b.onclick=()=>{ [yaw,pitch]=VIEWS[b.dataset.view]; draw(); };
