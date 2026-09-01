@@ -606,6 +606,68 @@ In order of how often each has actually been the cause:
 4. **The corrected error exceeds the uncorrected one** — a sign convention; the forward and
    reverse steps are adding rather than cancelling.
 
+#### 5.4.8 An independent test on real data: rotate the event onto the beam axis
+
+Everything above uses the simulation, which feeds events through **the same Langevin helper
+going in as coming out**. That can only show the code inverts its own forward model — an
+error shared by both directions cancels invisibly. This test uses **no simulation**.
+
+**The idea** (Yassid's): **B** is parallel to the beam and the detector is tilted, so the
+beam sits at `TiltAng` from the pad-plane normal. If the correction is right, rotating a
+*corrected* event by that tilt lands the beam on the detector axis — the event looks as
+though the detector had never been tilted. If the correction is wrong, a residual tilt
+survives the rotation.
+
+```bash
+# dump 3000 events of a magnet-OFF run and a magnet-ON run
+root -l -b -q 'dump_hits.C(".../alpha_run_0100_hits.root","hits_run100.csv","hits",3000)'
+root -l -b -q 'dump_hits.C(".../alpha_run_0128_hits.root","hits_run128.csv","hits",3000)'
+$PY calib/rotate_to_beam.py hits_run100.csv hits_run128.csv
+```
+
+Result on 3000 events of each:
+
+| quantity | value |
+|---|---|
+| beam axis measured at B=0 (run 100, raw) | 5.44° off the detector axis |
+| run 128 **uncorrected** | 5.89° from that axis |
+| run 128 **corrected** | **1.22°** — 4.8× better |
+| **shear removed by the correction** | **4.69°** vs **4.72° predicted** |
+
+The last row is the result: the magnitude is predicted from `BField`, `EField` and
+`DriftVelocity` alone — nothing fitted to this observable — and confirmed on data to
+**0.6 %**. The residual 1.22° is consistent with the reference axis itself being uncertain
+by ~1.5°, so it bounds the correction's error rather than measuring a defect.
+
+> **Use the empirical reference, not the parameter file.** At B = 0 there is no shear, so
+> the raw run-100 beam direction *is* the beam axis, and no angle convention can be got
+> wrong. Building the reference from `TiltAng`/`ThetaRot`/`ThetaPad` instead gave an axis
+> 10.4° away and made the correction look as though it made things **worse** (5.0° → 9.2°).
+> That was entirely an artefact of the reference, and it is the trap to avoid here.
+
+**This partially breaks the `ThetaPad`/`ThetaRot` degeneracy of §3.8.** Comparing both
+readings of `ThetaRot` against the measured beam axis:
+
+| interpretation | distance from the measured axis |
+|---|---|
+| field-frame azimuth, then rotated by `ThetaPad` | 10.43° |
+| **pad-frame azimuth, no extra rotation** | **1.56°** |
+
+So `ThetaRot` behaves as a pad-frame azimuth. `AtLangevin.h` documents it that way but then
+rotates the result by `ThetaPad` as well; `ThetaPad` (110.9, itself fitted to the shear)
+absorbs the difference, which is why the net correction comes out right even though the two
+angles are individually mis-assigned. **Do not "fix" one without refitting the other.**
+
+> **A stale file was found doing this.** `alpha_run_0100_hits.root` had been unpacked on
+> 7 Aug, before the pad-frame fix `4bfcdb5f` landed on 11 Aug, so its stored
+> `PositionCorr` came from the old buggy correction — and it was not inert at B = 0, which
+> it must be. `GetPosition` is untouched by that code, so the raw column stayed valid. The
+> file has been regenerated. **When a corrected position looks wrong, check the file's date
+> against the last change to `AtPSA`/`AtPSASimple2` before suspecting the physics.**
+
+Caveat: run 100 is 300 torr and run 128 is 150 torr. The tilt is mechanical and the beam
+line common, so the axis should not move, but that has not been demonstrated independently.
+
 ### 5.5 Trigger efficiency
 
 The simulation has **no trigger**, so comparing total charge per event between simulation and
