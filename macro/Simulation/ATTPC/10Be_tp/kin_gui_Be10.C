@@ -121,6 +121,7 @@ public:
    void ProfileKE();
    void SavePng();
    void FitRange();
+   void SetPeakWindow();
    void Fill(TH2D *h, TH1D *hex);
 };
 
@@ -199,6 +200,8 @@ KinGui::KinGui(const TGWindow *p, TString root, TString outDir) : fRoot(root), f
    ctl->AddFrame(new TGLabel(ctl, "        bins     min      max"), new TGLayoutHints(kLHintsLeft, 4, 4, 0, 0));
    mkrow("#lab", fNx, fXlo, fXhi, 360, 0, 180, 500);
    mkrow("KE ", fNy, fYlo, fYhi, 275, 0, 55, 510);
+   auto *bPeak = new TGTextButton(ctl, "set #theta_{cm} = transfer peak (2-45)", 405);
+   ctl->AddFrame(bPeak, new TGLayoutHints(kLHintsExpandX, 8, 8, 6, 2));
    auto *bFit = new TGTextButton(ctl, "fit range to data", 404);
    ctl->AddFrame(bFit, new TGLayoutHints(kLHintsExpandX, 8, 8, 4, 6));
 
@@ -253,6 +256,7 @@ KinGui::KinGui(const TGWindow *p, TString root, TString outDir) : fRoot(root), f
    fLogZ->Connect("Clicked()", "KinGui", this, "Redraw()");
    fVtxE->Connect("Clicked()", "KinGui", this, "Redraw()");
    bFit->Connect("Clicked()", "KinGui", this, "FitRange()");
+   bPeak->Connect("Clicked()", "KinGui", this, "SetPeakWindow()");
    for (TGNumberEntry *e : {fNx, fXlo, fXhi, fNy, fYlo, fYhi, fCmLo, fCmHi})
       e->Connect("ValueSet(Long_t)", "KinGui", this, "Redraw()");
    fEc->GetCanvas()->Connect("ProcessedEvent(Int_t,Int_t,Int_t,TObject*)", "KinGui", this,
@@ -523,11 +527,24 @@ void KinGui::ProjectEx()
    {
       double q[3] = {0.25, 0.5, 0.75}, v[3];
       h->GetQuantiles(3, v, q);
+      double n = h->GetEntries(), tail = 0;
+      for (int b = 1; b <= h->GetNbinsX(); ++b)
+         if (std::fabs(h->GetBinCenter(b) - v[1]) > 1.0) tail += h->GetBinContent(b);
       auto *tx = new TLatex();
       tx->SetNDC();
-      tx->SetTextSize(0.035);
-      tx->DrawLatex(0.14, 0.86, Form("IQR/1.349 = %.3f MeV   (%s E_{beam})", (v[2] - v[0]) / 1.349,
+      tx->SetTextSize(0.033);
+      tx->DrawLatex(0.14, 0.87, Form("IQR/1.349 = %.3f MeV   (%s E_{beam})", (v[2] - v[0]) / 1.349,
                                      fVtxE->IsOn() ? "vertex" : "constant"));
+      // The TAIL FRACTION is the number that explains a bad-looking projection, and it is almost
+      // always the angular window rather than anything else: 3 % beyond +-1 MeV over theta_cm
+      // 2-45, but 25 % over 2-180.
+      tx->DrawLatex(0.14, 0.82, Form("beyond #pm1 MeV: %.1f %%   (#theta_{cm} %.0f-%.0f#circ)",
+                                     n > 0 ? 100 * tail / n : 0.0, fCmLo->GetNumber(), fCmHi->GetNumber()));
+      if (fCmHi->GetNumber() > 50) {
+         tx->SetTextColor(kRed + 1);
+         tx->DrawLatex(0.14, 0.77, "window includes #theta_{cm} > 50#circ: fast forward protons,");
+         tx->DrawLatex(0.14, 0.73, "#sigma(KE)/KE 3-6 %, irreducible. Use the transfer peak.");
+      }
    }
    for (int l = 0; l < GNL; ++l) {
       if (!fLev[l]->IsOn()) continue;
@@ -562,6 +579,30 @@ void KinGui::ProfileKE()
    g->Draw("L SAME");
    c->Modified();
    c->Update();
+}
+
+/// THE ANGULAR WINDOW IS THE OTHER HALF OF THE RESOLUTION, and it is easy to forget because the
+/// default (everything) looks like the honest choice. Measured on the ground state, E_x width with
+/// the vertex beam energy already applied:
+///
+///     theta_cm     const Eb   vertex Eb   floor    median KE   sigma(KE)/KE
+///     2-20           0.195      0.077     0.020      4.2 MeV       0.73 %
+///     20-45          0.241      0.097     0.021      7.3 MeV       0.67 %
+///     45-90          0.653      0.601     0.026     18.4 MeV       3.42 %
+///     90-180         1.364      1.369     0.032     37.4 MeV       5.66 %
+///
+/// The vertex correction is worth a factor 2.5 backward and NOTHING forward -- at theta_cm 90-180
+/// it is fractionally worse. The reason is in the last column: a fast forward proton has a helix
+/// radius comparable to the chamber and traverses a short arc, so its curvature, hence its
+/// momentum, is badly determined. 5.7 % of 37 MeV is 2.1 MeV, and dEx/dKE ~ 0.7 turns that into
+/// 1.4 MeV of excitation energy. No correction reaches it: the floor is 0.03 MeV, so it is all
+/// detector. Opening the window to 0-180 puts 43 % of the sample in that regime, which is exactly
+/// the tail that makes this projection look worse than tp_spectrum_Be10.C's.
+void KinGui::SetPeakWindow()
+{
+   fCmLo->SetNumber(2);
+   fCmHi->SetNumber(45);
+   Redraw();
 }
 
 /// Snap the axes to the data actually selected, keeping the bin WIDTH the user has chosen rather
