@@ -10,6 +10,31 @@
 /// field or pad upgrade can buy. Those are properties of the reaction, not of the detector, so
 /// they should be known before a single event is generated.
 
+#include "TCanvas.h"
+#include "TF1.h"
+#include "TFile.h"
+#include "TGraph.h"
+#include "TH1.h"
+#include "TH2.h"
+#include "TKey.h"
+#include "TLegend.h"
+#include "TLine.h"
+#include "TMath.h"
+#include "TProfile.h"
+#include "TRandom.h"
+#include "TString.h"
+#include "TStyle.h"
+#include "TSystem.h"
+#include "TTree.h"
+#include "TClonesArray.h"
+#include "TFitResult.h"
+
+#include <algorithm>
+#include <cmath>
+#include <cstdio>
+#include <limits>
+#include <map>
+#include <vector>
 static double kn_om2(double x, double y, double z)
 {
    return std::sqrt(x * x + y * y + z * z - 2 * x * y - 2 * y * z - 2 * x * z);

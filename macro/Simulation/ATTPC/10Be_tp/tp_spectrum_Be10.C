@@ -28,7 +28,29 @@
 /// spectrum demands the extra state; a small one means the 0+_2 is invisible at this resolution
 /// however good the fit to it happens to look.
 
+#include "TCanvas.h"
+#include "TF1.h"
+#include "TFile.h"
+#include "TGraph.h"
+#include "TH1.h"
+#include "TH2.h"
+#include "TKey.h"
+#include "TLegend.h"
+#include "TLine.h"
+#include "TMath.h"
+#include "TProfile.h"
+#include "TRandom.h"
+#include "TString.h"
+#include "TStyle.h"
+#include "TSystem.h"
+#include "TTree.h"
+#include "TClonesArray.h"
+#include "TFitResult.h"
+
 #include <algorithm>
+#include <cmath>
+#include <cstdio>
+#include <limits>
 #include <map>
 #include <vector>
 
