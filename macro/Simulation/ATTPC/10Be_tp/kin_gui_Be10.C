@@ -105,6 +105,8 @@ private:
    TGComboBox *fCfg{nullptr}, *fSample{nullptr};
    TGCheckButton *fLev[GNL]{}, *fCurves{nullptr}, *fCmLines{nullptr}, *fLogZ{nullptr};
    TGNumberEntry *fCmLo{nullptr}, *fCmHi{nullptr};
+   TGNumberEntry *fNx{nullptr}, *fXlo{nullptr}, *fXhi{nullptr};
+   TGNumberEntry *fNy{nullptr}, *fYlo{nullptr}, *fYhi{nullptr};
    TString fRoot, fOut;
    std::vector<TString> fCfgs;
    TH2D *fH{nullptr};
@@ -118,6 +120,7 @@ public:
    void ProjectEx();
    void ProfileKE();
    void SavePng();
+   void FitRange();
    void Fill(TH2D *h, TH1D *hex);
 };
 
@@ -174,6 +177,31 @@ KinGui::KinGui(const TGWindow *p, TString root, TString outDir) : fRoot(root), f
    cmf->AddFrame(fCmHi, new TGLayoutHints(kLHintsLeft, 4, 4, 0, 0));
    ctl->AddFrame(cmf, new TGLayoutHints(kLHintsLeft, 4, 4, 2, 6));
 
+   // BINNING AND RANGE. Both, together: rebinning without being able to move the range is half a
+   // control -- the interesting structure here (the four loci separating at forward angle, the
+   // 2.109/2.251 pair merging at backward angle) only shows when the window follows the bins in.
+   ctl->AddFrame(new TGLabel(ctl, "binning and range"), new TGLayoutHints(kLHintsLeft, 4, 4, 10, 2));
+   auto mkrow = [&](const char *lab, TGNumberEntry *&n_, TGNumberEntry *&lo_, TGNumberEntry *&hi_, double nd,
+                    double lod, double hid, int idbase) {
+      auto *row = new TGHorizontalFrame(ctl);
+      row->AddFrame(new TGLabel(row, lab), new TGLayoutHints(kLHintsLeft | kLHintsCenterY, 4, 2, 0, 0));
+      n_ = new TGNumberEntry(row, nd, 4, idbase, TGNumberFormat::kNESInteger, TGNumberFormat::kNEAPositive);
+      lo_ = new TGNumberEntry(row, lod, 4, idbase + 1, TGNumberFormat::kNESRealOne);
+      hi_ = new TGNumberEntry(row, hid, 4, idbase + 2, TGNumberFormat::kNESRealOne);
+      n_->GetNumberEntry()->SetToolTipText("number of bins");
+      lo_->GetNumberEntry()->SetToolTipText("axis minimum");
+      hi_->GetNumberEntry()->SetToolTipText("axis maximum");
+      row->AddFrame(n_, new TGLayoutHints(kLHintsLeft, 2, 2, 0, 0));
+      row->AddFrame(lo_, new TGLayoutHints(kLHintsLeft, 2, 2, 0, 0));
+      row->AddFrame(hi_, new TGLayoutHints(kLHintsLeft, 2, 2, 0, 0));
+      ctl->AddFrame(row, new TGLayoutHints(kLHintsLeft, 2, 2, 1, 1));
+   };
+   ctl->AddFrame(new TGLabel(ctl, "        bins     min      max"), new TGLayoutHints(kLHintsLeft, 4, 4, 0, 0));
+   mkrow("#lab", fNx, fXlo, fXhi, 360, 0, 180, 500);
+   mkrow("KE ", fNy, fYlo, fYhi, 275, 0, 55, 510);
+   auto *bFit = new TGTextButton(ctl, "fit range to data", 404);
+   ctl->AddFrame(bFit, new TGLayoutHints(kLHintsExpandX, 8, 8, 4, 6));
+
    fCurves = new TGCheckButton(ctl, "analytic level curves", 300);
    fCurves->SetOn(kTRUE);
    ctl->AddFrame(fCurves, new TGLayoutHints(kLHintsLeft, 12, 4, 6, 1));
@@ -217,6 +245,9 @@ KinGui::KinGui(const TGWindow *p, TString root, TString outDir) : fRoot(root), f
    fCurves->Connect("Clicked()", "KinGui", this, "Redraw()");
    fCmLines->Connect("Clicked()", "KinGui", this, "Redraw()");
    fLogZ->Connect("Clicked()", "KinGui", this, "Redraw()");
+   bFit->Connect("Clicked()", "KinGui", this, "FitRange()");
+   for (TGNumberEntry *e : {fNx, fXlo, fXhi, fNy, fYlo, fYhi, fCmLo, fCmHi})
+      e->Connect("ValueSet(Long_t)", "KinGui", this, "Redraw()");
    fEc->GetCanvas()->Connect("ProcessedEvent(Int_t,Int_t,Int_t,TObject*)", "KinGui", this,
                             "OnMove(Int_t,Int_t,Int_t,TObject*)");
 
@@ -306,9 +337,19 @@ void KinGui::Redraw()
    const char *sn[3] = {"generated truth", "accepted truth", "reconstructed"};
    int samp = fSample->GetSelected();
 
+   int nx = (int)fNx->GetNumber(), ny = (int)fNy->GetNumber();
+   double xlo = fXlo->GetNumber(), xhi = fXhi->GetNumber();
+   double ylo = fYlo->GetNumber(), yhi = fYhi->GetNumber();
+   // A reversed or empty axis makes TH2D throw and takes the GUI down with it, so clamp rather
+   // than trust the entry boxes -- a user halfway through typing "180" has momentarily asked for
+   // a max of 1.
+   if (!(xhi > xlo)) xhi = xlo + 1;
+   if (!(yhi > ylo)) yhi = ylo + 1;
+   if (nx < 1) nx = 1;
+   if (ny < 1) ny = 1;
    fH = new TH2D("hKin", Form("^{10}Be(t,p)^{12}Be   %s   %s;#theta_{lab} [deg];KE_{p} [MeV]",
                               samp == 0 ? "(field-independent)" : cfg.Data(), sn[samp]),
-                 360, 0, 180, 275, 0, 55);
+                 nx, xlo, xhi, ny, ylo, yhi);
    fH->SetDirectory(nullptr);
    Fill(fH, nullptr);
    c->SetLogz(fLogZ->IsOn() ? 1 : 0);
@@ -368,7 +409,9 @@ void KinGui::Redraw()
    }
    c->Modified();
    c->Update();
-   fBar->SetText(Form("%s | %s | %.0f entries", cfg.Data(), sn[samp], fH->GetEntries()), 0);
+   fBar->SetText(Form("%s | %s | %.0f entries | bins %dx%d (%.2f deg x %.3f MeV)", cfg.Data(), sn[samp],
+                      fH->GetEntries(), nx, ny, (xhi - xlo) / nx, (yhi - ylo) / ny),
+                 0);
 }
 
 void KinGui::OnMove(Int_t, Int_t px, Int_t py, TObject *)
@@ -376,7 +419,10 @@ void KinGui::OnMove(Int_t, Int_t px, Int_t py, TObject *)
    TCanvas *c = fEc->GetCanvas();
    double x = c->AbsPixeltoX(px), y = c->AbsPixeltoY(py);
    double th = c->PadtoX(x), ke = c->PadtoY(y);
-   if (th < 0 || th > 180 || ke < 0 || ke > 55) return;
+   if (!fH) return;
+   if (th < fH->GetXaxis()->GetXmin() || th > fH->GetXaxis()->GetXmax() || ke < fH->GetYaxis()->GetXmin() ||
+       ke > fH->GetYaxis()->GetXmax())
+      return;
    double ex, cm;
    g_inv(th * TMath::DegToRad(), ke, ex, cm);
    fBar->SetText(Form("theta_lab %.2f deg   KE_p %.3f MeV", th, ke), 1);
@@ -426,6 +472,35 @@ void KinGui::ProfileKE()
    c->Update();
 }
 
+/// Snap the axes to the data actually selected, keeping the bin WIDTH the user has chosen rather
+/// than the bin COUNT -- zooming in should give more bins over the same structure, not the same
+/// number of wider ones stretched over less range.
+void KinGui::FitRange()
+{
+   if (!fH) return;
+   double wx = (fH->GetXaxis()->GetXmax() - fH->GetXaxis()->GetXmin()) / fH->GetNbinsX();
+   double wy = (fH->GetYaxis()->GetXmax() - fH->GetYaxis()->GetXmin()) / fH->GetNbinsY();
+   int x1 = fH->GetXaxis()->GetFirst(), x2 = fH->GetXaxis()->GetLast();
+   int y1 = fH->GetYaxis()->GetFirst(), y2 = fH->GetYaxis()->GetLast();
+   double xlo = 1e9, xhi = -1e9, ylo = 1e9, yhi = -1e9;
+   for (int i = x1; i <= x2; ++i)
+      for (int j = y1; j <= y2; ++j)
+         if (fH->GetBinContent(i, j) > 0) {
+            xlo = std::min(xlo, fH->GetXaxis()->GetBinLowEdge(i));
+            xhi = std::max(xhi, fH->GetXaxis()->GetBinUpEdge(i));
+            ylo = std::min(ylo, fH->GetYaxis()->GetBinLowEdge(j));
+            yhi = std::max(yhi, fH->GetYaxis()->GetBinUpEdge(j));
+         }
+   if (!(xhi > xlo) || !(yhi > ylo)) { fBar->SetText("nothing to fit the range to", 0); return; }
+   double px = 0.02 * (xhi - xlo), py = 0.02 * (yhi - ylo);
+   xlo -= px; xhi += px; ylo -= py; yhi += py;
+   fXlo->SetNumber(xlo); fXhi->SetNumber(xhi);
+   fYlo->SetNumber(ylo); fYhi->SetNumber(yhi);
+   fNx->SetNumber(std::max(1.0, std::floor((xhi - xlo) / wx)));
+   fNy->SetNumber(std::max(1.0, std::floor((yhi - ylo) / wy)));
+   Redraw();
+}
+
 void KinGui::SavePng()
 {
    TString f = TString::Format("%s/kin_gui_%s_s%d.png", fOut.Data(), fCfgs[fCfg->GetSelected()].Data(),
@@ -447,7 +522,8 @@ void kin_gui_Be10(TString root = "/mnt/f/Be10_tp", TString outDir = "plots")
 ///   root -b -q 'kin_gui_Be10.C+' ... or simply:
 ///   root -b -q 'kin_png_Be10.C("/mnt/f/Be10_tp","b285_attpc",0)'
 void kin_png_Be10(TString root = "/mnt/f/Be10_tp", TString cfg = "b285_attpc", int samp = 0,
-                  TString outDir = "plots", double cl = 0, double ch = 180)
+                  TString outDir = "plots", double cl = 0, double ch = 180, int nx = 360, double xlo = 0,
+                  double xhi = 180, int ny = 275, double ylo = 0, double yhi = 55)
 {
    gStyle->SetOptStat(0);
    gStyle->SetPalette(kBird);
@@ -461,7 +537,7 @@ void kin_png_Be10(TString root = "/mnt/f/Be10_tp", TString cfg = "b285_attpc", i
    auto *h = new TH2D("hKinPng",
                       Form("^{10}Be(t,p)^{12}Be   %s   %s;#theta_{lab} [deg];KE_{p} [MeV]",
                            samp == 0 ? "(field-independent)" : cfg.Data(), sn[samp]),
-                      360, 0, 180, 275, 0, 55);
+                      nx, xlo, xhi, ny, ylo, yhi);
    h->SetDirectory(nullptr);
    kin_fill(root, outDir, cfg, samp, on, cl, ch, h, nullptr);
    h->Draw("colz");
