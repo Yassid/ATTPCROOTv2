@@ -1,0 +1,311 @@
+<title>AT-TPC Dec 2014 — beam-frame event viewer</title>
+<style>
+  :root{
+    --ground:#0e1418; --panel:#151d23; --panel2:#1b262d; --rule:#24323b;
+    --ink:#dfe8ee; --muted:#8ea3b0; --faint:#5d7280;
+    --accent:#4fb3c9;
+    --raw:#e5484d; --cor:#4b8ff7; --det:#3fb950; --beam:#f0883e; --axis:#7f8f9a;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,"DejaVu Sans Mono",monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  @media (prefers-color-scheme: light){
+    :root{
+      --ground:#f6f8f9; --panel:#ffffff; --panel2:#eef3f5; --rule:#d5e0e5;
+      --ink:#16232b; --muted:#516875; --faint:#7d939e;
+      --accent:#0f7d95;
+      --raw:#c92a2f; --cor:#1f6fe0; --det:#1f8a37; --beam:#c2660f; --axis:#8a99a3;
+    }
+  }
+  :root[data-theme="dark"]{
+    --ground:#0e1418; --panel:#151d23; --panel2:#1b262d; --rule:#24323b;
+    --ink:#dfe8ee; --muted:#8ea3b0; --faint:#5d7280; --accent:#4fb3c9;
+    --raw:#e5484d; --cor:#4b8ff7; --det:#3fb950; --beam:#f0883e; --axis:#7f8f9a;
+  }
+  :root[data-theme="light"]{
+    --ground:#f6f8f9; --panel:#ffffff; --panel2:#eef3f5; --rule:#d5e0e5;
+    --ink:#16232b; --muted:#516875; --faint:#7d939e; --accent:#0f7d95;
+    --raw:#c92a2f; --cor:#1f6fe0; --det:#1f8a37; --beam:#c2660f; --axis:#8a99a3;
+  }
+
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);
+       font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased}
+
+  .wrap{max-width:1280px;margin:0 auto;padding:28px 22px 56px;
+        display:flex;flex-direction:column;gap:20px}
+
+  header{display:flex;flex-direction:column;gap:6px;
+         border-bottom:1px solid var(--rule);padding-bottom:16px}
+  .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.14em;
+           text-transform:uppercase;color:var(--accent)}
+  h1{margin:0;font-size:clamp(20px,2.6vw,28px);font-weight:620;letter-spacing:-.01em;
+     text-wrap:balance}
+  .sub{color:var(--muted);max-width:66ch;font-size:14px}
+
+  .stage{display:grid;grid-template-columns:minmax(0,1fr) 250px;gap:18px;align-items:start}
+  @media (max-width:860px){ .stage{grid-template-columns:minmax(0,1fr)} }
+
+  .canvasbox{position:relative;background:var(--panel);border:1px solid var(--rule);
+             border-radius:3px;overflow:hidden}
+  canvas{display:block;width:100%;height:auto;touch-action:none;cursor:grab}
+  canvas.drag{cursor:grabbing}
+  .hint{position:absolute;left:12px;bottom:10px;font-family:var(--mono);font-size:10.5px;
+        color:var(--faint);letter-spacing:.04em;pointer-events:none}
+
+  .rail{display:flex;flex-direction:column;gap:16px}
+  .block{background:var(--panel);border:1px solid var(--rule);border-radius:3px;padding:13px 14px}
+  .blabel{font-family:var(--mono);font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;
+          color:var(--faint);margin-bottom:9px}
+
+  .layers{display:flex;flex-direction:column;gap:2px}
+  .layer{display:flex;align-items:center;gap:9px;padding:5px 6px;border-radius:2px;
+         cursor:pointer;border:none;background:none;color:inherit;font:inherit;
+         text-align:left;width:100%}
+  .layer:hover{background:var(--panel2)}
+  .layer:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+  .swatch{width:11px;height:11px;border-radius:50%;flex:none}
+  .layer .nm{font-size:13px}
+  .layer .st{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--faint)}
+  .layer[aria-pressed="false"]{opacity:.4}
+
+  .views{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  button.v{font-family:var(--mono);font-size:11px;letter-spacing:.04em;padding:7px 4px;
+           background:var(--panel2);color:var(--ink);border:1px solid var(--rule);
+           border-radius:2px;cursor:pointer}
+  button.v:hover{border-color:var(--accent);color:var(--accent)}
+  button.v:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+
+  .evrow{display:flex;align-items:center;gap:8px}
+  .evrow input{flex:1;accent-color:var(--accent)}
+  .evid{font-family:var(--mono);font-size:12px;color:var(--muted);min-width:78px;
+        text-align:right;font-variant-numeric:tabular-nums}
+
+  table.read{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11.5px;
+             font-variant-numeric:tabular-nums}
+  table.read td{padding:4px 0;border-bottom:1px solid var(--rule)}
+  table.read tr:last-child td{border-bottom:none}
+  table.read td:last-child{text-align:right;color:var(--ink)}
+  table.read td:first-child{color:var(--muted)}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
+
+  .note{font-size:12.5px;color:var(--muted);line-height:1.5}
+  .note b{color:var(--ink);font-weight:600}
+  .foot{border-top:1px solid var(--rule);padding-top:14px;color:var(--faint);font-size:12px;
+        max-width:74ch}
+  code{font-family:var(--mono);font-size:.92em;color:var(--accent)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">AT-TPC · NSCL · December 2014 · run 128</div>
+    <h1>Beam-frame event viewer</h1>
+    <p class="sub">The same three point sets the ROOT display draws, in the browser. Drag to
+    rotate, scroll to zoom. Projection is <b>orthographic</b> — a perspective view would
+    distort the very angles this page exists to judge.</p>
+  </header>
+
+  <div class="stage">
+    <div class="canvasbox">
+      <canvas id="cv" width="1400" height="900"></canvas>
+      <div class="hint">drag to rotate · scroll to zoom</div>
+    </div>
+
+    <div class="rail">
+      <div class="block">
+        <div class="blabel">Event</div>
+        <div class="evrow">
+          <input id="ev" type="range" min="0" max="9" value="3" step="1" aria-label="Event index">
+          <span class="evid" id="evid">—</span>
+        </div>
+      </div>
+
+      <div class="block">
+        <div class="blabel">Layers</div>
+        <div class="layers" id="layers"></div>
+      </div>
+
+      <div class="block">
+        <div class="blabel">View</div>
+        <div class="views">
+          <button class="v" data-view="side">side</button>
+          <button class="v" data-view="top">top</button>
+          <button class="v" data-view="beam">down beam</button>
+          <button class="v" data-view="iso">iso</button>
+        </div>
+      </div>
+
+      <div class="block">
+        <div class="blabel">This event · angle from detector axis</div>
+        <table class="read" id="read"></table>
+      </div>
+
+      <div class="block">
+        <p class="note"><b>Read the ensemble, not one event.</b> Per-event direction scatters
+        by about 5° from beam divergence and fit noise. Over ~2200 events the corrected,
+        de-tilted beam sits <b>0.99°</b> from the axis — a single event will not.</p>
+      </div>
+    </div>
+  </div>
+
+  <p class="foot">Hits from run 128, unpacked on branch <code>FairRootv18.00-fairroot19-port</code>.
+  De-tilting uses the beam axis <b>measured</b> at B = 0 in run 100 (5.44°, −173.2°), not the
+  parameter file's <code>TiltAng</code>/<code>ThetaRot</code> — those leave 1.91° rather than
+  0.99°, because the two angles are individually mis-assigned while their product is not.
+  The grey cylinder is the active volume; the beam enters at the far end.</p>
+</div>
+
+<script>
+const DATA = __DATA__;
+
+const cv = document.getElementById("cv"), ctx = cv.getContext("2d");
+const css = getComputedStyle(document.documentElement);
+const col = n => css.getPropertyValue(n).trim();
+
+const LAYERS = [
+  {k:"raw", nm:"Raw hits",        v:"--raw", on:true},
+  {k:"cor", nm:"Lorentz-corrected", v:"--cor", on:true},
+  {k:"det", nm:"De-tilted to axis", v:"--det", on:true},
+  {k:"ax",  nm:"Reference axes",  v:"--beam", on:true},
+  {k:"vol", nm:"Active volume",   v:"--axis", on:true},
+];
+
+let yaw = -0.62, pitch = 0.30, zoom = 1, idx = 3;
+
+// ---- projection ---------------------------------------------------------------------
+// Orthographic on purpose. Detector coords are mm with z along the drift; centre the scene
+// on the middle of the drift length so rotation feels anchored to the detector, not to the
+// event's own centroid (which would make events jump as you step through them).
+const CZ = 600, SCALE = 0.42;
+function proj(p){
+  const x = p[0], y = p[1], z = p[2] - CZ;
+  const cy = Math.cos(yaw), sy = Math.sin(yaw);
+  let X = x*cy + z*sy, Z = -x*sy + z*cy;
+  const cp = Math.cos(pitch), sp = Math.sin(pitch);
+  let Y = y*cp - Z*sp;
+  const d = y*sp + Z*cp;                 // depth, for painter ordering only
+  const s = SCALE*zoom;
+  return [cv.width/2 + X*s, cv.height/2 - Y*s, d];
+}
+
+function line(a,b,color,w,dash){
+  const A=proj(a), B=proj(b);
+  ctx.save(); ctx.strokeStyle=color; ctx.lineWidth=w||1.2;
+  if(dash) ctx.setLineDash(dash);
+  ctx.beginPath(); ctx.moveTo(A[0],A[1]); ctx.lineTo(B[0],B[1]); ctx.stroke(); ctx.restore();
+}
+
+function volume(){
+  const R=275, z0=0, z1=1000, N=48, c=col("--axis");
+  ctx.save(); ctx.globalAlpha=.30; ctx.strokeStyle=c; ctx.lineWidth=1;
+  for(const z of [z0,z1]){
+    ctx.beginPath();
+    for(let i=0;i<=N;i++){
+      const t=i/N*Math.PI*2, P=proj([R*Math.cos(t),R*Math.sin(t),z]);
+      i?ctx.lineTo(P[0],P[1]):ctx.moveTo(P[0],P[1]);
+    }
+    ctx.stroke();
+  }
+  ctx.globalAlpha=.18;
+  for(let i=0;i<8;i++){
+    const t=i/8*Math.PI*2;
+    const A=proj([R*Math.cos(t),R*Math.sin(t),z0]), B=proj([R*Math.cos(t),R*Math.sin(t),z1]);
+    ctx.beginPath(); ctx.moveTo(A[0],A[1]); ctx.lineTo(B[0],B[1]); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// ---- direction fit, so the readout is measured rather than asserted ------------------
+function dirOf(pts){
+  let mz=0,mx=0,my=0;
+  for(const p of pts){mx+=p[0];my+=p[1];mz+=p[2];}
+  const n=pts.length; mx/=n; my/=n; mz/=n;
+  let sxz=0,syz=0,szz=0;
+  for(const p of pts){const dz=p[2]-mz; sxz+=dz*(p[0]-mx); syz+=dz*(p[1]-my); szz+=dz*dz;}
+  if(szz<=0) return null;
+  const a=sxz/szz, b=syz/szz;
+  return {a,b, deg: Math.atan2(Math.hypot(a,b),1)*180/Math.PI};
+}
+
+function draw(){
+  const e = DATA.events[idx];
+  ctx.clearRect(0,0,cv.width,cv.height);
+  ctx.fillStyle = col("--panel"); ctx.fillRect(0,0,cv.width,cv.height);
+
+  if(LAYERS.find(l=>l.k==="vol").on) volume();
+
+  if(LAYERS.find(l=>l.k==="ax").on){
+    // Drawn from the beam's own start point: only the DIRECTION is meaningful, and
+    // anchoring at the coordinate origin makes the comparison unreadable.
+    const p0=[e.cor[0][0], e.cor[0][1], 0], L=1200, B=DATA.beam;
+    line(p0,[p0[0],p0[1],p0[2]+L], col("--axis"), 1.4, [7,5]);
+    line(p0,[p0[0]+B[0]/B[2]*L, p0[1]+B[1]/B[2]*L, p0[2]+L], col("--beam"), 1.6);
+  }
+
+  // Painter's algorithm across all visible sets at once, so depth reads correctly where
+  // the three clouds interleave.
+  const pool=[];
+  for(const L of LAYERS){
+    if(!L.on || !(L.k in e)) continue;
+    const c=col(L.v);
+    e[L.k].forEach((p,i)=>{ const P=proj(p); pool.push([P[2],P[0],P[1],c,e.q[i]]); });
+  }
+  pool.sort((A,B)=>A[0]-B[0]);
+  for(const [,X,Y,c,q] of pool){
+    const r = 1.7 + Math.min(2.6, Math.log10(1+q)*0.85);
+    ctx.fillStyle=c; ctx.globalAlpha=.9;
+    ctx.beginPath(); ctx.arc(X,Y,r,0,6.283); ctx.fill();
+  }
+  ctx.globalAlpha=1;
+
+  // readout
+  const rows=[["raw","--raw","Raw"],["cor","--cor","Corrected"],["det","--det","De-tilted"]];
+  let html="";
+  for(const [k,v,nm] of rows){
+    const d=dirOf(e[k]);
+    html+=`<tr><td><span class="dot" style="background:${col(v)}"></span>${nm}</td>`
+        + `<td>${d?d.deg.toFixed(2)+"°":"—"}</td></tr>`;
+  }
+  html+=`<tr><td>hits</td><td>${e.n}</td></tr>`;
+  document.getElementById("read").innerHTML=html;
+  document.getElementById("evid").textContent=`#${e.id} · ${e.n} hits`;
+}
+
+// ---- controls ------------------------------------------------------------------------
+const layersEl=document.getElementById("layers");
+LAYERS.forEach((L,i)=>{
+  const b=document.createElement("button");
+  b.className="layer"; b.type="button"; b.setAttribute("aria-pressed",String(L.on));
+  b.innerHTML=`<span class="swatch" style="background:${col(L.v)}"></span>`
+            + `<span class="nm">${L.nm}</span><span class="st">${L.on?"on":"off"}</span>`;
+  b.onclick=()=>{ L.on=!L.on; b.setAttribute("aria-pressed",String(L.on));
+                  b.querySelector(".st").textContent=L.on?"on":"off"; draw(); };
+  layersEl.appendChild(b);
+});
+
+const VIEWS={side:[-Math.PI/2,0], top:[-Math.PI/2,Math.PI/2], beam:[0,0], iso:[-0.62,0.30]};
+document.querySelectorAll("button.v").forEach(b=>{
+  b.onclick=()=>{ [yaw,pitch]=VIEWS[b.dataset.view]; draw(); };
+});
+
+const evEl=document.getElementById("ev");
+evEl.max=String(DATA.events.length-1);
+evEl.oninput=()=>{ idx=+evEl.value; draw(); };
+
+let drag=false,lx=0,ly=0;
+cv.addEventListener("pointerdown",e=>{drag=true;lx=e.clientX;ly=e.clientY;
+  cv.classList.add("drag");cv.setPointerCapture(e.pointerId);});
+cv.addEventListener("pointerup",e=>{drag=false;cv.classList.remove("drag");});
+cv.addEventListener("pointermove",e=>{
+  if(!drag)return;
+  yaw+=(e.clientX-lx)*0.006; pitch+=(e.clientY-ly)*0.006;
+  pitch=Math.max(-1.45,Math.min(1.45,pitch));
+  lx=e.clientX; ly=e.clientY; draw();
+});
+cv.addEventListener("wheel",e=>{e.preventDefault();
+  zoom*=e.deltaY<0?1.09:1/1.09; zoom=Math.max(.35,Math.min(6,zoom)); draw();},{passive:false});
+
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change",draw);
+new MutationObserver(draw).observe(document.documentElement,{attributes:true,attributeFilter:["data-theme"]});
+draw();
+</script>

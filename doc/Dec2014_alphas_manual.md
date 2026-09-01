@@ -688,6 +688,25 @@ event, because the per-event direction scatters by ~5° from beam divergence and
 Right: the same as full 3D angles — corrected and de-tilted, the beam sits 0.99° from the
 detector axis.*
 
+#### Browser viewer
+
+There is also a **self-contained HTML viewer** — `calib/attpc_viewer.html`. Open it in any
+browser; it needs no ROOT, no X display and no network. Drag to rotate, scroll to zoom,
+toggle the three point sets and the reference axes, step through ten events spanning
+beam-like to reaction-like multiplicities. Each event's fitted direction is computed in the
+page, so the numbers shown are measured rather than asserted.
+
+The projection is **orthographic on purpose**: a perspective view would distort the very
+angles the page exists to judge.
+
+Regenerate it for a different run with:
+
+```bash
+$PY calib/export_viewer_json.py hits_run128.csv viewer_events.json
+python3 -c "open('attpc_viewer.html','w').write(
+    open('html_viewer_shell.html').read().replace('__DATA__', open('viewer_events.json').read()))"
+```
+
 ![Event display with the beam-frame overlay](figs/viewer_beamframe.png)
 
 *The event display (`run_eve_Dec2014_alphas.C`): red raw hits, blue Lorentz-corrected, green
@@ -917,6 +936,9 @@ Ordered by how much time each one cost.
 | `charge_shapes.py` | why the normalisation is not valid; the pile-up signature (§5.5) |
 | `rotate_to_beam.py` | validates the correction on **real data** (§5.4.8) |
 | `find_tbentrance.py` | confirms the longitudinal origin (§5.4.9) |
+| `attpc_viewer.html` | self-contained browser event viewer (no ROOT needed) |
+| `html_viewer_shell.html` + `export_viewer_json.py` | sources for regenerating it |
+| `make_figures.py` | the manual's beam-frame figure |
 | `view_event.py`, `analyse_event.py`, `vertex_tangent.py`, `validate130.py` | single-event tools |
 | `eloss_alpha_heco2.txt` | CATIMA α energy loss, He:CO₂ 90-10 @ 150 torr |
 
