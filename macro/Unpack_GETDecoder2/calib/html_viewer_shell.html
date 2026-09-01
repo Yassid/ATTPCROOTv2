@@ -335,6 +335,18 @@ function draw(){
     line(xf([0,0,0]), xf([B[0]/B[2]*L, B[1]/B[2]*L, L]), col("--beamc"), 1.4, [4,5]);
   }
 
+  // Mark the pivot: the beam entrance, on the axis. The detector is tilted about THIS
+  // point, so the beam is undeviated here and its deviation grows to a maximum at the pad
+  // plane -- 2.8 mm at the entrance against 74.3 mm at the pads, measured over 2248 events.
+  if(LAYERS.find(l=>l.k==="ax").on){
+    const c=xf(PIVOT), P=proj(c);
+    ctx.save(); ctx.strokeStyle=col("--axis"); ctx.lineWidth=1.3; ctx.globalAlpha=.85;
+    ctx.beginPath(); ctx.arc(P[0],P[1],5,0,6.283); ctx.stroke();
+    ctx.font='10px ui-monospace,monospace'; ctx.fillStyle=col("--faint");
+    ctx.fillText("tilt pivot = entrance", P[0]+8, P[1]+13);
+    ctx.restore();
+  }
+
   if(LAYERS.find(l=>l.k==="vx").on){
     const P=proj(V);
     ctx.save(); ctx.strokeStyle=col("--vtx"); ctx.lineWidth=2.2;
@@ -355,11 +367,26 @@ function draw(){
   ctx.restore();
 
   const rt=Math.hypot(V[0],V[1]);
+  // Extrapolate this event's beam line to the entrance and to the pad plane. The tilt
+  // pivots at the entrance, so the first should be small and the second large; that is the
+  // geometry, visible per event rather than only in the ensemble.
+  let dEnt="\u2014", dPad="\u2014";
+  const bd=dirOf3(e[K.beam]);
+  if(bd && Math.abs(bd[2])>1e-6){
+    const B0=e[K.beam].map(shift);
+    let mx=0,my=0,mz=0; for(const q of B0){mx+=q[0];my+=q[1];mz+=q[2];}
+    mx/=B0.length; my/=B0.length; mz/=B0.length;
+    const at=z=>{const t=(z-mz)/bd[2];
+                 return Math.hypot(mx+bd[0]*t, my+bd[1]*t).toFixed(0)+" mm";};
+    dEnt=at(1000); dPad=at(0);
+  }
   document.getElementById("read").innerHTML =
       `<tr><td>opening angle</td><td>${e.op.toFixed(1)}\u00b0</td></tr>`
     + `<tr><td>vertex x, y</td><td>${V[0].toFixed(0)}, ${V[1].toFixed(0)} mm</td></tr>`
     + `<tr><td>vertex z</td><td>${V[2].toFixed(0)} mm</td></tr>`
     + `<tr><td>vertex off axis</td><td>${rt.toFixed(0)} mm</td></tr>`
+    + `<tr><td>beam off axis @ entrance</td><td>${dEnt}</td></tr>`
+    + `<tr><td>beam off axis @ pad plane</td><td>${dPad}</td></tr>`
     + `<tr><td>hits</td><td>${e.n}</td></tr>`;
   document.getElementById("evid").textContent=`#${e.id} \u00b7 ${e.op.toFixed(1)}\u00b0`;
 }
