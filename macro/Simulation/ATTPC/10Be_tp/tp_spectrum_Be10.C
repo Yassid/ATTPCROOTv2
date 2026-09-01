@@ -248,7 +248,13 @@ void tp_spectrum_Be10(TString root = "/mnt/f/Be10_tp", TString cfg = "b285_attpc
    hSum->Scale(nTot / tot);
    for (int l = 0; l < NL; ++l) hLev[l]->Scale(nTot / tot);
 
-   auto runFit = [&](TH1D *h, bool with2251, const char *tag, int freePk = -1) {
+   // THE GLOBALS ARE THE TRAP. sp_model reads gNPk / gPkEx / gFreePk, so a TF1 built for one fit
+   // evaluates with WHATEVER configuration was set last. Fit C runs after fit A and leaves gNPk = 3
+   // with a free peak, so drawing fA afterwards drew a curve that was not fit A at all -- it showed
+   // the total falling BELOW one of its own components, which is what gave the bug away. The fitted
+   // numbers were never affected (they are captured at fit time), only anything evaluated later.
+   // setShape() restores a named configuration; call it before every evaluation of a stored TF1.
+   auto setShape = [&](bool with2251, int freePk) {
       gNPk = 0;
       int idx2109 = -1;
       for (int l = 0; l < NL; ++l) {
@@ -257,6 +263,9 @@ void tp_spectrum_Be10(TString root = "/mnt/f/Be10_tp", TString cfg = "b285_attpc
          gPkEx[gNPk++] = LEX[l];
       }
       gFreePk = (freePk >= 0) ? idx2109 : -1;
+   };
+   auto runFit = [&](TH1D *h, bool with2251, const char *tag, int freePk = -1) {
+      setShape(with2251, freePk);
       int npar = NSHAPE + gNPk + (gFreePk >= 0 ? 2 : 0);
       TF1 *f = new TF1(Form("f%s", tag), sp_model, exLo, exHi, npar);
       f->SetParName(0, "shift");
@@ -381,17 +390,38 @@ void tp_spectrum_Be10(TString root = "/mnt/f/Be10_tp", TString cfg = "b285_attpc
    double ymax = hObs->GetMaximum() * 1.35;
    hObs->GetYaxis()->SetRangeUser(0, ymax);
    hObs->Draw("E");
-   fA->SetLineColor(kRed);
-   fA->Draw("same");
-   B.first->SetLineColor(kGray + 2);
-   B.first->SetLineStyle(3);
-   B.first->Draw("same");
+   // Sample each fit into a TGraph WITH ITS OWN SHAPE RESTORED. Drawing the live TF1s would
+   // re-enter sp_model later, under whatever globals happen to be set at paint time.
+   auto sample = [&](TF1 *f, bool with2251, int freePk, int color, int style) {
+      setShape(with2251, freePk);
+      const int N = 1200;
+      auto *g = new TGraph(N);
+      for (int i = 0; i < N; ++i) {
+         double x = exLo + (exHi - exLo) * i / (N - 1.0);
+         g->SetPoint(i, x, f->EvalPar(&x, f->GetParameters()));
+      }
+      g->SetLineColor(color);
+      g->SetLineStyle(style);
+      g->SetLineWidth(2);
+      return g;
+   };
+   TGraph *gA = sample(fA, true, -1, kRed, 1);
+   TGraph *gB = sample(B.first, false, -1, kGray + 2, 3);
+   gA->Draw("L SAME");
+   gB->Draw("L SAME");
    int col[NL] = {kBlue, kGreen + 2, kMagenta, kOrange + 7};
    TF1 *comp[NL];
    for (int l = 0; l < NL; ++l) {
-      comp[l] = new TF1(Form("c%d", l), "gaus", exLo, exHi);
-      comp[l]->SetParameters(fA->GetParameter(NSHAPE + l) * (1 - fA->GetParameter(3)), LEX[l] + fA->GetParameter(0),
-                             sg); // the CORE of this level, which is what the eye should follow
+      // The FULL level -- core PLUS tail -- so the dashed curves really do sum to the red total.
+      // A plain "gaus" here would draw only the core, which is a different curve from the one the
+      // fit contains and would misread as the component being taller than the total.
+      comp[l] = new TF1(Form("c%d", l), "[0]*((1-[3])*exp(-0.5*((x-[1])/[2])^2)+[3]*([2]/[4])*exp(-0.5*((x-[1])/[4])^2))",
+                        exLo, exHi);
+      comp[l]->SetParameter(0, fA->GetParameter(NSHAPE + l));
+      comp[l]->SetParameter(1, LEX[l] + fA->GetParameter(0));
+      comp[l]->SetParameter(2, sg);
+      comp[l]->SetParameter(3, fA->GetParameter(3));
+      comp[l]->SetParameter(4, fA->GetParameter(2));
       comp[l]->SetLineColor(col[l]);
       comp[l]->SetLineStyle(2);
       comp[l]->SetNpx(1200);
@@ -399,8 +429,8 @@ void tp_spectrum_Be10(TString root = "/mnt/f/Be10_tp", TString cfg = "b285_attpc
    }
    TLegend *leg = new TLegend(0.60, 0.58, 0.98, 0.90);
    leg->AddEntry(hObs, Form("sum, %.0f counts", nTot), "lep");
-   leg->AddEntry(fA, Form("fit A: 4 levels (#sigma_{core} = %.3f)", sg), "l");
-   leg->AddEntry(B.first, Form("fit B: no 0^{+}_{2}  (%.1f#sigma worse)", nsig), "l");
+   leg->AddEntry(gA, Form("fit A: 4 levels (#sigma_{core} = %.3f)", sg), "l");
+   leg->AddEntry(gB, Form("fit B: no 0^{+}_{2}  (%.1f#sigma worse)", nsig), "l");
    for (int l = 0; l < NL; ++l) leg->AddEntry(comp[l], Form("%s  %.3f MeV  (w %.2f)", LJP[l], LEX[l], pop[l]), "l");
    leg->Draw();
    TString png = TString::Format("%s/spectrum_Be10tp_%s_cm%03.0f-%03.0f_%s.png", outDir.Data(), cfg.Data(), cmLo, cmHi,
