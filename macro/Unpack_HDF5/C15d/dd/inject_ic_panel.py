@@ -34,8 +34,8 @@ CARD = '''
       <div class="card wide" id="cardIC">
         <h2>ion chamber &mdash; drag to select the beam window</h2>
         <div class="legend">
-          <span><i class="swatch" style="background:var(--refdim)"></i>all tracks</span>
-          <span><i class="swatch" style="background:var(--data)"></i>single pulse</span>
+          <span><i class="swatch" style="background:var(--refdim)"></i>all multiplicities</span>
+          <span><i class="swatch" style="background:var(--data)"></i>selected multiplicity</span>
           <span><i class="swatch" style="background:var(--accent);opacity:.35;height:9px;width:9px;border-radius:2px"></i>selection</span>
           <span class="spacer" style="flex:1"></span>
           <button id="icSnap" style="font-size:11px;padding:2px 8px">use [931, 1413]</button>
@@ -80,16 +80,40 @@ SCRIPT = '''
     refresh();
   };
 
+  const npI = document.getElementById('npLo'), npH = document.getElementById('npHi');
+  /* byNp is indexed 0..3 for multiplicity 1,2,3,4+. The panel shades whatever the page's
+     npLo/npHi currently select, so "what am I selecting" is answered on the plot itself. */
+  const npSel = () => {
+    const a = npI ? parseFloat(npI.value) : 1, b = npH ? parseFloat(npH.value) : 1;
+    const lo = isFinite(a) ? a : 1, hi = isFinite(b) ? b : 1;
+    const out = [];
+    for (let m = 0; m < 4; ++m){ const mult = m + 1;           // index 3 means "4 or more"
+      const inRange = (m < 3) ? (mult >= lo && mult <= hi) : (hi >= 4);
+      if (inRange) out.push(m); }
+    return out;
+  };
+  const sumOver = (idx) => {
+    const h = new Float64Array(IC.nb);
+    idx.forEach(m => { for (let i = 0; i < IC.nb; ++i) h[i] += IC.byNp[m][i]; });
+    return h;
+  };
+  const ALL = sumOver([0,1,2,3]);
+
   let drag = null;   // {a, b} in IC units, while the mouse is down
 
   function refresh(){
     const w = drag ? [Math.min(drag.a, drag.b), Math.max(drag.a, drag.b)] : win();
-    const sel = w ? IC.sp.reduce((a, v, i) => a + (W(i) >= w[0] && W(i) <= w[1] ? v : 0), 0) : IC.nSP;
-    note.textContent = fmt(IC.nTot) + ' tracks in runs 17-103 \\u00b7 ' + fmt(IC.nNoIC)
-      + ' with no usable IC \\u00b7 ' + fmt(IC.nSP) + ' single-pulse \\u00b7 '
-      + (w ? ('window [' + Math.round(w[0]) + ', ' + Math.round(w[1]) + '] keeps ' + fmt(sel)
-              + ' = ' + (100 * sel / Math.max(1, IC.nSP)).toFixed(1) + '% of them')
-           : 'no window \\u2014 drag across the plot to set one');
+    const idx = npSel(), SEL = sumOver(idx);
+    let selTot = 0, inWin = 0;
+    for (let i = 0; i < IC.nb; ++i){ selTot += SEL[i];
+      if (w && W(i) >= w[0] && W(i) <= w[1]) inWin += SEL[i]; }
+    const lbl = ['1','2','3','4+'].filter((_, m) => idx.includes(m)).join(',') || 'none';
+    note.textContent = fmt(IC.nTot) + ' tracks \\u00b7 ' + fmt(IC.nNoIC) + ' with no usable IC \\u00b7 '
+      + 'multiplicity ' + lbl + ' -> ' + fmt(selTot) + ' \\u00b7 '
+      + (w ? ('window [' + Math.round(w[0]) + ', ' + Math.round(w[1]) + '] keeps ' + fmt(inWin)
+              + ' = ' + (100 * inWin / Math.max(1, selTot)).toFixed(1) + '%')
+           : 'no window \\u2014 drag across the plot to set one')
+      + ' \\u00b7 all: ' + IC.cnt.map((c, m) => ['1','2','3','4+'][m] + ':' + fmt(c)).join('  ');
     draw();
   }
 
@@ -103,7 +127,7 @@ SCRIPT = '''
     const L = 54, R = 12, T = 10, B = 30;
     const pw = cw - L - R, ph = chh - T - B;
     const lg = logBox.checked;
-    const top = Math.max(1, ...IC.all);
+    const top = Math.max(1, ...ALL);
     const yv = (v) => lg ? (v <= 0 ? 0 : Math.log10(v + 1) / Math.log10(top + 1)) : v / top;
     const px = (w) => L + (w - IC.lo) / (IC.hi - IC.lo) * pw;
     const py = (v) => T + ph - yv(v) * ph;
@@ -145,8 +169,8 @@ SCRIPT = '''
       }
       x.globalAlpha = 1;
     };
-    bars(IC.all, css('--refdim'), .45);
-    bars(IC.sp,  css('--data'),   .95);
+    bars(ALL,              css('--refdim'), .40);
+    bars(sumOver(npSel()), css('--data'),   .95);
 
     // labels
     x.fillStyle = css('--ink-3');
@@ -185,8 +209,8 @@ SCRIPT = '''
     tip.style.display = 'block';
     tip.style.left = Math.min(mx + 12, r.width - 150) + 'px';
     tip.style.top = '14px';
-    tip.innerHTML = 'IC ' + Math.round(W(i)) + '<br>all ' + fmt(IC.all[i])
-                  + '<br>single ' + fmt(IC.sp[i]);
+    tip.innerHTML = 'IC ' + Math.round(W(i)) + '<br>all ' + fmt(ALL[i])
+                  + '<br>np 1 ' + fmt(IC.byNp[0][i]) + '<br>np 2 ' + fmt(IC.byNp[1][i]);
   });
   // A click without movement is not a zero-width window -- that would empty every panel and read
   // as a broken page. Anything under 15 ADC wide is treated as a click and clears the selection.
@@ -203,7 +227,7 @@ SCRIPT = '''
   if (snap) snap.addEventListener('click', () => setWin(IC.gateLo, IC.gateHi));
   if (off)  off.addEventListener('click', () => { if (loI){ loI.value = -1; hiI.value = 4000;
               loI.dispatchEvent(new Event('input', {bubbles:true})); } refresh(); });
-  [loI, hiI].forEach(el => el && el.addEventListener('input', refresh));
+  [loI, hiI, npI, npH].forEach(el => el && el.addEventListener('input', refresh));
 
   logBox.addEventListener('change', draw);
   addEventListener('resize', draw);

@@ -32,13 +32,18 @@ static Long64_t dump_pk(TTree *t, FILE *o)
    // ic / npulse are optional: caches built before the IC join have neither, and the page hides
    // the IC control when the column is absent rather than showing one that selects nothing.
    float ic = -1;
-   int npulse = 0;
+   int npulse = 0, runNo = 0;
    const bool hasIc = t->GetBranch("ic") != nullptr;
    const bool hasNp = t->GetBranch("npulse") != nullptr;
+   // run rides along so a feature can be asked "is this one run or all of them?" in the page,
+   // which is the first question to put to any structure that has no known counterpart.
+   const bool hasRun = t->GetBranch("run") != nullptr;
    if (hasIc)
       t->SetBranchAddress("ic", &ic);
    if (hasNp)
       t->SetBranchAddress("npulse", &npulse);
+   if (hasRun)
+      t->SetBranchAddress("run", &runNo);
    const Long64_t N = t->GetEntries();
    fprintf(o, "{\"ke\":[");
    for (Long64_t i = 0; i < N; ++i) {
@@ -72,6 +77,13 @@ static Long64_t dump_pk(TTree *t, FILE *o)
       for (Long64_t i = 0; i < N; ++i) {
          t->GetEntry(i);
          fprintf(o, "%s%d", i ? "," : "", npulse);
+      }
+   }
+   if (hasRun) {
+      fprintf(o, "],\"run\":[");
+      for (Long64_t i = 0; i < N; ++i) {
+         t->GetEntry(i);
+         fprintf(o, "%s%d", i ? "," : "", runNo);
       }
    }
    fprintf(o, "]}");

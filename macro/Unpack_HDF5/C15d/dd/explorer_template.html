@@ -234,8 +234,12 @@ footer{
       <div class="pair"><input type="number" id="thLo" step="1" value="0"><input type="number" id="thHi" step="1" value="180"></div>
       <div class="row"><label>KE [MeV]</label></div>
       <div class="pair"><input type="number" id="keLo" step="0.5" value="0"><input type="number" id="keHi" step="0.5" value="1000"></div>
+      <div class="row" id="rowRunLab"><label>run range</label></div>
+      <div class="pair" id="rowRun"><input type="number" id="runLo" step="1" value="0"><input type="number" id="runHi" step="1" value="9999"></div>
       <div class="row" id="rowIcLab"><label>IC window [ADC]</label></div>
       <div class="pair" id="rowIc"><input type="number" id="icLo" step="10" value="-1"><input type="number" id="icHi" step="10" value="4000"></div>
+      <div class="row" id="rowNpLab"><label>IC multiplicity</label></div>
+      <div class="pair" id="rowNp"><input type="number" id="npLo" step="1" value="1"><input type="number" id="npHi" step="1" value="1"></div>
       <div class="row" id="rowVzLab"><label>vertex z [mm]</label></div>
       <div class="pair" id="rowVz"><input type="number" id="vzLo" step="10" value="-100"><input type="number" id="vzHi" step="10" value="1100"></div>
     </div>
@@ -423,12 +427,26 @@ const $ = id => document.getElementById(id);
 const IDS = ['ebeam','chi2','thLo','thHi','keLo','keHi','exBins','exLo','exHi','fitLo','fitHi',
              'thBins','thMin','thMax','keBins','keMin','keMax','cmBins','etExBins','cmLo','cmHi','slBins',
              'vzLo','vzHi','vzBins','vzExBins',
-             'icLo','icHi',
+             'icLo','icHi','runLo','runHi','npLo','npHi',
              'kcDenom','kcPivot'];
 
 /* vertex z is only meaningful if the cache actually carries it: ex_C15.C hardcoded 0
    before 2026-07-26, and old caches have no column at all. Detect a flat/absent
    column once and hide the whole z UI rather than drawing a misleading single stripe. */
+/* IC pulse multiplicity. Present only in caches built with the ic/npulse join. */
+const HAS_NP = FITTERS.some(f => {
+  const v = SETS[f] && SETS[f].np;
+  return !!(v && v.length);
+});
+
+/* Run number is optional in the same way as ic. When present it drives a range cut AND the
+   per-run panel, which is how a structure gets asked whether it belongs to one run or to all
+   of them. */
+const HAS_RUN = FITTERS.some(f => {
+  const v = SETS[f] && SETS[f].run;
+  return !!(v && v.length);
+});
+
 /* The ion-chamber value is optional: caches built before the IC join carry no column, and a
    window control that filters on a missing value would silently empty every panel. Detect it
    once, and hide the control entirely when it is absent. */
@@ -526,8 +544,13 @@ function pass(d, i, s) {
       // that applied the window without it would report a different number from the batch path
       // for the same window -- the two have already had to be reconciled once.
       && (!HAS_IC || !d.ic || s.icLo < 0
-          || (d.ic[i] >= 0 && d.ic[i] >= s.icLo && d.ic[i] <= s.icHi
-              && (!d.np || d.np[i] === 1)));
+          || (d.ic[i] >= 0 && d.ic[i] >= s.icLo && d.ic[i] <= s.icHi))
+      // Multiplicity is now its OWN cut rather than being welded to the IC window. It still
+      // DEFAULTS to 1-1, which is what apply_gate_C15d.C enforces, so the page and the batch
+      // path agree unless the range is deliberately opened -- and opening it is the point: a
+      // structure that grows with multiplicity is pile-up, one that does not is not.
+      && (!HAS_NP || !d.np || (d.np[i] >= s.npLo && d.np[i] <= s.npHi))
+      && (!HAS_RUN || !d.run || (d.run[i] >= s.runLo && d.run[i] <= s.runHi));
 }
 
 /** Ex histogram only, for a named fitter -- used for the comparison overlay */
@@ -1260,6 +1283,14 @@ function init() {
   // same for the ion chamber: no column -> no control, rather than one that filters on nothing
   if (!HAS_IC) {
     for (const id of ['rowIc','rowIcLab'])
+      { const e = $(id); if (e) e.style.display = 'none'; }
+  }
+  if (!HAS_RUN) {
+    for (const id of ['rowRun','rowRunLab','cardRun'])
+      { const e = $(id); if (e) e.style.display = 'none'; }
+  }
+  if (!HAS_NP) {
+    for (const id of ['rowNp','rowNpLab'])
       { const e = $(id); if (e) e.style.display = 'none'; }
   }
 
