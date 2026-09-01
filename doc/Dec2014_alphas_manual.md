@@ -688,6 +688,33 @@ event, because the per-event direction scatters by ~5° from beam divergence and
 Right: the same as full 3D angles — corrected and de-tilted, the beam sits 0.99° from the
 detector axis.*
 
+#### Where the tilt pivots
+
+The detector is tilted **about the beam entrance**, and it is centred on x = y = 0 there. So
+the beam is undeviated at the entrance and its deviation from the detector axis grows
+linearly to a maximum at the pad plane. Measured on the ensemble beam line of run 128
+(corrected hits, 2248 events):
+
+| z [mm] | distance from the detector axis |
+|---|---|
+| 1000 — entrance | **2.8 mm** |
+| 800 | 13.4 mm |
+| 600 | 28.6 mm |
+| 400 | 43.8 mm |
+| 200 | 59.0 mm |
+| 0 — pad plane | **74.3 mm** |
+
+Closest approach is **2.0 mm at z = 974 mm**, and 74.3 mm agrees with the 76 mm predicted
+from the 4.36° tilt over 1 m. This is also an independent confirmation of `TBEntrance`: the
+closest approach lands within 26 mm (7 tb) of z = 1000.
+
+> **A rotation needs a pivot, and the choice is not free.** The angle is pivot-invariant —
+> every result in §3.6, §5.4.8 and §5.4.9 is an angle and is therefore unaffected. Positions
+> are not. Rotating about the pad-coordinate origin (the pad-plane centre) is the tempting
+> default and is the worst choice: it leaves the de-tilted beam **103 mm** off the axis,
+> *further* than not rotating at all (53 mm). Pivoting at the entrance leaves 43 mm, and
+> that residual is real beam spot and divergence rather than an artefact of the transform.
+
 #### Browser viewer
 
 There is also a **self-contained HTML viewer** — `calib/attpc_viewer.html`. Open it in any

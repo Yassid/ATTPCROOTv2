@@ -162,7 +162,7 @@
   80–100° elastic band: scattering off the C and O in the CO₂ populates 60–70° and would
   confuse the topology. Vertices are fitted from all three segments. De-tilting uses the
   beam axis <b>measured</b> at B = 0 in run 100 (5.44°, −173.2°), not the parameter file's
-  <code>TiltAng</code>/<code>ThetaRot</code>. The grey cylinder is the 1 m active volume: the beam enters at z≈1000 mm and drifts toward the pad plane at z≈0.</p>
+  <code>TiltAng</code>/<code>ThetaRot</code>. The rotation pivots at the beam entrance on the axis, (0, 0, 1000) mm: the angle is the same for any pivot, but the pad-plane centre would push the de-tilted beam 103 mm off axis instead of 43. The grey cylinder is the 1 m active volume: the beam enters at z≈1000 mm and drifts toward the pad plane at z≈0.</p>
 </div>
 
 <script>
@@ -205,7 +205,27 @@ const RMAT = (function(b){
 
 const ap = (M,p) => M ? [M[0][0]*p[0]+M[0][1]*p[1]+M[0][2]*p[2],
                          M[1][0]*p[0]+M[1][1]*p[1]+M[1][2]*p[2],
-                         M[2][0]*p[0]+M[2][1]*p[1]+M[2][2]*p[2]] : p;   // rotate the event so the beam lies on the detector axis
+                         M[2][0]*p[0]+M[2][1]*p[1]+M[2][2]*p[2]] : p;
+
+// PIVOT. A rotation needs a centre, and the choice is not free of consequence for where
+// things END UP -- only for the angle, which is pivot-invariant. Rotating about the pad
+// coordinate origin (the pad-plane centre) is the tempting default and is the WORST choice:
+// it pushes the de-tilted beam 103 mm off the axis, further than leaving it alone (53 mm).
+// Pivot instead at the point where the beam enters the active volume, on the axis, which
+// leaves it 43 mm off -- and that residual is the real beam spot and divergence, not an
+// artefact of the transform.
+const PIVOT = [0, 0, 1000];
+
+// Rotation about PIVOT: R(p - P0) + P0 = R p + (P0 - R P0). The JSON already stores R p,
+// so the hits only need the constant offset added.
+const OFF = (function(){
+  const q = ap(RMAT, PIVOT);
+  return [PIVOT[0]-q[0], PIVOT[1]-q[1], PIVOT[2]-q[2]];
+})();
+const xf = p => deTilt ? (function(){ const q=ap(RMAT,p);
+                          return [q[0]+OFF[0], q[1]+OFF[1], q[2]+OFF[2]]; })() : p;
+const shift = p => deTilt ? [p[0]+OFF[0], p[1]+OFF[1], p[2]+OFF[2]] : p;
+   // rotate the event so the beam lies on the detector axis
 
 let yaw = -Math.PI/2, pitch = 0.16, zoom = 1, idx = 1;
 
@@ -217,7 +237,7 @@ let yaw = -Math.PI/2, pitch = 0.16, zoom = 1, idx = 1;
 // event as a smudge in the middle of a mostly empty canvas.
 let CX = 0, CY = 0, CZ = 600, SCALE = 0.42;
 function fitTo(e, K){
-  const P = [].concat(e[K.beam], e[K.a1], e[K.a2], [e[K.vtx]]);
+  const P = [].concat(e[K.beam], e[K.a1], e[K.a2], [e[K.vtx]]).map(shift);
   let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9,z0=1e9,z1=-1e9;
   for(const q of P){
     x0=Math.min(x0,q[0]); x1=Math.max(x1,q[0]);
@@ -246,13 +266,13 @@ function line(a,b,color,w,dash){
   ctx.beginPath(); ctx.moveTo(A[0],A[1]); ctx.lineTo(B[0],B[1]); ctx.stroke(); ctx.restore();
 }
 
-function volume(M){
+function volume(){
   const R=275, z0=0, z1=1000, N=48, c=col("--axis");
   ctx.save(); ctx.globalAlpha=.30; ctx.strokeStyle=c; ctx.lineWidth=1;
   for(const z of [z0,z1]){
     ctx.beginPath();
     for(let i=0;i<=N;i++){
-      const t=i/N*Math.PI*2, P=proj(ap(M,[R*Math.cos(t),R*Math.sin(t),z]));
+      const t=i/N*Math.PI*2, P=proj(xf([R*Math.cos(t),R*Math.sin(t),z]));
       i?ctx.lineTo(P[0],P[1]):ctx.moveTo(P[0],P[1]);
     }
     ctx.stroke();
@@ -260,7 +280,7 @@ function volume(M){
   ctx.globalAlpha=.18;
   for(let i=0;i<8;i++){
     const t=i/8*Math.PI*2;
-    const A=proj(ap(M,[R*Math.cos(t),R*Math.sin(t),z0])), B=proj(ap(M,[R*Math.cos(t),R*Math.sin(t),z1]));
+    const A=proj(xf([R*Math.cos(t),R*Math.sin(t),z0])), B=proj(xf([R*Math.cos(t),R*Math.sin(t),z1]));
     ctx.beginPath(); ctx.moveTo(A[0],A[1]); ctx.lineTo(B[0],B[1]); ctx.stroke();
   }
   ctx.restore();
@@ -274,8 +294,7 @@ function draw(){
   ctx.clearRect(0,0,cv.width,cv.height);
   ctx.fillStyle = col("--panel"); ctx.fillRect(0,0,cv.width,cv.height);
 
-  const M = deTilt ? RMAT : null;      // geometry transform for the active frame
-  if(LAYERS.find(l=>l.k==="vol").on) volume(M);
+  if(LAYERS.find(l=>l.k==="vol").on) volume();
 
   const SETS=[["beam","--beamc","qb"],["a1","--arm1","q1"],["a2","--arm2","q2"]];
 
@@ -285,7 +304,7 @@ function draw(){
   for(const [k,v,qk] of SETS){
     if(!LAYERS.find(l=>l.k===k).on) continue;
     const c=col(v);
-    e[K[k]].forEach((p,i)=>{ const P=proj(p); pool.push([P[2],P[0],P[1],c,e[qk][i]]); });
+    e[K[k]].forEach((p,i)=>{ const P=proj(shift(p)); pool.push([P[2],P[0],P[1],c,e[qk][i]]); });
   }
   pool.sort((A,B)=>A[0]-B[0]);
   for(const [,X,Y,c,q] of pool){
@@ -297,11 +316,11 @@ function draw(){
 
   // Each segment drawn as a ray FROM the vertex, so the topology reads as one beam coming
   // in and two arms leaving -- which is the thing being looked for.
-  const V=e[K.vtx];
+  const V=shift(e[K.vtx]);
   for(const [k,v] of SETS.map(t=>[t[0],t[1]])){
     if(!LAYERS.find(l=>l.k===k).on) continue;
-    const d=dirOf3(e[K[k]]); if(!d) continue;
-    let far=0, P=e[K[k]];
+    const d=dirOf3(e[K[k]]); if(!d) continue;   // direction is pivot-invariant
+    let far=0, P=e[K[k]].map(shift);
     for(const q of P){ const t=(q[0]-V[0])*d[0]+(q[1]-V[1])*d[1]+(q[2]-V[2])*d[2];
                        if(Math.abs(t)>Math.abs(far)) far=t; }
     line(V,[V[0]+d[0]*far, V[1]+d[1]*far, V[2]+d[2]*far], col(v), 2.4);
@@ -312,8 +331,8 @@ function draw(){
     // the detector tilt, and it stays visible whichever frame you are in -- what changes is
     // which one looks straight.
     const B=DATA.beam, L=1050;
-    line(ap(M,[0,0,0]), ap(M,[0,0,L]), col("--axis"), 1.6, [9,7]);
-    line(ap(M,[0,0,0]), ap(M,[B[0]/B[2]*L, B[1]/B[2]*L, L]), col("--beamc"), 1.4, [4,5]);
+    line(xf([0,0,0]), xf([0,0,L]), col("--axis"), 1.6, [9,7]);
+    line(xf([0,0,0]), xf([B[0]/B[2]*L, B[1]/B[2]*L, L]), col("--beamc"), 1.4, [4,5]);
   }
 
   if(LAYERS.find(l=>l.k==="vx").on){
