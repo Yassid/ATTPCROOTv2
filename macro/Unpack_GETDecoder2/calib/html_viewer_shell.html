@@ -159,7 +159,7 @@
   80–100° elastic band: scattering off the C and O in the CO₂ populates 60–70° and would
   confuse the topology. Vertices are fitted from all three segments. De-tilting uses the
   beam axis <b>measured</b> at B = 0 in run 100 (5.44°, −173.2°), not the parameter file's
-  <code>TiltAng</code>/<code>ThetaRot</code>. The grey cylinder is the active volume.</p>
+  <code>TiltAng</code>/<code>ThetaRot</code>. The grey cylinder is the 1 m active volume: the beam enters at z≈1000 mm and drifts toward the pad plane at z≈0.</p>
 </div>
 
 <script>
@@ -295,7 +295,11 @@ function draw(){
   ctx.save();
   ctx.font='11px ui-monospace,monospace'; ctx.fillStyle=col("--faint");
   const lab=(p,t)=>{const P=proj(p); ctx.fillText(t,P[0]+6,P[1]-4);};
-  lab([0,0,1080],"z  drift \u2192 pad plane");
+  // z = 1000 is the ENTRANCE (tb = TBEntrance = 320); z ~ 0 is the pad plane, because
+  // electrons reach the pads first and so occupy the LOW time buckets. The label used to
+  // say the opposite, which inverts the whole picture.
+  lab([0,0,1030],"beam enters  z\u22481000");
+  lab([0,0,-40],"pad plane  z\u22480");
   lab([330,0,0],"x"); lab([0,330,0],"y");
   ctx.restore();
 
