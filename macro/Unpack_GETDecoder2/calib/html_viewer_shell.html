@@ -4,7 +4,7 @@
     --ground:#0e1418; --panel:#151d23; --panel2:#1b262d; --rule:#24323b;
     --ink:#dfe8ee; --muted:#8ea3b0; --faint:#5d7280;
     --accent:#4fb3c9;
-    --raw:#e5484d; --cor:#4b8ff7; --det:#3fb950; --beam:#f0883e; --axis:#7f8f9a;
+    --beamc:#f0883e; --arm1:#4b8ff7; --arm2:#3fb950; --vtx:#e5484d; --axis:#7f8f9a;
     --mono:ui-monospace,"SF Mono",Menlo,Consolas,"DejaVu Sans Mono",monospace;
     --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
   }
@@ -13,18 +13,18 @@
       --ground:#f6f8f9; --panel:#ffffff; --panel2:#eef3f5; --rule:#d5e0e5;
       --ink:#16232b; --muted:#516875; --faint:#7d939e;
       --accent:#0f7d95;
-      --raw:#c92a2f; --cor:#1f6fe0; --det:#1f8a37; --beam:#c2660f; --axis:#8a99a3;
+      --beamc:#c2660f; --arm1:#1f6fe0; --arm2:#1f8a37; --vtx:#c92a2f; --axis:#8a99a3;
     }
   }
   :root[data-theme="dark"]{
     --ground:#0e1418; --panel:#151d23; --panel2:#1b262d; --rule:#24323b;
     --ink:#dfe8ee; --muted:#8ea3b0; --faint:#5d7280; --accent:#4fb3c9;
-    --raw:#e5484d; --cor:#4b8ff7; --det:#3fb950; --beam:#f0883e; --axis:#7f8f9a;
+    --beamc:#f0883e; --arm1:#4b8ff7; --arm2:#3fb950; --vtx:#e5484d; --axis:#7f8f9a;
   }
   :root[data-theme="light"]{
     --ground:#f6f8f9; --panel:#ffffff; --panel2:#eef3f5; --rule:#d5e0e5;
     --ink:#16232b; --muted:#516875; --faint:#7d939e; --accent:#0f7d95;
-    --raw:#c92a2f; --cor:#1f6fe0; --det:#1f8a37; --beam:#c2660f; --axis:#8a99a3;
+    --beamc:#c2660f; --arm1:#1f6fe0; --arm2:#1f8a37; --vtx:#c92a2f; --axis:#8a99a3;
   }
 
   *{box-sizing:border-box}
@@ -100,12 +100,10 @@
   <header>
     <div class="eyebrow">AT-TPC · NSCL · December 2014 · run 128</div>
     <h1>Beam-frame event viewer</h1>
-    <p class="sub">Every dot is one pad hit. The three colours are <b>the same hits three
-    times over</b> — not three tracks. Red is where the raw reconstruction puts them, blue
-    is after the E×B correction, green is blue rotated so the beam lands on the detector
-    axis. Each cloud carries its fitted line; the dashed lines are the beam direction and
-    the detector axis, drawn through the same point so only the angle between them matters.
-    <b>Blue should lie along amber. Green should lie along grey.</b></p>
+    <p class="sub">Ten α+α elastic candidates from run 128, clustered into a <b>beam</b>
+    track (amber) and <b>two arms</b> (blue, green) leaving a fitted <b>vertex</b> (red
+    ring). Every dot is one pad hit; positions are Lorentz-corrected. Toggle
+    <b>de-tilt</b> to rotate the event so the beam lies along the detector axis.</p>
   </header>
 
   <div class="stage">
@@ -118,7 +116,7 @@
       <div class="block">
         <div class="blabel">Event</div>
         <div class="evrow">
-          <input id="ev" type="range" min="0" max="9" value="3" step="1" aria-label="Event index">
+          <input id="ev" type="range" min="0" max="9" value="1" step="1" aria-label="Event index">
           <span class="evid" id="evid">—</span>
         </div>
       </div>
@@ -136,6 +134,7 @@
           <button class="v" data-view="beam">down beam</button>
           <button class="v" data-view="iso">iso</button>
         </div>
+        <button class="v" id="tilt" style="width:100%;margin-top:6px">de-tilt: off</button>
       </div>
 
       <div class="block">
@@ -144,18 +143,23 @@
       </div>
 
       <div class="block">
-        <p class="note"><b>Read the ensemble, not one event.</b> Per-event direction scatters
-        by about 5° from beam divergence and fit noise. Over ~2200 events the corrected,
-        de-tilted beam sits <b>0.99°</b> from the axis — a single event will not.</p>
+        <p class="note"><b>Three things that surprise people.</b><br>
+        The beam is <b>not</b> along z at x=y=0 — it is tilted ~6.4°, within ~12 mm of the
+        axis near the entrance but ~95 mm off by the pad plane.<br><br>
+        The vertex is <b>not</b> at (0,0) — vertices sit a median 50 mm off axis, because
+        the beam is itself offset and has a finite spot.<br><br>
+        The arms are <b>not</b> back-to-back. Equal-mass elastic gives a <b>90°</b> opening
+        in the lab; 180° is the centre-of-mass picture.</p>
       </div>
     </div>
   </div>
 
-  <p class="foot">Hits from run 128, unpacked on branch <code>FairRootv18.00-fairroot19-port</code>.
-  De-tilting uses the beam axis <b>measured</b> at B = 0 in run 100 (5.44°, −173.2°), not the
-  parameter file's <code>TiltAng</code>/<code>ThetaRot</code> — those leave 1.91° rather than
-  0.99°, because the two angles are individually mis-assigned while their product is not.
-  The grey cylinder is the active volume; the beam enters at the far end.</p>
+  <p class="foot">Run 128, branch <code>FairRootv18.00-fairroot19-port</code>. Events are
+  clustered with direction-aware HDBSCAN and kept only if the opening angle falls in the
+  80–100° elastic band: scattering off the C and O in the CO₂ populates 60–70° and would
+  confuse the topology. Vertices are fitted from all three segments. De-tilting uses the
+  beam axis <b>measured</b> at B = 0 in run 100 (5.44°, −173.2°), not the parameter file's
+  <code>TiltAng</code>/<code>ThetaRot</code>. The grey cylinder is the active volume.</p>
 </div>
 
 <script>
@@ -166,22 +170,38 @@ const css = getComputedStyle(document.documentElement);
 const col = n => css.getPropertyValue(n).trim();
 
 const LAYERS = [
-  {k:"raw", nm:"Raw hits",        v:"--raw", on:true},
-  {k:"cor", nm:"Lorentz-corrected", v:"--cor", on:true},
-  {k:"det", nm:"De-tilted to axis", v:"--det", on:true},
-  {k:"ax",  nm:"Reference axes",  v:"--beam", on:true},
-  {k:"vol", nm:"Active volume",   v:"--axis", on:true},
+  {k:"beam", nm:"Beam track",     v:"--beamc", on:true},
+  {k:"a1",   nm:"Arm 1",          v:"--arm1",  on:true},
+  {k:"a2",   nm:"Arm 2",          v:"--arm2",  on:true},
+  {k:"vx",   nm:"Vertex",         v:"--vtx",   on:true},
+  {k:"ax",   nm:"Detector axis",  v:"--axis",  on:true},
+  {k:"vol",  nm:"Active volume",  v:"--axis",  on:true},
 ];
+let deTilt = false, refit = true;   // rotate the event so the beam lies on the detector axis
 
-let yaw = -Math.PI/2, pitch = 0.16, zoom = 1, idx = 3;
+let yaw = -Math.PI/2, pitch = 0.16, zoom = 1, idx = 1;
 
 // ---- projection ---------------------------------------------------------------------
 // Orthographic on purpose. Detector coords are mm with z along the drift; centre the scene
 // on the middle of the drift length so rotation feels anchored to the detector, not to the
 // event's own centroid (which would make events jump as you step through them).
-const CZ = 600, SCALE = 0.42;
+// Auto-fit: centre on the event and scale so it fills the frame. A fixed scale left the
+// event as a smudge in the middle of a mostly empty canvas.
+let CX = 0, CY = 0, CZ = 600, SCALE = 0.42;
+function fitTo(e, K){
+  const P = [].concat(e[K.beam], e[K.a1], e[K.a2], [e[K.vtx]]);
+  let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9,z0=1e9,z1=-1e9;
+  for(const q of P){
+    x0=Math.min(x0,q[0]); x1=Math.max(x1,q[0]);
+    y0=Math.min(y0,q[1]); y1=Math.max(y1,q[1]);
+    z0=Math.min(z0,q[2]); z1=Math.max(z1,q[2]);
+  }
+  CX=(x0+x1)/2; CY=(y0+y1)/2; CZ=(z0+z1)/2;
+  const span=Math.max(x1-x0, y1-y0, z1-z0, 200);
+  SCALE = 0.80*Math.min(cv.width, cv.height)/span;
+}
 function proj(p){
-  const x = p[0], y = p[1], z = p[2] - CZ;
+  const x = p[0]-CX, y = p[1]-CY, z = p[2] - CZ;
   const cy = Math.cos(yaw), sy = Math.sin(yaw);
   let X = x*cy + z*sy, Z = -x*sy + z*cy;
   const cp = Math.cos(pitch), sp = Math.sin(pitch);
@@ -218,70 +238,60 @@ function volume(){
   ctx.restore();
 }
 
-// ---- direction fit, so the readout is measured rather than asserted ------------------
-function dirOf(pts){
-  let mz=0,mx=0,my=0;
-  for(const p of pts){mx+=p[0];my+=p[1];mz+=p[2];}
-  const n=pts.length; mx/=n; my/=n; mz/=n;
-  let sxz=0,syz=0,szz=0;
-  for(const p of pts){const dz=p[2]-mz; sxz+=dz*(p[0]-mx); syz+=dz*(p[1]-my); szz+=dz*dz;}
-  if(szz<=0) return null;
-  const a=sxz/szz, b=syz/szz;
-  return {a,b, deg: Math.atan2(Math.hypot(a,b),1)*180/Math.PI};
-}
-
 function draw(){
   const e = DATA.events[idx];
+  const K = deTilt ? {beam:"beamR", a1:"a1R", a2:"a2R", vtx:"vtxR"}
+                   : {beam:"beam",  a1:"a1",  a2:"a2",  vtx:"vtx"};
+  if(refit){ fitTo(e,K); refit=false; }
   ctx.clearRect(0,0,cv.width,cv.height);
   ctx.fillStyle = col("--panel"); ctx.fillRect(0,0,cv.width,cv.height);
 
   if(LAYERS.find(l=>l.k==="vol").on) volume();
 
-  // Points first, fitted lines on top. Painter's algorithm across all visible sets at
-  // once, so depth reads correctly where the three clouds interleave.
+  const SETS=[["beam","--beamc","qb"],["a1","--arm1","q1"],["a2","--arm2","q2"]];
+
+  // Points first, fitted lines on top. Painter's algorithm across all visible segments
+  // together, so depth reads correctly where the beam and an arm cross near the vertex.
   const pool=[];
-  for(const L of LAYERS){
-    if(!L.on || !(L.k in e)) continue;
-    const c=col(L.v);
-    e[L.k].forEach((p,i)=>{ const P=proj(p); pool.push([P[2],P[0],P[1],c,e.q[i]]); });
+  for(const [k,v,qk] of SETS){
+    if(!LAYERS.find(l=>l.k===k).on) continue;
+    const c=col(v);
+    e[K[k]].forEach((p,i)=>{ const P=proj(p); pool.push([P[2],P[0],P[1],c,e[qk][i]]); });
   }
   pool.sort((A,B)=>A[0]-B[0]);
   for(const [,X,Y,c,q] of pool){
-    const r = 1.6 + Math.min(2.4, Math.log10(1+q)*0.8);
-    ctx.fillStyle=c; ctx.globalAlpha=.62;
+    const r = 1.7 + Math.min(2.5, Math.log10(1+q)*0.85);
+    ctx.fillStyle=c; ctx.globalAlpha=.72;
     ctx.beginPath(); ctx.arc(X,Y,r,0,6.283); ctx.fill();
   }
   ctx.globalAlpha=1;
 
-  // Fit each visible cloud and draw its own line. Comparing SLOPES of drawn lines is
-  // something the eye can actually do; comparing the slope of a scatter against a
-  // reference drawn from an arbitrary anchor is not, which is what the first version
-  // asked of the reader.
-  const fits={};
-  for(const L of LAYERS){
-    if(!L.on || !(L.k in e)) continue;
-    const d=dirOf(e[L.k]); if(!d) continue;
-    let mz=0,mx=0,my=0; const P=e[L.k];
-    for(const q of P){mx+=q[0];my+=q[1];mz+=q[2];}
-    const n=P.length; mx/=n; my/=n; mz/=n;
-    let z0=1e9,z1=-1e9; for(const q of P){z0=Math.min(z0,q[2]);z1=Math.max(z1,q[2]);}
-    fits[L.k]={d,mx,my,mz,z0,z1};
-    const A=[mx+d.a*(z0-mz), my+d.b*(z0-mz), z0];
-    const B=[mx+d.a*(z1-mz), my+d.b*(z1-mz), z1];
-    line(A,B,col(L.v),2.2);
+  // Each segment drawn as a ray FROM the vertex, so the topology reads as one beam coming
+  // in and two arms leaving -- which is the thing being looked for.
+  const V=e[K.vtx];
+  for(const [k,v] of SETS.map(t=>[t[0],t[1]])){
+    if(!LAYERS.find(l=>l.k===k).on) continue;
+    const d=dirOf3(e[K[k]]); if(!d) continue;
+    let far=0, P=e[K[k]];
+    for(const q of P){ const t=(q[0]-V[0])*d[0]+(q[1]-V[1])*d[1]+(q[2]-V[2])*d[2];
+                       if(Math.abs(t)>Math.abs(far)) far=t; }
+    line(V,[V[0]+d[0]*far, V[1]+d[1]*far, V[2]+d[2]*far], col(v), 2.4);
   }
 
-  if(LAYERS.find(l=>l.k==="ax").on && fits.cor){
-    // Reference directions drawn THROUGH the corrected cloud's own centre, so only the
-    // angle between lines matters and the anchor cannot mislead.
-    const f=fits.cor, B=DATA.beam, L=(f.z1-f.z0)/2+120;
-    const c=[f.mx,f.my,f.mz];
-    line([c[0],c[1],c[2]-L],[c[0],c[1],c[2]+L], col("--axis"), 1.5, [8,6]);
-    line([c[0]-B[0]/B[2]*L, c[1]-B[1]/B[2]*L, c[2]-L],
-         [c[0]+B[0]/B[2]*L, c[1]+B[1]/B[2]*L, c[2]+L], col("--beam"), 1.8, [8,6]);
+  if(LAYERS.find(l=>l.k==="ax").on){
+    // Detector axis: the actual x=y=0 line, not a direction through the event. The point
+    // of this page is partly that the beam does NOT sit on it.
+    line([0,0,0],[0,0,1050], col("--axis"), 1.5, [9,7]);
   }
 
-  // In-scene labels: without them the orientation has to be inferred from the cylinder.
+  if(LAYERS.find(l=>l.k==="vx").on){
+    const P=proj(V);
+    ctx.save(); ctx.strokeStyle=col("--vtx"); ctx.lineWidth=2.2;
+    ctx.beginPath(); ctx.arc(P[0],P[1],9,0,6.283); ctx.stroke();
+    ctx.beginPath(); ctx.arc(P[0],P[1],2,0,6.283); ctx.fillStyle=col("--vtx"); ctx.fill();
+    ctx.restore();
+  }
+
   ctx.save();
   ctx.font='11px ui-monospace,monospace'; ctx.fillStyle=col("--faint");
   const lab=(p,t)=>{const P=proj(p); ctx.fillText(t,P[0]+6,P[1]-4);};
@@ -289,17 +299,31 @@ function draw(){
   lab([330,0,0],"x"); lab([0,330,0],"y");
   ctx.restore();
 
-  // readout
-  const rows=[["raw","--raw","Raw"],["cor","--cor","Corrected"],["det","--det","De-tilted"]];
-  let html="";
-  for(const [k,v,nm] of rows){
-    const d=dirOf(e[k]);
-    html+=`<tr><td><span class="dot" style="background:${col(v)}"></span>${nm}</td>`
-        + `<td>${d?d.deg.toFixed(2)+"°":"—"}</td></tr>`;
+  const rt=Math.hypot(V[0],V[1]);
+  document.getElementById("read").innerHTML =
+      `<tr><td>opening angle</td><td>${e.op.toFixed(1)}\u00b0</td></tr>`
+    + `<tr><td>vertex x, y</td><td>${V[0].toFixed(0)}, ${V[1].toFixed(0)} mm</td></tr>`
+    + `<tr><td>vertex z</td><td>${V[2].toFixed(0)} mm</td></tr>`
+    + `<tr><td>vertex off axis</td><td>${rt.toFixed(0)} mm</td></tr>`
+    + `<tr><td>hits</td><td>${e.n}</td></tr>`;
+  document.getElementById("evid").textContent=`#${e.id} \u00b7 ${e.op.toFixed(1)}\u00b0`;
+}
+
+// Principal direction of a segment (unit vector), used to draw each ray from the vertex.
+function dirOf3(P){
+  let mx=0,my=0,mz=0; for(const p of P){mx+=p[0];my+=p[1];mz+=p[2];}
+  const n=P.length; mx/=n; my/=n; mz/=n;
+  let xx=0,xy=0,xz=0,yy=0,yz=0,zz=0;
+  for(const p of P){const a=p[0]-mx,b=p[1]-my,c=p[2]-mz;
+    xx+=a*a; xy+=a*b; xz+=a*c; yy+=b*b; yz+=b*c; zz+=c*c;}
+  // power iteration on the covariance: enough for a principal axis, no linear algebra dep
+  let v=[1,1,1];
+  for(let it=0;it<60;it++){
+    const w=[xx*v[0]+xy*v[1]+xz*v[2], xy*v[0]+yy*v[1]+yz*v[2], xz*v[0]+yz*v[1]+zz*v[2]];
+    const m=Math.hypot(w[0],w[1],w[2]); if(m<1e-12) return null;
+    v=[w[0]/m,w[1]/m,w[2]/m];
   }
-  html+=`<tr><td>hits</td><td>${e.n}</td></tr>`;
-  document.getElementById("read").innerHTML=html;
-  document.getElementById("evid").textContent=`#${e.id} · ${e.n} hits`;
+  return v;
 }
 
 // ---- controls ------------------------------------------------------------------------
@@ -315,13 +339,16 @@ LAYERS.forEach((L,i)=>{
 });
 
 const VIEWS={side:[-Math.PI/2,0], top:[-Math.PI/2,Math.PI/2], beam:[0,0], iso:[-0.62,0.30]};
+document.getElementById("tilt").onclick=function(){
+  deTilt=!deTilt; refit=true; this.textContent="de-tilt: "+(deTilt?"on":"off"); draw();
+};
 document.querySelectorAll("button.v").forEach(b=>{
   b.onclick=()=>{ [yaw,pitch]=VIEWS[b.dataset.view]; draw(); };
 });
 
 const evEl=document.getElementById("ev");
 evEl.max=String(DATA.events.length-1);
-evEl.oninput=()=>{ idx=+evEl.value; draw(); };
+evEl.oninput=()=>{ idx=+evEl.value; refit=true; zoom=1; draw(); };
 
 let drag=false,lx=0,ly=0;
 cv.addEventListener("pointerdown",e=>{drag=true;lx=e.clientX;ly=e.clientY;
