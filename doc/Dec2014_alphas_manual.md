@@ -715,6 +715,25 @@ closest approach lands within 26 mm (7 tb) of z = 1000.
 > *further* than not rotating at all (53 mm). Pivoting at the entrance leaves 43 mm, and
 > that residual is real beam spot and divergence rather than an artefact of the transform.
 
+#### The convention, checked against the commissioning paper
+
+Bradt *et al.*, NIM A **875** (2017) 65–79, Fig. 7 defines the analysis frame, and it
+matches this one exactly: x and y from the sensor-plane geometry, **z pointing upstream with
+the sensor plane at z = 0**, the **beam entrance window at z = 1000 mm** (stated twice in
+the text), and **τ = the angle between E and B**, since the solenoid is aligned with the
+beam. Thesis Fig. 3.2 adds that the beam frame is reached "by a rotation through angle τ
+**about the beam entrance window**" — the pivot.
+
+One difference: the paper's system is **left-handed**, this analysis is right-handed. That
+flips the sign of the **E**×**B** term, which the fitted `ThetaPad`/`ThetaRot` silently
+absorb (§3.8). Harmless as long as those two are fitted rather than set from geometry.
+
+> **A known offset, accepted.** Hits span 384–1644 mm against a 0–1000 mm active volume.
+> 9 % lie beyond z = 1000, and **66.8 % of beam-segment hits do against 0 % of arm hits** —
+> so it is the beam's drift-time origin (or a merged pile-up beam track), not the reaction
+> products. The arms are fully contained and their **range**, which carries the energy, is
+> unaffected.
+
 #### Browser viewer
 
 There is also a **self-contained HTML viewer** — `calib/attpc_viewer.html`. Open it in any
