@@ -1,0 +1,6 @@
+# Regenerable output, as in the sibling 14C_dp campaign: every figure here comes back from
+# tp_spectrum_Be10.C / tp_kinplots_Be10.C / kin_gui_Be10.C run against /mnt/f/Be10_tp, and
+# kin_truth_Be10.root is a cache rebuilt by make_kin_points_Be10.C. Tracking 1.5 MB of PNGs in a
+# shared framework repo buys nothing that the macros do not already give.
+plots/
+diagnostics/
