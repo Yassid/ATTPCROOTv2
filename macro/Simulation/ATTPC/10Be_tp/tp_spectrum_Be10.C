@@ -323,10 +323,21 @@ void tp_spectrum_Be10(TString root = "/mnt/f/Be10_tp", TString cfg = "b285_attpc
    double bw = hSum->GetBinWidth(1), sg = fA->GetParameter(1);
    double area[NL];
    for (int l = 0; l < NL; ++l) area[l] = fA->GetParameter(NSHAPE + l) * sg * std::sqrt(2 * TMath::Pi()) / bw;
+   // GUARD. A ratio is only meaningful while its denominator is a real peak. In a slice where the
+   // fit collapses, A_2109 goes to ~0 and area/area(2+) prints something like 7e8 -- a number that
+   // looks like a result and is not one. Require the 2+ to hold at least 1 % of the spectrum.
+   const bool refOK = area[1] > 0.01 * nTot;
    printf("\n  %-8s %10s %12s %14s %14s\n", "level", "Ex [MeV]", "area", "area/area(2+)", "input ratio");
-   for (int l = 0; l < NL; ++l)
-      printf("  %-8s %10.3f %12.1f %14.3f %14s\n", LVL[l], LEX[l], area[l], area[1] > 0 ? area[l] / area[1] : NAN,
-             l == 2 ? Form("%.3f", rTrue) : "-");
+   for (int l = 0; l < NL; ++l) {
+      if (refOK)
+         printf("  %-8s %10.3f %12.1f %14.3f %14s\n", LVL[l], LEX[l], area[l], area[l] / area[1],
+                l == 2 ? Form("%.3f", rTrue) : "-");
+      else
+         printf("  %-8s %10.3f %12.1f %14s %14s\n", LVL[l], LEX[l], area[l], "n/a", l == 2 ? Form("%.3f", rTrue) : "-");
+   }
+   if (!refOK)
+      printf("  \033[1;31mTHE 2+ REFERENCE PEAK COLLAPSED (area %.1f of %.0f counts) -- every ratio below is\n"
+             "  meaningless and this slice must not be quoted.\033[0m\n", area[1], nTot);
    printf("  fitted lineshape: core sigma %.3f MeV, tail sigma %.3f MeV with %.1f %% of the yield,\n"
           "                    energy-scale shift %+.3f MeV\n",
           sg, fA->GetParameter(2), 100 * fA->GetParameter(3), fA->GetParameter(0));
@@ -350,9 +361,11 @@ void tp_spectrum_Be10(TString root = "/mnt/f/Be10_tp", TString cfg = "b285_attpc
           C.first->GetNpar(), lC, dlC, nsigC >= 3 ? 2 : (nsigC >= 2 ? 3 : 1), nsigC);
    printf("  THIS is the number to quote: A vs B only says the 2.109 is not a single clean peak,\n"
           "  which a slightly wrong calibration would also produce. A vs C says there are TWO states.\n");
-   printf("  fitted 0+_2 / 2+ area ratio %.3f against the %.3f actually injected%s\n",
-          area[1] > 0 ? area[2] / area[1] : NAN, rTrue,
-          (area[1] > 0 && std::fabs(area[2] / area[1] - rTrue) < 0.35 * rTrue) ? "  (recovered)" : "  (NOT recovered)");
+   if (refOK)
+      printf("  fitted 0+_2 / 2+ area ratio %.3f against the %.3f actually injected%s\n", area[2] / area[1], rTrue,
+             (std::fabs(area[2] / area[1] - rTrue) < 0.35 * rTrue) ? "  (recovered)" : "  (NOT recovered)");
+   else
+      printf("  no usable area ratio: the 2+ reference peak collapsed in this slice\n");
 
    // ---- figure, on ONE Poisson realisation so it looks like data -----------------------------
    gRandom->SetSeed(20260901);
