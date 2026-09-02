@@ -1,0 +1,5 @@
+# Regenerable output, as in the sibling 14C_dp and 10Be_tp campaigns: every figure here comes back
+# from dp_kinematics_C17.C / dp_summary_C17.C / dp_plots_C17.C run against /mnt/f/C17dp. Tracking
+# PNGs in a shared framework repo buys nothing the macros do not already give.
+plots/
+diagnostics/
