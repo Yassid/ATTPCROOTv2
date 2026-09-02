@@ -1,0 +1,3 @@
+# Campaign products live outside the repo (INEL_ROOT, default the Seagate drive).
+data/
+*.root

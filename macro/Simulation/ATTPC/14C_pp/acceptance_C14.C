@@ -49,6 +49,10 @@ static std::tuple<double, double> acc_kine(double m1, double m2, double m3, doub
 
 /// @param dThetaMax  truth match: |theta_fit - theta_true| must be under this (deg). <=0 disables.
 /// @param keRatioMin/Max  truth match window on KE_fit/KE_true.
+/// @param ejPdg PDG code of the light EJECTILE to truth-match. 2212 (proton) is the default so
+///        every existing caller is byte-identical; 17C(d,d') passes 1000010020 (deuteron).
+///        With the wrong code nothing truth-matches and the macro reports
+///        "generated reactions 0 ... acceptance 0.000" on a sample whose fits are perfectly fine.
 void acceptance_C14(TString simFile, TString fitFile, TString tag = "gs", Double_t resEx = 0.0, Double_t Ebeam = 161.0,
                     Double_t chi2Cut = 5.0, Int_t nBins = 36, Double_t cmMax = 180.0, Double_t dThetaMax = 10.0,
                     Double_t keRatioMin = 0.5, Double_t keRatioMax = 2.0, Bool_t useXtr = kFALSE,
@@ -60,7 +64,8 @@ void acceptance_C14(TString simFile, TString fitFile, TString tag = "gs", Double
                     // BEAM mass, in amu. Was hard-coded at 14C until 2026-08-31; it is a trailing
                     // argument with the old value as its default, so every existing caller is
                     // byte-identical. 10Be(t,p)12Be passes 10.0135341.
-                    Double_t mBeamAmu = 14.003242)
+                    Double_t mBeamAmu = 14.003242,
+                    Int_t ejPdg = 2212)
 {
    gSystem->Load("libAtReconstruction.so");
    gSystem->Load("libAtSimulationData.so");
@@ -113,7 +118,7 @@ void acceptance_C14(TString simFile, TString fitFile, TString tag = "gs", Double
       double keT = -1, thT = -1, zT = -1e9;
       for (int k = 0; k < mc->GetEntriesFast(); ++k) {
          auto *t = (AtMCTrack *)mc->At(k);
-         if (!t || t->GetPdgCode() != 2212 || t->GetMotherId() != -1)
+         if (!t || t->GetPdgCode() != ejPdg || t->GetMotherId() != -1)
             continue;
          zT = t->GetStartZ() * 10.0; // FairRoot stores cm; the analysis works in mm
          double px = t->GetPx() * 1000, py = t->GetPy() * 1000, pz = t->GetPz() * 1000; // GeV -> MeV

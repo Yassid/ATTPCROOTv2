@@ -66,13 +66,18 @@ static double exr_quantile(std::vector<double> &v, double q)
 ///        The beam is always 14C here. resEx is added to mResidAmu to make the generated residual,
 ///        and the RECONSTRUCTED excitation is always referred to the ground-state residual -- that
 ///        is what an experiment does, so the residual below is the error.
+/// @param ejPdg PDG code of the light EJECTILE to truth-match. 2212 (proton) is the default so
+///        every existing caller is byte-identical; 17C(d,d') passes 1000010020 (deuteron).
+///        With the wrong code nothing truth-matches and the macro reports
+///        "generated reactions 0 ... acceptance 0.000" on a sample whose fits are perfectly fine.
 void ex_res_C14_hf(TString simFile, TString fitFile, TString tag, Double_t resEx = 0.0, Double_t Ebeam = 159.75,
                    Double_t chi2Cut = 5.0, Bool_t useXtr = kTRUE, TString outDir = "./", Double_t dThetaMax = 10.0,
                    Double_t keRatioMin = 0.5, Double_t keRatioMax = 2.0, Double_t mTargetAmu = 1.007825,
                    Double_t mEjectAmu = 1.007825, Double_t mResidAmu = 14.003242,
                    // BEAM mass in amu; trailing with the old hard-coded 14C value as default, so
                    // existing callers are unchanged. 10Be(t,p)12Be passes 10.0135341.
-                   Double_t mBeamAmu = 14.003242)
+                   Double_t mBeamAmu = 14.003242,
+                   Int_t ejPdg = 2212)
 {
    gSystem->Load("libAtReconstruction.so");
    gSystem->Load("libAtSimulationData.so");
@@ -145,7 +150,7 @@ void ex_res_C14_hf(TString simFile, TString fitFile, TString tag, Double_t resEx
       double keT = -1, thT = -1, zT = -1e9;
       for (int k = 0; k < mc->GetEntriesFast(); ++k) {
          auto *t = (AtMCTrack *)mc->At(k);
-         if (!t || t->GetPdgCode() != 2212 || t->GetMotherId() != -1)
+         if (!t || t->GetPdgCode() != ejPdg || t->GetMotherId() != -1)
             continue;
          zT = t->GetStartZ() * 10.0;
          double px = t->GetPx() * 1000, py = t->GetPy() * 1000, pz = t->GetPz() * 1000;

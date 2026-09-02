@@ -18,9 +18,13 @@
 ///
 /// Check 3 is the one that would catch a swapped mass or a wrong residual excitation, which
 /// checks 1 and 2 cannot see.
+/// @param ejPdg PDG code of the LIGHT ejectile to look for in check 3. 2212 is a proton, which is
+///        the (d,p) arm's ejectile and stays the default so every existing caller is unchanged.
+///        The (d,d') channel of the same proposal needs 1000010020 (deuteron): with 2212 check 3
+///        finds only stray secondaries and reports a spurious failure while checks 1 and 2 pass.
 void check_beam_C17(TString f = "./data/attpcsim.root", Double_t pAsked = 2.1290066, Double_t mBeamAmu = 17.02257865,
                     Double_t mTgtAmu = 2.0141017778, Double_t mResAmu = 18.02675193, Double_t mEjAmu = 1.0078250322,
-                    Double_t resEx = 0.0)
+                    Double_t resEx = 0.0, Int_t ejPdg = 2212)
 {
    TFile *fi = TFile::Open(f);
    if (!fi || fi->IsZombie()) {
@@ -75,7 +79,7 @@ void check_beam_C17(TString f = "./data/attpcsim.root", Double_t pAsked = 2.1290
       ++nreact;
 
       // --- reaction event: track 0 is the scattered 18C at the vertex, and the proton is the
-      // --- light track in the same event. Find it by PDG (2212).
+      // --- light track in the same event. Find it by PDG (ejPdg: 2212 p, 1000010020 d).
       const double vz = tr->GetStartZ();
       vzMin = std::min(vzMin, vz);
       vzMax = std::max(vzMax, vz);
@@ -83,7 +87,7 @@ void check_beam_C17(TString f = "./data/attpcsim.root", Double_t pAsked = 2.1290
       const AtMCTrack *pr = nullptr;
       for (int k = 1; k < tracks->GetEntriesFast(); ++k) {
          auto *c = (AtMCTrack *)tracks->At(k);
-         if (c && c->GetPdgCode() == 2212) {
+         if (c && c->GetPdgCode() == ejPdg) {
             pr = c;
             break;
          }
@@ -146,9 +150,9 @@ void check_beam_C17(TString f = "./data/attpcsim.root", Double_t pAsked = 2.1290
       printf("  vertex z : %.1f to %.1f cm, mean %.2f cm   (uniform over the active volume)\n", vzMin, vzMax,
              sumVz / nreact);
 
-   printf("\n\033[1;33m===== 3. two-body kinematics closure (proton) =====\033[0m\n");
-   printf("  Q(17C(d,p)18C) at Ex = %.3f : %+.4f MeV\n", resEx, (mB + mT - mR - mE) * 1000);
-   printf("  protons found    = %d\n", nk);
+   printf("\n\033[1;33m===== 3. two-body kinematics closure (ejectile PDG %d) =====\033[0m\n", ejPdg);
+   printf("  Q(reaction) at Ex = %.3f : %+.4f MeV\n", resEx, (mB + mT - mR - mE) * 1000);
+   printf("  ejectiles found  = %d\n", nk);
    if (nk) {
       printf("  theta_lab range  = %.1f to %.1f deg\n", thMin, thMax);
       printf("  KE range         = %.2f to %.2f MeV\n", keMin, keMax);
