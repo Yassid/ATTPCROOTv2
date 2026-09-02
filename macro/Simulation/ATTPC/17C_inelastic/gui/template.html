@@ -1,0 +1,351 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>17C kinematics explorer</title>
+<style>
+  :root{
+    --bg:#12151a; --panel:#1a1f27; --edge:#2b3340; --ink:#e6ebf2; --dim:#93a1b5;
+    --gs:#c9d1dc; --l217:#ff6b6b; --l332:#5aa9ff; --accent:#ffd166;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:13px/1.45 ui-sans-serif,system-ui,"Segoe UI",Roboto,sans-serif;display:flex;height:100vh;overflow:hidden}
+  #side{width:290px;flex:none;background:var(--panel);border-right:1px solid var(--edge);
+        padding:14px;overflow-y:auto}
+  #main{flex:1;display:flex;align-items:center;justify-content:center;overflow:auto;padding:14px}
+  h1{font-size:15px;margin:0 0 2px}
+  .sub{color:var(--dim);font-size:11px;margin-bottom:14px}
+  .grp{margin-bottom:15px;padding-bottom:13px;border-bottom:1px solid var(--edge)}
+  .grp:last-child{border-bottom:none}
+  .lab{font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:var(--dim);margin-bottom:6px}
+  .row{display:flex;gap:5px;flex-wrap:wrap}
+  button{background:#232a35;color:var(--ink);border:1px solid var(--edge);border-radius:5px;
+         padding:5px 9px;font:inherit;font-size:12px;cursor:pointer}
+  button:hover{background:#2c3542}
+  button.on{background:var(--accent);color:#12151a;border-color:var(--accent);font-weight:600}
+  label.ck{display:flex;align-items:center;gap:7px;padding:3px 0;cursor:pointer;font-size:12px}
+  input[type=range]{width:100%;accent-color:var(--accent)}
+  .val{float:right;color:var(--accent);font-variant-numeric:tabular-nums}
+  .sw{width:11px;height:11px;border-radius:2px;display:inline-block}
+  canvas{background:#fff;border-radius:6px;box-shadow:0 6px 26px #0008;max-width:100%;height:auto}
+  #stat{font-size:11px;color:var(--dim);margin-top:9px;line-height:1.6;font-variant-numeric:tabular-nums}
+  #stat b{color:var(--ink);font-weight:600}
+  .warn{font-size:10.5px;color:#ffc48a;background:#3a2a13;border:1px solid #6b4a20;
+        border-radius:5px;padding:7px;margin-top:9px;line-height:1.5}
+</style>
+</head>
+<body>
+<div id="side">
+  <h1>¹⁷C kinematics explorer</h1>
+  <div class="sub">M<sub>n</sub>/M<sub>p</sub> proposal simulation · one day of beam</div>
+
+  <div class="grp">
+    <div class="lab">Configuration</div>
+    <div class="row" id="cfgRow"></div>
+  </div>
+
+  <div class="grp">
+    <div class="lab">View</div>
+    <div class="row" id="viewRow"></div>
+  </div>
+
+  <div class="grp">
+    <div class="lab">Levels</div>
+    <label class="ck"><input type="checkbox" id="L0" checked><span class="sw" style="background:var(--gs)"></span>3/2⁺ g.s. (elastic)</label>
+    <label class="ck"><input type="checkbox" id="L1" checked><span class="sw" style="background:var(--l217)"></span>1/2⁺ 217 keV</label>
+    <label class="ck"><input type="checkbox" id="L2" checked><span class="sw" style="background:var(--l332)"></span>5/2⁺ 332 keV</label>
+    <label class="ck"><input type="checkbox" id="curves" checked>show analytic curves</label>
+    <label class="ck"><input type="checkbox" id="vcorr" checked>vertex correction</label>
+    <label class="ck"><input type="checkbox" id="logs" checked>log scale</label>
+  </div>
+
+  <div class="grp">
+    <div class="lab">θ<sub>lab</sub> window <span class="val" id="thV"></span></div>
+    <input type="range" id="thLo" min="10" max="88" step="1" value="50">
+    <input type="range" id="thHi" min="10" max="88" step="1" value="70">
+  </div>
+
+  <div class="grp">
+    <div class="lab">N(elastic) / N(1/2⁺) <span class="val" id="rV"></span></div>
+    <input type="range" id="R" min="0" max="5" step="1" value="3">
+    <div class="warn">Not measured. No elastic FRESCO calculation exists, so the elastic is given
+      the 1/2⁺ angular shape and this sets its total. The 1/2⁺ : 5/2⁺ ratio of 2.38 is real.</div>
+  </div>
+
+  <div class="grp">
+    <div class="lab">E<sub>x</sub> bin width <span class="val" id="bwV"></span></div>
+    <input type="range" id="bw" min="5" max="60" step="5" value="20">
+  </div>
+
+  <div class="grp">
+    <div class="lab">Capture</div>
+    <div class="row" id="sizeRow"></div>
+    <div class="row" style="margin-top:6px"><button id="save">Save PNG</button></div>
+  </div>
+
+  <div id="stat"></div>
+</div>
+<div id="main"><canvas id="cv"></canvas></div>
+
+<script>
+const DATA = __DATA__;
+
+const U = 931.49401, MBEAM = 17.0225787*U, E0 = DATA.meta.E0;
+const LEV = DATA.meta.levels, LNAME = ["3/2+ g.s.","1/2+ 217","5/2+ 332"];
+const LCOL = ["#8b96a5","#e03131","#1c7ed6"];
+// 300 torr H2 (atomic H in media.geo: A=1.007, rho=3.308e-5) over 1 m; D2 at the same pressure has
+// the same molecular number density to 0.8 %, so the deuteron day sees the same areal density.
+const NTGT = 3.308e-5/1.007*6.02214076e23*100, BEAMDAY = 940*86400;
+const N217 = BEAMDAY*NTGT*DATA.meta.sig217*1e-27, N332 = BEAMDAY*NTGT*DATA.meta.sig332*1e-27;
+
+const CFGS = [["pp_b285","(p,p') 2.85 T"],["pp_b400","(p,p') 4.00 T"],
+              ["dd_b285","(d,d') 2.85 T"],["dd_b400","(d,d') 4.00 T"]];
+const VIEWS = [["kemap","KE vs θ"],["exmap","Eₓ vs θ"],["exspec","Eₓ spectrum"]];
+const RVALS = [0,1,3,10,30,100];
+const SIZES = [["1200×900",1200,900],["1600×1200",1600,1200],["2000×1400",2000,1400]];
+
+let cfg="pp_b285", view="kemap", R=10, W=1200, H=900;
+
+// ---- two-body kinematics, same inversion as the ROOT macros -------------------------------------
+function om2(x,y,z){return Math.sqrt(Math.max(0,x*x+y*y+z*z-2*x*y-2*y*z-2*x*z));}
+function exOf(m2,Kp,thDeg,Ke){
+  const th=thDeg*Math.PI/180, m1=MBEAM, m3=m2, m4=MBEAM;
+  const Et1=Kp+m1, Et3=Ke+m3;
+  const s=m1*m1+m2*m2+2*m2*Et1, uu=m2*m2+m3*m3-2*m2*Et3;
+  const arg=(Math.cos(th)*om2(s,m1*m1,m2*m2)*om2(uu,m2*m2,m3*m3)-(s-m1*m1-m2*m2)*(m2*m2+m3*m3-uu))/(2*m2*m2)+s+uu-m2*m2;
+  return arg<=0?-1e9:Math.sqrt(arg)-m4;
+}
+// scan then bisect: the relation has no solution at very low KE for a given angle, so a fixed
+// lower bracket is invalid (this exact bug silently emptied the ROOT version's curves).
+function keOf(m2,Kp,thDeg,ex,keMax){
+  const nS=300; let pK=-1,pF=0;
+  for(let i=1;i<=nS;i++){
+    const ke=keMax*i/nS, v=exOf(m2,Kp,thDeg,ke);
+    if(v<-1e8){pK=-1;continue;}
+    const f=v-ex;
+    if(pK>0&&pF*f<=0){
+      let lo=pK,hi=ke,fl=pF;
+      for(let it=0;it<60;it++){const mid=.5*(lo+hi),fm=exOf(m2,Kp,thDeg,mid)-ex;
+        if(fl*fm<=0)hi=mid;else{lo=mid;fl=fm;}}
+      return .5*(lo+hi);
+    }
+    pK=ke;pF=f;
+  }
+  return -1;
+}
+const mLightOf=c=>(c.startsWith("dd")?2.0141018:1.007825)*U;
+
+// ---- per-level scale so the y axis is counts in one day ----------------------------------------
+function scales(){
+  const d=DATA.cfg[cfg], out=[0,0,0], tot=[0,0,0];
+  for(let i=0;i<d.lev.length;i++) tot[d.lev[i]]+=d.w[i];
+  const N=[R*N217*d.detFrac[0], N217*d.detFrac[1], N332*d.detFrac[2]];
+  for(let l=0;l<3;l++) out[l]= tot[l]>0 ? N[l]/tot[l] : 0;
+  return out;
+}
+const on=l=>document.getElementById("L"+l).checked;
+
+// ---- drawing ------------------------------------------------------------------------------------
+const cv=document.getElementById("cv"), cx=cv.getContext("2d");
+function pal(t){ // perceptual-ish, dark->blue->green->yellow
+  t=Math.max(0,Math.min(1,t));
+  const s=[[13,20,60],[26,80,140],[30,150,130],[150,200,60],[250,230,90]];
+  const x=t*(s.length-1), i=Math.min(s.length-2,Math.floor(x)), f=x-i;
+  return `rgb(${s[i].map((v,k)=>Math.round(v+(s[i+1][k]-v)*f)).join(",")})`;
+}
+function frame(m,xr,yr,xl,yl,title,noYTicks){
+  cx.fillStyle="#fff";cx.fillRect(0,0,W,H);
+  cx.strokeStyle="#111";cx.lineWidth=1.4;cx.strokeRect(m.l,m.t,W-m.l-m.r,H-m.t-m.b);
+  cx.fillStyle="#111";cx.font="600 20px ui-sans-serif,system-ui";cx.textAlign="center";
+  cx.fillText(title,W/2,m.t-16);
+  cx.font="15px ui-sans-serif,system-ui";
+  const X=v=>m.l+(v-xr[0])/(xr[1]-xr[0])*(W-m.l-m.r);
+  const Y=v=>H-m.b-(v-yr[0])/(yr[1]-yr[0])*(H-m.t-m.b);
+  const ticks=(a,b)=>{const st=Math.pow(10,Math.floor(Math.log10((b-a)/5)));
+    for(const mu of [1,2,5,10]){const s=st*mu; if((b-a)/s<=9) return s;} return st*10;};
+  const dx=ticks(xr[0],xr[1]), dy=ticks(yr[0],yr[1]);
+  cx.textAlign="center";cx.textBaseline="top";
+  for(let v=Math.ceil(xr[0]/dx)*dx;v<=xr[1]+1e-9;v+=dx){
+    cx.strokeStyle="#0004";cx.beginPath();cx.moveTo(X(v),H-m.b);cx.lineTo(X(v),H-m.b-7);cx.stroke();
+    cx.fillText(Math.abs(v)<1e-9?"0":(+v.toFixed(6)).toString(),X(v),H-m.b+9);}
+  cx.textAlign="right";cx.textBaseline="middle";
+  // In log mode the caller draws its own decade labels; frame's linear ticks would sit under them.
+  for(let v=Math.ceil(yr[0]/dy)*dy;!noYTicks&&v<=yr[1]+1e-9;v+=dy){
+    cx.strokeStyle="#0004";cx.beginPath();cx.moveTo(m.l,Y(v));cx.lineTo(m.l+7,Y(v));cx.stroke();
+    cx.fillText(Math.abs(v)<1e-9?"0":(+v.toFixed(6)).toString(),m.l-9,Y(v));}
+  cx.fillStyle="#111";cx.textAlign="center";cx.textBaseline="alphabetic";
+  cx.font="16px ui-sans-serif,system-ui";
+  cx.fillText(xl,m.l+(W-m.l-m.r)/2,H-14);
+  cx.save();cx.translate(20,m.t+(H-m.t-m.b)/2);cx.rotate(-Math.PI/2);cx.fillText(yl,0,0);cx.restore();
+  return {X,Y};
+}
+function legend(m,items){
+  cx.font="15px ui-sans-serif,system-ui";cx.textAlign="left";cx.textBaseline="middle";
+  let y=m.t+22;
+  for(const [col,txt,dash] of items){
+    cx.strokeStyle=col;cx.lineWidth=2.5;cx.setLineDash(dash||[]);
+    cx.beginPath();cx.moveTo(W-m.r-300,y);cx.lineTo(W-m.r-258,y);cx.stroke();cx.setLineDash([]);
+    cx.fillStyle="#111";cx.fillText(txt,W-m.r-250,y);y+=24;
+  }
+}
+
+function drawMap(isEx){
+  const d=DATA.cfg[cfg], sc=scales(), m={l:78,r:130,t:56,b:64};
+  const thLo=+document.getElementById("thLo").value, thHi=+document.getElementById("thHi").value;
+  const xr=[10,88], yr=isEx?[-0.8,1.2]:[0,d.keMax];
+  const nx=300, ny=240, grid=new Float64Array(nx*ny);
+  const vc=document.getElementById("vcorr").checked;
+  let n=0;
+  for(let i=0;i<d.lev.length;i++){
+    const l=d.lev[i]; if(!on(l))continue;
+    const yv=isEx?(vc?d.ex[i]:d.exr[i]):d.ke[i];
+    const bx=Math.floor((d.th[i]-xr[0])/(xr[1]-xr[0])*nx), by=Math.floor((yv-yr[0])/(yr[1]-yr[0])*ny);
+    if(bx<0||bx>=nx||by<0||by>=ny)continue;
+    grid[by*nx+bx]+=d.w[i]*sc[l]; n++;
+  }
+  let mx=0; for(const v of grid) if(v>mx)mx=v;
+  const g=frame(m,xr,yr,"θ_lab  [deg]",isEx?"Eₓ(¹⁷C)  [MeV]":"KE of the recoil  [MeV]",
+    `¹⁷C${cfg.startsWith("dd")?"(d,d')":"(p,p')"}   B = ${cfg.endsWith("400")?"4.00":"2.85"} T   `+
+    `${vc?"vertex-corrected":"constant E_beam"}   one day of beam`);
+  const lg=document.getElementById("logs").checked;
+  const iw=W-m.l-m.r, ih=H-m.t-m.b;
+  const img=cx.createImageData(iw,ih);
+  for(let py=0;py<ih;py++)for(let px=0;px<iw;px++){
+    const bx=Math.floor(px/iw*nx), by=ny-1-Math.floor(py/ih*ny);
+    const v=grid[by*nx+bx]; const o=(py*iw+px)*4;
+    if(v<=0){img.data[o]=img.data[o+1]=img.data[o+2]=255;img.data[o+3]=255;continue;}
+    const t=lg?Math.log10(1+v)/Math.log10(1+mx):v/mx;
+    const c=pal(t).match(/\d+/g);
+    img.data[o]=+c[0];img.data[o+1]=+c[1];img.data[o+2]=+c[2];img.data[o+3]=255;
+  }
+  cx.putImageData(img,m.l,m.t);
+  cx.strokeStyle="#111";cx.lineWidth=1.4;cx.strokeRect(m.l,m.t,iw,ih);
+
+  // the selected theta window, shaded
+  cx.fillStyle="#00000012";
+  cx.fillRect(g.X(xr[0]),m.t,g.X(thLo)-g.X(xr[0]),ih);
+  cx.fillRect(g.X(thHi),m.t,g.X(xr[1])-g.X(thHi),ih);
+  cx.strokeStyle="#111a";cx.setLineDash([5,4]);cx.lineWidth=1.5;
+  for(const t of [thLo,thHi]){cx.beginPath();cx.moveTo(g.X(t),m.t);cx.lineTo(g.X(t),H-m.b);cx.stroke();}
+  cx.setLineDash([]);
+
+  if(document.getElementById("curves").checked){
+    const m2=mLightOf(cfg), items=[];
+    for(let l=0;l<3;l++){
+      if(!on(l))continue;
+      cx.strokeStyle=LCOL[l];cx.lineWidth=2.4;cx.setLineDash(l==0?[]:(l==1?[9,5]:[3,4]));
+      cx.beginPath();let first=true;
+      for(let th=xr[0];th<=xr[1];th+=0.4){
+        const yv=isEx?LEV[l]:keOf(m2,E0,th,LEV[l],d.keMax);
+        if(!isEx&&yv<=0){first=true;continue;}
+        const px=g.X(th),py=g.Y(yv);
+        if(first){cx.moveTo(px,py);first=false;}else cx.lineTo(px,py);
+      }
+      cx.stroke();cx.setLineDash([]);
+      items.push([LCOL[l],LNAME[l],l==0?[]:(l==1?[9,5]:[3,4])]);
+    }
+    legend(m,items);
+  }
+  document.getElementById("stat").innerHTML=
+    `<b>${n.toLocaleString()}</b> simulated events drawn<br>`+
+    `E_beam(z) = ${d.ebz[0].toFixed(2)} ${d.ebz[1].toFixed(5)}·z<br>`+
+    `detected fraction ${d.detFrac.map(x=>x.toFixed(2)).join(" / ")}`;
+}
+
+function drawSpec(){
+  const d=DATA.cfg[cfg], sc=scales(), m={l:88,r:36,t:56,b:64};
+  const thLo=+document.getElementById("thLo").value, thHi=+document.getElementById("thHi").value;
+  const bw=+document.getElementById("bw").value/1000, lo=-0.8, hi=1.2;
+  const nb=Math.round((hi-lo)/bw), vc=document.getElementById("vcorr").checked;
+  const h=[new Float64Array(nb),new Float64Array(nb),new Float64Array(nb)];
+  const res=[[],[],[]];
+  for(let i=0;i<d.lev.length;i++){
+    const l=d.lev[i]; if(!on(l))continue;
+    if(d.th[i]<thLo||d.th[i]>=thHi)continue;
+    const x=vc?d.ex[i]:d.exr[i];
+    const b=Math.floor((x-lo)/bw); if(b<0||b>=nb)continue;
+    h[l][b]+=d.w[i]*sc[l]; res[l].push(x-LEV[l]);
+  }
+  const sum=new Float64Array(nb);
+  for(let l=0;l<3;l++)for(let b=0;b<nb;b++)sum[b]+=h[l][b];
+  let mx=0;for(const v of sum)if(v>mx)mx=v;
+  const lg=document.getElementById("logs").checked;
+  const yr=lg?[0.5,mx*4]:[0,mx*1.25];
+  const g=frame(m,[lo,hi],lg?[0,1]:yr,"Eₓ(¹⁷C)  [MeV]","counts / "+(bw*1000).toFixed(0)+" keV",
+    `¹⁷C${cfg.startsWith("dd")?"(d,d')":"(p,p')"}   B = ${cfg.endsWith("400")?"4.00":"2.85"} T   `+
+    `${thLo}° < θ_lab < ${thHi}°   ${vc?"vertex-corrected":"constant E_beam"}`, lg);
+  const Yv=v=>lg?g.Y(Math.log10(Math.max(v,0.5)/yr[0])/Math.log10(yr[1]/yr[0]))
+                :g.Y(Math.min(v,yr[1]));
+  if(lg){ // log y labels
+    cx.font="15px ui-sans-serif,system-ui";cx.textAlign="right";cx.textBaseline="middle";
+    for(let e=0;e<=6;e++){const v=Math.pow(10,e); if(v<yr[0]||v>yr[1])continue;
+      cx.fillStyle="#111";cx.fillText(v>=1000?v.toExponential(0):v.toString(),m.l-9,Yv(v));
+      cx.strokeStyle="#0002";cx.beginPath();cx.moveTo(m.l,Yv(v));cx.lineTo(W-m.r,Yv(v));cx.stroke();}
+  }
+  const step=(H1,col,lw,dash)=>{
+    cx.strokeStyle=col;cx.lineWidth=lw;cx.setLineDash(dash||[]);cx.beginPath();
+    for(let b=0;b<nb;b++){const x0=g.X(lo+b*bw),x1=g.X(lo+(b+1)*bw),y=Yv(H1[b]);
+      if(b===0)cx.moveTo(x0,y);else cx.lineTo(x0,y); cx.lineTo(x1,y);}
+    cx.stroke();cx.setLineDash([]);};
+  for(let l=0;l<3;l++) if(on(l)) step(h[l],LCOL[l],2.2);
+  step(sum,"#111",3.2);
+  // level markers
+  for(let l=0;l<3;l++){ if(!on(l))continue;
+    cx.strokeStyle=LCOL[l];cx.setLineDash([2,4]);cx.lineWidth=1.4;
+    cx.beginPath();cx.moveTo(g.X(LEV[l]),H-m.b);cx.lineTo(g.X(LEV[l]),m.t+(H-m.t-m.b)*0.55);cx.stroke();
+    cx.setLineDash([]);}
+  const items=[["#111","sum = what is measured",[]]];
+  for(let l=0;l<3;l++) if(on(l)) items.push([LCOL[l],LNAME[l],[]]);
+  legend(m,items);
+
+  const iqr=v=>{if(v.length<20)return NaN;v.sort((a,b)=>a-b);
+    return (v[Math.floor(.75*v.length)]-v[Math.floor(.25*v.length)])/1.349;};
+  const s1=iqr(res[1]), s2=iqr(res[2]);
+  const tot=[0,1,2].map(l=>h[l].reduce((a,b)=>a+b,0));
+  document.getElementById("stat").innerHTML=
+    `σ(Eₓ) &nbsp; 1/2⁺ <b>${isNaN(s1)?"—":s1.toFixed(3)}</b> &nbsp; 5/2⁺ <b>${isNaN(s2)?"—":s2.toFixed(3)}</b> MeV<br>`+
+    `separation Δ/(σ₁+σ₂) = <b>${(!isNaN(s1)&&!isNaN(s2))?(0.115/(s1+s2)).toFixed(2):"—"}</b><br>`+
+    `counts in window &nbsp; gs <b>${tot[0].toFixed(0)}</b> · 217 <b>${tot[1].toFixed(0)}</b> · 332 <b>${tot[2].toFixed(0)}</b>`;
+}
+
+function draw(){
+  const dpr=Math.min(2,window.devicePixelRatio||1);
+  cv.width=W*dpr;cv.height=H*dpr;cv.style.width=W+"px";cv.style.height=H+"px";
+  cx.setTransform(dpr,0,0,dpr,0,0);
+  if(view==="exspec")drawSpec(); else drawMap(view==="exmap");
+}
+
+// ---- controls -----------------------------------------------------------------------------------
+function mkRow(id,list,get,set){
+  const el=document.getElementById(id);
+  el.innerHTML="";
+  list.forEach(it=>{const b=document.createElement("button");b.textContent=it[1];
+    b.onclick=()=>{set(it);sync();draw();};b.dataset.k=it[0];el.appendChild(b);});
+}
+function sync(){
+  [...document.querySelectorAll("#cfgRow button")].forEach(b=>b.classList.toggle("on",b.dataset.k===cfg));
+  [...document.querySelectorAll("#viewRow button")].forEach(b=>b.classList.toggle("on",b.dataset.k===view));
+  [...document.querySelectorAll("#sizeRow button")].forEach(b=>b.classList.toggle("on",+b.dataset.k===W));
+  document.getElementById("thV").textContent=
+    document.getElementById("thLo").value+"–"+document.getElementById("thHi").value+"°";
+  document.getElementById("rV").textContent=R;
+  document.getElementById("bwV").textContent=document.getElementById("bw").value+" keV";
+}
+mkRow("cfgRow",CFGS,()=>cfg,it=>cfg=it[0]);
+mkRow("viewRow",VIEWS,()=>view,it=>view=it[0]);
+mkRow("sizeRow",SIZES.map(s=>[s[1],s[0]]),()=>W,it=>{const s=SIZES.find(x=>x[1]===it[0]);W=s[1];H=s[2];});
+for(const id of ["L0","L1","L2","curves","vcorr","logs","bw"])
+  document.getElementById(id).addEventListener("input",()=>{sync();draw();});
+for(const id of ["thLo","thHi"]) document.getElementById(id).addEventListener("input",()=>{
+  const a=document.getElementById("thLo"),b=document.getElementById("thHi");
+  if(+a.value>=+b.value){ if(id==="thLo")a.value=+b.value-1; else b.value=+a.value+1; }
+  sync();draw();});
+document.getElementById("R").addEventListener("input",e=>{R=RVALS[+e.target.value];sync();draw();});
+document.getElementById("save").onclick=()=>{
+  const a=document.createElement("a");
+  a.download=`C17_${cfg}_${view}.png`;a.href=cv.toDataURL("image/png");a.click();};
+sync();draw();
+</script>
+</body>
+</html>

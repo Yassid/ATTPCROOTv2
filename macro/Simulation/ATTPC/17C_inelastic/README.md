@@ -33,6 +33,7 @@ root -b -q 'inel_kinematics_C17.C'          # the gate: minutes, no campaign nee
 root -b -q 'inel_summary_C17.C'             # resolution, floor, vertex correction, separation
 root -b -q 'decompose_C17.C("...","pp_b285")'   # the headline: can the yields be extracted
 root -b -q 'kine_lines_C17.C("...","pp_b285")'   # the loci, raw vs vertex-corrected
+root -b -q 'export_gui_C17.C' && gui/build_gui.sh   # the interactive explorer, for figure captures
 ```
 
 `accumulate_C17inel.sh <channel> <state> <field_T> <seed> [nEvents]` is one sample, and is the
@@ -122,6 +123,8 @@ this reason.
 | `inel_summary_C17.C` | σ(Ex), the method floor, the vertex correction, level separation |
 | `decompose_C17.C` | the headline: fixed-position three-component fit at one day of beam |
 | `kine_lines_C17.C` | the reconstructed kinematic lines and per-window E_x spectra; `plots/kinelines_*.png`, `plots/kinemap_*.png` |
+| `export_gui_C17.C` | dumps the accepted events to `gui/C17_gui_data.json` for the viewer |
+| `gui/build_gui.sh` | inlines that JSON into `gui/template.html` -> one self-contained HTML file |
 | `fresco/` | the DWBA angular distributions supplied with the proposal |
 
 Reco, genfit, acceptance and Ex resolution reuse the 14C macros unchanged — they already take the
