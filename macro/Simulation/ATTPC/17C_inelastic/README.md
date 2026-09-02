@@ -52,12 +52,18 @@ Products live in `/media/yassid/Seagate Hub/ATTPC/C17_inel/` (override with `INE
 **There is no pad-pitch axis.** This proposal runs the conventional AT-TPC pad plane, so the 2 mm
 comparison the 14C campaign made is not on offer.
 
-**There is a field axis because the kinematics gate says the field is the only lever.** Run
-`inel_kinematics_C17.C` before anything else: dEx/dKE is flat at −0.53 across every angle in both
-channels, so the 115 keV level gap appears as **217 keV of recoil energy at every lab angle**, and
-σ(Ex) is set entirely by σ(KE). The 14C matrix measured σ(KE) on this same pad plane as 0.343 MeV at
-2.85 T and 0.067 MeV at 4 T. Propagated, that is σ(Ex) = 0.18 MeV at 2.85 T against 0.043 MeV at
-4 T — a separation of 0.32 versus 1.34. Nothing else in the configuration moves that number.
+**There is a field axis, but the field turned out not to be the lever.** The axis was added on a
+pre-campaign extrapolation that propagated 14C(p,p')'s single angle-averaged σ(KE) through this
+channel's leverage and predicted a 4× gain at 4 T. That was wrong twice over — σ(KE) varies 20×
+across the angular range rather than being one number, and the constant-E_beam term dominates until
+it is corrected — so 4 T changes the as-analysed σ(E_x) by nothing and costs acceptance. It is worth
+1.6× once the vertex correction is applied, which matters most on the deuteron day. See
+[RESULTS.md](RESULTS.md); `inel_kinematics_C17.C` now states the *requirement* instead of predicting
+the outcome.
+
+What the gate does get right, and is worth running first, is the leverage: dEx/dKE is flat at
+−0.533 (p) / −0.563 (d) across every angle, so the 115 keV level gap always appears as ~217 keV of
+recoil energy and σ(E_x) is set by σ(KE) alone.
 
 ## What is held fixed
 
