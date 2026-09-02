@@ -125,29 +125,47 @@ Acceptance, elastic: 0.827 (p, 2.85 T), 0.798 (p, 4 T), 0.653 (d, 2.85 T), 0.665
 proton value reproduces the 14C(p,p') campaign's 0.826 at the same field and pad plane, which is
 the cheapest available check that nothing drifted between the two campaigns.
 
-## The kinematic lines
+## The kinematic lines, window by window
 
 `kine_lines_C17.C` shows the same result in the variable an experimenter looks at first — recoil KE
 against θ_lab. **The three loci are not separable raw**: each event carries the beam energy at its
-own vertex, and the 14.6 MeV lost across the chamber spreads the band by several MeV, which is an
-order of magnitude more than the level spacing. Rebuilding every event at a common reference beam
-energy collapses that spread and the loci appear.
+own vertex, and the 14.6 MeV lost across the chamber spreads the band by several MeV, an order of
+magnitude more than the level spacing. Rebuilding every event at a common reference beam energy
+collapses that spread and the loci appear as flat bands once the g.s. line is subtracted.
 
-The 115 keV level gap is **221–269 keV of recoil energy** for protons (209–240 keV for deuterons),
-growing slowly toward backward angles:
+The 115 keV level gap is **221–269 keV of recoil energy** for protons (207–223 keV for deuterons),
+nearly constant with angle. What is *not* constant is σ(KE), and that is what decides everything:
 
-| θ_lab | 30 | 40 | 50 | 60 | 70 | 75 |
-|---|---|---|---|---|---|---|
-| KE(g.s.) [MeV] | 21.363 | 16.674 | 11.709 | 7.067 | 3.300 | 1.888 |
-| gap 217→332 [keV] | 221 | 221 | 222 | 225 | 238 | 269 |
+separation Δ/(σ₁+σ₂) of the 1/2⁺ and 5/2⁺, per θ_lab window:
 
-The clearest view is the g.s. line subtracted, `KE − KE_gs(θ_lab)`, over θ_lab 50–75°: three
-resolved peaks at 0, −0.44 and −0.66 MeV for (p,p'), against a single broad blob for the same
-events without the vertex correction. That one panel is probably the best single figure for the
-proposal — it shows the method and the result together, with no derived quantity in between.
+| θ_lab | 30–40 | 40–50 | 50–60 | 60–70 | 70–80 |
+|---|---|---|---|---|---|
+| (p,p') 2.85 T | 0.38 | 0.52 | **1.15** | **1.19** | 0.30 |
+| (p,p') 4.00 T | 0.84 | **1.18** | **1.28** | **1.29** | 0.23 |
+| (d,d') 2.85 T | 0.05 | 0.08 | 0.16 | 0.43 | **1.22** |
+| (d,d') 4.00 T | 0.07 | 0.11 | 0.23 | 0.76 | **1.14** |
 
-For (d,d') the same panel shows the peaks present but heavily overlapping, which is the 5× worse
-σ(E_x) seen directly.
+**This refines the angular recommendation made from the integrated numbers.** The usable window is
+narrower and further back than "θ_lab > 60°":
+
+- **(p,p') 2.85 T: 50–70°.** Forward of 50° the resolution collapses; the 70–80° bin is *worse*
+  again (σ(KE) 0.152) because the recoil is under 2 MeV there and the track is too short to fit.
+- **(p,p') 4.00 T: 40–70°** — the field buys the 40–50° bin, which is real added coverage.
+- **(d,d') 2.85 T: 70–80° only.** The 60–70° bin gives 0.43, not the ~1 the integrated
+  θ_lab > 60° cut implied. That is a much tighter window than the proposal's angular coverage
+  assumes, and it is the strongest argument for 4 T.
+- **(d,d') 4.00 T: 60–80°**, roughly doubling the deuteron coverage.
+
+Note the 70–80° reversal on (p,p'): every previous statement in this document that resolution
+improves monotonically toward backward angles is wrong at the last bin, where the recoil energy
+falls below what the tracker can use. It matters because θ_lab 70–80° is θ_cm 20–40°, which the
+FRESCO distribution does populate.
+
+The figures are `plots/kinelines_*.png`: the corrected locus map, the same with the g.s. line
+subtracted, and the five angular windows on a log axis with the components drawn separately. The
+elastic there is drawn at an **assumed** N_elastic/N_217 = 10 with the 1/2⁺ angular shape — the
+1/2⁺ : 5/2⁺ ratio of 2.38 is real, the elastic normalisation is not, and it is labelled on the
+figure.
 
 ## What is still missing
 

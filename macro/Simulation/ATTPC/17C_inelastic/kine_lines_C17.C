@@ -135,10 +135,19 @@ double klInterp(const std::vector<double> &th, const std::vector<double> &xs, do
    return xs[i] * (1 - f) + xs[i + 1] * f;
 }
 } // namespace
-
+/// @param R  N(elastic)/N(1/2+ 217), the elastic normalisation. THIS IS NOT MEASURED. No elastic
+///           FRESCO calculation was supplied with the proposal, so the elastic events are given the
+///           1/2+ angular SHAPE and their total is set by this number. An earlier version of this
+///           macro left the elastic weighted by the 1/2+ cross section outright, i.e. R = 1, which
+///           drew a comfortable three-peak spectrum and badly understated the problem: elastic
+///           scattering is 10-100x the inelastic here, and the two states of interest are structure
+///           on its low-energy flank. Vary R until the elastic curve exists.
+/// @param slices  theta_lab window edges. The separation is strongly angle-dependent -- sigma(KE)
+///           varies twentyfold across this range -- so one window cannot represent the measurement
+///           and the panels are the point of the figure.
 void kine_lines_C17(TString root = "/media/yassid/Seagate Hub/ATTPC/C17_inel", TString cfgTag = "pp_b285",
                     TString frescoDir = "./fresco/", Double_t chi2Cut = 5.0, TString outDir = "./plots/",
-                    Double_t thZoomLo = 48.0, Double_t thZoomHi = 78.0, Double_t slLo = 58.0, Double_t slHi = 68.0)
+                    Double_t R = 10.0, Double_t resLo = -1.5, Double_t resHi = 0.7)
 {
    gStyle->SetOptStat(0);
    gStyle->SetPalette(kBird);
@@ -147,8 +156,13 @@ void kine_lines_C17(TString root = "/media/yassid/Seagate Hub/ATTPC/C17_inel", T
    const int nL = 3;
    const double ExGen[nL] = {0.0, 0.217, 0.332};
    const char *stTag[nL] = {"gs", "ex217", "ex332"};
-   const char *stName[nL] = {"3/2^{+} g.s.", "1/2^{+} 217 keV", "5/2^{+} 332 keV"};
-   const int col[nL] = {kBlack, kRed + 1, kBlue + 1};
+   const char *stName[nL] = {"3/2^{+} g.s. (elastic)", "1/2^{+} 217 keV", "5/2^{+} 332 keV"};
+   const int col[nL] = {kGray + 2, kRed + 1, kBlue + 1};
+
+   // five theta_lab windows, forward to backward
+   const int nW = 5;
+   const double wLo[nW] = {30, 40, 50, 60, 70};
+   const double wHi[nW] = {40, 50, 60, 70, 80};
 
    TString chan(cfgTag);
    chan.Remove(2);
@@ -156,44 +170,24 @@ void kine_lines_C17(TString root = "/media/yassid/Seagate Hub/ATTPC/C17_inel", T
    btag.Remove(0, 3);
 
    const double uAmu = 931.49401;
-   const double m1 = 17.0225787 * uAmu;                            // beam 17C
-   const double mL = (chan == "dd" ? 2.0141018 : 1.007825) * uAmu;  // target = ejectile
-   const double m4 = m1;                                           // residual IS the beam
-   const double E0 = 135.0;                                        // reference beam energy
+   const double m1 = 17.0225787 * uAmu;                           // beam 17C
+   const double mL = (chan == "dd" ? 2.0141018 : 1.007825) * uAmu; // target = ejectile
+   const double m4 = m1;                                          // residual IS the beam
+   const double E0 = 135.0;                                       // reference beam energy
    const double keMax = (chan == "dd") ? 60.0 : 34.0;
 
-   printf("\n\033[1;33m===== reconstructed kinematic lines, %s =====\033[0m\n", cfgTag.Data());
+   printf("\n\033[1;33m===== reconstructed kinematic lines, %s (N_elastic/N_217 = %.0f) =====\033[0m\n",
+          cfgTag.Data(), R);
 
    std::vector<double> fth[2], fxs[2];
    const bool haveFresco = klReadFresco((frescoDir + "c17pp_217keV.out").Data(), fth[0], fxs[0]) &&
                            klReadFresco((frescoDir + "c17pp_332keV.out").Data(), fth[1], fxs[1]);
-   if (!haveFresco)
-      printf("  [no FRESCO tables in %s -- events drawn with the flat generator's density]\n", frescoDir.Data());
-
-   // ---- histograms ------------------------------------------------------------------------------
-   const int nTh = 150, nKE = 400;
-   TH2D *hRaw = new TH2D("hRaw", "", nTh, 15, 90, nKE, 0, keMax);
-   TH2D *hCor = new TH2D("hCor", "", nTh, 15, 90, nKE, 0, keMax);
-   // The residual against the GROUND-STATE kinematic line, dKE = KE - KE_gs(theta_lab). This is
-   // the variable that actually shows the loci: inside any theta slice wide enough to hold
-   // statistics the kinematics itself sweeps several MeV, which buries a 227 keV separation. The
-   // subtraction removes exactly that sweep and leaves three horizontal bands at 0, -0.22, -0.45.
-   TH2D *hRes = new TH2D("hRes", "", 100, thZoomLo, thZoomHi, 260, -0.95, 0.35);
-   TH1D *hSl[nL];
-   TH1D *hSlRaw = new TH1D("hSlRaw", "", 130, -0.95, 0.35);
-   hSlRaw->SetDirectory(nullptr);
-   hSlRaw->SetLineColor(kGray + 2);
-   hSlRaw->SetLineStyle(2);
-   hSlRaw->SetLineWidth(2);
-   for (int l = 0; l < nL; ++l) {
-      hSl[l] = new TH1D(Form("hSl%d", l), "", 130, -0.95, 0.35);
-      hSl[l]->SetDirectory(nullptr);
-      hSl[l]->SetLineColor(col[l]);
-      hSl[l]->SetLineWidth(2);
+   if (!haveFresco) {
+      printf("\033[1;31m  no FRESCO tables in %s -- cannot weight the events. Aborting.\033[0m\n", frescoDir.Data());
+      return;
    }
 
-   // The analytic g.s. line at the reference energy, cached on a fine grid so the per-event
-   // subtraction is a lookup rather than 400 klEx calls.
+   // ---- the analytic g.s. line, cached, so the per-event subtraction is a lookup ---------------
    const int nGrid = 1500;
    const double gLo = 15.0, gHi = 90.0;
    std::vector<double> keGS(nGrid + 1);
@@ -209,6 +203,27 @@ void kine_lines_C17(TString root = "/media/yassid/Seagate Hub/ATTPC/C17_inel", T
       return keGS[i] + (x - i) * (keGS[i + 1] - keGS[i]);
    };
 
+   // ---- histograms -----------------------------------------------------------------------------
+   const int nB = (int)std::lround((resHi - resLo) / 0.025); // 25 keV bins
+   TH2D *hCor = new TH2D("hCor", "", 150, 15, 90, 400, 0, keMax);
+   TH2D *hRes = new TH2D("hRes", "", 130, 20, 85, 200, resLo, resHi);
+   TH1D *hW[nW][nL];
+   TH1D *hWraw[nW]; // the same window with NO vertex correction, for the contrast
+   std::vector<double> resW[nW][nL];
+   for (int w = 0; w < nW; ++w) {
+      hWraw[w] = new TH1D(Form("hWraw%d", w), "", nB, resLo, resHi);
+      hWraw[w]->SetDirectory(nullptr);
+      hWraw[w]->SetLineColor(kGray + 1);
+      hWraw[w]->SetLineStyle(2);
+      hWraw[w]->SetLineWidth(2);
+      for (int l = 0; l < nL; ++l) {
+         hW[w][l] = new TH1D(Form("hW%d_%d", w, l), "", nB, resLo, resHi);
+         hW[w][l]->SetDirectory(nullptr);
+         hW[w][l]->SetLineColor(col[l]);
+         hW[w][l]->SetLineWidth(2);
+      }
+   }
+
    double ebz_a = 0, ebz_b = 0;
    bool haveEbz = false;
    long nUsed = 0;
@@ -220,13 +235,13 @@ void kine_lines_C17(TString root = "/media/yassid/Seagate Hub/ATTPC/C17_inel", T
       found = found.Strip(TString::kBoth);
       if (found.IsNull()) {
          printf("\033[1;31m  %-8s MISSING\033[0m\n", stTag[l]);
-         continue;
+         return;
       }
       TFile *f = TFile::Open(found);
       TTree *t = f ? (TTree *)f->Get("res") : nullptr;
       if (!t) {
          printf("\033[1;31m  no res tree in %s\033[0m\n", found.Data());
-         continue;
+         return;
       }
       double thT, thR, keT, keR, cmT, c2n, zT, zR;
       t->SetBranchAddress("thTrue", &thT);
@@ -238,7 +253,6 @@ void kine_lines_C17(TString root = "/media/yassid/Seagate Hub/ATTPC/C17_inel", T
       t->SetBranchAddress("zTrue", &zT);
       t->SetBranchAddress("zReco", &zR);
 
-      // E_beam(z) from truth, on the first level present
       if (!haveEbz) {
          TGraph g;
          for (Long64_t i = 0; i < t->GetEntries(); ++i) {
@@ -268,22 +282,16 @@ void kine_lines_C17(TString root = "/media/yassid/Seagate Hub/ATTPC/C17_inel", T
 
       for (Long64_t i = 0; i < t->GetEntries(); ++i) {
          t->GetEntry(i);
-         if (c2n >= chi2Cut)
+         if (c2n >= chi2Cut || !haveEbz)
             continue;
-         double w = 1.0;
-         if (haveFresco && l > 0)
-            w = klInterp(fth[l - 1], fxs[l - 1], cmT);
-         else if (haveFresco && l == 0)
-            w = klInterp(fth[0], fxs[0], cmT); // no elastic calculation; 1/2+ shape stands in
+         // ANGULAR WEIGHT. The 1/2+ and 5/2+ carry their own FRESCO dsigma/dOmega in absolute
+         // mb/sr, so their relative areas ARE the cross-section ratio (2.38). The elastic has no
+         // calculation: it borrows the 1/2+ shape and its total is fixed to R x N(217) below, which
+         // is an assumption and is labelled as one on the figure.
+         const double w = klInterp(fth[l == 0 ? 0 : l - 1], fxs[l == 0 ? 0 : l - 1], cmT);
          if (w <= 0)
             continue;
 
-         hRaw->Fill(thR, keR, w);
-
-         // vertex correction: the excitation this event implies at ITS OWN beam energy, then the
-         // KE that same excitation would give at the reference energy and the same lab angle.
-         if (!haveEbz)
-            continue;
          const double exHere = klEx(m1, mL, mL, m4, ebz_a + ebz_b * zR, thR, keR);
          if (exHere < -1e8)
             continue;
@@ -291,138 +299,184 @@ void kine_lines_C17(TString root = "/media/yassid/Seagate Hub/ATTPC/C17_inel", T
          if (keCorr <= 0)
             continue;
          hCor->Fill(thR, keCorr, w);
+
          const double kgs = keGSat(thR);
-         if (kgs > 0) {
-            if (thR >= thZoomLo && thR <= thZoomHi)
-               hRes->Fill(thR, keCorr - kgs, w);
-            if (thR >= slLo && thR < slHi) {
-               hSl[l]->Fill(keCorr - kgs, w);
-               hSlRaw->Fill(keR - kgs, w); // the same residual WITHOUT the vertex correction
+         if (kgs <= 0)
+            continue;
+         hRes->Fill(thR, keCorr - kgs, w);
+         for (int wi = 0; wi < nW; ++wi)
+            if (thR >= wLo[wi] && thR < wHi[wi]) {
+               hW[wi][l]->Fill(keCorr - kgs, w);
+               hWraw[wi]->Fill(keR - kgs, w);
+               resW[wi][l].push_back(keCorr - kgs);
             }
-         }
          ++nUsed;
       }
       f->Close();
    }
    printf("  %ld events on the corrected plot\n", nUsed);
 
-   // ---- analytic lines ---------------------------------------------------------------------------
-   TGraph *gLine[nL];
-   for (int l = 0; l < nL; ++l) {
-      gLine[l] = new TGraph();
-      for (double th = 16; th <= 89; th += 0.25) {
-         const double k = klKE(m1, mL, mL, m4, E0, th, ExGen[l], keMax);
-         if (k > 0)
-            gLine[l]->SetPoint(gLine[l]->GetN(), th, k);
-      }
-      gLine[l]->SetLineColor(col[l]);
-      gLine[l]->SetLineWidth(2);
-      gLine[l]->SetLineStyle(l == 0 ? 1 : (l == 1 ? 7 : 3));
+   // ---- put the elastic on its stated footing ---------------------------------------------------
+   // Weights alone give 217:332 = the cross-section ratio, which is right. The elastic was filled
+   // with the 1/2+ shape, so its normalisation carries no meaning until it is set here.
+   for (int w = 0; w < nW; ++w) {
+      const double i217 = hW[w][1]->Integral();
+      const double igs = hW[w][0]->Integral();
+      if (igs > 0 && i217 > 0)
+         hW[w][0]->Scale(R * i217 / igs);
    }
 
-   // How far apart the lines are, in the measured variable
-   printf("\n  %10s %12s %12s %12s   %s\n", "theta_lab", "KE(gs)", "KE(217)", "KE(332)", "gap 217-332 [keV]");
-   for (double th : {30., 40., 50., 55., 60., 65., 70., 75., 80.}) {
+   // ---- analytic lines, and the numbers behind the panels ----------------------------------------
+   TGraph *gLine[nL], *gBand[nL];
+   for (int l = 0; l < nL; ++l) {
+      gLine[l] = new TGraph();
+      gBand[l] = new TGraph();
+      for (double th = 16; th <= 89; th += 0.25) {
+         const double k = klKE(m1, mL, mL, m4, E0, th, ExGen[l], keMax);
+         const double k0 = klKE(m1, mL, mL, m4, E0, th, 0.0, keMax);
+         if (k > 0)
+            gLine[l]->SetPoint(gLine[l]->GetN(), th, k);
+         if (k > 0 && k0 > 0 && th >= 20 && th <= 85)
+            gBand[l]->SetPoint(gBand[l]->GetN(), th, k - k0);
+      }
+      for (TGraph *g : {gLine[l], gBand[l]}) {
+         g->SetLineColor(l == 0 ? kBlack : col[l]);
+         g->SetLineWidth(2);
+         g->SetLineStyle(l == 0 ? 1 : (l == 1 ? 7 : 3));
+      }
+   }
+
+   auto iqrSigma = [](std::vector<double> v) {
+      if (v.size() < 20)
+         return -1.0;
+      std::sort(v.begin(), v.end());
+      return (v[(size_t)(0.75 * v.size())] - v[(size_t)(0.25 * v.size())]) / 1.349;
+   };
+
+   printf("\n  %-12s %10s %10s %10s %12s %12s\n", "theta_lab", "KE(gs)", "gap 0-217", "gap 217-332", "sigma(KE)",
+          "separation");
+   printf("  %-12s %10s %10s %10s %12s %12s\n", "[deg]", "[MeV]", "[keV]", "[keV]", "[MeV]", "217/332");
+   double sepW[nW];
+   for (int w = 0; w < nW; ++w) {
+      const double th = 0.5 * (wLo[w] + wHi[w]);
       const double k0 = klKE(m1, mL, mL, m4, E0, th, ExGen[0], keMax);
       const double k1 = klKE(m1, mL, mL, m4, E0, th, ExGen[1], keMax);
       const double k2 = klKE(m1, mL, mL, m4, E0, th, ExGen[2], keMax);
-      if (k1 < 0 || k2 < 0)
-         continue;
-      printf("  %10.0f %12.3f %12.3f %12.3f   %14.0f\n", th, k0, k1, k2, (k1 - k2) * 1000);
+      const double s1 = iqrSigma(resW[w][1]), s2 = iqrSigma(resW[w][2]);
+      sepW[w] = (s1 > 0 && s2 > 0) ? (k1 - k2) / (s1 + s2) : -1;
+      printf("  %5.0f-%-6.0f %10.3f %10.0f %10.0f %12.3f %12.2f\n", wLo[w], wHi[w], k0, (k0 - k1) * 1000,
+             (k1 - k2) * 1000, s1, sepW[w]);
    }
 
-   // ---- figure -------------------------------------------------------------------------------------
+   // ---- figure ------------------------------------------------------------------------------------
    if (!outDir.Length())
       return;
    gSystem->mkdir(outDir, kTRUE);
-   TCanvas *cv = new TCanvas("cvkl", "kinematic lines", 1500, 1050);
-   cv->Divide(2, 2);
-
-   auto drawLines = [&](bool leg) {
-      for (int l = 0; l < nL; ++l)
-         gLine[l]->Draw("L SAME");
-      if (leg) {
-         TLegend *lg = new TLegend(0.58, 0.66, 0.90, 0.89);
-         lg->SetBorderSize(0);
-         lg->SetFillStyle(0);
-         for (int l = 0; l < nL; ++l)
-            lg->AddEntry(gLine[l], stName[l], "l");
-         lg->Draw();
-      }
-   };
+   // 4x2: the two maps, the five angular windows, and a summary pad. On a 3x2 the fifth
+   // window silently landed on a pad that does not exist and overwrote the fourth.
+   TCanvas *cv = new TCanvas("cvkl", "kinematic lines", 2000, 1000);
+   cv->Divide(4, 2);
 
    cv->cd(1);
    gPad->SetLogz();
-   hRaw->SetTitle(Form("%s  RAW reconstruction  (each event at its own vertex beam energy);"
-                       "#theta_{lab} [deg];KE of the recoil [MeV]",
-                       cfgTag.Data()));
-   hRaw->Draw("COLZ");
-   drawLines(true);
-
-   cv->cd(2);
-   gPad->SetLogz();
-   hCor->SetTitle(Form("%s  VERTEX-CORRECTED to E_{beam} = %.0f MeV;#theta_{lab} [deg];KE of the recoil [MeV]",
+   hCor->SetTitle(Form("%s  vertex-corrected to E_{beam} = %.0f MeV;#theta_{lab} [deg];KE of the recoil [MeV]",
                        cfgTag.Data(), E0));
    hCor->Draw("COLZ");
-   drawLines(false);
-
-   cv->cd(3);
-   gPad->SetLogz();
-   hRes->SetTitle("vertex-corrected, g.s. line subtracted;#theta_{lab} [deg];"
-                  "KE #minus KE_{g.s.}(#theta_{lab}) [MeV]");
-   hRes->Draw("COLZ");
-   {
-      // the three levels are now horizontal bands; draw where each should sit
-      TGraph *gb[nL];
-      TLegend *lg = new TLegend(0.15, 0.16, 0.52, 0.38);
-      lg->SetBorderSize(0);
-      lg->SetFillStyle(0);
-      for (int l = 0; l < nL; ++l) {
-         gb[l] = new TGraph();
-         for (double th = thZoomLo; th <= thZoomHi; th += 0.5) {
-            const double k = klKE(m1, mL, mL, m4, E0, th, ExGen[l], keMax);
-            const double k0 = klKE(m1, mL, mL, m4, E0, th, 0.0, keMax);
-            if (k > 0 && k0 > 0)
-               gb[l]->SetPoint(gb[l]->GetN(), th, k - k0);
-         }
-         gb[l]->SetLineColor(col[l]);
-         gb[l]->SetLineWidth(2);
-         gb[l]->SetLineStyle(l == 0 ? 1 : (l == 1 ? 7 : 3));
-         gb[l]->Draw("L SAME");
-         lg->AddEntry(gb[l], stName[l], "l");
-      }
-      lg->Draw();
-   }
-
-   cv->cd(4);
-   double mx = 0;
    for (int l = 0; l < nL; ++l)
-      mx = std::max(mx, hSl[l]->GetMaximum());
-   if (hSlRaw->Integral() > 0)
-      hSlRaw->Scale(mx / std::max(1e-9, hSlRaw->GetMaximum()));
-   for (int l = 0; l < nL; ++l) {
-      hSl[l]->SetMaximum(1.35 * mx);
-      hSl[l]->SetTitle(Form("%.0f < #theta_{lab} < %.0f deg;KE #minus KE_{g.s.}(#theta_{lab}) [MeV];yield [arb]",
-                            slLo, slHi));
-      hSl[l]->Draw(l ? "HIST SAME" : "HIST");
-   }
-   hSlRaw->Draw("HIST SAME");
+      gLine[l]->Draw("L SAME");
    {
-      TLegend *lg = new TLegend(0.14, 0.62, 0.52, 0.89);
+      TLegend *lg = new TLegend(0.52, 0.68, 0.90, 0.89);
       lg->SetBorderSize(0);
       lg->SetFillStyle(0);
       for (int l = 0; l < nL; ++l)
-         lg->AddEntry(hSl[l], stName[l], "l");
-      lg->AddEntry(hSlRaw, "sum, NO vertex correction", "l");
+         lg->AddEntry(gLine[l], stName[l], "l");
       lg->Draw();
+   }
+
+   cv->cd(2);
+   gPad->SetLogz();
+   hRes->SetTitle("g.s. line subtracted -- the loci as flat bands;#theta_{lab} [deg];"
+                  "KE #minus KE_{g.s.} [MeV]");
+   hRes->GetYaxis()->SetTitleOffset(1.15);
+   hRes->Draw("COLZ");
+   for (int l = 0; l < nL; ++l)
+      gBand[l]->Draw("L SAME");
+   {
       TLatex tx;
       tx.SetNDC();
-      tx.SetTextSize(0.032);
-      const double th = 0.5 * (slLo + slHi);
-      const double k1 = klKE(m1, mL, mL, m4, E0, th, ExGen[1], keMax);
-      const double k2 = klKE(m1, mL, mL, m4, E0, th, ExGen[2], keMax);
-      tx.DrawLatex(0.56, 0.52, Form("115 keV level gap ="));
-      tx.DrawLatex(0.56, 0.47, Form("%.0f keV of recoil energy", (k1 - k2) * 1000));
+      tx.SetTextSize(0.030);
+      tx.DrawLatex(0.14, 0.20, "the five windows below are slices of this panel");
+   }
+
+   // the five angular windows
+   for (int w = 0; w < nW; ++w) {
+      cv->cd(3 + w);
+      // LOG y. At a realistic elastic ratio the components span two decades, and on a linear axis
+      // the 1/2+ and 5/2+ are invisible under the elastic -- which reads as "there is nothing
+      // there" when the fit in decompose_C17.C recovers them to 5.6 % and 9.8 %. The extraction
+      // works off the flank, not off a visible bump, and only a log axis shows the flank.
+      gPad->SetLogy();
+      TH1D *sum = (TH1D *)hW[w][0]->Clone(Form("sum%d", w));
+      sum->SetDirectory(nullptr);
+      for (int l = 1; l < nL; ++l)
+         sum->Add(hW[w][l]);
+      sum->SetLineColor(kBlack);
+      sum->SetLineWidth(3);
+      sum->SetTitle(Form("%.0f < #theta_{lab} < %.0f deg   (sep %.2f);"
+                         "KE #minus KE_{g.s.}(#theta_{lab}) [MeV];counts / 25 keV",
+                         wLo[w], wHi[w], sepW[w]));
+      sum->SetMaximum(4.0 * sum->GetMaximum());
+      sum->SetMinimum(0.5);
+      sum->Draw("HIST");
+      for (int l = 0; l < nL; ++l)
+         hW[w][l]->Draw("HIST SAME");
+      if (hWraw[w]->Integral() > 0) {
+         // Same INTEGRAL as the sum, not the same peak. Peak-matching on a log axis puts this
+         // curve above everything and it reads as a dominant component; it is only a shape, drawn
+         // to show how much wider the spectrum is without the vertex correction.
+         hWraw[w]->Scale(sum->Integral() / hWraw[w]->Integral());
+         hWraw[w]->Draw("HIST SAME");
+      }
+      if (w == 0) {
+         TLegend *lg = new TLegend(0.13, 0.60, 0.55, 0.89);
+         lg->SetBorderSize(0);
+         lg->SetFillStyle(0);
+         lg->AddEntry(sum, "sum = what is measured", "l");
+         for (int l = 0; l < nL; ++l)
+            lg->AddEntry(hW[w][l], stName[l], "l");
+         lg->AddEntry(hWraw[w], "sum, NO vertex corr. (shape)", "l");
+         lg->Draw();
+      }
+   }
+
+   cv->cd(8);
+   {
+      TLatex tx;
+      tx.SetTextSize(0.055);
+      tx.SetTextFont(102);
+      tx.DrawLatexNDC(0.04, 0.92, Form("%s", cfgTag.Data()));
+      tx.SetTextSize(0.048);
+      tx.DrawLatexNDC(0.04, 0.83, "#theta_{lab}    #sigma(KE)   sep(217/332)");
+      for (int w = 0; w < nW; ++w)
+         tx.DrawLatexNDC(0.04, 0.74 - 0.09 * w,
+                         Form("%2.0f-%2.0f    %5.3f       %4.2f", wLo[w], wHi[w], iqrSigma(resW[w][1]), sepW[w]));
+      tx.SetTextFont(42);
+      tx.SetTextSize(0.042);
+      tx.DrawLatexNDC(0.04, 0.22, "separation = #Delta / (#sigma_{1}+#sigma_{2})");
+      tx.DrawLatexNDC(0.04, 0.14, "best at #theta_{lab} 50-70 deg,");
+      tx.DrawLatexNDC(0.04, 0.07, "which is where the yield sits");
+   }
+
+   cv->cd(0);
+   {
+      TLatex tx;
+      tx.SetNDC();
+      tx.SetTextSize(0.017);
+      tx.DrawLatex(0.005, 0.005,
+                   Form("elastic normalisation ASSUMED: N(elastic)/N(1/2+) = %.0f, with the 1/2+ angular shape "
+                        "-- no elastic FRESCO calculation exists. 1/2+ : 5/2+ = 2.38 is the real cross-section "
+                        "ratio.",
+                        R));
    }
 
    cv->SaveAs(outDir + "kinelines_" + cfgTag + ".png");
