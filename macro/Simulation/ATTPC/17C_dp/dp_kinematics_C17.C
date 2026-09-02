@@ -221,13 +221,16 @@ void dp_kinematics_C17(Double_t Ebeam = 135.0, Double_t mBeamAmu = 17.02257865, 
    }
 
    // --- B: KE vs theta_lab, with MC TRUTH under the curves
-   ck->cd(2);
-   gPad->SetGrid();
-   TH2D *frame = new TH2D("kinframe", "proton locus, curves = analytic, points = MC truth;"
-                                      "#theta_{lab} (proton) [deg];proton KE [MeV]",
-                          180, 0, 180, 200, 0, 1.08 * keMax);
-   frame->Draw();
+   //
+   // READABILITY. The first version drew single-pixel markers at 30 % alpha and then covered them
+   // with a width-3 analytic curve IN THE SAME COLOUR, so the points were invisible and the panel
+   // showed nothing the formula did not already say. The fix is to make the two things contrast
+   // rather than coincide: the MC is a COLOURED CLOUD (round markers, opaque enough to see), the
+   // analytic curve is a THIN BLACK DASHED line drawn through it. Agreement then reads as the
+   // black dashes sitting in the middle of each colour band, and a disagreement would read as the
+   // dashes leaving the band -- which is the whole point of overlaying them.
    long nOverlay = 0;
+   TGraph *gMC[nL] = {nullptr};
    if (!simDir.IsNull()) {
       for (int l = 0; l < nL; ++l) {
          TString found = gSystem->GetFromPipe(TString("ls -1 ") + simDir + "exres_" + tag[l] +
@@ -242,42 +245,71 @@ void dp_kinematics_C17(Double_t Ebeam = 135.0, Double_t mBeamAmu = 17.02257865, 
          double thT, keT;
          t->SetBranchAddress("thTrue", &thT);
          t->SetBranchAddress("keTrue", &keT);
-         TGraph *gp = new TGraph();
-         for (Long64_t i = 0; i < t->GetEntries(); i += 3) { // thinned, it is only a visual check
+         gMC[l] = new TGraph();
+         for (Long64_t i = 0; i < t->GetEntries(); i += 2) { // thinned, it is only a visual check
             t->GetEntry(i);
-            gp->SetPoint(gp->GetN(), thT, keT);
+            gMC[l]->SetPoint(gMC[l]->GetN(), thT, keT);
          }
-         gp->SetMarkerStyle(1);
-         gp->SetMarkerColorAlpha(col[l], 0.30);
-         gp->Draw("P SAME");
-         nOverlay += gp->GetN();
+         gMC[l]->SetMarkerStyle(20);
+         gMC[l]->SetMarkerSize(0.28);
+         gMC[l]->SetMarkerColorAlpha(col[l], 0.45);
+         nOverlay += gMC[l]->GetN();
       }
    }
-   for (int l = 0; l < nL; ++l) {
-      gKeTh[l]->SetLineColor(col[l]);
-      gKeTh[l]->SetLineWidth(3);
-      gKeTh[l]->Draw("L SAME");
-   }
-   {
+
+   // drawn twice: once in the 2x2 overview, once as a standalone full-size figure, because at a
+   // quarter of a canvas the cloud and the curve cannot both be resolved
+   auto drawLocus = [&](double txtSize, double mkSize) {
+      gPad->SetGrid();
+      TH2D *fr = new TH2D(TString::Format("kinframe%d", (int)(1000 * mkSize)),
+                          "proton locus:  points = MC truth,  dashed = analytic;"
+                          "#theta_{lab} (proton) [deg];proton KE [MeV]",
+                          180, 0, 180, 200, 0, 1.08 * keMax);
+      fr->Draw();
+      for (int l = 0; l < nL; ++l)
+         if (gMC[l]) {
+            gMC[l]->SetMarkerSize(mkSize);
+            gMC[l]->Draw("P SAME");
+         }
+      for (int l = 0; l < nL; ++l) {
+         gKeTh[l]->SetLineColor(kBlack);
+         gKeTh[l]->SetLineWidth(2);
+         gKeTh[l]->SetLineStyle(2);
+         gKeTh[l]->Draw("L SAME");
+      }
       // the transfer peak in LAB angle -- it runs backwards, hence hi/lo swapped
-      TLine *l1 = new TLine(thLabAtPeakHi, 0, thLabAtPeakHi, 1.08 * keMax);
-      TLine *l2 = new TLine(thLabAtPeakLo, 0, thLabAtPeakLo, 1.08 * keMax);
-      for (TLine *ln : {l1, l2}) {
+      for (double x : {thLabAtPeakHi, thLabAtPeakLo}) {
+         TLine *ln = new TLine(x, 0, x, 1.08 * keMax);
          ln->SetLineColor(kOrange + 7);
          ln->SetLineStyle(2);
          ln->SetLineWidth(2);
          ln->Draw();
       }
-      // bottom-left is the empty corner here (forward lab angles carry the FAST protons), so the
-      // label goes there rather than beside the legend
+      // bottom-left is the empty corner here (forward lab angles carry the FAST protons)
       TLatex *tx = new TLatex(0.15, 0.20,
                               TString::Format("#color[801]{transfer peak: #theta_{lab} %.0f-%.0f#circ}",
                                               thLabAtPeakHi, thLabAtPeakLo));
       tx->SetNDC();
-      tx->SetTextSize(0.036);
+      tx->SetTextSize(txtSize);
       tx->Draw();
-   }
-   legend(gKeTh, 0.60, 0.55, 0.90, 0.78);
+      // legend keyed on the MARKERS, since those are what carries the level identity now
+      TLegend *lg = new TLegend(0.58, 0.54, 0.90, 0.80);
+      lg->SetBorderSize(0);
+      lg->SetFillStyle(0);
+      lg->SetTextSize(txtSize);
+      for (int l = 0; l < nL; ++l)
+         if (gMC[l]) {
+            TGraph *key = new TGraph(*gMC[l]); // a legend-only copy, drawn at a legible size
+            key->SetMarkerSize(1.4);
+            key->SetMarkerColorAlpha(col[l], 1.0);
+            lg->AddEntry(key, nm[l], "p");
+         }
+      lg->AddEntry(gKeTh[0], "analytic 2-body", "l");
+      lg->Draw();
+   };
+
+   ck->cd(2);
+   drawLocus(0.036, 0.22);
 
    // --- C: KE vs theta_cm
    ck->cd(3);
@@ -315,8 +347,16 @@ void dp_kinematics_C17(Double_t Ebeam = 135.0, Double_t mBeamAmu = 17.02257865, 
    legend(gLev, 0.18, 0.62, 0.52, 0.87);
 
    ck->SaveAs(outDir + "kinematics_C17dp.png");
-   printf("wrote %skinematics_C17dp.png", outDir.Data());
+
+   // the locus on its own, full size -- this is the panel worth looking at closely, and a quarter
+   // of a 2x2 canvas cannot resolve both the cloud and the curve through it
+   TCanvas *cl = new TCanvas("clocus17", "17C(d,p)18C proton locus", 1100, 850);
+   cl->cd();
+   drawLocus(0.030, 0.45);
+   cl->SaveAs(outDir + "kinematics_C17dp_locus.png");
+
+   printf("wrote %skinematics_C17dp.png and %skinematics_C17dp_locus.png", outDir.Data(), outDir.Data());
    if (nOverlay)
-      printf("   (%ld MC truth protons overlaid in panel B)", nOverlay);
+      printf("   (%ld MC truth protons overlaid)", nOverlay);
    printf("\n\n");
 }

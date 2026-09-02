@@ -62,9 +62,12 @@ backward-lab and slow in both:
 | 60° | 80.2° / 11.90 MeV | 76.5° / 14.19 MeV |
 
 `plots/kinematics_C17dp.png` draws this: θ_lab vs θ_cm, the proton KE locus with the **MC truth
-overlaid on the analytic curves** (11328 protons, they coincide — which is what validates the
+overlaid on the analytic curves** (17k protons, they coincide — which is what validates the
 generator, the transport and these formulae against each other), the level separation in proton KE,
-and the |dE_x/dKE| leverage. The transfer-peak band is shaded on every panel, because that is where
+and the |dE_x/dKE| leverage. `plots/kinematics_C17dp_locus.png` is that locus panel full size,
+which is the one to actually look at — MC as a coloured cloud per level, analytic as a thin black
+dashed line through it. The clouds have a real width: the beam loses 14.8 MeV crossing the chamber
+and the vertex is uniform in z, so at fixed θ_lab the proton KE genuinely spreads. The transfer-peak band is shaded on every panel, because that is where
 every quotable number comes from and it is *not* where a flat generator puts most of its events.
 
 **θ_cm CONVENTION.** The standard (d,p) angle, from the deuteron direction in the entrance
@@ -145,7 +148,7 @@ not the expectation.
 | `accumulate_C17dp.sh` | one sample: generate → reco → genfit → acceptance → Ex resolution |
 | `run_C17dp_campaign.sh` | the four levels (`DP_ONE_WAVE=1` to merge waves on a resume) |
 | `check_beam_C17.C` | truth verification of beam, vertices and two-body closure |
-| `dp_kinematics_C17.C` | the analytic map + `plots/kinematics_C17dp.png`; run it on 14C parameters as a control |
+| `dp_kinematics_C17.C` | the analytic map + `plots/kinematics_C17dp{,_locus}.png`; run it on 14C parameters as a control |
 | `dp_summary_C17.C` | full-range resolution, floor, vertex correction, level separation |
 | `dp_plots_C17.C` | `plots/C17dp_summary.png` — acceptance, E_x spectra, resolution |
 
