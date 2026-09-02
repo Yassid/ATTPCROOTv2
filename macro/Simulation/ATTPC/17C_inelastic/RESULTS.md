@@ -125,6 +125,30 @@ Acceptance, elastic: 0.827 (p, 2.85 T), 0.798 (p, 4 T), 0.653 (d, 2.85 T), 0.665
 proton value reproduces the 14C(p,p') campaign's 0.826 at the same field and pad plane, which is
 the cheapest available check that nothing drifted between the two campaigns.
 
+## The kinematic lines
+
+`kine_lines_C17.C` shows the same result in the variable an experimenter looks at first — recoil KE
+against θ_lab. **The three loci are not separable raw**: each event carries the beam energy at its
+own vertex, and the 14.6 MeV lost across the chamber spreads the band by several MeV, which is an
+order of magnitude more than the level spacing. Rebuilding every event at a common reference beam
+energy collapses that spread and the loci appear.
+
+The 115 keV level gap is **221–269 keV of recoil energy** for protons (209–240 keV for deuterons),
+growing slowly toward backward angles:
+
+| θ_lab | 30 | 40 | 50 | 60 | 70 | 75 |
+|---|---|---|---|---|---|---|
+| KE(g.s.) [MeV] | 21.363 | 16.674 | 11.709 | 7.067 | 3.300 | 1.888 |
+| gap 217→332 [keV] | 221 | 221 | 222 | 225 | 238 | 269 |
+
+The clearest view is the g.s. line subtracted, `KE − KE_gs(θ_lab)`, over θ_lab 50–75°: three
+resolved peaks at 0, −0.44 and −0.66 MeV for (p,p'), against a single broad blob for the same
+events without the vertex correction. That one panel is probably the best single figure for the
+proposal — it shows the method and the result together, with no derived quantity in between.
+
+For (d,d') the same panel shows the peaks present but heavily overlapping, which is the 5× worse
+σ(E_x) seen directly.
+
 ## What is still missing
 
 1. **The elastic FRESCO curve at 136 MeV.** R = N_elastic/N_217 is the single number that decides
