@@ -121,7 +121,7 @@ this reason.
 | `run_C17inel_campaign.sh` | the 12-sample matrix, in two waves, with a PID-checked driver lock |
 | `inel_summary_C17.C` | σ(Ex), the method floor, the vertex correction, level separation |
 | `decompose_C17.C` | the headline: fixed-position three-component fit at one day of beam |
-| `kine_lines_C17.C` | the reconstructed kinematic lines, raw and vertex-corrected; `plots/kinelines_*.png` |
+| `kine_lines_C17.C` | the reconstructed kinematic lines and per-window E_x spectra; `plots/kinelines_*.png`, `plots/kinemap_*.png` |
 | `fresco/` | the DWBA angular distributions supplied with the proposal |
 
 Reco, genfit, acceptance and Ex resolution reuse the 14C macros unchanged — they already take the

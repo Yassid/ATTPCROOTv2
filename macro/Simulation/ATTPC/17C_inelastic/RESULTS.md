@@ -128,41 +128,52 @@ the cheapest available check that nothing drifted between the two campaigns.
 ## The kinematic lines, window by window
 
 `kine_lines_C17.C` shows the same result in the variable an experimenter looks at first — recoil KE
-against θ_lab. **The three loci are not separable raw**: each event carries the beam energy at its
-own vertex, and the 14.6 MeV lost across the chamber spreads the band by several MeV, an order of
-magnitude more than the level spacing. Rebuilding every event at a common reference beam energy
-collapses that spread and the loci appear as flat bands once the g.s. line is subtracted.
+against θ_lab (`plots/kinemap_*.png` is that map on its own, full size). **The three loci are not
+separable raw**: each event carries the beam energy at its own vertex, and the 14.6 MeV lost across
+the chamber spreads the band by several MeV, an order of magnitude more than the level spacing.
+Rebuilding every event at a common reference beam energy collapses that spread.
 
-The 115 keV level gap is **221–269 keV of recoil energy** for protons (207–223 keV for deuterons),
-nearly constant with angle. What is *not* constant is σ(KE), and that is what decides everything:
+The projections are in **excitation energy**, so the peaks land on 0, 0.217 and 0.332 MeV and can be
+read off directly. That also makes the two channels comparable — the same 115 keV gap is 221–269 keV
+of proton recoil but only 207–223 keV of deuteron recoil, so a KE residual silently rescales between
+them — and it makes these widths the same quantity as the tables above rather than a proxy.
 
-separation Δ/(σ₁+σ₂) of the 1/2⁺ and 5/2⁺, per θ_lab window:
+σ(E_x) [MeV] and, beneath it, the separation Δ/(σ₁+σ₂) of the 1/2⁺ and 5/2⁺, per θ_lab window:
 
 | θ_lab | 30–40 | 40–50 | 50–60 | 60–70 | 70–80 |
 |---|---|---|---|---|---|
-| (p,p') 2.85 T | 0.38 | 0.52 | **1.15** | **1.19** | 0.30 |
-| (p,p') 4.00 T | 0.84 | **1.18** | **1.28** | **1.29** | 0.23 |
-| (d,d') 2.85 T | 0.05 | 0.08 | 0.16 | 0.43 | **1.22** |
-| (d,d') 4.00 T | 0.07 | 0.11 | 0.23 | 0.76 | **1.14** |
+| (p,p') 2.85 T | 0.152 | 0.114 | **0.052** | **0.047** | 0.067 |
+| | 0.38 | 0.52 | **1.15** | **1.20** | 0.88 |
+| (p,p') 4.00 T | 0.065 | **0.050** | **0.047** | **0.044** | 0.073 |
+| | 0.84 | **1.18** | **1.28** | **1.31** | 0.75 |
+| (d,d') 2.85 T | 1.136 | 0.754 | 0.372 | 0.135 | **0.047** |
+| | 0.05 | 0.08 | 0.16 | 0.44 | **1.23** |
+| (d,d') 4.00 T | 0.792 | 0.534 | 0.270 | **0.074** | **0.047** |
+| | 0.07 | 0.11 | 0.23 | **0.76** | **1.21** |
 
 **This refines the angular recommendation made from the integrated numbers.** The usable window is
 narrower and further back than "θ_lab > 60°":
 
-- **(p,p') 2.85 T: 50–70°.** Forward of 50° the resolution collapses; the 70–80° bin is *worse*
-  again (σ(KE) 0.152) because the recoil is under 2 MeV there and the track is too short to fit.
-- **(p,p') 4.00 T: 40–70°** — the field buys the 40–50° bin, which is real added coverage.
-- **(d,d') 2.85 T: 70–80° only.** The 60–70° bin gives 0.43, not the ~1 the integrated
+- **(p,p') 2.85 T: 50–70°**, with 70–80° usable but degraded.
+- **(p,p') 4.00 T: 40–70°** — the field buys the 40–50° bin outright, which is real added coverage.
+- **(d,d') 2.85 T: 70–80° essentially alone.** The 60–70° bin gives 0.44, not the ~1 that a
   θ_lab > 60° cut implied. That is a much tighter window than the proposal's angular coverage
   assumes, and it is the strongest argument for 4 T.
 - **(d,d') 4.00 T: 60–80°**, roughly doubling the deuteron coverage.
 
-Note the 70–80° reversal on (p,p'): every previous statement in this document that resolution
-improves monotonically toward backward angles is wrong at the last bin, where the recoil energy
-falls below what the tracker can use. It matters because θ_lab 70–80° is θ_cm 20–40°, which the
-FRESCO distribution does populate.
+Note that at 70–80° the deuteron reaches σ(E_x) = 0.047 MeV — identical to the proton's best. The
+deuteron channel is not intrinsically worse; it is worse everywhere *except* the backward window,
+because its recoil is twice as energetic and only becomes slow enough to track well at the very
+back.
 
-The figures are `plots/kinelines_*.png`: the corrected locus map, the same with the g.s. line
-subtracted, and the five angular windows on a log axis with the components drawn separately. The
+**Correction to an earlier statement in this document:** the 70–80° (p,p') bin was previously quoted
+as separation 0.30, a collapse. That number came from a KE-residual width that was not a proper
+residual for the excited levels; in excitation energy it is 0.88. Resolution does still stop
+improving at the last bin — the recoil falls below ~2 MeV and the track gets short — but the bin
+remains usable rather than lost.
+
+The figures are `plots/kinelines_*.png`: the locus map, the same in E_x (flat bands at the level
+energies), and the five angular windows on a log axis with the components drawn separately. The
 elastic there is drawn at an **assumed** N_elastic/N_217 = 10 with the 1/2⁺ angular shape — the
 1/2⁺ : 5/2⁺ ratio of 2.38 is real, the elastic normalisation is not, and it is labelled on the
 figure.

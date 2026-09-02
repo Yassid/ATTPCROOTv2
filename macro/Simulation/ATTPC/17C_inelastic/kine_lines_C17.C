@@ -16,7 +16,14 @@
 /// implies at E_beam(z), then ask what KE that same excitation would give at E0 for the same
 /// theta_lab. The vertex spread collapses and the lines appear.
 ///
-///     KE_corr = KE such that  Ex(E0, theta_lab, KE_corr) = Ex(E_beam(z_reco), theta_lab, KE_reco)
+///     Ex_corr = Ex(E_beam(z_reco), theta_lab, KE_reco)
+///
+/// The projection panels are in EXCITATION ENERGY, not in a KE residual against the g.s. line. Ex
+/// is what the levels actually are -- the peaks land on 0, 0.217 and 0.332 MeV and can be read off
+/// -- and it is the only variable in which the two channels are comparable: the same 115 keV gap is
+/// 221 keV of proton recoil but 207 keV of deuteron recoil, so a KE residual silently rescales
+/// between them. It is also the variable inel_summary_C17.C and decompose_C17.C work in, so the
+/// widths quoted here are the same numbers as the tables in RESULTS.md rather than a proxy.
 ///
 /// This is not a cosmetic re-plot: it is exactly the analysis step the proposal needs to adopt,
 /// shown in the variable an experimenter looks at first.
@@ -37,6 +44,7 @@
 #include "TLegend.h"
 #include "TMath.h"
 #include "TStyle.h"
+#include "TLine.h"
 #include "TSystem.h"
 #include "TTree.h"
 
@@ -147,7 +155,7 @@ double klInterp(const std::vector<double> &th, const std::vector<double> &xs, do
 ///           and the panels are the point of the figure.
 void kine_lines_C17(TString root = "/media/yassid/Seagate Hub/ATTPC/C17_inel", TString cfgTag = "pp_b285",
                     TString frescoDir = "./fresco/", Double_t chi2Cut = 5.0, TString outDir = "./plots/",
-                    Double_t R = 10.0, Double_t resLo = -1.5, Double_t resHi = 0.7)
+                    Double_t R = 10.0, Double_t exLo = -0.8, Double_t exHi = 1.2)
 {
    gStyle->SetOptStat(0);
    gStyle->SetPalette(kBird);
@@ -204,20 +212,20 @@ void kine_lines_C17(TString root = "/media/yassid/Seagate Hub/ATTPC/C17_inel", T
    };
 
    // ---- histograms -----------------------------------------------------------------------------
-   const int nB = (int)std::lround((resHi - resLo) / 0.025); // 25 keV bins
+   const int nB = (int)std::lround((exHi - exLo) / 0.020); // 20 keV bins
    TH2D *hCor = new TH2D("hCor", "", 150, 15, 90, 400, 0, keMax);
-   TH2D *hRes = new TH2D("hRes", "", 130, 20, 85, 200, resLo, resHi);
+   TH2D *hRes = new TH2D("hRes", "", 130, 20, 85, 200, exLo, exHi);
    TH1D *hW[nW][nL];
    TH1D *hWraw[nW]; // the same window with NO vertex correction, for the contrast
    std::vector<double> resW[nW][nL];
    for (int w = 0; w < nW; ++w) {
-      hWraw[w] = new TH1D(Form("hWraw%d", w), "", nB, resLo, resHi);
+      hWraw[w] = new TH1D(Form("hWraw%d", w), "", nB, exLo, exHi);
       hWraw[w]->SetDirectory(nullptr);
       hWraw[w]->SetLineColor(kGray + 1);
       hWraw[w]->SetLineStyle(2);
       hWraw[w]->SetLineWidth(2);
       for (int l = 0; l < nL; ++l) {
-         hW[w][l] = new TH1D(Form("hW%d_%d", w, l), "", nB, resLo, resHi);
+         hW[w][l] = new TH1D(Form("hW%d_%d", w, l), "", nB, exLo, exHi);
          hW[w][l]->SetDirectory(nullptr);
          hW[w][l]->SetLineColor(col[l]);
          hW[w][l]->SetLineWidth(2);
@@ -243,7 +251,7 @@ void kine_lines_C17(TString root = "/media/yassid/Seagate Hub/ATTPC/C17_inel", T
          printf("\033[1;31m  no res tree in %s\033[0m\n", found.Data());
          return;
       }
-      double thT, thR, keT, keR, cmT, c2n, zT, zR;
+      double thT, thR, keT, keR, cmT, c2n, zT, zR, exR;
       t->SetBranchAddress("thTrue", &thT);
       t->SetBranchAddress("thReco", &thR);
       t->SetBranchAddress("keTrue", &keT);
@@ -252,6 +260,9 @@ void kine_lines_C17(TString root = "/media/yassid/Seagate Hub/ATTPC/C17_inel", T
       t->SetBranchAddress("chi2ndf", &c2n);
       t->SetBranchAddress("zTrue", &zT);
       t->SetBranchAddress("zReco", &zR);
+      // exReco is the CONSTANT-Ebeam reconstruction the pipeline already stores -- exactly the
+      // "no vertex correction" comparison, with no need to recompute it.
+      t->SetBranchAddress("exReco", &exR);
 
       if (!haveEbz) {
          TGraph g;
@@ -303,12 +314,12 @@ void kine_lines_C17(TString root = "/media/yassid/Seagate Hub/ATTPC/C17_inel", T
          const double kgs = keGSat(thR);
          if (kgs <= 0)
             continue;
-         hRes->Fill(thR, keCorr - kgs, w);
+         hRes->Fill(thR, exHere, w);
          for (int wi = 0; wi < nW; ++wi)
             if (thR >= wLo[wi] && thR < wHi[wi]) {
-               hW[wi][l]->Fill(keCorr - kgs, w);
-               hWraw[wi]->Fill(keR - kgs, w);
-               resW[wi][l].push_back(keCorr - kgs);
+               hW[wi][l]->Fill(exHere, w);
+               hWraw[wi]->Fill(exR, w);
+               resW[wi][l].push_back(exHere - ExGen[l]);
             }
          ++nUsed;
       }
@@ -353,9 +364,8 @@ void kine_lines_C17(TString root = "/media/yassid/Seagate Hub/ATTPC/C17_inel", T
       return (v[(size_t)(0.75 * v.size())] - v[(size_t)(0.25 * v.size())]) / 1.349;
    };
 
-   printf("\n  %-12s %10s %10s %10s %12s %12s\n", "theta_lab", "KE(gs)", "gap 0-217", "gap 217-332", "sigma(KE)",
-          "separation");
-   printf("  %-12s %10s %10s %10s %12s %12s\n", "[deg]", "[MeV]", "[keV]", "[keV]", "[MeV]", "217/332");
+   printf("\n  %-12s %10s %12s %12s %12s\n", "theta_lab", "KE(gs)", "gap in KE", "sigma(Ex)", "separation");
+   printf("  %-12s %10s %12s %12s %12s\n", "[deg]", "[MeV]", "[keV]", "[MeV]", "217/332");
    double sepW[nW];
    for (int w = 0; w < nW; ++w) {
       const double th = 0.5 * (wLo[w] + wHi[w]);
@@ -363,9 +373,10 @@ void kine_lines_C17(TString root = "/media/yassid/Seagate Hub/ATTPC/C17_inel", T
       const double k1 = klKE(m1, mL, mL, m4, E0, th, ExGen[1], keMax);
       const double k2 = klKE(m1, mL, mL, m4, E0, th, ExGen[2], keMax);
       const double s1 = iqrSigma(resW[w][1]), s2 = iqrSigma(resW[w][2]);
-      sepW[w] = (s1 > 0 && s2 > 0) ? (k1 - k2) / (s1 + s2) : -1;
-      printf("  %5.0f-%-6.0f %10.3f %10.0f %10.0f %12.3f %12.2f\n", wLo[w], wHi[w], k0, (k0 - k1) * 1000,
-             (k1 - k2) * 1000, s1, sepW[w]);
+      // separation in EXCITATION ENERGY: the level gap is 0.115 MeV by definition, so this is
+      // directly comparable with the tables in inel_summary_C17.C.
+      sepW[w] = (s1 > 0 && s2 > 0) ? (ExGen[2] - ExGen[1]) / (s1 + s2) : -1;
+      printf("  %5.0f-%-6.0f %10.3f %12.0f %12.3f %12.2f\n", wLo[w], wHi[w], k0, (k1 - k2) * 1000, s1, sepW[w]);
    }
 
    // ---- figure ------------------------------------------------------------------------------------
@@ -395,13 +406,18 @@ void kine_lines_C17(TString root = "/media/yassid/Seagate Hub/ATTPC/C17_inel", T
 
    cv->cd(2);
    gPad->SetLogz();
-   hRes->SetTitle("g.s. line subtracted -- the loci as flat bands;#theta_{lab} [deg];"
-                  "KE #minus KE_{g.s.} [MeV]");
+   hRes->SetTitle("excitation energy -- the loci as flat bands;#theta_{lab} [deg];E_{x}(^{17}C) [MeV]");
    hRes->GetYaxis()->SetTitleOffset(1.15);
    hRes->Draw("COLZ");
-   for (int l = 0; l < nL; ++l)
-      gBand[l]->Draw("L SAME");
    {
+      // in Ex the bands are simply the level energies
+      for (int l = 0; l < nL; ++l) {
+         TLine *ln = new TLine(20, ExGen[l], 85, ExGen[l]);
+         ln->SetLineColor(l == 0 ? kBlack : col[l]);
+         ln->SetLineWidth(2);
+         ln->SetLineStyle(l == 0 ? 1 : (l == 1 ? 7 : 3));
+         ln->Draw();
+      }
       TLatex tx;
       tx.SetNDC();
       tx.SetTextSize(0.030);
@@ -422,8 +438,7 @@ void kine_lines_C17(TString root = "/media/yassid/Seagate Hub/ATTPC/C17_inel", T
          sum->Add(hW[w][l]);
       sum->SetLineColor(kBlack);
       sum->SetLineWidth(3);
-      sum->SetTitle(Form("%.0f < #theta_{lab} < %.0f deg   (sep %.2f);"
-                         "KE #minus KE_{g.s.}(#theta_{lab}) [MeV];counts / 25 keV",
+      sum->SetTitle(Form("%.0f < #theta_{lab} < %.0f deg   (sep %.2f);E_{x}(^{17}C) [MeV];counts / 20 keV",
                          wLo[w], wHi[w], sepW[w]));
       sum->SetMaximum(4.0 * sum->GetMaximum());
       sum->SetMinimum(0.5);
@@ -436,6 +451,12 @@ void kine_lines_C17(TString root = "/media/yassid/Seagate Hub/ATTPC/C17_inel", T
          // to show how much wider the spectrum is without the vertex correction.
          hWraw[w]->Scale(sum->Integral() / hWraw[w]->Integral());
          hWraw[w]->Draw("HIST SAME");
+      }
+      for (int l = 0; l < nL; ++l) {
+         TLine *ln = new TLine(ExGen[l], sum->GetMinimum(), ExGen[l], 0.45 * sum->GetMaximum());
+         ln->SetLineColor(l == 0 ? kBlack : col[l]);
+         ln->SetLineStyle(3);
+         ln->Draw();
       }
       if (w == 0) {
          TLegend *lg = new TLegend(0.13, 0.60, 0.55, 0.89);
@@ -456,7 +477,7 @@ void kine_lines_C17(TString root = "/media/yassid/Seagate Hub/ATTPC/C17_inel", T
       tx.SetTextFont(102);
       tx.DrawLatexNDC(0.04, 0.92, Form("%s", cfgTag.Data()));
       tx.SetTextSize(0.048);
-      tx.DrawLatexNDC(0.04, 0.83, "#theta_{lab}    #sigma(KE)   sep(217/332)");
+      tx.DrawLatexNDC(0.04, 0.83, "#theta_{lab}    #sigma(Ex)   sep(217/332)");
       for (int w = 0; w < nW; ++w)
          tx.DrawLatexNDC(0.04, 0.74 - 0.09 * w,
                          Form("%2.0f-%2.0f    %5.3f       %4.2f", wLo[w], wHi[w], iqrSigma(resW[w][1]), sepW[w]));
@@ -480,5 +501,40 @@ void kine_lines_C17(TString root = "/media/yassid/Seagate Hub/ATTPC/C17_inel", T
    }
 
    cv->SaveAs(outDir + "kinelines_" + cfgTag + ".png");
-   printf("\n  wrote %skinelines_%s.png\n\n", outDir.Data(), cfgTag.Data());
+
+   // ---- the locus map on its own, full size -------------------------------------------------
+   // At a sixth of a multi-panel canvas the band and the three curves through it cannot both be
+   // resolved, and this is the panel worth looking at closely.
+   TCanvas *cm = new TCanvas("cvmap", "kinematics", 1200, 900);
+   cm->SetLogz();
+   cm->SetRightMargin(0.13);
+   TH2D *hMap = (TH2D *)hCor->Clone("hMap");
+   hMap->SetTitle(Form("^{17}C%s  vertex-corrected to E_{beam} = %.0f MeV, one day of beam;"
+                       "#theta_{lab} [deg];KE of the recoil [MeV]",
+                       chan == "dd" ? "(d,d')" : "(p,p')", E0));
+   hMap->GetXaxis()->SetRangeUser(15, 88);
+   hMap->Draw("COLZ");
+   for (int l = 0; l < nL; ++l)
+      gLine[l]->Draw("L SAME");
+   {
+      TLegend *lg = new TLegend(0.56, 0.68, 0.86, 0.88);
+      lg->SetBorderSize(0);
+      lg->SetFillStyle(0);
+      for (int l = 0; l < nL; ++l)
+         lg->AddEntry(gLine[l], stName[l], "l");
+      lg->Draw();
+      TLatex tx;
+      tx.SetNDC();
+      tx.SetTextSize(0.026);
+      tx.DrawLatex(0.14, 0.20, Form("%s, B = %s T, 300 torr %s", cfgTag.Data(),
+                                    btag == "b400" ? "4.00" : "2.85", chan == "dd" ? "D_{2}" : "H_{2}"));
+      tx.DrawLatex(0.14, 0.16, "the three curves are 217 and 332 keV apart in E_{x},");
+      tx.DrawLatex(0.14, 0.12, Form("which is ~%.0f keV of recoil energy",
+                                    (klKE(m1, mL, mL, m4, E0, 60, ExGen[1], keMax) -
+                                     klKE(m1, mL, mL, m4, E0, 60, ExGen[2], keMax)) * 1000));
+   }
+   cm->SaveAs(outDir + "kinemap_" + cfgTag + ".png");
+
+   printf("\n  wrote %skinelines_%s.png and %skinemap_%s.png\n\n", outDir.Data(), cfgTag.Data(), outDir.Data(),
+          cfgTag.Data());
 }
