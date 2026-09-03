@@ -1,11 +1,11 @@
-/// @file unpackFRIB_C15d.C
-/// @brief Unpack ONLY the FRIB DAQ group (frib/evt/*_1903) of a2091 D2 (15C+d) HDF5 with
+/// @file unpackFRIB_C15p.C
+/// @brief Unpack ONLY the FRIB DAQ group (frib/evt/*_1903) of a2091 H2 (15C+p) HDF5 with
 ///        AtFRIBHDFUnpacker -> <run>_FRIB.root (AtRawEvent of the 8 auxiliary channels).
 ///        The ION CHAMBER is generic trace[0]; used for the 15C beam gate.
 ///        Fast (no PSA/PRA) — just reads the small frib group.
 ///
-///   root -b -q 'unpackFRIB_C15d.C("run_0017")'
-void unpackFRIB_C15d(TString fileName = "run_0017", TString outDir = "/home/yassid/C15d_ic/tmp/",
+///   root -b -q 'unpackFRIB_C15p.C("run_0017")'
+void unpackFRIB_C15p(TString fileName = "run_0017", TString outDir = "/home/yassid/a2091_C15_ic/tmp/",
                      TString filepath = "/media/yassid/Seagate Hub/ATTPC/Data/a2091/")
 {
    gSystem->Load("libAtReconstruction.so");
@@ -17,15 +17,15 @@ void unpackFRIB_C15d(TString fileName = "run_0017", TString outDir = "/home/yass
    TString mapDir = dir + "/scripts/ANL2023.xml";
    gSystem->Setenv("GEOMPATH", (dir + "/geometry/").Data());
    TString outputFile = outDir + fileName + "_FRIB.root";
-   TString digiParFile = dir + "/parameters/ATTPC.C15d_a2091_D2.par";
+   TString digiParFile = dir + "/parameters/ATTPC.a2091_C15.par";
    // This workspace's own D2 geometry, not the inherited H1bar: that file does not even exist in a
    // fresh checkout (the .root geometries are generated, not tracked), and its absence crashed this
    // macro with a segfault rather than an error. The FRIB group carries no tracks, so the geometry
    // only has to LOAD -- but it still has to exist.
-   TString geoManFile = dir + "/geometry/ATTPC_D300torr_v2_geomanager.root";
+   TString geoManFile = dir + "/geometry/ATTPC_H300torr_RT_geomanager.root";
    if (gSystem->AccessPathName(geoManFile.Data())) {
       std::cout << "ERROR: geometry not found: " << geoManFile
-                << "\n  generate it once:  root -b -q $VMCWORKDIR/geometry/ATTPC_D300torr_v2.C\n";
+                << "\n  generate it once:  root -b -q $VMCWORKDIR/geometry/ATTPC_H300torr_RT.C\n";
       return;
    }
 

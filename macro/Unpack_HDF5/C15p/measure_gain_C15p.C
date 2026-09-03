@@ -1,8 +1,8 @@
-/// @file measure_gain_C15d.C
+/// @file measure_gain_C15p.C
 /// @brief Measure the per-run dE/dx gain factors from THIS analysis's own PID plane.
 ///
-///   root -b -q 'measure_gain_C15d.C(0.30, 0.60)'          // Brho window, T*m
-///   root -b -q 'measure_gain_C15d.C(0.30, 0.60, "/home/yassid/C15d_reco/", "gainmatch_C15d.csv")'
+///   root -b -q 'measure_gain_C15p.C(0.30, 0.60)'          // Brho window, T*m
+///   root -b -q 'measure_gain_C15p.C(0.30, 0.60, "/home/yassid/a2091_C15_reco/", "gainmatch_C15p.csv")'
 ///
 /// METHOD -- anchored on the dE/dx peak in a fixed Brho window.
 ///
@@ -23,7 +23,7 @@
 /// higher median for reasons that have nothing to do with gain, and that shift would be
 /// absorbed into f(r) and silently distort the plane it was supposed to fix.
 ///
-/// CHOOSE THE WINDOW BY LOOKING AT THE PLANE FIRST (mkpid_C15d.C). It must sit where one band
+/// CHOOSE THE WINDOW BY LOOKING AT THE PLANE FIRST (mkpid_C15p.C). It must sit where one band
 /// dominates; a window straddling two bands measures their ratio, not the gain, and the result
 /// will look perfectly smooth while being wrong.
 ///
@@ -131,14 +131,14 @@ const char *kEstName[4] = {"interquartile truncated mean", "median", "max bin + 
 
 } // namespace
 
-void measure_gain_C15d(Double_t bLo = 0.30, Double_t bHi = 0.60,
-                       TString inDir = "/home/yassid/C15d_reco/", TString outCsv = "gainmatch_C15d.csv",
+void measure_gain_C15p(Double_t bLo = 0.30, Double_t bHi = 0.60,
+                       TString inDir = "/home/yassid/C15p_reco/", TString outCsv = "gainmatch_C15p.csv",
                        Int_t minTracks = 200, Int_t nbins = 200, Double_t dLo = 0.0, Double_t dHi = 0.0,
                        Int_t minClusters = 0, Int_t estimator = 0, Int_t refRun = -1,
                        TString plotDir = "plots/",
                        /// Restrict to a run range. REQUIRED here: runs >=106 are a HYDROGEN target,
                        /// so pooling them with the D2 runs would measure the target change as gain.
-                       Int_t runMin = 13, Int_t runMax = 133)
+                       Int_t runMin = 138, Int_t runMax = 182)
 {
    gSystem->mkdir(plotDir, kTRUE);
 
@@ -210,7 +210,7 @@ void measure_gain_C15d(Double_t bLo = 0.30, Double_t bHi = 0.60,
       dHi = 3.0 * med;
    }
 
-   std::cout << "\033[1;33m=== measure_gain_C15d ===\033[0m\n"
+   std::cout << "\033[1;33m=== measure_gain_C15p ===\033[0m\n"
              << "  runs        : " << files.size() << "  (range " << runMin << "-" << runMax << ")\n"
              << "  anchor      : most-probable dEdx, Brho in [" << bLo << ", " << bHi << "] T*m\n"
              << "  dEdx range  : [" << dLo << ", " << dHi << "] in " << nbins << " bins\n"
@@ -335,7 +335,7 @@ void measure_gain_C15d(Double_t bLo = 0.30, Double_t bHi = 0.60,
 
    // ---- write -------------------------------------------------------------------------------
    std::ofstream out(outCsv.Data());
-   out << "# C15d dE/dx gain-match factors, measured from this analysis's own PID plane\n";
+   out << "# C15p dE/dx gain-match factors, measured from this analysis's own PID plane\n";
    out << "# anchor      : most-probable dEdx for valid tracks with brho in [" << bLo << "," << bHi
        << "] T*m\n";
    out << "# reference   : " << ref << (refRun > 0 ? Form(" (run %d)", refRun) : " (statistics-weighted pooled peak)")
@@ -388,6 +388,6 @@ void measure_gain_C15d(Double_t bLo = 0.30, Double_t bHi = 0.60,
    gF->SetTitle("gain-match factor;run;factor");
    gF->SetMarkerStyle(20);
    gF->Draw("AP");
-   c->SaveAs(plotDir + "gainmatch_C15d.png");
-   std::cout << "  plot           : " << plotDir << "gainmatch_C15d.png\n";
+   c->SaveAs(plotDir + "gainmatch_C15p.png");
+   std::cout << "  plot           : " << plotDir << "gainmatch_C15p.png\n";
 }

@@ -1,0 +1,8 @@
+{
+  "name": "ic_C15p",
+  "observable": "icmax",
+  "comment": "max of FRIB generic trace[0] over time buckets 1050-1250. Window carried over from the a2091 UKF analysis (pid/ic_15C.json), which used the same detector, channel and reduction. The IC amplitude spectrum is a Z ladder: the gated peak near 1145 ADC is Z=6, the one near 2055 is Z=8.",
+  "singlePulse": true,
+  "icLo": 979.508,
+  "icHi": 1278.8
+}

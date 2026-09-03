@@ -1,16 +1,16 @@
-/// @file mkpid_C15d.C
+/// @file mkpid_C15p.C
 /// @brief Merge the per-run gain-matched PID caches into one plane and draw it.
 ///
-///   root -b -q 'mkpid_C15d.C()'                                  // whatever is cached so far
-///   root -b -q 'mkpid_C15d.C("/home/yassid/C15d_reco/", "plots/", 60, 0, 4, 200, 0, 2.5)'
+///   root -b -q 'mkpid_C15p.C()'                                  // whatever is cached so far
+///   root -b -q 'mkpid_C15p.C("/home/yassid/a2091_C15_reco/", "plots/", 60, 0, 4, 200, 0, 2.5)'
 ///
 /// Reads every <run>_pid.root in inDir, fills sqrt(dE/dx) vs Brho, writes
-/// plots/pid_C15d.png and plots/pid_C15d.root (the TH2 plus the merged TChain's
+/// plots/pid_C15p.png and plots/pid_C15p.root (the TH2 plus the merged TChain's
 /// selection counts). Cheap: the caches are a couple of MB per run, so re-binning
 /// and re-cutting is instant.
 ///
 /// GATES OVERLAY: pass a comma-separated list of Cut2D JSON files (as written by
-/// draw_gate_C15d.C) and each is drawn on top with its in-gate count.
+/// draw_gate_C15p.C) and each is drawn on top with its in-gate count.
 ///
 /// GAIN: the caches hold RAW dE/dx, so pass gainTable to see the matched plane. Without it the
 /// axis label says so explicitly.
@@ -22,18 +22,18 @@
 /// Default axis ranges cover the whole populated plane (sqrt_dEdx up to ~85, brho up to 2.5) so
 /// nothing is clipped out of view by the plot itself -- a clipped axis looks exactly like a band
 /// that ends.
-#include "gain_C15d.h"
+#include "gain_C15p.h"
 
-void mkpid_C15d(TString inDir = "/home/yassid/C15d_reco/", TString outDir = "plots/", Int_t nbx = 340,
+void mkpid_C15p(TString inDir = "/home/yassid/C15p_reco/", TString outDir = "plots/", Int_t nbx = 340,
                 Double_t xlo = 0.0, Double_t xhi = 85.0, Int_t nby = 300, Double_t ylo = 0.0,
                 Double_t yhi = 2.5, TString gates = "", Int_t minClusters = 0, Double_t maxVtxR = -1.0,
-                /// Set once measure_gain_C15d.C has produced a table AND the caches were built with
+                /// Set once measure_gain_C15p.C has produced a table AND the caches were built with
                 /// gain matching on -- it only controls the axis label, but a mislabelled plane is
                 /// how an unmatched plane ends up being trusted as a matched one.
                 TString gainTable = "",
                 /// Restrict to a run range. Runs >=106 are a HYDROGEN target -- plotting them on
                 /// the same plane overlays two different gases and doubles every band.
-                Int_t runMin = 13, Int_t runMax = 133)
+                Int_t runMin = 138, Int_t runMax = 182)
 {
    gSystem->Load("libAtTools.so");
    gSystem->mkdir(outDir, kTRUE);
@@ -73,16 +73,16 @@ void mkpid_C15d(TString inDir = "/home/yassid/C15d_reco/", TString outDir = "plo
 
    const Long64_t nAll = ch.GetEntries();
    const Long64_t nSel = ch.GetEntries(sel);
-   std::cout << "\033[1;33m=== C15d PID plane ===\033[0m\n"
+   std::cout << "\033[1;33m=== C15p PID plane ===\033[0m\n"
              << "  runs        : " << nRuns << "  (range " << runMin << "-" << runMax << ")\n"
              << "  tracks      : " << nAll << "\n"
              << "  selected    : " << nSel << "  (" << sel << ")  = " << (nAll ? 100.0 * nSel / nAll : 0.)
              << "%\n";
 
-   // The reco persists RAW dE/dx (unpackReco_C15d.C has gainMatch off by default), so say so on
+   // The reco persists RAW dE/dx (unpackReco_C15p.C has gainMatch off by default), so say so on
    // the axis. A plane labelled "gain matched" that is not is the kind of thing that survives
    // into a talk.
-   auto gainMap = LoadGainTable_C15d(gainTable);
+   auto gainMap = LoadGainTable_C15p(gainTable);
    TString xlabel = gainMap.empty() ? "#sqrt{dE/dx}  (raw, per-run gain NOT matched)"
                                     : "#sqrt{dE/dx}  (gain matched)";
    auto *h = new TH2D("hpid", ";" + xlabel + ";B#rho  (T m)", nbx, xlo, xhi, nby, ylo, yhi);
@@ -109,7 +109,7 @@ void mkpid_C15d(TString inDir = "/home/yassid/C15d_reco/", TString outDir = "plo
          if (maxVtxR > 0 && b_vtxR >= maxVtxR)
             continue;
          bool missing = false;
-         const double f = GainFactor_C15d(gainMap, b_run, missing);
+         const double f = GainFactor_C15p(gainMap, b_run, missing);
          if (missing) {
             ++nMissing;
             missingRuns.insert(b_run);
@@ -126,7 +126,7 @@ void mkpid_C15d(TString inDir = "/home/yassid/C15d_reco/", TString outDir = "plo
       ch.ResetBranchAddresses();
    }
 
-   TCanvas *c = new TCanvas("cpid", "C15d PID", 1100, 850);
+   TCanvas *c = new TCanvas("cpid", "C15p PID", 1100, 850);
    c->SetLogz();
    c->SetRightMargin(0.13);
    h->Draw("colz");
@@ -185,9 +185,9 @@ void mkpid_C15d(TString inDir = "/home/yassid/C15d_reco/", TString outDir = "plo
       delete toks;
    }
 
-   c->SaveAs(outDir + "pid_C15d.png");
-   TFile fo(outDir + "pid_C15d.root", "RECREATE");
+   c->SaveAs(outDir + "pid_C15p.png");
+   TFile fo(outDir + "pid_C15p.root", "RECREATE");
    h->Write();
    fo.Close();
-   std::cout << "\033[1;32mwrote\033[0m " << outDir << "pid_C15d.png and .root\n";
+   std::cout << "\033[1;32mwrote\033[0m " << outDir << "pid_C15p.png and .root\n";
 }

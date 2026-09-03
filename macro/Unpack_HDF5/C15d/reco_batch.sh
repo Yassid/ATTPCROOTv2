@@ -35,14 +35,19 @@ set -eo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/../../.." && pwd)"
 
-NPAR="${1:-16}"
-# runs_d2.txt, NOT runs_d.txt. runs_d.txt is the original list and still carries the 28 runs
+# ★ PARALLELISM: KEEP IT LOW. The raw data is on a single spinning USB disk and each run is a
+# 20-40 GB sequential read. Concurrency turns those into seeks and throughput COLLAPSES:
+#     2 workers -> 23.6 MB/s, 118 kB per I/O      12 workers -> 4.0 MB/s, 16 kB per I/O
+# Per-worker CPU at 12 was 16 %, i.e. all of them waiting on the disk. At 4 MB/s the 104-run
+# a2091 production takes ~6 days; at 23.6 MB/s it takes ~23 h. More cores make it SLOWER.
+NPAR="${1:-3}"
+# runs_a2091_d2.txt, NOT runs_d.txt. runs_d.txt is the original list and still carries the 28 runs
 # >=106, which were later established to be a HYDROGEN target (dE/dx ratio 0.52 against 0.500
-# predicted for H2/D2, and arclength jumping 162-166 -> 182-185 mm). runs_d2.txt is the curated
+# predicted for H2/D2, and arclength jumping 162-166 -> 182-185 mm). runs_a2091_d2.txt is the curated
 # D2-only set written once that was known. Leaving the default on the stale list reconstructed
 # all 28 hydrogen runs, and because they are the LARGEST files a downstream `ls -S | head` then
 # fitted 7 of them as deuterium -- which put the (d,d) beam energy at 54 MeV instead of 190.
-RUNLIST="${2:-$HERE/runs_d2.txt}"
+RUNLIST="${2:-$HERE/runs_a2091_d2.txt}"
 NEVENTS="${3:--1}"
 
 RECO_DIR="${C15D_RECO:-/home/yassid/C15d_reco}"
@@ -105,7 +110,11 @@ do_run() {
       # numbers, so a job killed mid-write would leave a non-empty file that the skip test
       # above accepts as finished, and the run silently enters the analysis short. mv within
       # the same filesystem is atomic, so a reco under its final name is always complete.
-      local part_dir="$RECO_DIR/.part/$run"
+      # ⚠ .part/<run> is LIVE staging for a run in progress, not scratch. Clearing .part/* while
+   # a batch is running destroys finished output that has not been mv-ed yet -- it cost
+   # run_0049 and run_0120 a full 6700 s and 5800 s reconstruction apiece. Only ever remove
+   # the subdirectory of a run you know is not running.
+   local part_dir="$RECO_DIR/.part/$run"
       rm -rf "$part_dir"
       mkdir -p "$part_dir"
       if root -b -q "$HERE/unpackReco_C15d.C(\"$run\", $NEVENTS, false, \"$part_dir/\")" \

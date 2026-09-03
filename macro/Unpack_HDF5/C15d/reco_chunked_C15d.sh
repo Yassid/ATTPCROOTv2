@@ -1,0 +1,152 @@
+#!/usr/bin/env bash
+# Chunked reconstruction: ONE run at a time, split across many cores.
+#
+#   ./reco_chunked_C15d.sh [chunks] [runlist]
+#
+# WHY THIS EXISTS. The obvious way to use 32 cores is to reconstruct 32 runs at once. On this
+# machine that is the WORST thing to do: the raw data is on a single spinning USB disk and each
+# run is a 17-27 GB read, so concurrency turns sequential reads into seeks --
+#
+#     2 workers  -> 23.6 MB/s, 118 kB per I/O        12 workers -> 4.0 MB/s, 16 kB per I/O
+#
+# and per-worker CPU falls to 16 %, i.e. every worker waiting on the disk.
+#
+# But the drive streams at 253 MB/s sequentially, and a run whose file is in page cache
+# reconstructs at 99 % CPU (measured, against 40 % cold). So the fast route is the opposite of the
+# obvious one: read ONE run sequentially into cache, then let many cores share that warm file.
+#
+#   1  prefetch the run into page cache with a single sequential read
+#   2  reconstruct it as N chunks in parallel, all served from RAM
+#   3  hadd the chunks into <run>_reco.root
+#
+# Chunking is exact: chunk 0 + chunk 1 reproduce a single pass byte for byte (1200 events, 1085
+# tracks, 132451 hits, identical sum of hit z), and hadd preserves that.
+#
+# ⚠ The chunk offset goes to AtUnpacker::SetInitialEventID BEFORE the unpacker is moved into the
+# task. FairRunAna::Run(first, last) does NOT drive the HDF5 unpacker -- passing a start event
+# there is silently ignored and every chunk re-reads the same events.
+#
+# ⚠ MEMORY. Each chunk is ~1.1 GB resident and the warm file needs 17-27 GB of page cache, against
+# 62 GB total. 12 chunks is about the limit; more evicts the very file we prefetched.
+
+set -eo pipefail
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO="$(cd "$HERE/../../.." && pwd)"
+NCHUNK="${1:-12}"
+RUNLIST="${2:-$HERE/runs_a2091_d2.txt}"
+RAW="/media/yassid/Seagate Hub/ATTPC/Data/a2091/"
+RECO="${C15D_RECO:-/home/yassid/C15d_reco}"
+LOG="${C15D_LOGS:-/home/yassid/C15d_logs}"
+PAR="ATTPC.C15d_a2091_D2.par"
+GEO="ATTPC_D300torr_v2_geomanager.root"
+MIN_FREE_GB=40
+H5LS="/home/yassid/fair_install/hdf5-1.10.4-inst/bin/h5ls"
+MAX_SANE_EVENTS=2000000   # a real AT-TPC run is 1e3-1e5 events; anything above this is corrupt metadata
+
+set +u; source "$REPO/build/config.sh" >/dev/null 2>&1; set -u
+[[ -n "${VMCWORKDIR:-}" ]] || { echo "ERROR: config.sh did not set VMCWORKDIR" >&2; exit 1; }
+mkdir -p "$RECO" "$LOG" "$RECO/.chunk"
+cd "$HERE"
+
+mapfile -t RUNS < <(grep -vE '^\s*(#|$)' "$RUNLIST" | tr -s ' \n' '\n' | grep '^run_')
+echo "=== chunked reco: ${#RUNS[@]} runs, $NCHUNK chunks per run ==="
+echo "  raw  : $RAW"
+echo "  out  : $RECO"
+echo "  par  : $PAR"
+
+for run in "${RUNS[@]}"; do
+   out="$RECO/${run}_reco.root"
+   [[ -s "$out" ]] && { echo "[$run] exists, skipping"; continue; }
+   raw="$RAW$run.h5"
+   [[ -s "$raw" ]] || { echo "[$run] no raw file, skipping"; continue; }
+
+   free_gb=$(df -BG --output=avail "$RECO" | tail -1 | tr -d ' G')
+   (( free_gb < MIN_FREE_GB )) && { echo "[$run] SKIP: only ${free_gb} GB free"; continue; }
+
+   t0=$SECONDS
+   # --- 1. how many events? probe once; the unpacker prints it during Init -------------------
+   nev=$(root -b -q "$HERE/unpackReco_C15d.C(\"$run\",1,false,\"$RECO/.chunk/probe_\",\"$RAW\",\"$PAR\",\"$GEO\")" 2>/dev/null \
+         | grep -oE "Run contains [0-9]+" | grep -oE "[0-9]+" | head -1)
+   rm -f "$RECO/.chunk/probe_${run}_reco.root"
+   [[ -n "$nev" && "$nev" -gt 0 ]] || { echo "[$run] could not read the event count, skipping"; continue; }
+   # ★ SANITY-CHECK THE EVENT COUNT. Some files have corrupt metadata and the unpacker reports it
+   # verbatim: run_0019 claims 127,979,076,285,538 events. Chunking on that asks for datasets like
+   # evt95984350326776_header, which do not exist, and HDF5 prints a full multi-line error stack
+   # PER ATTEMPT in a loop that never terminates -- 127 GB per chunk log, 1.4 TB over 12 chunks,
+   # which filled the disk and hung every worker in D state. A real AT-TPC run is at most a few
+   # hundred thousand events.
+   if (( nev > MAX_SANE_EVENTS )); then
+      # RECOVERABLE: the DATA is fine, only /meta is wrong. /get holds two datasets per event
+      # (evtN_data and evtN_header), so counting its children and halving gives the true count.
+      # run_0019: metadata claims 1.3e14, /get has 14568 children = 7284 real events.
+      echo "[$run] bad metadata ($nev events) -- counting /get datasets instead"
+      real=$(timeout 600 "$H5LS" "$raw/get" 2>/dev/null | wc -l)
+      real=$(( real / 2 ))
+      if (( real > 0 && real <= MAX_SANE_EVENTS )); then
+         echo "[$run] recovered: $real events from the dataset count"
+         nev=$real
+      else
+         echo "[$run] UNRECOVERABLE: /get gave $real events -- skipping"
+         echo "$run" >> "$HERE/runs_bad_metadata.txt"
+         continue
+      fi
+   fi
+
+   # --- 2. prefetch the whole file into page cache, sequentially ------------------------------
+   dd if="$raw" of=/dev/null bs=8M 2>/dev/null || true
+   t_pf=$((SECONDS - t0))
+
+   # --- 3. N chunks in parallel, all served from RAM ------------------------------------------
+   per=$(( (nev + NCHUNK - 1) / NCHUNK ))
+   pids=()
+   for ((c=0; c<NCHUNK; c++)); do
+      first=$(( c * per ))
+      (( first >= nev )) && break
+      # ★ CLAMP THE LAST CHUNK. per = ceil(nev/NCHUNK), so NCHUNK*per OVERRUNS nev -- for
+      # run_0110, 12 x 2078 = 24936 against 24929 real events. The merged file then carries a few
+      # phantom events at the end, its length no longer matches the IC file, and
+      # make_points_C15d.C refuses the join: "IC has 24930 entries vs 24936 reco events". That
+      # silently costs the run its beam gate. 22 of 35 runs were affected.
+      this=$per
+      (( first + this > nev )) && this=$(( nev - first ))
+      # head -c caps each chunk log at 50 MB. Belt and braces against the runaway above: even
+      # with the event-count guard, any per-event error loop would otherwise fill the disk.
+      root -b -q "$HERE/unpackReco_C15d.C(\"$run\",$this,false,\"$RECO/.chunk/$(printf c%02d_ "$c")\",\"$RAW\",\"$PAR\",\"$GEO\",20.0,15.0,7.5,kTRUE,kFALSE,\"\",30,0.0,2.85,$first)" 2>&1 \
+         | head -c 50000000 >"$LOG/${run}_$(printf c%02d "$c").log" &
+      pids+=($!)
+   done
+   fail=0
+   for p in "${pids[@]}"; do wait "$p" || fail=1; done
+
+   # --- 4. merge ------------------------------------------------------------------------------
+   # ★ MERGE IN NUMERIC ORDER, EXPLICITLY. A glob of c*_ expands ALPHABETICALLY --
+   # c0_, c10_, c11_, c1_, c2_ ... -- so hadd concatenated the chunks out of order and the merged
+   # tree's entry N no longer corresponded to raw event N. That silently breaks every positional
+   # join: the IC join, and any (run, event, trackID) match to the fits. The PID plane is a
+   # histogram and does not care, which is exactly why it went unnoticed.
+   parts=()
+   for ((c=0; c<NCHUNK; c++)); do
+      f="$RECO/.chunk/$(printf c%02d_ "$c")${run}_reco.root"
+      [[ -s "$f" ]] && parts+=("$f")
+   done
+   if (( fail )) || [[ ! -s "${parts[0]}" ]]; then
+      echo "[$run] CHUNK FAILED (see $LOG/${run}_c*.log)"
+      rm -f "$RECO"/.chunk/c[0-9][0-9]_"${run}"_reco.root
+      continue
+   fi
+   if hadd -f "$RECO/.chunk/${run}_merged.root" "${parts[@]}" >"$LOG/${run}_hadd.log" 2>&1 \
+      && [[ -s "$RECO/.chunk/${run}_merged.root" ]]; then
+      mv "$RECO/.chunk/${run}_merged.root" "$out"
+      rm -f "$RECO"/.chunk/c[0-9][0-9]_"${run}"_reco.root
+      # ★ The PID NTUPLE is a separate step and it is NOT optional. mkpid_C15d.C,
+      # make_points_C15d.C and gain_report_C15d.C all read <run>_pid.root, not the reco. Omitting
+      # it here (reco_batch.sh does run it) left the gain report with "runs with data : 1" and no
+      # usable PID plane, which looks like a data problem rather than a missing stage.
+      root -b -q "$HERE/pidntuple_C15d.C(\"$run\",\"$RECO/\")" >>"$LOG/${run}_pid.log" 2>&1 || true
+      echo "[$run] OK  $nev events, ${#parts[@]} chunks, $((SECONDS-t0)) s (prefetch ${t_pf} s)  $(du -h "$out" | cut -f1)"
+   else
+      echo "[$run] HADD FAILED (see $LOG/${run}_hadd.log)"
+      rm -f "$RECO"/.chunk/c[0-9][0-9]_"${run}"_reco.root
+   fi
+done
+echo "=== done: $(ls -1 "$RECO"/*_reco.root 2>/dev/null | wc -l) reco files ==="

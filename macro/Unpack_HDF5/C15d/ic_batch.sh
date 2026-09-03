@@ -25,7 +25,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/../../.." && pwd)"
 
 NPAR="${1:-6}"
-RUNLIST="${2:-$HERE/runs_d2.txt}"
+RUNLIST="${2:-$HERE/runs_a2091_d2.txt}"
 
 IC_DIR="${C15D_IC:-/home/yassid/C15d_ic}"
 TMP_DIR="$IC_DIR/tmp"

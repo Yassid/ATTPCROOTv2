@@ -1,11 +1,11 @@
-/// @file make_points_C15d.C
+/// @file make_points_C15p.C
 /// @brief Merge the per-run PID caches into the single `pts` points file the gate GUI reads,
 ///        applying the per-run gain match and joining the ion chamber onto every track.
 ///
-///   root -b -q 'pid/make_points_C15d.C()'
-///   root -b -q 'pid/make_points_C15d.C("/home/yassid/C15d_reco/","pid/points_C15d.root")'
+///   root -b -q 'pid/make_points_C15p.C()'
+///   root -b -q 'pid/make_points_C15p.C("/home/yassid/a2091_C15_reco/","pid/points_C15p.root")'
 ///
-/// Output tree `pts`, one entry per VALID track, with the branch names gate_draw_C15d.C expects:
+/// Output tree `pts`, one entry per VALID track, with the branch names gate_draw_C15p.C expects:
 ///   sqrtdedx  gain-matched sqrt(dE/dx)          brho   T*m
 ///   polar     degrees (AtSpyralResult is rad)   ic     ion-chamber max, -1 if unavailable
 ///   npulse    IC pulse count (pile-up)          run / event / trackID / nclusters
@@ -26,15 +26,15 @@
 /// downstream IC window then drops them, which is correct, but it has to be a visible decision
 /// rather than a surprise.
 
-#include "../gain_C15d.h"
+#include "../gain_C15p.h"
 
-void make_points_C15d(TString inDir = "/home/yassid/C15d_reco/", TString outFile = "",
-                      TString gainTable = "gainmatch_C15d.csv", TString icDir = "/home/yassid/C15d_ic/",
-                      Int_t runMin = 13, Int_t runMax = 133)
+void make_points_C15p(TString inDir = "/home/yassid/C15p_reco/", TString outFile = "",
+                      TString gainTable = "gainmatch_C15p.csv", TString icDir = "/home/yassid/a2091_C15_ic/",
+                      Int_t runMin = 138, Int_t runMax = 182)
 {
    TString here = gSystem->DirName(gInterpreter->GetCurrentMacroName());
    if (outFile.IsNull())
-      outFile = here + "/points_C15d.root";
+      outFile = here + "/points_C15p.root";
 
    TString gt = gainTable;
    if (gt.Length() && !gt.BeginsWith("/") && gSystem->AccessPathName(gt)) {
@@ -42,12 +42,12 @@ void make_points_C15d(TString inDir = "/home/yassid/C15d_reco/", TString outFile
       if (gSystem->AccessPathName(gt))
          gt = here + "/" + gainTable;
    }
-   auto gain = LoadGainTable_C15d(gt);
+   auto gain = LoadGainTable_C15p(gt);
    if (gain.empty())
       std::cout << "\033[1;31mWARNING: no gain table -- the points file will be RAW.\033[0m\n";
 
    TFile fo(outFile, "RECREATE");
-   TTree pts("pts", "C15d PID points, gain matched, IC joined");
+   TTree pts("pts", "C15p PID points, gain matched, IC joined");
    Float_t sqrtdedx, brho, polar, ic, dedx, arclen, vtxz, vtxr;
    Int_t run, event, trackID, nclusters, npulse;
    pts.Branch("sqrtdedx", &sqrtdedx, "sqrtdedx/F");
@@ -65,7 +65,7 @@ void make_points_C15d(TString inDir = "/home/yassid/C15d_reco/", TString outFile
    pts.Branch("nclusters", &nclusters, "nclusters/I");
 
    Long64_t nTot = 0, nNoIC = 0;
-   Int_t nRuns = 0, nRunsNoIC = 0, nRunsMismatch = 0, nRunsNoGain = 0, nRunsTruncated = 0;
+   Int_t nRuns = 0, nRunsNoIC = 0, nRunsMismatch = 0, nRunsNoGain = 0;
 
    for (Int_t r = runMin; r <= runMax; ++r) {
       TString pf = TString::Format("%srun_%04d_pid.root", inDir.Data(), r);
@@ -80,7 +80,7 @@ void make_points_C15d(TString inDir = "/home/yassid/C15d_reco/", TString outFile
       ++nRuns;
 
       bool missingGain = false;
-      const double gf = GainFactor_C15d(gain, r, missingGain);
+      const double gf = GainFactor_C15p(gain, r, missingGain);
       if (missingGain)
          ++nRunsNoGain;
       const double sq = std::sqrt(gf);
@@ -88,51 +88,26 @@ void make_points_C15d(TString inDir = "/home/yassid/C15d_reco/", TString outFile
       // --- IC summary for this run, indexed by entry -------------------------------------
       std::vector<float> icv;
       std::vector<int> npv;
-      bool hasEvtId = false, icGapless = false;
-      Long64_t nIcEntries = 0;
       TString icf = TString::Format("%srun_%04d_ic.root", icDir.Data(), r);
       if (!gSystem->AccessPathName(icf)) {
          TFile *fi = TFile::Open(icf);
          TTree *ti = fi ? (TTree *)fi->Get("ic") : nullptr;
          if (ti) {
-            Int_t e_, np_, ev_ = -1;
+            Int_t e_, np_;
             Float_t im_;
             ti->SetBranchAddress("entry", &e_);
             ti->SetBranchAddress("icmax", &im_);
             ti->SetBranchAddress("npulse", &np_);
-            // ★ evtid is the TRUE event number, taken from the HDF5 dataset name (evt<N>_1903).
-            // It is written only by the corrected icsum_C15d.C. OLDER IC SUMMARIES DO NOT HAVE IT
-            // and must keep the previous behaviour exactly -- other experiments (16C, 12Be) join
-            // cleanly on position and nothing here may change for them.
-            hasEvtId = (ti->GetBranch("evtid") != nullptr);
-            if (hasEvtId)
-               ti->SetBranchAddress("evtid", &ev_);
             const Long64_t ni = ti->GetEntries();
-            // Size the arrays by the LARGEST event number seen, not by the entry count: with
-            // evtid the IC is indexed by event number, so a run whose IC stops early still places
-            // its events at the right indices.
-            Long64_t maxIdx = ni;
-            if (hasEvtId) {
-               for (Long64_t i = 0; i < ni; ++i) { ti->GetEntry(i); if (ev_ + 1 > maxIdx) maxIdx = ev_ + 1; }
-               icGapless = true;
-               Int_t prev = -1;
-               for (Long64_t i = 0; i < ni; ++i) {
-                  ti->GetEntry(i);
-                  if (prev >= 0 && ev_ != prev + 1) { icGapless = false; break; }
-                  prev = ev_;
-               }
-            }
-            icv.assign(maxIdx, -1.f);
-            npv.assign(maxIdx, 0);
+            icv.assign(ni, -1.f);
+            npv.assign(ni, 0);
             for (Long64_t i = 0; i < ni; ++i) {
                ti->GetEntry(i);
-               const Int_t idx = hasEvtId ? ev_ : e_;
-               if (idx >= 0 && idx < (Int_t)icv.size()) {
-                  icv[idx] = im_;
-                  npv[idx] = np_;
+               if (e_ >= 0 && e_ < (Int_t)icv.size()) {
+                  icv[e_] = im_;
+                  npv[e_] = np_;
                }
             }
-            nIcEntries = ni;
          }
          if (fi) fi->Close();
       }
@@ -194,21 +169,7 @@ void make_points_C15d(TString inDir = "/home/yassid/C15d_reco/", TString outFile
          // without event IDs, which the IC summary does not carry. Being wrong here selects the
          // wrong beam silently, so the tolerance stays at what can be explained.
          const Long64_t diff = std::abs((Long64_t)icv.size() - nRef);
-         bool ok = exact ? (diff <= 1) : (rel <= 0.02);
-         // ★ NEW PATH, and it only ever ACCEPTS what the old code would have refused -- it can
-         // never reject something the old code accepted, so 16C/12Be are bit-for-bit unaffected.
-         // With evtid present AND the sequence gapless, the IC is indexed by TRUE EVENT NUMBER,
-         // so a size difference means the IC simply STOPPED EARLY: events 0..n_ic-1 match exactly
-         // and the rest legitimately have no IC. Verified on a2091 run_0027: evtid 0..45863 with
-         // ZERO gaps against 55006 pad events. Without evtid, or with gaps, fall through to the
-         // old tolerance -- an interleaved surplus shifts every later event and is unrecoverable.
-         if (!ok && hasEvtId && icGapless) {
-            std::cout << "  run " << r << ": IC has " << nIcEntries << " events vs " << nRef
-                      << " -- gapless evtid, joining over the overlap (" << (nRef - (Long64_t)nIcEntries)
-                      << " events beyond the IC get ic = -1)\n";
-            ok = true;
-            ++nRunsTruncated;
-         }
+         const bool ok = exact ? (diff <= 1) : (rel <= 0.02);
          if (!ok) {
             std::cout << "\033[1;31m  run " << r << ": IC has " << icv.size() << " entries vs " << nRef
                       << (exact ? " reco events" : " (est.) events")
@@ -251,12 +212,11 @@ void make_points_C15d(TString inDir = "/home/yassid/C15d_reco/", TString outFile
    pts.Write();
    fo.Close();
 
-   std::cout << "\033[1;33m=== make_points_C15d ===\033[0m\n"
+   std::cout << "\033[1;33m=== make_points_C15p ===\033[0m\n"
              << "  runs        : " << nRuns << "  (" << runMin << "-" << runMax << ")\n"
              << "  tracks      : " << nTot << " valid\n"
              << "  gain        : " << (gain.empty() ? "NONE (RAW)" : gt.Data()) << "\n"
              << "  runs w/o IC : " << nRunsNoIC << (nRunsMismatch ? Form(", %d refused on length mismatch", nRunsMismatch) : "")
-             << (nRunsTruncated ? Form(", %d joined over the overlap via evtid", nRunsTruncated) : "")
              << "  -> " << nNoIC << " tracks carry ic = -1\n";
    if (nRunsNoGain)
       std::cout << "\033[1;31m  " << nRunsNoGain << " run(s) had no gain entry and went in UNMATCHED\033[0m\n";

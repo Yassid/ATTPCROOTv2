@@ -23,7 +23,7 @@ MODE="${1:-d2}"
 case "$MODE" in
    d2)  RMIN="${2:-17}";  RMAX="${3:-103}"; GAIN="gainmatch_C15d.csv"; TAG="15C + d  --  PID plane (D2)";;
    raw) RMIN="${2:-17}";  RMAX="${3:-103}"; GAIN="";                   TAG="15C + d  --  PID plane (D2, RAW)";;
-   h2)  RMIN="${2:-106}"; RMAX="${3:-133}"; GAIN="";                   TAG="a1975 H2 runs -- NOT the 15C+d analysis";;
+   h2)  RMIN="${2:-138}"; RMAX="${3:-182}"; GAIN="";                   TAG="a2091 H2/proton runs -- that is the ../C15p analysis";;
    *)   echo "usage: $0 [d2|raw|h2] [runMin] [runMax]" >&2; exit 1;;
 esac
 

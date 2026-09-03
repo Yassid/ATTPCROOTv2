@@ -69,7 +69,7 @@ void fitUKF_C15d(TString fileName = "run_0017", Long64_t nEvents = -1, TString p
                  Double_t bFieldMag = 2.85, Double_t gasDensity = 6.5643e-5, Double_t measSigma = 2.0,
                  Double_t momSigmaFrac = 0.3, Int_t nIter = 1, Int_t minClusters = 4,
                  Bool_t clusterDirSeed = kTRUE, TString recoSuffix = "_reco", TString outSuffix = "",
-                 TString parName = "ATTPC.C15d_D2_300torr.par", Int_t matA = 2, Bool_t gainMatch = kTRUE,
+                 TString parName = "ATTPC.C15d_a2091_D2.par", Int_t matA = 2, Bool_t gainMatch = kTRUE,
                  TString gainTable = "")
 {
    gSystem->Load("libAtReconstruction.so");

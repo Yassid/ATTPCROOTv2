@@ -1,0 +1,47 @@
+# EXCLUDED: run_0140 -- its reco in /home/yassid/a2091_C15_reco is a 288-byte truncated
+# file (ROOT reports it as a zombie) although the raw HDF5 is 17 GB, and it is also the one
+# run with no IC file. Usable set is therefore 40 runs, not 41. Re-reco it from raw to
+# recover it.
+# a2091 15C+p PROTON-target runs, 0138-0182. Missing on disk: 0154 0155 0156 0168.
+# Reco already exists at /home/yassid/a2091_C15_reco (86 GB, built by the older ATTPCROOTv2
+# tree and verified readable by this build: 333 tracks / 95381 hits over 300 events of run_0138).
+run_0138
+run_0139
+run_0141
+run_0142
+run_0143
+run_0144
+run_0145
+run_0146
+run_0147
+run_0148
+run_0149
+run_0150
+run_0151
+run_0152
+run_0153
+run_0157
+run_0158
+run_0159
+run_0160
+run_0161
+run_0162
+run_0163
+run_0164
+run_0165
+run_0166
+run_0167
+run_0169
+run_0170
+run_0171
+run_0172
+run_0173
+run_0174
+run_0175
+run_0176
+run_0177
+run_0178
+run_0179
+run_0180
+run_0181
+run_0182

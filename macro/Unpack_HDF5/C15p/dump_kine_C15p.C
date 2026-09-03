@@ -1,7 +1,7 @@
-/// @file dump_kine_C15d.C
+/// @file dump_kine_C15p.C
 /// @brief Flatten a GENFIT fit output into a small kinematics ntuple, selected by a PID gate.
 ///
-///   root -b -q 'dump_kine_C15d.C("run_0017","_dd","/path/to/fits/","pid/sel_deuteron_C15d.root")'
+///   root -b -q 'dump_kine_C15p.C("run_0017","_dd","/path/to/fits/","pid/sel_deuteron_C15p.root")'
 ///
 /// Output tree `kin`, one entry per fitted track that passes:
 ///   run event trackID | ke (MeV) theta (deg) phi (deg) | vx vy vz (mm) | chi2ndf ndf | dirFwd
@@ -21,8 +21,8 @@
 /// the beam axis) are written: keXtr/thetaXtr is the one to use for physics, ke/theta is kept so
 /// the size of the back-extrapolation correction stays visible instead of being folded in.
 
-void dump_kine_C15d(TString fileName = "run_0017", TString suffix = "_dd",
-                    TString inDir = "/home/yassid/C15d_fit/", TString selFile = "",
+void dump_kine_C15p(TString fileName = "run_0017", TString suffix = "_dd",
+                    TString inDir = "/home/yassid/C15p_fit/", TString selFile = "",
                     TString species = "d", TString outFile = "", Double_t chi2Cut = 1e9)
 {
    gSystem->Load("libAtReconstruction.so");
@@ -34,7 +34,7 @@ void dump_kine_C15d(TString fileName = "run_0017", TString suffix = "_dd",
    }
    const Int_t runNo = AtGainMatchTask::RunNumberFromName(fileName);
 
-   // ---- selection: (run, event, trackID) triples from apply_gate_C15d.C -------------------
+   // ---- selection: (run, event, trackID) triples from apply_gate_C15p.C -------------------
    std::set<Long64_t> keep;
    auto key = [](int r, int e, int t) { return ((Long64_t)r << 44) | ((Long64_t)e << 12) | (Long64_t)(t & 0xFFF); };
    if (selFile.Length()) {

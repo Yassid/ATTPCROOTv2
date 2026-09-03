@@ -1,0 +1,11 @@
+# 10-run test subset of runs_a2091_d2.txt, spread across 0013-0120.
+run_0013
+run_0023
+run_0034
+run_0049
+run_0060
+run_0070
+run_0085
+run_0100
+run_0110
+run_0120

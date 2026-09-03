@@ -1,34 +1,34 @@
-/// @file apply_gate_C15d.C
+/// @file apply_gate_C15p.C
 /// @brief Apply a PID gate to the cached plane and write a per-track selection list.
 ///
-///   root -b -q 'apply_gate_C15d.C("gates/proton_C15d.json")'
-///   root -b -q 'apply_gate_C15d.C("gates/proton_C15d.json", "/home/yassid/C15d_reco/", "sel_p.root")'
+///   root -b -q 'apply_gate_C15p.C("gates/proton_C15p.json")'
+///   root -b -q 'apply_gate_C15p.C("gates/proton_C15p.json", "/home/yassid/a2091_C15_reco/", "sel_p.root")'
 ///
 /// Reads every <run>_pid.root, tests each track against the polygon, and writes a `sel` tree
 /// of (run, event, trackID) for the ones inside. That triple is what makes the selection
 /// USABLE: the fitting stage can join on it and fit only the gated tracks, without recomputing
 /// AtSpyralPID over the multi-GB recos. A gate you can only draw is half a gate.
 ///
-/// Gate files are spyral_utils Cut2D JSON, written by draw_gate_C15d.C on THIS plane. Applies the
+/// Gate files are spyral_utils Cut2D JSON, written by draw_gate_C15p.C on THIS plane. Applies the
 /// same per-run gain table the gate was drawn with, since the cached dE/dx is raw.
 ///
 /// The report breaks the yield down by run so a gate that only holds in part of the run set
 /// is visible immediately -- that is the signature of a gain-matching problem, and it would
 /// otherwise hide inside a healthy-looking total.
 
-#include "gain_C15d.h"
+#include "gain_C15p.h"
 
-void apply_gate_C15d(TString gateFile, TString pointsFile = "pid/points_C15d.root", TString outFile = "",
+void apply_gate_C15p(TString gateFile, TString pointsFile = "pid/points_C15p.root", TString outFile = "",
                      Int_t minClusters = 0, Double_t maxVtxR = -1.0, Bool_t perRun = kTRUE,
                      /// MUST match the table the gate was DRAWN on. A gate drawn on a matched
                      /// plane and applied to raw values selects the wrong tracks, silently.
                      /// IC window. MUST MATCH THE ONE THE GATE WAS DRAWN WITH -- a gate drawn on a
                      /// single-beam plane and applied to the full cocktail counts tracks from a beam
                      /// it was never meant to select, and the number looks perfectly reasonable.
-                     Double_t icLo = -1, Double_t icHi = -1, Int_t runMin = 13, Int_t runMax = 133,
-                     /// The IC window was chosen on the SINGLE-PULSE spectrum and pid/ic_C15d.json
+                     Double_t icLo = -1, Double_t icHi = -1, Int_t runMin = 138, Int_t runMax = 182,
+                     /// The IC window was chosen on the SINGLE-PULSE spectrum and pid/ic_C15p.json
                      /// records singlePulse: true, so applying the window without this condition is
-                     /// not the gate that was selected. gate_events_C15d.C requires it too; leaving
+                     /// not the gate that was selected. gate_events_C15p.C requires it too; leaving
                      /// them inconsistent makes the pre-fit and post-fit paths disagree by ~9 %.
                      Bool_t requireSinglePulse = kTRUE)
 {
@@ -54,7 +54,7 @@ void apply_gate_C15d(TString gateFile, TString pointsFile = "pid/points_C15d.roo
    // join needs. Re-deriving either here would mean two implementations that can disagree.
    if (gSystem->AccessPathName(pointsFile)) {
       std::cout << "\033[1;31mERROR: " << pointsFile << " not found. Build it with "
-                   "pid/make_points_C15d.C().\033[0m\n";
+                   "pid/make_points_C15p.C().\033[0m\n";
       return;
    }
    TFile *fin = TFile::Open(pointsFile);
@@ -124,7 +124,7 @@ void apply_gate_C15d(TString gateFile, TString pointsFile = "pid/points_C15d.roo
    sel.Write();
    fo.Close();
 
-   std::cout << "\033[1;33m=== apply_gate_C15d : " << cut.GetName() << " ===\033[0m\n"
+   std::cout << "\033[1;33m=== apply_gate_C15p : " << cut.GetName() << " ===\033[0m\n"
              << "  gate     : " << gateFile << "  (" << cut.GetVertices().size() << " vertices)\n"
              << "  runs     : " << runsSeen.size() << "\n"
              << "  tracks   : " << nAll << " total, " << nCons << " considered (valid"

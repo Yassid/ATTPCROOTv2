@@ -3,7 +3,7 @@
 ///
 ///   raw HDF5 -> AtRawEvent -> AtPSAMax(AtEventH) -> SC(AtEventCorrected) -> PRA(AtPatternEvent)
 ///
-/// Self-contained: reads its own par (ATTPC.C15d_D2_300torr.par) and writes to its own
+/// Self-contained: reads its own par (ATTPC.C15d_a2091_D2.par) and writes to its own
 /// output area, so it shares nothing with any other workspace.
 ///
 ///   root -b -q 'unpackReco_C15d.C("run_0017", 500, true, "/home/yassid/C15d_reco/")'
@@ -22,8 +22,8 @@
 
 void unpackReco_C15d(TString fileName = "run_0017", Long64_t nEvents = 1000, Bool_t persistRaw = false,
                      TString outDir = "/home/yassid/C15d_reco/",
-                     TString rawDir = "/media/yassid/Seagate Hub/ATTPC/Data/a1975/h5/",
-                     TString parName = "ATTPC.C15d_D2_300torr.par",
+                     TString rawDir = "/media/yassid/Seagate Hub/ATTPC/Data/a2091/",
+                     TString parName = "ATTPC.C15d_a2091_D2.par",
                      TString geoName = "ATTPC_D300torr_v2_geomanager.root", Double_t psaThreshold = 20.0,
                      Double_t clusterRadius = 15.0, Double_t clusterDistance = 7.5,
                      // PID is computed HERE, once, and persisted gain-matched. AtSpyralPID is
@@ -39,7 +39,14 @@ void unpackReco_C15d(TString fileName = "run_0017", Long64_t nEvents = 1000, Boo
                      // 30 = Spyral's min_total_trajectory_points for this analysis, so the two planes
                      // are cut the same way. WHATEVER VALUE A PRODUCTION PERSISTS IS THE PLANE ITS
                      // GATES MUST BE DRAWN ON -- a gate drawn at 15 does not apply to a plane cut at 30.
-                     Int_t pidMinPoints = 30, Double_t pidZTieTol = 0.0, Double_t bField = 2.85)
+                     Int_t pidMinPoints = 30, Double_t pidZTieTol = 0.0, Double_t bField = 2.85,
+                     /// First event to process. With nEvents this defines a CHUNK, so one run can
+                     /// be split across workers. That matters because the reco is CPU-bound once
+                     /// the raw file is in page cache (measured: 99 % CPU on a warm file, 40 % on a
+                     /// cold one) -- but each worker normally takes a whole run, and only ~2 of
+                     /// these 17-27 GB runs fit in 48 GB of cache at once. Chunking lets many
+                     /// workers share ONE warm file.
+                     Long64_t firstEvent = 0)
 {
    gSystem->Load("libAtReconstruction.so");
 
@@ -108,6 +115,13 @@ void unpackReco_C15d(TString fileName = "run_0017", Long64_t nEvents = 1000, Boo
    unpacker->SetInputFileName(inputFile.Data());
    unpacker->SetNumberTimestamps(2);
    unpacker->SetBaseLineSubtraction(true);
+   // ★ The chunk offset must be set HERE, on the unpacker, and before it is moved into the task.
+   // FairRunAna::Run(first, last) does NOT drive the HDF5 unpacker's event counter: AtHDFUnpacker
+   // forms its dataset name from fDataEventID = fFirstEvent + fEventID, so passing a start event to
+   // Run() is silently ignored and every chunk re-reads the SAME events. That was verified: two
+   // chunks asked for events 0-599 and 600-1199 returned byte-identical output.
+   if (firstEvent > 0)
+      unpacker->SetInitialEventID(firstEvent);
    auto unpackTask = new AtUnpackTask(std::move(unpacker));
    unpackTask->SetPersistence(persistRaw);
 
@@ -199,6 +213,8 @@ void unpackReco_C15d(TString fileName = "run_0017", Long64_t nEvents = 1000, Boo
       numEvents = nEvents;
    std::cout << cGREEN << "Reconstructing (unpack+PSA+SC+PRA) " << numEvents << " events." << cNORMAL << std::endl;
 
+   if (firstEvent > 0)
+      std::cout << cGREEN << "  chunk: events " << firstEvent << " .. " << firstEvent + numEvents << cNORMAL << "\n";
    run->Run(0, numEvents);
 
    timer.Stop();

@@ -1,0 +1,86 @@
+##############################################################################
+#  ATTPC.C15d_a2091_D2.par
+#
+#  15C + d  --  the a2091 DEUTERIUM-target runs, 0013-0133.
+#
+#  ############################################################################
+#  ##  THIS IS NOT THE a1975 DATASET.  ########################################
+#  ############################################################################
+#  The earlier C15d work read /media/yassid/Seagate Hub/ATTPC/Data/a1975/h5/
+#  runs 17-103. Those runs are 16C(d,p)17C -- see the repo's own
+#  macro/Unpack_HDF5/a1975/D2_UKF/README.md, "D2 (d,p) physics runs = 0016-0103",
+#  and note that a1975 runs 0106-0189 are its H2/proton set. The Spyral
+#  15CdAnalysis reads the same a1975 path, which is where the 15C+d label came
+#  from. The real 15C+d data is a2091 runs 0013-0133, the deuteron-target half
+#  of the experiment whose proton runs 0138-0182 are the 15C(p,p') analysis.
+#  Symptom of the mix-up: a 1.8 MeV peak in the (d,d') Ex spectrum with no 15C
+#  counterpart, which is the 16C first 2+ at 1.766 MeV.
+#
+#  DRIFT WORKING POINT -- from the Spyral configuration, at the user's choice:
+#      micromegas_time_bucket = 25       -> pad plane,  z = 0
+#      window_time_bucket     = 300      -> window,     z = 1000 mm
+#      detector_length        = 1000 mm
+#      get_frequency          = 3.125 MHz -> 320 ns/TB
+#  => 1000 mm / (300 - 25) TB = 3.6364 mm/TB
+#  => dv = 3.6364 mm / 320 ns = 1.1364 cm/us
+#
+#  The whole drift spans TB 25-300, comfortably inside the 512-sample record.
+#  That is a real improvement on the a1975 point, which needed TBEntrance 582 in
+#  a 512-sample record, i.e. a window that is never actually sampled.
+#
+#  CROSS-CHECK AVAILABLE, AND IT SHOULD BE DONE BEFORE ANY PHYSICS: the a2091
+#  proton runs of this same experiment give a clean elastic ridge at 201 MeV
+#  (13.4 MeV/u) with dv 1.30 at 320 ns. H2 and D2 at the same pressure have the
+#  same number density and hence the same E/N, and electron drift depends on
+#  electron-molecule cross sections that are near-identical between them -- so
+#  dv here would be expected close to 1.30, not 1.136. The two differ by 14 %.
+#  Measure it: the (d,d) elastic ridge on these runs must give ~201 MeV too,
+#  since it is the same beam. If it does not, this is the number to move.
+#
+#  Density is D2, not H2: 6.5643e-5 g/cm3 at 300 torr, matching the media.geo
+#  entry TargetD2_300 exactly. The a2091 par is H2 (3.308e-5) and is for the
+#  proton runs only.
+#
+#  #### DO NOT PUT STANDALONE COMMENT LINES INSIDE [AtDigiPar] ####
+#  FairParAsciiFileIo stops parsing at the first one and every entry after it
+#  silently reads as 0. The PSA then prints "Sampling Rate : -1 ns, Drift
+#  Velocity : 0", every hit z collapses, and fits return theta = exactly 90.000
+#  degrees with absurd energies. Trailing comments on a value line are fine.
+##############################################################################
+[AtDigiPar]
+PadPlaneX:Int_t                864   # mm
+PadPlaneZ:Int_t               1344   # mm
+PadSizeX:Int_t                   8   # mm
+PadSizeZ:Int_t                  12   # mm
+PadRows:Int_t                  108   #
+PadLayers:Int_t                112   #
+AnodeWirePlaneY:Double_t     -4.05   # mm
+GroundWirePlaneY:Double_t     -8.1   # mm
+GatingWirePlaneY:Double_t      -14   # mm
+EField:Double_t              45000   # V/m   (Spyral electric_field, same as a2091)
+NumTbs:Int_t                   512
+SamplingRate:Int_t               3   # -> 320 ns/TB = 3.125 MHz (Spyral get_frequency)
+DriftVelocity:Double_t       1.1364  # cm/us = 3.6364 mm/TB; from Spyral TB 25 -> 300 over 1000 mm
+DriftLength:Double_t        1000.0   # mm    (Spyral detector_length)
+YDivider:Int_t                1000   # Full drift length divided by this when finding clusters
+GasFile:Int_t                    2
+PadPlaneFile:Int_t               3
+PadShapeFile:Int_t               4
+BField:Double_t               2.85   # Tesla  (sign is a FITTER argument, not a par entry)
+TiltAng:Double_t               0.0   # Degrees
+TB0:Int_t                       25   # Spyral micromegas_time_bucket; DEPRECATED and IGNORED
+LorentzAngle:Double_t          0.0   # Lorentz Angle
+TBEntrance:Int_t               300   # Spyral window_time_bucket; inside the 512 record
+ZPadPlane:Double_t          1000.0   # mm    (Spyral detector_length)
+Density:Double_t           0.065643  # mg/cm3 == 6.5643e-5 g/cm3. D2 at 300 torr, matches media.geo
+ThetaPad:Double_t            110.9   # AT-TPC pad plane rotation
+ThetaRot:Double_t              0.0   # Second Lorentz Angle
+GasPressure:Double_t           300   # torr
+EIonize:Double_t            15.603   # eV
+Fano:Double_t                 0.24   #
+CoefL:Double_t              0.0009   # Longitudinal diffusion [cm^2/us]
+CoefT:Double_t              0.0009   # Transverse diffusion [cm^2/us]
+Gain:Double_t                10000   # Micromegas gain
+GETGain:Double_t              1000   # GET electronics gain [fC]
+PeakingTime:Int_t              720   # ns
+MaxRange:Double_t            500.0   # mm

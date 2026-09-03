@@ -1,10 +1,10 @@
-/// @file fitGenfit_C15d.C
-/// @brief 15C + d  --  stage 2: GENFIT fit of a C15d reco, with the CATIMA material model.
+/// @file fitGenfit_C15p.C
+/// @brief 15C + p  --  stage 2: GENFIT fit of a C15p reco, with the CATIMA material model.
 ///
 /// Reads <run>_reco.root (AtPatternEvent), writes <run>_genfit_<tag><suffix>.root carrying
 /// AtTrackingEvent + AtPIDEvent.
 ///
-///   root -b -q 'fitGenfit_C15d.C("run_0017", 500, "/home/yassid/C15d_reco/", "_test", "/tmp/")'
+///   root -b -q 'fitGenfit_C15p.C("run_0017", 500, "/home/yassid/a2091_C15_reco/", "_test", "/tmp/")'
 ///
 /// ---------------------------------------------------------------------------------------
 /// WHY THE DEFAULTS ARE WHAT THEY ARE
@@ -38,19 +38,19 @@
 /// vertex (should sit near the beam axis) and a physical ejectile KE, not on chi2 alone.
 /// ---------------------------------------------------------------------------------------
 
-void fitGenfit_C15d(TString fileName = "run_0017", Long64_t nEvents = -1,
-                    TString ioDir = "/home/yassid/C15d_reco/", TString outSuffix = "", TString outDir = "",
+void fitGenfit_C15p(TString fileName = "run_0138", Long64_t nEvents = -1,
+                    TString ioDir = "/home/yassid/a2091_C15_reco/", TString outSuffix = "", TString outDir = "",
                     Double_t bField = -2.85, Int_t minIter = 2, Int_t maxIter = 5, TString pidGate = "",
                     Double_t measSigma = 4.0, Double_t thetaMinDeg = 5.0, Double_t thetaMaxDeg = 178.0,
                     Bool_t matEffects = kTRUE, Bool_t backwardSeedFix = kTRUE,
-                    // ejectile: proton = the (d,p) channel Spyral solved with p_gate.
-                    //   (d,t) : pdg 1000010030, massAmu 3.01550072, Z 1, speciesTag "t"
-                    //   (d,d) : pdg 1000010020, massAmu 2.01410178, Z 1, speciesTag "d"
+                    // ejectile: proton = the (p,p') elastic/inelastic channel, which is the point of this workspace.
+                    //   (p,t) : pdg 1000010030, massAmu 3.01550072, Z 1, speciesTag "t"
+                    //   (p,d) : pdg 1000010020, massAmu 2.01410178, Z 1, speciesTag "d"
                     Int_t pdg = 2212, Double_t massAmu = 1.00782503207, Int_t Z = 1, TString speciesTag = "p",
-                    TString recoSuffix = "_reco", TString geoName = "ATTPC_D300torr_v2_geomanager.root",
-                    TString parName = "ATTPC.C15d_a2091_D2.par",
+                    TString recoSuffix = "_reco", TString geoName = "ATTPC_H300torr_RT_geomanager.root",
+                    TString parName = "ATTPC.a2091_C15.par",
                     // D2 target: A = 2, and rho matches media.geo TargetD2_300 exactly.
-                    Double_t gasDensity = 6.5643e-5, Int_t matA = 2, Bool_t matFallback = kFALSE,
+                    Double_t gasDensity = 3.308e-5, Int_t matA = 2, Bool_t matFallback = kFALSE,
                     Bool_t catimaMSC = kTRUE, Bool_t catimaStraggling = kTRUE, Bool_t catimaELoss = kTRUE,
                     Bool_t catimaELossFull = kFALSE, Bool_t backExtrap = kFALSE, Bool_t rangeConstraint = kFALSE,
                     Bool_t seedFromSpyral = kFALSE,
@@ -84,7 +84,7 @@ void fitGenfit_C15d(TString fileName = "run_0017", Long64_t nEvents = -1,
       return;
    }
 
-   std::cout << "\033[1;33m=== fitGenfit_C15d (15C + d, D2 300 torr, ejectile '" << speciesTag << "' pdg=" << pdg
+   std::cout << "\033[1;33m=== fitGenfit_C15p (15C + p, H2 300 torr, ejectile '" << speciesTag << "' pdg=" << pdg
              << " m=" << massAmu << " amu Z=" << Z << ") ===\033[0m\n"
              << "  in  : " << inputFile << "\n  out : " << outputFile << "\n  geo : " << geoName
              << "\n  par : " << parName << "\n  B=" << bField << " T   iter " << minIter << "-" << maxIter
@@ -175,7 +175,7 @@ void fitGenfit_C15d(TString fileName = "run_0017", Long64_t nEvents = -1,
    // Must be added AFTER AtPIDTask -- it rescales that task's output in place.
    AtGainMatchTask *gainTask = nullptr;
    if (gainMatch) {
-      TString tbl = gainTable.Length() ? gainTable : (dir + "/macro/Unpack_HDF5/C15d/gainmatch_C15d.csv");
+      TString tbl = gainTable.Length() ? gainTable : (dir + "/macro/Unpack_HDF5/C15p/gainmatch_C15p.csv");
       const Int_t runNo = AtGainMatchTask::RunNumberFromName(fileName);
       if (runNo < 0) {
          std::cout << "\033[1;31mERROR: cannot parse a run number from '" << fileName
