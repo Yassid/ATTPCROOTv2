@@ -1,7 +1,21 @@
 /// @file panels_pd.C
-/// @brief All four 16C(p,d)15C states, one panel each, with the DWBA where it exists.
+/// @brief All four 16C(p,d)15C states, one panel each, against the report's CRC calculations.
 ///
-/// The calculation covers ONLY the two bound states. 15C is unbound above Sn = 1.218 MeV, so the
+/// The curves are the COUPLED REACTION CHANNEL calculations from the theory report
+/// ("Results of 16C(p,p') and (d,d') Analysis", 2025-09-05), digitised from the vector content of
+/// its figures into pp/crc/ -- see pp/crc/README.txt. They REPLACE the FRESCO DWBA I built, which
+/// used unexamined global optical potentials.
+///
+/// THEY ARE PLOTTED ABSOLUTE, WITH NO FITTED SCALE. The report fitted its <16C|15C+n> spectroscopic
+/// amplitudes to the measured (p,d) angular distributions of the same 11.5 MeV/nucleon data set, so
+/// the curves already carry their normalisation. Rescaling them onto our points would throw away
+/// exactly the information worth having: the ratio of our absolute cross-section to theirs is an
+/// independent check on our luminosity (168.3 mb^-1, itself carried over from the (p,p) elastic).
+/// That ratio is printed per bin and summarised per state.
+///
+/// The old FRESCO comparison is still available in pp/dwba_compare_pd.C.
+///
+/// There is no curve for the ~4.9 structure. 15C is unbound above Sn = 1.218 MeV, so the
 /// ~3.4 and ~4.9 structures are resonances: a transfer DWBA to a bound single-particle state does
 /// not describe them, and FRESCO would need a continuum/resonance treatment (a bin in the n+14C
 /// continuum, or an R-matrix form factor). Their panels therefore show DATA ONLY, and the panel
@@ -33,8 +47,9 @@ void panels_pd(TString dataFile = "plots/fit_pd_ps_gap2.root",
    TString here = gSystem->DirName(gInterpreter->GetCurrentMacroName());
 
    const char *tag[4] = {"gs", "ex1", "ex2", "ex3"};
-   const char *ttl[4] = {"^{15}C g.s.  1/2^{+}   (#font[12]{l} = 0)", "^{15}C 0.740  5/2^{+}   (#font[12]{l} = 2)",
-                         "^{15}C ~3.4  (unbound)", "^{15}C ~4.9  (unbound)"};
+   const char *ttl[4] = {"^{15}C g.s.  1/2^{+}", "^{15}C 0.740  5/2^{+}",
+                         "^{15}C 3.103  1/2^{-}  (fitted at 3.38)", "^{15}C ~4.9  (no calculation)"};
+   const char *crc[4] = {"gs", "e074", "e310", ""};
    int col[4] = {kBlack, kRed + 1, kGreen + 3, kOrange + 7};
    int mrk[4] = {20, 24, 21, 25};
 
@@ -49,15 +64,20 @@ void panels_pd(TString dataFile = "plots/fit_pd_ps_gap2.root",
    }
    fd->Close();
 
-   // DWBA only for the two bound states. NOTE the file naming: run_fresco.sh assumes a (d,p)
-   // reaction and labels by outgoing particle, so for (p,d) "_dsdo" is the g.s. TRANSFER and
-   // "_state1" is the elastic.
-   TGraph *T[4] = {pnReadFresco(frescoDir + "/" + stem + "_dsdo.dat"),
-                   pnReadFresco(frescoDir + "/" + stem + "_state2.dat"), nullptr, nullptr};
+   // CRC curves, "Full" and "Reduced", for the first three states
+   TGraph *T[4] = {nullptr, nullptr, nullptr, nullptr};   // Full
+   TGraph *R[4] = {nullptr, nullptr, nullptr, nullptr};   // Reduced
+   for (int g = 0; g < 4; ++g) {
+      if (!crc[g][0]) continue;
+      T[g] = pnReadFresco(here + "/crc/" + crc[g] + "_full.dat");
+      R[g] = pnReadFresco(here + "/crc/" + crc[g] + "_reduced.dat");
+      if (T[g]->GetN() < 10) { printf("\033[1;31m  missing crc/%s_full.dat\033[0m\n", crc[g]); T[g] = nullptr; }
+   }
 
    TCanvas *c = new TCanvas("cpn", "pd panels", 1100, 850);
    c->Divide(2, 2, 0.001, 0.001);
-   printf("\n  state        scale (~S)   rms ln(data/theory) %.0f-%.0f\n", fitLo, fitHi);
+   printf("\n  CRC curves plotted ABSOLUTE -- no scale fitted.\n");
+   printf("  state      data/CRC     rms ln(data/CRC)  over %.0f-%.0f deg\n", fitLo, fitHi);
    for (int g = 0; g < 4; ++g) {
       c->cd(g + 1);
       gPad->SetLogy(); gPad->SetGridx(); gPad->SetGridy();
@@ -83,36 +103,34 @@ void panels_pd(TString dataFile = "plots/fit_pd_ps_gap2.root",
          bnd->Draw("E2 same");
       }
 
-      double sc = 1, rms = 0;
-      if (T[g] && T[g]->GetN() > 10) {
-         double num = 0, den = 0;
+      double ratio = 0, rms = 0;
+      if (T[g]) {
+         // NO SCALE FITTED. Sum both over the overlap window and take the plain ratio.
+         double sd = 0, st = 0, s2 = 0; int m = 0;
          for (int b = 1; b <= D[g]->GetNbinsX(); ++b) {
             double a = D[g]->GetBinCenter(b), d = D[g]->GetBinContent(b);
             if (d <= 0 || a < fitLo || a > fitHi) continue;
-            double e = D[g]->GetBinError(b), sy = S[g] ? S[g]->GetBinError(b) : 0;
-            double w = 1.0 / (e * e + sy * sy), t = T[g]->Eval(a);
+            double t = T[g]->Eval(a);
             if (t <= 0) continue;
-            num += w * d * t; den += w * t * t;
-         }
-         if (den > 0) sc = num / den;
-         double s2 = 0; int m = 0;
-         for (int b = 1; b <= D[g]->GetNbinsX(); ++b) {
-            double a = D[g]->GetBinCenter(b), d = D[g]->GetBinContent(b);
-            if (d <= 0 || a < fitLo || a > fitHi) continue;
-            double t = sc * T[g]->Eval(a);
-            if (t <= 0) continue;
+            sd += d; st += t;
             double l = std::log(d / t); s2 += l * l; ++m;
          }
+         ratio = st > 0 ? sd / st : 0;
          rms = m ? std::sqrt(s2 / m) : 0;
-         auto *tg = new TGraph();
-         for (int i = 0; i < T[g]->GetN(); ++i) {
-            double x, y; T[g]->GetPoint(i, x, y);
-            if (x >= 10 && x <= 85) tg->SetPoint(tg->GetN(), x, sc * y);
+         for (int k = 0; k < 2; ++k) {
+            TGraph *src = k ? R[g] : T[g];
+            if (!src || src->GetN() < 10) continue;
+            auto *tg = new TGraph();
+            for (int i = 0; i < src->GetN(); ++i) {
+               double x, y; src->GetPoint(i, x, y);
+               if (x >= 10 && x <= 85) tg->SetPoint(tg->GetN(), x, y);
+            }
+            tg->SetLineColor(col[g]); tg->SetLineWidth(k ? 2 : 3); tg->SetLineStyle(k ? 2 : 1);
+            tg->Draw("L same");
          }
-         tg->SetLineColor(col[g]); tg->SetLineWidth(3); tg->Draw("L same");
-         printf("  %-10s  %10.4g   %8.3f\n", tag[g], sc, rms);
+         printf("  %-10s  %8.3f      %8.3f\n", tag[g], ratio, rms);
       } else {
-         printf("  %-10s  no DWBA (unbound - needs a continuum/resonance treatment)\n", tag[g]);
+         printf("  %-10s  no CRC curve in the report\n", tag[g]);
       }
 
       D[g]->SetMarkerStyle(mrk[g]); D[g]->SetMarkerColor(col[g]); D[g]->SetLineColor(col[g]);
@@ -120,13 +138,14 @@ void panels_pd(TString dataFile = "plots/fit_pd_ps_gap2.root",
       D[g]->Draw("E1 same");
 
       auto *tx = new TLatex(); tx->SetNDC(); tx->SetTextSize(0.042);
-      if (T[g] && T[g]->GetN() > 10)
-         tx->DrawLatex(0.55, 0.85, Form("DWBA  S #approx %.3f", sc));
-      else {
+      if (T[g]) {
+         tx->DrawLatex(0.50, 0.86, Form("CRC: data/calc = %.2f", ratio));
+         tx->SetTextSize(0.034); tx->SetTextColor(kGray + 2);
+         tx->DrawLatex(0.50, 0.81, "full / reduced, absolute");
+      } else {
          tx->SetTextColor(kGray + 2);
-         tx->DrawLatex(0.36, 0.86, "no DWBA: unbound,");
-         tx->DrawLatex(0.36, 0.81, "needs a continuum");
-         tx->DrawLatex(0.36, 0.76, "treatment");
+         tx->DrawLatex(0.40, 0.86, "no CRC curve");
+         tx->DrawLatex(0.40, 0.81, "in the report");
       }
    }
    gSystem->mkdir(here + "/plots", kTRUE);

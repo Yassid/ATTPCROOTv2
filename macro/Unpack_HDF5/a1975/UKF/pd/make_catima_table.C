@@ -10,13 +10,17 @@
 ///
 ///   root -b -q 'pd/make_catima_table.C'
 
+// A,Z,mass are arguments now: the (p,t) channel needs a TRITON curve in the same H2 gas, and the
+// species was hard-coded. Defaults reproduce the deuteron table exactly, so existing calls are
+// unaffected.
 void make_catima_table(double densGcm3 = 8.3147e-5, // = 0.083147 mg/cm3 (genfit gasMediumDensity)
-                       TString outFile = "../../../../resources/energy_loss/deuteron_H2_catima.txt")
+                       TString outFile = "../../../../resources/energy_loss/deuteron_H2_catima.txt",
+                       int projA = 2, int projZ = 1, double projMass = 2.0135532)
 {
    gSystem->Load("libAtTools.so");
    // deuteron in H2 gas
    auto eloss = new AtTools::AtELossCATIMA(densGcm3);
-   eloss->SetProjectile(2, 1, 2.0135532); // A,Z,mass(amu)
+   eloss->SetProjectile(projA, projZ, projMass); // A,Z,mass(amu)
    std::vector<std::tuple<int, int, int>> mat;
    mat.push_back(std::make_tuple(1, 1, 1)); // hydrogen
    eloss->SetMaterial(mat);
