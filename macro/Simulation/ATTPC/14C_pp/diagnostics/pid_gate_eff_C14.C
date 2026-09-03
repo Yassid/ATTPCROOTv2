@@ -38,11 +38,14 @@
 /// its eps = 0.59 would need the trigger to cost a further factor 0.69 on top of the gate.
 ///
 ///   root -b -q 'pid_gate_eff_C14.C("/mnt/f/a1954_C14_acc_catima/gs_s1001_reco.root")'
-/// *** THE FIELD SIGN IS +2.85 FOR SIMULATION, -2.85 FOR DATA. *** AtSpyralPID returns a SIGNED
-/// Brho, so passing the data value here puts every simulated track at negative Brho while the
-/// hand-drawn gate spans +0.040 to +0.964 -- and the efficiency comes back as a clean 0.0000,
-/// which reads as a result rather than as a bug. The default below is the SIMULATION value
-/// because that is what this macro is for.
+/// *** AtSpyralPID TAKES +2.85, IN BOTH DATA AND SIMULATION. *** Do not copy the -2.85 that
+/// appears in the fitGenfit_C14.C calls: that is genfit's field convention, a different parameter.
+/// pipeline/gate_events_C14.C -- the chain that draws and applies the gate on DATA -- passes
+/// bField = +2.85, and the gate's vertices are therefore at POSITIVE Brho, +0.040 to +0.964.
+/// AtSpyralPID returns a SIGNED Brho, so a negative field puts every track at negative Brho, no
+/// track can fall inside the gate, and the efficiency comes back as a clean 0.0000 -- which reads
+/// as a result rather than as a bug. Check the Brho median against the gate's y-range before
+/// believing any number from this route.
 void pid_gate_eff_C14(TString recoFile, Double_t bField = +2.85, Double_t thMin = 90.0,
                       TString protonGate = "/home/yassid/fair_install/ATTPCROOTv2-OpenKF/macro/"
                                            "Unpack_HDF5/a1954/UKF/pid/proton_14C.json",
