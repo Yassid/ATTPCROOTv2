@@ -57,8 +57,17 @@ static std::tuple<double, double> dt_kine(double m1, double m2, double m3, doubl
 void acceptance_C16dt(TString simDir = "/mnt/f/a1975_C16_dt_sim/",
                       TString statesCSV = "gs_s3001,ex1_s3001,ex2_s3001,ex3_s3001,ex4_s3001",
                       TString exCSV = "0.0,0.740,3.103,4.657,6.358",
-                      TString gateFile = "triton_dt_sim.json", Double_t Ebeam = 184.17, Int_t nBins = 28,
-                      Double_t cmMax = 70.0, Double_t thLabMin = 8.0, Double_t thLabMax = 56.0,
+                      TString gateFile = "triton_dt_sim.json", Double_t Ebeam = 184.25, Int_t nBins = 28,
+                      Double_t cmMax = 70.0, Double_t thLabMin = 0.0, Double_t thLabMax = 180.0,
+                      // Vertex window from the explorer selection of 2026-08-18: the range over
+                      // which the per-state z distributions are homogeneous.
+                      Double_t vzLo = 10.0, Double_t vzHi = 500.0,
+                      // THE SIMULATION'S DRIFT z IS MIRRORED against the experiment: measured on
+                      // gs_s3001, corr(z_true, z_reco) = -1.000 with z_true + z_reco = 981.8 mm.
+                      // Applying the data's vz window to the raw reconstructed z would therefore
+                      // select the OPPOSITE half of the target and silently invert the correction.
+                      // The numerator un-mirrors before cutting; 0 disables (real data).
+                      Double_t zMirror = 981.8,
                       TString outFile = "data/acceptance_dt.root", TString outPng = "data/acceptance_dt.png")
 {
    gSystem->Load("libAtReconstruction.so");
@@ -143,10 +152,11 @@ void acceptance_C16dt(TString simDir = "/mnt/f/a1975_C16_dt_sim/",
       for (Long64_t i = 0; i < ts->GetEntries(); ++i) {
          ts->GetEntry(i);
          // --- truth: find the triton by SPECIES, never by index ---
-         double cmT = -1, thLabT = -1;
+         double cmT = -1, thLabT = -1, zTrue = -1e9;
          for (int k = 0; k < mc->GetEntries(); ++k) {
             auto *t = (AtMCTrack *)mc->At(k);
             if (!t || t->GetPdgCode() != 1000010030) continue; // triton
+            zTrue = t->GetStartZ() * 10.0; // cm -> mm
             double px = t->GetPx() * 1000, py = t->GetPy() * 1000, pz = t->GetPz() * 1000; // GeV -> MeV
             double pm = std::sqrt(px * px + py * py + pz * pz);
             if (pm <= 0) continue;
@@ -161,6 +171,8 @@ void acceptance_C16dt(TString simDir = "/mnt/f/a1975_C16_dt_sim/",
          if (cmT < 0) continue;
          // the data's theta_lab window, on TRUTH, so numerator and denominator see one selection
          if (thLabMax > thLabMin && (thLabT < thLabMin || thLabT > thLabMax)) continue;
+         // DENOMINATOR: reactions that really happened inside the vertex window, on TRUTH.
+         if (vzHi > vzLo && (zTrue < vzLo || zTrue > vzHi)) continue;
          ++nGen;
          hGen->Fill(cmT);
 
@@ -175,6 +187,12 @@ void acceptance_C16dt(TString simDir = "/mnt/f/a1975_C16_dt_sim/",
             auto r = spy.Estimate(T);
             if (!r.valid) continue;
             if (!gate.IsInside(r.sqrtdEdx, r.brho)) continue;
+            // NUMERATOR: the data's vertex cut, applied to the RECONSTRUCTED z after un-mirroring,
+            // so the numerator carries the z resolution the data's cut also suffers.
+            if (vzHi > vzLo) {
+               double zr = (zMirror > 0) ? (zMirror - r.vertex.Z()) : r.vertex.Z();
+               if (zr < vzLo || zr > vzHi) continue;
+            }
             // truth-match the track itself, so a gated contaminant cannot count as a success
             int nT = 0, nTot = 0;
             for (const auto &hit : T.GetHitArray()) {
