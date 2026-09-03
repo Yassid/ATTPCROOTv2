@@ -232,3 +232,145 @@ figure.
    were wrong: σ(KE) varies 20× across the angular range, and the constant-E_beam term dominates
    until it is corrected. The leverage half of the gate (dE_x/dKE, dE_x/dθ, dE_x/dE_beam) is exact
    and was worth computing; the σ(E_x) prediction was not, and the macro now says so in its header.
+
+## Realistic counts: the ledger (2026-09-03)
+
+`yields_C17.C` writes out every factor between a FRESCO cross section and a fitted differential
+point, each one either **measured** from the campaign or **named** as a parameter. Reproduce with
+
+```bash
+root -b -q 'yields_C17.C("/media/yassid/Seagate Hub/ATTPC/C17_inel","pp_b285")'
+```
+
+The proposal's "∼1000 counts of scattered protons" is not derived from a cross section — it is an
+analogy to Ref. [24] scaled by the beam rate. Replacing it with arithmetic:
+
+| step | 1/2⁺ | 5/2⁺ | source |
+|---|---|---|---|
+| σ(4π) = 8.582 / 3.601 mb × 940 pps × 86400 s × 1.978e21 cm⁻² | 1379 | 579 | FRESCO + gas |
+| × duty 0.70 × purity 1.00 | 965 | 405 | **[par]**, no source supplied |
+| × pile-up-free 0.930 (77 µs drift at 940 pps) | 898 | 377 | [par], computed |
+| × usable angular window × acceptance × χ² × z-fiducial | **352** | **145** | **[sim]** |
+
+So **the counts that can actually enter the fit are ~350 and ~145, i.e. 0.35× and 0.15× the quoted
+~1000** for (p,p') at 2.85 T. Two factors do all of that work and neither is in the proposal:
+
+1. **A requested day is not 86400 s of beam on target.** Every yield in this study and in the
+   proposal multiplies 940 pps by a full day. The simulation cannot know the duty factor; it is a
+   parameter with a *guessed* 0.70 default and it is the cheapest thing in the whole study to fix —
+   it needs a number from ReA6 operations.
+2. **Counts outside the usable angular window are not counts.** The FRESCO distributions put only
+   **42.7 %** of the (p,p') yield in the 50–70° window that the resolution study leaves usable
+   (53.7 % in the 40–70° window at 4 T, 13.0 % in the (d,d') 70–80° window at 2.85 T, 37.3 % at
+   4 T). The earlier "1163 and 487 detected" integrates over angles whose E_x spectrum is a
+   featureless bump.
+
+| config | window | N(1/2⁺) | N(5/2⁺) | δ(1/2⁺) | δ(5/2⁺) | best per-point δ(5/2⁺) |
+|---|---|---|---|---|---|---|
+| (p,p') 2.85 T | 50–70° | 352 | 145 | 7.3 % | 11.5 % | 21.0 % (60–65°) |
+| (p,p') 4.00 T | 40–70° | 429 | 179 | 6.0 % | 9.5 % | 18.9 % (60–65°) |
+| (d,d') 2.85 T | 70–80° | 91 | 36 | 12.7 % | 20.5 % | 25.7 % (70–75°) |
+| (d,d') 4.00 T | 60–80° | 241 | 106 | 10.5 % | 16.7 % | 23.9 % (65–70°) |
+
+at duty 0.70, purity 1, one day, R = 10. The window-integrated errors are close to the earlier
+all-angle numbers (5.6 / 9.8 % for (p,p') 2.85 T) — the forward angles the window cut removes were
+contributing little — but the **per-angular-point** column is new and it is the one that matters:
+M_n/M_p is the normalisation of a dσ/dΩ *curve*.
+
+**The per-point conclusion is the harshest result in this study.** Reaching 10 % on the 5/2⁺ at
+even the best single angular point needs 3.6–6.6× the integrated luminosity of one day at duty
+0.70. That is more than duty = 1 can give back, so with the requested 2 days the deliverable is a
+**window-integrated yield ratio**, not a measured angular distribution. Either the proposal should
+say that — the deformation length is a normalisation, so an integrated ratio is a defensible
+deliverable — or it should ask for more days, or the window has to widen, which is the strongest
+remaining argument for 4 T (0.427 → 0.537 of the yield on the proton day, 0.130 → 0.373 on the
+deuteron day, i.e. **2.9× the deuteron statistics**, on top of the 1.6× resolution gain).
+
+Days-equivalent value of each factor, (p,p') 2.85 T: window ×2.34, duty ×1.43, pile-up ×1.08,
+purity ×1.00. **The window is the largest and the only one a detector setting can move.**
+
+`plots/yields_*.png` is δN/N per angular point against θ_lab, with the 10 % target drawn.
+
+### What the ledger still cannot include
+
+- **The elastic angular distribution.** R is still scanned and still assumed *constant in angle*,
+  which is wrong in a known direction: elastic is forward-peaked, so the true R rises towards the
+  forward end of every usable window — exactly where the per-point errors are already worst.
+- **The trigger.** The AT-TPC trigger counts *pads* above threshold, and a backward-angle recoil in
+  a 2.85–4 T field is a tightly curled helix that revisits the same pads. The digitised events are
+  already on disk in the campaign's sim files and nothing has counted their pad multiplicity against
+  a threshold. This would bite hardest in precisely the backward window the resolution study
+  selected, so it is the cheapest unrun check in the study.
+- **Competing channels and the 17O contaminant**, neither of which exists in the simulation at any
+  rate. On the deuterium day (d,p), (d,t), (d,³He) and breakup all compete.
+- **The assumed deformation length behind the FRESCO cross sections.** Every count above scales with
+  it. If the DWBA β is 20 % smaller the yields fall by ~36 %, which moves the ledger further than
+  any detector factor in it.
+
+## What the two angular distributions would actually look like (2026-09-03)
+
+`dsdo_C17.C` draws the supplied DWBA curves with the data points and error bars this experiment
+would put on them. The elastic is left arbitrary (R = 10, flat) — it enters only through the
+overlap penalty on the bars.
+
+```bash
+root -b -q 'dsdo_C17.C("/media/yassid/Seagate Hub/ATTPC/C17_inel","pp_b400",40,70,10)'
+```
+
+**The first thing the curves say, before any detector: the two shapes are nearly proportional.**
+dσ(217)/dσ(332) runs only **1.80 → 2.62 across θ_cm 2–150°** — flat to ±15 % about 2.2. Both have
+their first maximum at **θ_cm 45° (θ_lab 68°)**, the same diffraction minimum at **θ_cm 93°
+(θ_lab 44°)** and the same secondary maximum near θ_cm 130°. The 5/2⁺ is the 1/2⁺ divided by ~2.2
+with identical structure.
+
+So **the angular shape carries essentially no power to separate the two states.** What the
+measurement extracts is two *normalisations*; the shape's only job is to confirm the assumed L
+transfer. That reframes the deliverable, and it is good news for the count problem: a window that
+covers one maximum well beats a wider window that smears both.
+
+**And the first maximum lands inside the good-resolution window.** θ_cm 45° is θ_lab 68°, which sits
+in the 50–70° window on the proton day — a piece of luck the proposal does not currently claim.
+
+Expected points, one day, duty 0.70, R = 10, **10° θ_lab bins**:
+
+| config | θ_lab | θ_cm | N(1/2⁺) | N(5/2⁺) | dσ/dΩ(217) | ± | dσ/dΩ(332) | ± |
+|---|---|---|---|---|---|---|---|---|
+| (p,p') 2.85 T | 50–60 | 60–80 | 161 | 66 | 0.769 | 10.7 % | 0.316 | 18.6 % |
+| | 60–70 | 40–60 | 191 | 79 | 1.251 | 8.4 % | 0.537 | 15.5 % |
+| (p,p') 4.00 T | 40–50 | 80–100 | 92 | 36 | 0.431 | 15.9 % | 0.179 | 27.9 % |
+| | 50–60 | 60–80 | 148 | 66 | 0.769 | 9.7 % | 0.316 | 15.8 % |
+| | 60–70 | 40–60 | 188 | 78 | 1.251 | 8.6 % | 0.537 | 15.0 % |
+| (d,d') 4.00 T | 60–70 | 40–60 | 170 | 73 | 1.251 | 13.6 % | 0.537 | 22.7 % |
+| | 70–80 | 20–40 | 71 | 34 | 1.019 | 14.1 % | 0.457 | 23.4 % |
+| (d,d') 2.85 T | 65–75 | 30–50 | 135 | 57 | 1.234 | 14.9 % | 0.538 | 22.4 % |
+| | 75–85 | 10–30 | 36 | 14 | 0.741 | 21.7 % | 0.351 | 35.5 % |
+
+At 5° binning the same windows give 12–18 % (1/2⁺) and 21–31 % (5/2⁺) per point — see
+`plots/dsdo_*_d5.png`. **10° bins are the right choice**: nothing in a curve this smooth needs 5°
+sampling, and the shape is fixed by DWBA anyway.
+
+**The coverage, config by config:**
+
+- **(p,p') 2.85 T** (θ_lab 50–70 = θ_cm 40–80): covers the first maximum and its fall-off. **Two
+  points.** Misses the minimum.
+- **(p,p') 4.00 T** (40–70 = θ_cm 40–100): covers the maximum *and reaches the diffraction
+  minimum at θ_cm 93°*. **Three points spanning peak → minimum**, and that is the only real shape
+  information the experiment can get. A third argument for 4 T, independent of resolution and of
+  statistics.
+- **(d,d') 4.00 T** (60–80 = θ_cm 20–60): the maximum and the backward side of it, no minimum.
+- **(d,d') 2.85 T** (70–80 = θ_cm 20–40): one, at best two usable points, all on the far side of
+  the maximum. Sliding the window back to 65–85° gives two points at 14.9 / 22.4 % and
+  21.7 / 35.5 %, so even there the deuteron day at 2.85 T is a one-good-point measurement.
+
+**What the proposal should therefore claim.** Not "differential cross section curves to both the
+1/2⁺ and the 5/2⁺", which two or three points on a shape that is degenerate between the states
+does not support. The defensible claim is **two normalisations, measured at 2–3 angular points that
+bracket the DWBA maximum, to 8–11 % (1/2⁺) and 15–19 % (5/2⁺) in one day** — which is exactly what
+M_n/M_p needs, since the deformation lengths are normalisations. Stated that way the proposal's
+~10 % per state is met on the proton day and nearly met on the deuteron day at 4 T, and the
+per-point pessimism of the previous section stops being the binding constraint.
+
+`plots/dsdo_<cfg>_<window>_d<bin>.png`: left panel the two DWBA curves with the expected points
+(inner bar statistics only, outer bar with the three-component overlap penalty) and the usable
+window shaded; right panel the ratio of the two curves, which is the figure that shows the shapes
+are degenerate.

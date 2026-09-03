@@ -32,6 +32,8 @@ root -b -q 'inel_kinematics_C17.C'          # the gate: minutes, no campaign nee
 ./run_C17inel_campaign.sh -j 8 16000        # 12 samples, ~2 h on this box
 root -b -q 'inel_summary_C17.C'             # resolution, floor, vertex correction, separation
 root -b -q 'decompose_C17.C("...","pp_b285")'   # the headline: can the yields be extracted
+root -b -q 'yields_C17.C("...","pp_b285")'       # the count ledger: what "~1000 counts" really is
+root -b -q 'dsdo_C17.C("...","pp_b400",40,70,10)'  # the DWBA curves with the expected data points
 root -b -q 'kine_lines_C17.C("...","pp_b285")'   # the loci, raw vs vertex-corrected
 root -b -q 'export_gui_C17.C' && gui/build_gui.sh   # the interactive explorer, for figure captures
 ```
@@ -122,6 +124,8 @@ this reason.
 | `run_C17inel_campaign.sh` | the 12-sample matrix, in two waves, with a PID-checked driver lock |
 | `inel_summary_C17.C` | σ(Ex), the method floor, the vertex correction, level separation |
 | `decompose_C17.C` | the headline: fixed-position three-component fit at one day of beam |
+| `yields_C17.C` | the count ledger: every factor from mb to a fitted differential point, measured or named; `plots/yields_*.png` |
+| `dsdo_C17.C` | the two DWBA curves with the expected points and error bars; shows the shapes are proportional; `plots/dsdo_*.png` |
 | `kine_lines_C17.C` | the reconstructed kinematic lines and per-window E_x spectra; `plots/kinelines_*.png`, `plots/kinemap_*.png` |
 | `export_gui_C17.C` | dumps the accepted events to `gui/C17_gui_data.json` for the viewer |
 | `gui/build_gui.sh` | inlines that JSON into `gui/template.html` -> one self-contained HTML file |
