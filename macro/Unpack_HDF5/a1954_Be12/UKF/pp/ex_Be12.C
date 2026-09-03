@@ -74,7 +74,10 @@ void ex_Be12(TString runsCSV = "run_0142", TString inDir = "/home/yassid/a1954_B
    gSystem->mkdir(plotDir.Data(), kTRUE);
 
    TFile *fcache = new TFile((plotDir + "proton_kin" + outTag + ".root").Data(), "RECREATE");
-   TNtuple *ntk = new TNtuple("pk", "proton kinematics", "ke:theta:vertexz:thcm:ex:chi2ndf");
+   // `run` rides along so the browser explorer can ask "is this structure in one run or in all
+   // of them?" -- the first question to put to any feature with no known counterpart. It is a
+   // float because TNtuple is float-only; the run numbers here (4 digits) are exact in a float.
+   TNtuple *ntk = new TNtuple("pk", "proton kinematics", "ke:theta:vertexz:thcm:ex:chi2ndf:run");
 
    TH1F *hex = new TH1F("hex", Form("%s excitation energy;E_{x} [MeV];ejectiles", chanLabel.Data()), 200, -5, 25);
    TH2F *hexcm = new TH2F("hexcm", "E_{x} vs #theta_{cm};#theta_{cm} [deg];E_{x} [MeV]", 180, 0, 180, 150, -5, 25);
@@ -87,6 +90,8 @@ void ex_Be12(TString runsCSV = "run_0142", TString inDir = "/home/yassid/a1954_B
    long nProton = 0, nEvtWithTrk = 0;
    for (int ri = 0; ri < runs->GetEntries(); ++ri) {
       TString run = ((TObjString *)runs->At(ri))->GetString().Strip(TString::kBoth);
+      TString runDigits = run; runDigits.ReplaceAll("run_", "");
+      const float runNo = runDigits.Atof();
       TString uf = inDir + run + "_" + fitter + ".root";
       if (gSystem->AccessPathName(uf)) {
          printf("skip %s (no %s)\n", run.Data(), uf.Data());
@@ -128,7 +133,7 @@ void ex_Be12(TString runsCSV = "run_0142", TString inDir = "/home/yassid/a1954_B
             hex->Fill(ex);
             hexcm->Fill(thcm, ex);
             hexvz->Fill(vz, ex);
-            ntk->Fill(ke, thDeg, vz, thcm, ex, c2n);
+            ntk->Fill(ke, thDeg, vz, thcm, ex, c2n, runNo);
          }
       }
       fu->Close();

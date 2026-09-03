@@ -182,7 +182,7 @@ footer{
 
 <header>
   <div>
-    <div class="eyebrow" id="hdrEyebrow">a1954 &middot; AT-TPC</div>
+    <div class="eyebrow" id="hdrEyebrow">a2091 &middot; AT-TPC</div>
     <h1 id="hdrTitle">excitation-energy explorer</h1>
   </div>
   <div class="sub" id="hdrCache"></div>
@@ -191,6 +191,9 @@ footer{
   <button id="pngBtn" title="all panels stitched into one high-resolution PNG">save figure</button>
   <button id="panelBtn" title="each panel as its own high-resolution PNG">save panels</button>
   <button id="csvBtn" title="histogram contents as CSV, for replotting">save data</button>
+  <button id="parBtn" title="all control values as a .json file you can reload later">save params</button>
+  <button id="parLoadBtn" title="restore control values from a saved .json">load params</button>
+  <input type="file" id="parFile" accept=".json,application/json" style="display:none">
 </header>
 
 <main class="layout">
@@ -210,19 +213,40 @@ footer{
     </div>
 
     <div class="grp">
+      <div class="eyebrow">kinematics correction</div>
+      <div class="row"><label class="check"><input type="checkbox" id="kcOn"> apply &theta; correction</label></div>
+      <div class="row"><label for="kcDenom">N in 2&pi;/N [rad/MeV]</label><input type="number" id="kcDenom" step="50" value="4000"></div>
+      <!-- The slider drives the SLOPE, not N: N is inverse (360/N deg/MeV), so a linear slider on
+           it spends nearly all its travel in the small-slope region and skips through the range
+           that actually matters. Slope is linear, signed, and is what the panels respond to; N
+           stays the stored parameter so saved params files keep working. -->
+      <input type="range" id="kcSlopeR" min="-0.5" max="0.5" step="0.002" value="0.09">
+      <div class="row"><span class="mono num" id="kcSlopeLbl" style="font-size:11.5px;color:var(--ink-3)"></span></div>
+      <div class="row"><label for="kcPivot">kethe [MeV]</label><input type="number" id="kcPivot" step="0.5" value="13"></div>
+      <input type="range" id="kcPivotR" min="0" max="60" step="0.5" value="13">
+      <div class="row"><span class="mono num" id="kcNote" style="font-size:11.5px;color:var(--ink-3)"></span></div>
+    </div>
+
+    <div class="grp">
       <div class="eyebrow">cuts</div>
       <div class="row"><label for="chi2">&chi;&sup2;/ndf &lt;</label><input type="number" id="chi2" step="0.5" value="5"></div>
       <div class="row"><label>&theta;<sub>lab</sub> [deg]</label></div>
       <div class="pair"><input type="number" id="thLo" step="1" value="0"><input type="number" id="thHi" step="1" value="180"></div>
       <div class="row"><label>KE [MeV]</label></div>
       <div class="pair"><input type="number" id="keLo" step="0.5" value="0"><input type="number" id="keHi" step="0.5" value="1000"></div>
+      <div class="row" id="rowRunLab"><label>run range</label></div>
+      <div class="pair" id="rowRun"><input type="number" id="runLo" step="1" value="0"><input type="number" id="runHi" step="1" value="9999"></div>
+      <div class="row" id="rowIcLab"><label>IC window [ADC]</label></div>
+      <div class="pair" id="rowIc"><input type="number" id="icLo" step="10" value="-1"><input type="number" id="icHi" step="10" value="4000"></div>
+      <div class="row" id="rowNpLab"><label>IC multiplicity</label></div>
+      <div class="pair" id="rowNp"><input type="number" id="npLo" step="1" value="1"><input type="number" id="npHi" step="1" value="1"></div>
       <div class="row" id="rowVzLab"><label>vertex z [mm]</label></div>
       <div class="pair" id="rowVz"><input type="number" id="vzLo" step="10" value="-100"><input type="number" id="vzHi" step="10" value="1100"></div>
     </div>
 
     <div class="grp">
       <div class="eyebrow">E<sub>x</sub> axis &amp; fit</div>
-      <div class="row"><label for="exBins">spectrum bins</label><input type="number" id="exBins" step="10" value="200"></div>
+      <div class="row"><label for="exBins">spectrum bins</label><input type="number" id="exBins" step="10" value="500"></div>
       <div class="row"><label>range [MeV]</label></div>
       <div class="pair"><input type="number" id="exLo" step="1" value="-5"><input type="number" id="exHi" step="1" value="25"></div>
       <div class="row"><label>g.s. fit window</label></div>
@@ -233,16 +257,21 @@ footer{
     <div class="grp">
       <div class="eyebrow">maps</div>
       <div class="sublab">KE vs &theta;<sub>lab</sub></div>
-      <div class="row"><label for="thBins">&theta;<sub>lab</sub> bins</label><input type="number" id="thBins" step="10" value="100"></div>
-      <div class="row"><label for="thMax">&theta;<sub>lab</sub> max</label><input type="number" id="thMax" step="5" value="95"></div>
-      <div class="row"><label for="keBins">KE bins</label><input type="number" id="keBins" step="10" value="150"></div>
-      <div class="row"><label for="keMax">KE max</label><input type="number" id="keMax" step="1" value="40"></div>
+      <div class="row"><label for="thBins">&theta;<sub>lab</sub> bins</label><input type="number" id="thBins" step="10" value="500"></div>
+      <!-- min as well as max: these two maps carry the kinematic loci, so being able to zoom
+           onto the part of the fan where the g.s. curve meets the data is the whole point of
+           the panel. Range is display only -- it never removes events, that is what CUTS does. -->
+      <div class="row"><label>&theta;<sub>lab</sub> range [deg]</label></div>
+      <div class="pair"><input type="number" id="thMin" step="5" value="0"><input type="number" id="thMax" step="5" value="95"></div>
+      <div class="row"><label for="keBins">KE bins</label><input type="number" id="keBins" step="10" value="500"></div>
+      <div class="row"><label>KE range [MeV]</label></div>
+      <div class="pair"><input type="number" id="keMin" step="1" value="0"><input type="number" id="keMax" step="1" value="40"></div>
       <div class="sublab">E<sub>x</sub> vs &theta;<sub>cm</sub></div>
-      <div class="row"><label for="cmBins">&theta;<sub>cm</sub> bins</label><input type="number" id="cmBins" step="10" value="90"></div>
-      <div class="row"><label for="etExBins">E<sub>x</sub> bins</label><input type="number" id="etExBins" step="10" value="200"></div>
+      <div class="row"><label for="cmBins">&theta;<sub>cm</sub> bins</label><input type="number" id="cmBins" step="10" value="500"></div>
+      <div class="row"><label for="etExBins">E<sub>x</sub> bins</label><input type="number" id="etExBins" step="10" value="500"></div>
       <div class="sublab" id="lblVzMap">E<sub>x</sub> vs vertex z</div>
-      <div class="row" id="rowVzBins"><label for="vzBins">z bins</label><input type="number" id="vzBins" step="10" value="120"></div>
-      <div class="row" id="rowVzExBins"><label for="vzExBins">E<sub>x</sub> bins</label><input type="number" id="vzExBins" step="10" value="200"></div>
+      <div class="row" id="rowVzBins"><label for="vzBins">z bins</label><input type="number" id="vzBins" step="10" value="500"></div>
+      <div class="row" id="rowVzExBins"><label for="vzExBins">E<sub>x</sub> bins</label><input type="number" id="vzExBins" step="10" value="500"></div>
       <label class="check"><input type="checkbox" id="kinLines" checked> kinematic loci</label>
       <label class="check"><input type="checkbox" id="logZ" checked> log density</label>
     </div>
@@ -250,7 +279,7 @@ footer{
     <div class="grp">
       <div class="eyebrow">&theta;<sub>cm</sub> slice</div>
       <div class="pair"><input type="number" id="cmLo" step="5" value="0"><input type="number" id="cmHi" step="5" value="180"></div>
-      <div class="row"><label for="slBins">bins</label><input type="number" id="slBins" step="10" value="200"></div>
+      <div class="row"><label for="slBins">bins</label><input type="number" id="slBins" step="10" value="500"></div>
     </div>
 
     <div class="grp">
@@ -288,6 +317,12 @@ footer{
       </div>
 
       <div class="card">
+        <h2>corrected KE vs &theta;<sub>lab</sub> &mdash; tune kethe</h2>
+        <div class="legend"><span id="kcLive">&nbsp;</span></div>
+        <div class="canvas-wrap"><canvas id="cKc"></canvas><div class="tip" id="tipKc"></div></div>
+      </div>
+
+      <div class="card">
         <h2>E<sub>x</sub> vs &theta;<sub>cm</sub></h2>
         <div class="legend"><span id="cmSliceNote">slice shown in the panel to the right</span></div>
         <div class="canvas-wrap"><canvas id="cEt"></canvas><div class="tip" id="tipEt"></div></div>
@@ -322,13 +357,21 @@ const RAW  = /*__DATA__*/ null;
 
 /* RAW is {ukf:{ke,th,c2}, genfit:{...}} -- older single-fitter files are wrapped here */
 const SETS = RAW.ke ? {ukf: RAW} : RAW;
-const FITTERS = ['ukf', 'genfit'].filter(f => SETS[f] && SETS[f].ke && SETS[f].ke.length);
+// Set names come from the JSON, not a fixed list, so a page can carry more than the original
+// ukf/genfit pair (a1975 (d,t) ships three: genfit matFX-off, genfit matFX-on, UKF). The two
+// historical names are pinned to the front so existing two-set pages keep their button order
+// and their default ACTIVE; anything else follows in JSON order.
+const FITTERS = (() => {
+  const all = Object.keys(SETS).filter(f => SETS[f] && SETS[f].ke && SETS[f].ke.length);
+  const head = ['ukf', 'genfit'].filter(f => all.includes(f));
+  return [...head, ...all.filter(f => !head.includes(f))];
+})();
 let ACTIVE = FITTERS[0];
 const DATA = () => SETS[ACTIVE];
 const other = () => FITTERS.find(f => f !== ACTIVE);
 
 /* ---------------------------------------------------------------------------
-   physics - identical expressions to pp/ex_Be12.C / pp/explore_Be12.C
+   physics - identical expressions to pp/ex_C15.C / pp/explore_C15.C
    ------------------------------------------------------------------------ */
 const U = 931.49401;
 const M1 = CFG.mBeamAmu * U, M2 = CFG.mTargAmu * U,
@@ -382,19 +425,43 @@ function kinLocus(Eb, Ex) {
    ------------------------------------------------------------------------ */
 const $ = id => document.getElementById(id);
 const IDS = ['ebeam','chi2','thLo','thHi','keLo','keHi','exBins','exLo','exHi','fitLo','fitHi',
-             'thBins','thMax','keBins','keMax','cmBins','etExBins','cmLo','cmHi','slBins',
-             'vzLo','vzHi','vzBins','vzExBins'];
+             'thBins','thMin','thMax','keBins','keMin','keMax','cmBins','etExBins','cmLo','cmHi','slBins',
+             'vzLo','vzHi','vzBins','vzExBins',
+             'icLo','icHi','runLo','runHi','npLo','npHi',
+             'kcDenom','kcPivot'];
 
-/* vertex z is only meaningful if the cache actually carries it: ex_Be12.C hardcoded 0
+/* vertex z is only meaningful if the cache actually carries it: ex_C15.C hardcoded 0
    before 2026-07-26, and old caches have no column at all. Detect a flat/absent
    column once and hide the whole z UI rather than drawing a misleading single stripe. */
+/* IC pulse multiplicity. Present only in caches built with the ic/npulse join. */
+const HAS_NP = FITTERS.some(f => {
+  const v = SETS[f] && SETS[f].np;
+  return !!(v && v.length);
+});
+
+/* Run number is optional in the same way as ic. When present it drives a range cut AND the
+   per-run panel, which is how a structure gets asked whether it belongs to one run or to all
+   of them. */
+const HAS_RUN = FITTERS.some(f => {
+  const v = SETS[f] && SETS[f].run;
+  return !!(v && v.length);
+});
+
+/* The ion-chamber value is optional: caches built before the IC join carry no column, and a
+   window control that filters on a missing value would silently empty every panel. Detect it
+   once, and hide the control entirely when it is absent. */
+const HAS_IC = FITTERS.some(f => {
+  const v = SETS[f] && SETS[f].ic;
+  return !!(v && v.length && v.some(x => x >= 0));
+});
+
 const HAS_VZ = FITTERS.some(f => {
   const v = SETS[f] && SETS[f].vz;
   if (!v || !v.length) return false;
   for (let i = 1; i < v.length; ++i) if (v[i] !== v[0]) return true;
   return false;
 });
-const FLAGS = ['logY','logZ','kinLines'];
+const FLAGS = ['logY','logZ','kinLines','kcOn'];
 const DEFAULTS = {};
 
 function readState() {
@@ -403,16 +470,20 @@ function readState() {
   for (const id of FLAGS) s[id] = $(id).checked;
   // every panel's bin count is independent; clamp each so a typo cannot lock the page up
   const nb = (v, d) => Math.max(10, Math.min(5000, Math.round(isFinite(v) ? v : d)));
-  s.exBins   = nb(s.exBins, 200);
-  s.slBins   = nb(s.slBins, 200);
-  s.etExBins = nb(s.etExBins, 200);
-  s.vzExBins = nb(s.vzExBins, 200);
-  s.thBins   = nb(s.thBins, 100);
-  s.keBins   = nb(s.keBins, 150);
-  s.cmBins   = nb(s.cmBins, 90);
-  s.vzBins   = nb(s.vzBins, 120);
-  if (!(s.thMax > 0)) s.thMax = 95;
-  if (!(s.keMax > 0)) s.keMax = 40;
+  s.exBins   = nb(s.exBins, 500);
+  s.slBins   = nb(s.slBins, 500);
+  s.etExBins = nb(s.etExBins, 500);
+  s.vzExBins = nb(s.vzExBins, 500);
+  s.thBins   = nb(s.thBins, 500);
+  s.keBins   = nb(s.keBins, 500);
+  s.cmBins   = nb(s.cmBins, 500);
+  s.vzBins   = nb(s.vzBins, 500);
+  // a min typed above its max would give a zero or negative span and divide the binning by it,
+  // so fall back to the full default window rather than rendering an empty canvas
+  if (!isFinite(s.thMin)) s.thMin = 0;
+  if (!isFinite(s.keMin)) s.keMin = 0;
+  if (!(s.thMax > s.thMin)) { s.thMin = 0; s.thMax = 95; }
+  if (!(s.keMax > s.keMin)) { s.keMin = 0; s.keMax = 40; }
   if (!(s.vzHi > s.vzLo)) { s.vzLo = -100; s.vzHi = 1100; }
   return s;
 }
@@ -420,11 +491,66 @@ function readState() {
 /* ---------------------------------------------------------------------------
    histogramming
    ------------------------------------------------------------------------ */
+/* ---------------------------------------------------------------------------
+   kinematics correction
+
+   The reconstructed polar angle carries a bias that grows with the ejectile energy, so it is
+   straightened with a shift LINEAR IN KE about a pivot energy:
+
+       theta -> theta - slope * (KE - pivot)
+
+   The reference implementation (Spyral notebook, 16C(p,d), TB 20-510) uses
+       polar = polar - (2*pi/4000)*(kinetic_energy - kethe),  kethe = 13
+   and 2*pi/4000 rad/MeV is exactly 0.09 deg/MeV. BOTH numbers are specific to THAT experiment:
+   the slope starts from 0.09 only as a first guess and must be re-tuned here, and the 13 MeV pivot
+   does not carry over at all -- the pivot defaults instead to the median KE of whatever data is
+   loaded, so the correction begins as a rotation about this dataset's own centre. The correction
+   is OFF until the checkbox is ticked.
+
+   NOTE the two parameters are not independent: theta - slope*(KE - pivot) = theta - slope*KE +
+   slope*pivot, so the pivot only sets a constant theta offset. Tune the slope for the SHAPE and
+   the pivot for the overall placement.
+
+   This is a correction to theta, not to KE, and that matters: it is the whole FAMILY of Ex loci
+   that has to line up at once, so one two-parameter correction is strongly constrained rather than
+   free to absorb anything. Sweep the slope and pivot until every band sits on its curve in the
+   KE-vs-theta panel.
+--------------------------------------------------------------------------- */
+function thCorr(s, th, ke) {
+  return s.kcOn ? thCorrForce(s, th, ke) : th;
+}
+/** the correction regardless of the checkbox -- the tuning panel is always corrected so the
+    raw panel beside it stays as a reference while kethe and the slope are swept */
+function thCorrForce(s, th, ke) {
+  return th - kcSlopeDeg(s)*(ke - (isFinite(s.kcPivot) ? s.kcPivot : 0));
+}
+/** the notebook writes the slope as 2*pi/N rad/MeV; in degrees that is exactly 360/N deg/MeV
+    (N = 4000 -> 0.09 deg/MeV). N is the control, so the formula stays recognisable. */
+function kcSlopeDeg(s) {
+  const N = s.kcDenom;
+  return (isFinite(N) && Math.abs(N) > 1e-9) ? 360/N : 0;
+}
+
 function pass(d, i, s) {
   return d.c2[i] <= s.chi2
-      && d.th[i] >= s.thLo && d.th[i] <= s.thHi
+      && thCorr(s, d.th[i], d.ke[i]) >= s.thLo && thCorr(s, d.th[i], d.ke[i]) <= s.thHi
       && d.ke[i] >= s.keLo && d.ke[i] <= s.keHi
-      && (!HAS_VZ || !d.vz || (d.vz[i] >= s.vzLo && d.vz[i] <= s.vzHi));
+      && (!HAS_VZ || !d.vz || (d.vz[i] >= s.vzLo && d.vz[i] <= s.vzHi))
+      // A track whose run had no ion chamber carries ic = -1. It CANNOT satisfy a window, so it
+      // is dropped whenever one is active -- the same rule apply_gate_C15d.C uses. Treating -1 as
+      // "no information, keep it" would quietly mix ungated beam into a gated sample.
+      // Single pulse rides WITH the window, never separately: pid/ic_C15d.json records
+      // singlePulse: true and apply_gate_C15d.C enforces it whenever the window is on, so a page
+      // that applied the window without it would report a different number from the batch path
+      // for the same window -- the two have already had to be reconciled once.
+      && (!HAS_IC || !d.ic || s.icLo < 0
+          || (d.ic[i] >= 0 && d.ic[i] >= s.icLo && d.ic[i] <= s.icHi))
+      // Multiplicity is now its OWN cut rather than being welded to the IC window. It still
+      // DEFAULTS to 1-1, which is what apply_gate_C15d.C enforces, so the page and the batch
+      // path agree unless the range is deliberately opened -- and opening it is the point: a
+      // structure that grows with multiplicity is pile-up, one that does not is not.
+      && (!HAS_NP || !d.np || (d.np[i] >= s.npLo && d.np[i] <= s.npHi))
+      && (!HAS_RUN || !d.run || (d.run[i] >= s.runLo && d.run[i] <= s.runHi));
 }
 
 /** Ex histogram only, for a named fitter -- used for the comparison overlay */
@@ -434,7 +560,7 @@ function exOnly(name, s) {
   if (!d) return h;
   for (let i = 0; i < d.ke.length; ++i) {
     if (!pass(d, i, s)) continue;
-    const [ex] = kine2b(s.ebeam, d.th[i]*Math.PI/180, d.ke[i]);
+    const [ex] = kine2b(s.ebeam, thCorr(s, d.th[i], d.ke[i])*Math.PI/180, d.ke[i]);
     if (!isFinite(ex)) continue;
     const b = Math.floor((ex - s.exLo)/exW);
     if (b >= 0 && b < nEx) h[b]++;
@@ -449,6 +575,7 @@ function compute(s) {
   const vzExW = (s.exHi - s.exLo)/s.vzExBins;      // Ex vs vertex z map: own y binning
   const hEx = new Float64Array(nEx), hSl = new Float64Array(s.slBins);
   const hKT = new Float64Array(s.thBins*s.keBins);
+  const hKTc = new Float64Array(s.thBins*s.keBins);   // same map, corrected theta
   const hEt = new Float64Array(s.cmBins*s.etExBins);
   const hVz = new Float64Array(s.vzBins*s.vzExBins);
   // running mean of Ex per vertex-z column -> the profile drawn over the z map
@@ -458,10 +585,15 @@ function compute(s) {
   const d = DATA(), N = d.ke.length;
   for (let i = 0; i < N; ++i) {
     if (!pass(d, i, s)) continue;
-    const ke = d.ke[i], th = d.th[i];
-    // KE vs theta_lab map (0..thMax deg)
-    const bx = Math.floor(th/s.thMax*s.thBins), by = Math.floor(ke/s.keMax*s.keBins);
+    const ke = d.ke[i], th = thCorr(s, d.th[i], ke);
+    // KE vs theta_lab map (thMin..thMax deg, keMin..keMax MeV)
+    const bx = Math.floor((th - s.thMin)/(s.thMax - s.thMin)*s.thBins),
+          by = Math.floor((ke - s.keMin)/(s.keMax - s.keMin)*s.keBins);
     if (bx >= 0 && bx < s.thBins && by >= 0 && by < s.keBins) hKT[by*s.thBins + bx]++;
+    // the tuning panel: same events, theta corrected, always applied
+    const thc = thCorrForce(s, d.th[i], ke);
+    const bxc = Math.floor((thc - s.thMin)/(s.thMax - s.thMin)*s.thBins);
+    if (bxc >= 0 && bxc < s.thBins && by >= 0 && by < s.keBins) hKTc[by*s.thBins + bxc]++;
     const [ex, tcm] = kine2b(s.ebeam, th*Math.PI/180, ke);
     if (!isFinite(ex)) continue;
     ++n;
@@ -482,7 +614,7 @@ function compute(s) {
   }
   const vzProf = new Float64Array(s.vzBins);
   for (let i = 0; i < s.vzBins; ++i) vzProf[i] = vzCnt[i] > 20 ? vzSum[i]/vzCnt[i] : NaN;
-  return {n, hEx, hSl, hKT, hEt, hVz, vzProf, exW};
+  return {n, hEx, hSl, hKT, hKTc, hEt, hVz, vzProf, exW};
 }
 
 /** solve a small dense system in place (gaussian elimination, partial pivot) */
@@ -810,8 +942,8 @@ function render() {
     + `<span><i class="swatch" style="background:var(--accent);opacity:.35;height:9px;width:9px;border-radius:2px"></i>fit window</span>`
     + (cmp ? `<span><i class="swatch" style="background:var(--alt)"></i>${other().toUpperCase()} (same cuts)</span>` : '');
 
-  views.cKT = drawHeat($('cKT'), r.hKT, s.thBins, s.keBins, 0, s.thMax, 0, s.keMax,
-                       '\\theta_{lab}  (deg)', 'ejectile KE  (MeV)', s, c => {
+  // the Ex loci, shared by the raw and the corrected KE-vs-theta panels so the two are comparable
+  const lociOverlay = c => {
     if (!s.kinLines) return;
     const {g, pw, ph} = c;
     const loci = REF_EX.map((r, i) => [r.ex, refColor(i), i < 2 ? [] : [5,4]]);
@@ -821,13 +953,30 @@ function render() {
       g.strokeStyle = col; g.lineWidth = 2; g.setLineDash(dash); g.beginPath();
       let started = false;
       for (const [th, ke] of pts) {
-        if (th < 0 || th > s.thMax || ke > s.keMax) { started = false; continue; }
-        const x = PAD.l + th/s.thMax*pw, y = PAD.t + ph - ke/s.keMax*ph;
+        if (th < s.thMin || th > s.thMax || ke < s.keMin || ke > s.keMax) { started = false; continue; }
+        const x = PAD.l + (th - s.thMin)/(s.thMax - s.thMin)*pw,
+              y = PAD.t + ph - (ke - s.keMin)/(s.keMax - s.keMin)*ph;
         started ? g.lineTo(x, y) : g.moveTo(x, y); started = true;
       }
       g.stroke(); g.setLineDash([]);
     }
-  }, 'ejectile KE vs \\theta_{lab}');
+  };
+  views.cKT = drawHeat($('cKT'), r.hKT, s.thBins, s.keBins, s.thMin, s.thMax, s.keMin, s.keMax,
+                       '\\theta_{lab}  (deg)', 'ejectile KE  (MeV)', s, lociOverlay,
+                       'ejectile KE vs \\theta_{lab}  (raw)');
+
+  // the tuning panel: identical events and identical loci, theta corrected
+  views.cKc = drawHeat($('cKc'), r.hKTc, s.thBins, s.keBins, s.thMin, s.thMax, s.keMin, s.keMax,
+                       '\\theta_{lab} corrected  (deg)', 'ejectile KE  (MeV)', s, lociOverlay,
+                       'corrected: \\theta - slope(KE - kethe)');
+  {
+    const sl = kcSlopeDeg(s);
+    $('kcLive').innerHTML =
+        'N=<b>' + (isFinite(s.kcDenom) ? s.kcDenom : '?') + '</b>, kethe=<b>'
+      + (isFinite(s.kcPivot) ? s.kcPivot.toFixed(1) : '?') + '</b> MeV'
+      + ' &rarr; ' + sl.toFixed(4) + '&deg;/MeV, shift ' + (sl*(40 - (s.kcPivot||0))).toFixed(2) + '&deg; at 40 MeV'
+      + (s.kcOn ? ' &middot; <b>propagated to E<sub>x</sub></b>' : ' &middot; not propagated');
+  }
 
   views.cEt = drawHeat($('cEt'), r.hEt, s.cmBins, s.etExBins, 0, 180, s.exLo, s.exHi,
                        '\\theta_{cm}  (deg)', 'E_x  (MeV)', s, c => {
@@ -893,6 +1042,20 @@ function zeroGs() {
 
 function setEbeam(v) { $('ebeam').value = v; $('ebeamR').value = v; }
 
+/** Push the two kinematics-correction NUMBER boxes out to their sliders and relabel. Called
+    whenever N or kethe is typed, params are restored, or the pivot is preset from the data,
+    so the sliders never drift out of step with the values the panels actually use. */
+function syncKcSliders() {
+  const N = parseFloat($('kcDenom').value);
+  const sl = (isFinite(N) && Math.abs(N) > 1e-9) ? 360/N : 0;
+  const r = $('kcSlopeR');
+  r.value = Math.max(parseFloat(r.min), Math.min(parseFloat(r.max), sl));
+  $('kcPivotR').value = $('kcPivot').value;
+  // flag the clamp: past +-0.5 deg/MeV the handle would sit at the end and silently lie
+  $('kcSlopeLbl').textContent = 'slope ' + sl.toFixed(4) + ' °/MeV'
+    + (Math.abs(sl) > parseFloat(r.max) ? '  (beyond slider range)' : '');
+}
+
 /* ---- hover readout ---- */
 function hookTip(cvId, tipId, fmt) {
   const cv = $(cvId), tip = $(tipId);
@@ -936,6 +1099,77 @@ function download(href, name) {
   a.download = name; a.href = href;
   document.body.appendChild(a); a.click(); a.remove();
 }
+/* ---- save / restore the control panel -------------------------------------------------
+   Writes every IDS value and FLAGS checkbox to a small .json, together with the fitter in
+   use and the masses baked into the page, so a set of cuts can be reproduced later or handed
+   to someone else. The masses and tag are recorded for provenance only -- loading never
+   overwrites them, because they belong to the data baked into the page, not to the controls. */
+function saveParams() {
+  const p = { _what: 'a2091 15C explorer parameters', _saved: new Date().toISOString(),
+              tag: CFG.tag || '', fitter: ACTIVE,
+              provenance: { cache: CFG.cache || '', beamA: CFG.beamA,
+                            mBeamAmu: CFG.mBeamAmu, mTargAmu: CFG.mTargAmu,
+                            mEjectAmu: CFG.mEjectAmu, mResidAmu: CFG.mResidAmu },
+              controls: {}, flags: {} };
+  for (const id of IDS)   p.controls[id] = $(id).value;
+  for (const id of FLAGS) p.flags[id]    = $(id).checked;
+  // cmpFit ("overlay the other fitter") is a real control but is in neither IDS nor FLAGS,
+  // so it has to be handled explicitly or it silently would not round-trip
+  if ($('cmpFit')) p.flags.cmpFit = $('cmpFit').checked;
+  const name = 'explorer_params_' + (CFG.tag || 'run').replace(/[^A-Za-z0-9]+/g, '_')
+             + '_' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.json';
+  download('data:application/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(p, null, 2)), name);
+  note('saved ' + name);
+}
+
+function applyParams(p) {
+  if (!p || typeof p !== 'object') { note('not a parameter file'); return; }
+  const c = p.controls || {}, f = p.flags || {};
+  let n = 0, skipped = [];
+  for (const id of IDS)   if (c[id] !== undefined) { $(id).value = c[id]; n++; }
+  for (const id of FLAGS) if (f[id] !== undefined) { $(id).checked = !!f[id]; n++; }
+  if (f.cmpFit !== undefined && $('cmpFit')) { $('cmpFit').checked = !!f.cmpFit; n++; }
+  // restore the selected fitter too, but only if this page actually has that cache
+  if (p.fitter && typeof FITTERS !== 'undefined') {
+    if (FITTERS.includes(p.fitter)) {
+      ACTIVE = p.fitter;
+      // keep the segmented button in step with ACTIVE, exactly as its click handler does --
+      // otherwise the highlight keeps pointing at the previous fitter
+      const seg = $('segFitter');
+      if (seg) for (const o of seg.children) o.setAttribute('aria-pressed', String(o.dataset.f === ACTIVE));
+      n++;
+    } else skipped.push('fitter=' + p.fitter + ' (not in this page)');
+  }
+  // controls present in the file but not in this page (older/newer template)
+  for (const k of Object.keys(c)) if (!IDS.includes(k)) skipped.push(k);
+  for (const k of Object.keys(f)) if (!FLAGS.includes(k) && k !== 'cmpFit') skipped.push(k);
+  if ($('ebeam')) $('ebeamR').value = $('ebeam').value;
+  syncKcSliders();
+  render();
+  let msg = 'restored ' + n + ' control' + (n === 1 ? '' : 's');
+  if (p.tag && CFG.tag && p.tag !== CFG.tag) msg += ' -- WARNING: saved for "' + p.tag + '", page is "' + CFG.tag + '"';
+  if (skipped.length) msg += ' -- ignored unknown: ' + skipped.join(', ');
+  note(msg);
+}
+
+function loadParams(file) {
+  const r = new FileReader();
+  r.onload = () => { try { applyParams(JSON.parse(r.result)); }
+                     catch (e) { note('could not parse that file: ' + e.message); } };
+  r.onerror = () => note('could not read that file');
+  r.readAsText(file);
+}
+
+/* transient status line; falls back to the console if the page has no status element */
+function note(msg) {
+  const el = $('hdrCache');
+  if (!el) { console.log(msg); return; }
+  if (note._t) { clearTimeout(note._t); }
+  if (note._orig === undefined) note._orig = el.textContent;
+  el.textContent = msg;
+  note._t = setTimeout(() => { el.textContent = note._orig; note._t = null; }, 6000);
+}
+
 /* render everything at high DPR, run fn(), then restore the screen rendering */
 function atHiRes(fn) {
   EXPORT_SCALE = EXPORT_DPR;
@@ -988,13 +1222,19 @@ function saveCsv() {
     const v = views[id];
     if (!v) continue;
     lines.push('', `# ---- panel ${id} (${v.kind}) ----`);
+    // axis ranges, so the panel can be rebuilt EXACTLY (a sparse 2D block alone cannot say where
+    // its empty edge bins were). pp/csv_to_root.C relies on these lines.
     if (v.kind === 'hist') {
       const lo = st.exLo, hi = st.exHi;
       const w = (hi - lo)/v.nb;
+      lines.push(`# axes nb=${v.nb},lo=${lo},hi=${hi}`);
+      lines.push(`# title ${(v.title||id).replace(/\n/g,' ')}`);
       lines.push('bin_centre_MeV,counts');
       for (let b = 0; b < v.nb; ++b) lines.push(`${(lo + (b+0.5)*w).toFixed(6)},${v.hist[b]}`);
     } else {
       const dx = (v.xhi - v.xlo)/v.nx, dy = (v.yhi - v.ylo)/v.ny;
+      lines.push(`# axes nx=${v.nx},xlo=${v.xlo},xhi=${v.xhi},ny=${v.ny},ylo=${v.ylo},yhi=${v.yhi}`);
+      lines.push(`# title ${(v.title||id).replace(/\n/g,' ')}`);
       lines.push('x_centre,y_centre,counts');
       for (let iy = 0; iy < v.ny; ++iy)
         for (let ix = 0; ix < v.nx; ++ix) {
@@ -1012,10 +1252,13 @@ function saveCsv() {
 /* ---- wiring ---- */
 function init() {
   const seg = $('segFitter');
-  for (const f of ['ukf','genfit']) {
+  // Build one button per set actually present, not a fixed ukf/genfit pair -- a page carrying
+  // three sets (or sets under any other name) would otherwise render two buttons for names that
+  // do not exist, both disabled, and look like it had no selector at all.
+  for (const f of FITTERS) {
     const b = document.createElement('button');
     b.textContent = f; b.dataset.f = f;
-    b.disabled = !FITTERS.includes(f);
+    b.disabled = false;
     b.setAttribute('aria-pressed', String(f === ACTIVE));
     b.addEventListener('click', () => {
       if (b.disabled || ACTIVE === f) return;
@@ -1037,6 +1280,20 @@ function init() {
       { const e = $(id); if (e) e.style.display = 'none'; }
   }
 
+  // same for the ion chamber: no column -> no control, rather than one that filters on nothing
+  if (!HAS_IC) {
+    for (const id of ['rowIc','rowIcLab'])
+      { const e = $(id); if (e) e.style.display = 'none'; }
+  }
+  if (!HAS_RUN) {
+    for (const id of ['rowRun','rowRunLab','cardRun'])
+      { const e = $(id); if (e) e.style.display = 'none'; }
+  }
+  if (!HAS_NP) {
+    for (const id of ['rowNp','rowNpLab'])
+      { const e = $(id); if (e) e.style.display = 'none'; }
+  }
+
   $('legKin').innerHTML = REF_EX.map((r, i) =>
     `<span><i class="swatch" style="background:${refColor(i)}"></i>${r.label}</span>`).join('');
   $('hdrTitle').textContent = CFG.title || 'excitation-energy explorer';
@@ -1046,23 +1303,56 @@ function init() {
 
   setEbeam(CFG.ebeam0);
   $("keHi").value = 1000; $("thHi").value = 180;
+  // pivot defaults to THIS dataset's median KE, not the 13 MeV of the 16C(p,d) reference slide
+  {
+    const kv = Array.from(DATA().ke).filter(v => v > 0).sort((a, b) => a - b);
+    if (kv.length) {
+      const med = kv[kv.length >> 1];
+      $('kcPivot').value = (Math.round(med*2)/2).toFixed(1);
+      $('kcNote').textContent = 'pivot preset to median KE = ' + med.toFixed(1) + ' MeV';
+      // span the pivot slider over THIS dataset (99th pct, so a few runaway fits do not
+      // stretch it), else a fixed 0-60 is useless for a channel that lives below 10 MeV
+      const hi = kv[Math.min(kv.length - 1, Math.floor(0.99*kv.length))];
+      $('kcPivotR').max = Math.max(5, Math.ceil(hi));
+    }
+  }
+  syncKcSliders();
   for (const id of IDS) DEFAULTS[id] = $(id).value;
   for (const id of FLAGS) DEFAULTS[id] = $(id).checked;
 
   for (const id of IDS) $(id).addEventListener('input', () => {
     if (id === 'ebeam') $('ebeamR').value = $('ebeam').value;
+    if (id === 'kcDenom' || id === 'kcPivot') syncKcSliders();
     render();
   });
   for (const id of FLAGS) $(id).addEventListener('change', render);
   $('ebeamR').addEventListener('input', () => { $('ebeam').value = $('ebeamR').value; render(); });
+  // slope slider -> N. Zero slope means "no tilt", which is N = infinity; store a big finite
+  // number so kcSlopeDeg's 360/N lands on ~0 instead of producing Infinity/NaN downstream.
+  $('kcSlopeR').addEventListener('input', () => {
+    const sl = parseFloat($('kcSlopeR').value);
+    $('kcDenom').value = (Math.abs(sl) < 1e-6) ? 1e9 : (360/sl).toFixed(1);
+    $('kcSlopeLbl').textContent = 'slope ' + sl.toFixed(4) + ' °/MeV';
+    render();
+  });
+  $('kcPivotR').addEventListener('input', () => { $('kcPivot').value = $('kcPivotR').value; render(); });
   $('zeroBtn').addEventListener('click', zeroGs);
   $('pngBtn').addEventListener('click', savePng);
   $('panelBtn').addEventListener('click', savePanels);
   $('csvBtn').addEventListener('click', saveCsv);
+  $('parBtn').addEventListener('click', saveParams);
+  // the file input is hidden: the visible button forwards the click to it, and the value is
+  // cleared afterwards so reloading the SAME file again still fires a change event
+  $('parLoadBtn').addEventListener('click', () => $('parFile').click());
+  $('parFile').addEventListener('change', e => {
+    const f = e.target.files && e.target.files[0];
+    if (f) loadParams(f);
+    e.target.value = '';
+  });
   $('resetBtn').addEventListener('click', () => {
     for (const id of IDS) $(id).value = DEFAULTS[id];
     for (const id of FLAGS) $(id).checked = DEFAULTS[id];
-    setEbeam(CFG.ebeam0); render();
+    setEbeam(CFG.ebeam0); syncKcSliders(); render();
   });
   $('themeBtn').addEventListener('click', () => {
     const cur = document.documentElement.getAttribute('data-theme')
