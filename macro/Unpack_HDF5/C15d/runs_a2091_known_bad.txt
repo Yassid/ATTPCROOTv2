@@ -1,0 +1,16 @@
+# No a2091 D2 run is known-bad. All 104 reconstruct, 2,020,162 valid PID tracks.
+#
+# TWO WRONG DIAGNOSES, recorded so they are not repeated:
+#
+# 1. Twelve runs (0059 0067 0081 0082 0086 0090 0108 0109 0112 0116 0118 0125) failed with
+#    "bad symbol table node signature" on /meta. Blamed first on file corruption (h5ls reads them
+#    fine) and then on an HDF5 concurrent-open race on exFAT (a serial retry failed too). The real
+#    cause: a merger version that writes the /meta GROUP without the /meta/meta DATASET, 76
+#    datasets instead of 81. AtHDFUnpacker::setFirstAndLastEventNum() tested only for the group,
+#    so it read an invalid dataset ID and left the event range uninitialised before LOG(fatal).
+#    Fixed with an H5Lexists check that falls through to the /get scan already in the code.
+#
+# 2. Seven runs looked "under-reconstructed" because their reco held far fewer events than their
+#    IC file. NOT a fault: /get (pad plane) and /frib (auxiliary) are SEPARATE DAQs and record
+#    different event counts -- run_0118 has 31446 GET against 64844 FRIB, run_0098 has 1 against
+#    150893. The reconstruction is complete for what /get contains.

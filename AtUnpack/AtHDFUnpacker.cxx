@@ -241,7 +241,20 @@ void AtHDFUnpacker::setFirstAndLastEventNum()
    // Look for the meta group and from it pull the minimum and maximum event numbers
    auto meta_size = open_group(_file, "meta");
    auto metaID = std::get<0>(meta_size);
+   // ★ The /meta GROUP existing does not guarantee the /meta/meta DATASET exists. Some merger
+   // versions write the group (cobo*asad*_files, _length, ...) without it -- 12 of 104 a2091 runs
+   // are like this, 76 datasets instead of 81. The old code checked only the group, so it took
+   // this branch, open_dataset returned an invalid ID, and H5Dread on that ID left fFirstEvent /
+   // fLastEvent UNINITIALISED: "Events: 94564123027744 to 32", followed by LOG(fatal). Check the
+   // dataset too and fall through to the /get scan below, which already exists for exactly this.
+   bool haveMetaDataset = false;
    if (metaID > 0) {
+      haveMetaDataset = (H5Lexists(metaID, "meta", H5P_DEFAULT) > 0);
+      if (!haveMetaDataset)
+         LOG(warn) << "The /meta group has no 'meta' dataset -- deriving the event range by "
+                      "scanning /get instead. This is normal for some merger versions.";
+   }
+   if (metaID > 0 && haveMetaDataset) {
       std::string datasetName = "meta";
       auto dataset_dims = open_dataset(metaID, datasetName.c_str());
       auto datasetId = std::get<0>(dataset_dims);

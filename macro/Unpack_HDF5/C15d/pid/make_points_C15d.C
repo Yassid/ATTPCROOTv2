@@ -113,11 +113,16 @@ void make_points_C15d(TString inDir = "/home/yassid/C15d_reco/", TString outFile
             // its events at the right indices.
             Long64_t maxIdx = ni;
             if (hasEvtId) {
-               for (Long64_t i = 0; i < ni; ++i) { ti->GetEntry(i); if (ev_ + 1 > maxIdx) maxIdx = ev_ + 1; }
+               for (Long64_t i = 0; i < ni; ++i) { ti->GetEntry(i); if (ev_ >= 0 && ev_ + 1 > maxIdx) maxIdx = ev_ + 1; }
+               // ★ SKIP EMPTY EVENTS. An event with no FRIB payload is written with evtid = -1
+               // (and npulse 0, icmax -1). Counting that as a gap is what refused the join on
+               // every run: run_0027 has entry == evtid for all 54731 real events and exactly ONE
+               // trailing empty one, and that single entry was enough to discard the run.
                icGapless = true;
                Int_t prev = -1;
                for (Long64_t i = 0; i < ni; ++i) {
                   ti->GetEntry(i);
+                  if (ev_ < 0) continue;                       // empty event, not a gap
                   if (prev >= 0 && ev_ != prev + 1) { icGapless = false; break; }
                   prev = ev_;
                }
@@ -203,9 +208,25 @@ void make_points_C15d(TString inDir = "/home/yassid/C15d_reco/", TString outFile
          // ZERO gaps against 55006 pad events. Without evtid, or with gaps, fall through to the
          // old tolerance -- an interleaved surplus shifts every later event and is unrecoverable.
          if (!ok && hasEvtId && icGapless) {
-            std::cout << "  run " << r << ": IC has " << nIcEntries << " events vs " << nRef
-                      << " -- gapless evtid, joining over the overlap (" << (nRef - (Long64_t)nIcEntries)
-                      << " events beyond the IC get ic = -1)\n";
+            // Report the direction correctly. EITHER side can be shorter: the IC can stop early
+            // (reco events past its end get ic = -1) or the RECO can be short, which means the
+            // event range was under-derived and that run should be re-reconstructed rather than
+            // quietly analysed at partial statistics. Printing a negative count hid the second
+            // case entirely.
+            const Long64_t d = nRef - (Long64_t)nIcEntries;
+            if (d >= 0)
+               std::cout << "  run " << r << ": IC has " << nIcEntries << " events vs " << nRef
+                         << " reco -- gapless evtid, joining over the overlap (" << d
+                         << " reco events beyond the IC get ic = -1)\n";
+            else
+               // NOT an error. /get (pad plane) and /frib (auxiliary) are separate DAQs and can
+               // record different numbers of events in the same run -- run_0118 has 31446 GET
+               // against 64844 FRIB, run_0098 has 1 against 150893. The reconstruction is complete
+               // for what /get holds; the surplus FRIB events simply have no pad data. Reported so
+               // the asymmetry is visible, not as a fault.
+               std::cout << "  run " << r << ": IC has " << nIcEntries << " events, reco has " << nRef
+                         << " (" << (100.0 * nRef / nIcEntries) << " % -- fewer GET than FRIB events, normal);"
+                         << " joining the overlap\n";
             ok = true;
             ++nRunsTruncated;
          }

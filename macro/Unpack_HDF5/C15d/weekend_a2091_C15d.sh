@@ -56,20 +56,12 @@ guard(){
    fi
 }
 
-say "stage 1/8  IC rebuild with the corrected icsum"
-while pgrep -f "[i]c_batch.sh" >/dev/null 2>&1; do sleep 30; done
+say "stage 1/8  (nothing to rebuild -- all previous output was erased)"
 # ★ ic_batch SKIPS a run whose <run>_ic.root already exists, so a fix to icsum_C15d.C has no
 # effect until the old outputs are removed. The amplitude window was wrong (max over a narrow
 # [1050,1250] while pulses were counted over [800,1500]), which mismeasured 12.4 % of events as
 # baseline and put a spurious 35 ADC peak in the spectrum. Force the rebuild once, here.
-if ls /home/yassid/C15d_ic/*_ic.root >/dev/null 2>&1 \
-   && ! root -b -q 'pid/icbranch_check_C15d.C()' 2>/dev/null | grep -q "HAS_ICTB"; then
-   echo "  old IC summaries detected (no ictb branch) -- removing and rebuilding"
-   rm -f /home/yassid/C15d_ic/*_ic.root
-fi
-ls -1 "$RECO"/*_reco.root 2>/dev/null | sed 's#.*/##;s/_reco.root//' > "$HERE/runs_a2091_have.txt"
-./ic_batch.sh 3 "$HERE/runs_a2091_have.txt" >>"$LOG/wk_ic0.log" 2>&1 || true
-echo "  IC summaries: $(ls -1 /home/yassid/C15d_ic/*_ic.root 2>/dev/null | wc -l)"
+echo "  starting from a clean slate"
 
 say "stage 2/8  reconstruct the remaining runs"
 guard

@@ -43,6 +43,12 @@ MIN_FREE_GB=40
 H5LS="/home/yassid/fair_install/hdf5-1.10.4-inst/bin/h5ls"
 MAX_SANE_EVENTS=2000000   # a real AT-TPC run is 1e3-1e5 events; anything above this is corrupt metadata
 
+# ★ HDF5 FILE LOCKING OFF. The raw data lives on an exFAT volume, which has no real file
+# locking, and 12 chunks open the SAME .h5 read-only at the same moment. HDF5 1.10.4 then
+# intermittently fails with "bad symbol table node signature" on /meta and the unpacker derives a
+# garbage event range and calls LOG(fatal). It is a RACE, not corruption: h5ls reads /meta of the
+# very same files without complaint. It cost 12 of 104 runs on the first full pass.
+export HDF5_USE_FILE_LOCKING=FALSE
 set +u; source "$REPO/build/config.sh" >/dev/null 2>&1; set -u
 [[ -n "${VMCWORKDIR:-}" ]] || { echo "ERROR: config.sh did not set VMCWORKDIR" >&2; exit 1; }
 mkdir -p "$RECO" "$LOG" "$RECO/.chunk"
@@ -65,10 +71,30 @@ for run in "${RUNS[@]}"; do
 
    t0=$SECONDS
    # --- 1. how many events? probe once; the unpacker prints it during Init -------------------
+   # ★ THE `|| true` IS LOAD-BEARING. With `set -eo pipefail`, a probe that prints no
+   # "Run contains" line makes grep return 1, so the pipeline returns 1, so the ASSIGNMENT
+   # returns 1, and set -e kills the whole script -- before the `[[ -n "$nev" ]]` check below
+   # that exists to handle exactly that case. The guard was unreachable. That is how a 104-run
+   # pass silently stopped after 39 runs with no error message: run_0059's probe came back empty
+   # and the script simply exited, and the caller's `|| true` made it look like normal completion.
    nev=$(root -b -q "$HERE/unpackReco_C15d.C(\"$run\",1,false,\"$RECO/.chunk/probe_\",\"$RAW\",\"$PAR\",\"$GEO\")" 2>/dev/null \
-         | grep -oE "Run contains [0-9]+" | grep -oE "[0-9]+" | head -1)
+         | grep -oE "Run contains [0-9]+" | grep -oE "[0-9]+" | head -1) || true
    rm -f "$RECO/.chunk/probe_${run}_reco.root"
-   [[ -n "$nev" && "$nev" -gt 0 ]] || { echo "[$run] could not read the event count, skipping"; continue; }
+   if [[ -z "$nev" || "$nev" -le 0 ]]; then
+      # The probe printed no event count at all. Try the same /get recovery used for corrupt
+      # metadata before giving up -- two datasets per event (evt<N>_data, evt<N>_header).
+      echo "[$run] probe gave no event count -- counting /get datasets instead"
+      real=$(timeout 600 "$H5LS" "$raw/get" 2>/dev/null | wc -l) || true
+      real=$(( ${real:-0} / 2 ))
+      if (( real > 0 && real <= MAX_SANE_EVENTS )); then
+         echo "[$run] recovered: $real events from the dataset count"
+         nev=$real
+      else
+         echo "[$run] PROBE FAILED and unrecoverable -- skipping, continuing with the rest"
+         echo "$run" >> "$HERE/runs_probe_failed.txt"
+         continue
+      fi
+   fi
    # ★ SANITY-CHECK THE EVENT COUNT. Some files have corrupt metadata and the unpacker reports it
    # verbatim: run_0019 claims 127,979,076,285,538 events. Chunking on that asks for datasets like
    # evt95984350326776_header, which do not exist, and HDF5 prints a full multi-line error stack
@@ -80,7 +106,7 @@ for run in "${RUNS[@]}"; do
       # (evtN_data and evtN_header), so counting its children and halving gives the true count.
       # run_0019: metadata claims 1.3e14, /get has 14568 children = 7284 real events.
       echo "[$run] bad metadata ($nev events) -- counting /get datasets instead"
-      real=$(timeout 600 "$H5LS" "$raw/get" 2>/dev/null | wc -l)
+      real=$(timeout 600 "$H5LS" "$raw/get" 2>/dev/null | wc -l) || true
       real=$(( real / 2 ))
       if (( real > 0 && real <= MAX_SANE_EVENTS )); then
          echo "[$run] recovered: $real events from the dataset count"
@@ -114,6 +140,7 @@ for run in "${RUNS[@]}"; do
       root -b -q "$HERE/unpackReco_C15d.C(\"$run\",$this,false,\"$RECO/.chunk/$(printf c%02d_ "$c")\",\"$RAW\",\"$PAR\",\"$GEO\",20.0,15.0,7.5,kTRUE,kFALSE,\"\",30,0.0,2.85,$first)" 2>&1 \
          | head -c 50000000 >"$LOG/${run}_$(printf c%02d "$c").log" &
       pids+=($!)
+      sleep 0.4   # stagger the opens; simultaneous first-access is what trips the metadata cache
    done
    fail=0
    for p in "${pids[@]}"; do wait "$p" || fail=1; done
@@ -130,9 +157,22 @@ for run in "${RUNS[@]}"; do
       [[ -s "$f" ]] && parts+=("$f")
    done
    if (( fail )) || [[ ! -s "${parts[0]}" ]]; then
-      echo "[$run] CHUNK FAILED (see $LOG/${run}_c*.log)"
+      # RETRY ONCE, SERIALLY. The failure mode above is a concurrent-open race, so a single
+      # reader almost always succeeds where 12 did not. Slower, but it recovers the run instead
+      # of losing it -- and only the runs that actually failed pay the cost.
+      echo "[$run] chunked pass failed -- retrying serially (one reader)"
       rm -f "$RECO"/.chunk/c[0-9][0-9]_"${run}"_reco.root
-      continue
+      if root -b -q "$HERE/unpackReco_C15d.C(\"$run\",$nev,false,\"$RECO/.chunk/c00_\",\"$RAW\",\"$PAR\",\"$GEO\",20.0,15.0,7.5,kTRUE,kFALSE,\"\",30,0.0,2.85,0)" \
+            2>&1 | head -c 50000000 >"$LOG/${run}_serial.log" \
+         && [[ -s "$RECO/.chunk/c00_${run}_reco.root" ]]; then
+         parts=("$RECO/.chunk/c00_${run}_reco.root")
+         echo "[$run] serial retry OK"
+      else
+         echo "[$run] FAILED even serially (see $LOG/${run}_serial.log)"
+         rm -f "$RECO"/.chunk/c[0-9][0-9]_"${run}"_reco.root
+         echo "$run" >> "$HERE/runs_reco_failed.txt"
+         continue
+      fi
    fi
    if hadd -f "$RECO/.chunk/${run}_merged.root" "${parts[@]}" >"$LOG/${run}_hadd.log" 2>&1 \
       && [[ -s "$RECO/.chunk/${run}_merged.root" ]]; then
