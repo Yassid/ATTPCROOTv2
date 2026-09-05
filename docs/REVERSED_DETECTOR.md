@@ -145,23 +145,62 @@ more hits clear threshold at the long-drift end — and that is the opposite end
 each mode. The mean hit z therefore legitimately moves by tens of mm while the mapping is
 perfectly correct. It moves for the same reason the feature exists.
 
-Measured on 400 events of the 46Ar g.s. sample:
+Measured across the full field x pad-plane matrix, 400 events per arm — **8/8 PASS, 0 FAIL**:
 
-| | residual median | IQR | vertex-z correlation vs truth |
+| cell | residual, normal | residual, reversed | IQR |
 |---|---|---|---|
-| normal | +9.37 mm | 1.81 mm | **+0.967** (185/193 fits) |
-| reversed | −9.75 mm | 1.81 mm | **+0.967** (182/193 fits) |
+| 2.85 T, AT-TPC | +9.37 mm | −9.75 mm | 1.81 mm |
+| 2.85 T, 2 mm | +9.58 | −9.51 | 1.71 |
+| 3.9 T, AT-TPC | +9.65 | −9.77 | 1.83 |
+| 3.9 T, 2 mm | +9.83 | −9.56 | 1.65 |
 
-The residual is **flat against truth z** in both modes; a flipped mapping would slope at −2 and put
-the median hundreds of mm out. The ±9.4 mm is the peaking-time bias discussed above. The
-correlation column is the independent end-to-end check via `fitGenfitter_Ar46.C` +
-`ex_genfit_3Hed.C`: it must stay positive and the same size in both modes.
+The residual is **flat against truth z** in every cell; a flipped mapping would slope at −2 and put
+the median hundreds of mm out. The ±9.4 mm is the peaking-time bias discussed above. Independently,
+the genfit vertex-z correlation against truth is **+0.967 in both modes** (`fitGenfitter_Ar46.C` +
+`ex_genfit_3Hed.C`) — a sign error flips it. The positive control fires in every cell: the
+charge-weighted mean hit z moves by 40–50 mm as diffusion swaps ends.
 
-Positive control, printed by the same macro: the charge-weighted mean hit z moves
-526.9 → 477.2 mm as diffusion swaps ends. Zero movement would mean the flag never reached
-`AtClusterize`.
+`check_reverse_matrix.sh` runs the whole thing, including the regression below.
 
-## Normal running is unchanged by construction
+## Normal running is unchanged — measured, not just argued
+
+`check_reverse_matrix.sh` PART 1 re-runs a full 12 000-event production reconstruction with the
+current build and diffs it hit by hit against the product already on disk:
+
+```
+events compared      : 12000
+hits reference/new   : 386600 / 386600
+events with differing hit count : 0
+hits differing in position/charge: 0  (largest deviation 0)
+[IDENTICAL] normal-mode output is unchanged, hit for hit.
+```
+
+This is only a valid regression test because **the digitisation is reproducible**: nothing in the
+chain calls `SetSeed`, so `gRandom` keeps ROOT's default sequence and two runs over the same input
+draw identical diffusion throws and gain fluctuations. If a seed is ever introduced, this check
+silently stops being a regression test.
+
+The unit-test suite is unaffected: three `AtPropagatorTest` cases fail, and they fail identically
+with these six files reverted to their pre-change versions — pre-existing, unrelated to drift.
+
+## Two ways this broke things before it worked
+
+Both are fixed; they are recorded because the same shapes will recur.
+
+**An "optional" parameter read with `fill()` is not silent.** `paramList->fill()` on a par file
+without the entry prints `[ERROR] Could not find parameter ReverseDrift`, and
+`FairRuntimeDb::initContainers()` then reports an initialisation error — on every job using an old
+par, i.e. almost every job. A 12 000-event run died at event 3053 with no other explanation. Probe
+with `FairParamList::find()`, which returns nullptr silently, and only then `fill()`.
+
+**A new member must be APPENDED, never inserted.** The getters are inline, so a translation unit
+compiled against an older header keeps the old member offsets; inserting mid-class shifts every
+later member and that code then reads the wrong field with no error. `AtDigiPar` and `AtPSA` both
+carry streamers (`+` in their LinkDefs), so appending is also what ROOT schema evolution wants.
+**A full rebuild is required after touching these headers** — a partial one leaves modules such as
+`AtEventDisplay` and `AtUnpack` stale against them.
+
+## Normal running is unchanged by construction## Normal running is unchanged by construction
 
 Both edits are guarded so the normal path is the original expression:
 `AtPSA::CalculateZGeo` early-returns before the reversal, and `AtClusterize` selects the original

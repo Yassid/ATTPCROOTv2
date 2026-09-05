@@ -104,8 +104,15 @@ Bool_t AtDigiPar::getParams(FairParamList *paramList) // TODO Change all these p
       // OPTIONAL, AND IT MUST STAY OPTIONAL: every par file in the repository predates it, and a
       // missing entry has to mean "normal detector" rather than a fatal. Absence is the default,
       // so an old par keeps behaving exactly as it did.
-      if (!(paramList->fill("ReverseDrift", &fReverseDrift)))
-         fReverseDrift = 0;
+      //
+      // PROBE WITH find(), NOT WITH fill(). A failed fill() prints
+      //     [ERROR] Could not find parameter ReverseDrift
+      // and FairRuntimeDb::initContainers() then reports "Error occured during initialization" --
+      // an error line that no run produced before this parameter existed, on EVERY job using an
+      // old par, i.e. on almost every job. find() returns nullptr silently.
+      fReverseDrift = 0;
+      if (paramList->find("ReverseDrift") != nullptr)
+         paramList->fill("ReverseDrift", &fReverseDrift);
       if (fReverseDrift != 0)
          LOG(warn) << "*** REVERSED DETECTOR: beam enters through the PAD PLANE, drift length is "
                    << "z_beam instead of ZPadPlane - z_beam. Digitisation and PSA both follow this "

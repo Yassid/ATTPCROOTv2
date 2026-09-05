@@ -1,0 +1,87 @@
+################################################################################
+# 46Ar(3He,d)47K SIMULATION parameters -- active target, 3He + 5% CO2 at 300 torr.
+#
+# Derived from ATTPC.a1975_C16_sim.par. Only the gas block below differs; the pad plane,
+# electronics and field entries are the AT-TPC's own and are carried over unchanged.
+#
+# !! THIS IS A PROPOSAL SIMULATION: THERE IS NO DATA TO MATCH IT TO !!
+# For a1954/a1975 the digitisation parameters were established by matching simulated track width
+# and charge against a real data set. That anchor does not exist here, so the three entries below
+# are calculated or carried over, and each one that is not calculated is marked. Treat absolute
+# charge, absolute gain and anything derived from them (the dE/dx axis of the PID plane, in
+# particular) as provisional until they are settled.
+#
+#   Density   CALCULATED. 3He + 5% CO2 (molar) at 300 torr, 293.15 K: mean molar mass
+#             0.95*3.0160293 + 0.05*44.009 = 5.0657 g/mol over 24.0552 L/mol at 1 atm scaled by
+#             300/760 gives 8.3128e-5 g/cm3 = 0.0831 mg/cm3. Same number as the He3CO2_300torr
+#             media.geo entry and the geometry, by construction.
+#
+#   EIonize   ESTIMATED, and the least safe number here. 0.95*41.3 (He) + 0.05*33.0 (CO2) = 40.9
+#             eV. That linear mix IGNORES PENNING TRANSFER, which is not a small correction in
+#             He/CO2: helium metastables lie well above the CO2 ionisation potential, so the
+#             effective W can fall substantially below the linear estimate, raising the electron
+#             yield per unit dE. It sets the charge scale, hence the dE/dx axis the PID gate is
+#             drawn on. Settle it with Magboltz before drawing conclusions from absolute charge.
+#
+#   Fano      CARRIED OVER for helium (0.17). Affects the width of the charge distribution, not
+#             its scale.
+#
+#   DriftVelocity  PLACEHOLDER at the a1975 value of 1.30 cm/us. It is NOT the drift velocity of
+#             this gas, which nobody has computed yet -- 3He + 5% CO2 at 300 torr and 5000 V/m is
+#             E/p = 0.167 V/cm/torr, a different mixture and a different reduced field from the H2
+#             it was measured in. Two consequences, of opposite severity:
+#               harmless -- digitising and reconstructing with the same value is an identity,
+#                           z -> TB -> z cancels exactly, so track shapes and the acceptance are
+#                           unaffected;
+#               NOT harmless -- diffusion smearing goes as sqrt(2*D*z/v_d), so the z resolution,
+#                           and through it the Q-value resolution this proposal is about, scales
+#                           with it. Run Magboltz for this mixture before quoting a resolution.
+#
+#   CoefL/CoefT, Gain, GETGain  CARRIED OVER from a1975 (and there from a1954, where they were
+#             tuned against H2 data). Helium diffuses more than hydrogen at the same field and a
+#             He mixture does not hold the same gain, so none of these three describe this gas.
+#
+# Parameters used throughout ATTPCROOT software
+# Format:
+# parameter_name:parameter_type(Int_t-integer, Double_t-double) parameter_value
+# AtDigiPar
+################################################################################
+[AtDigiPar]
+PadPlaneX:Int_t                864   # mm
+PadPlaneZ:Int_t               1344   # mm
+PadSizeX:Int_t                   8   # mm
+PadSizeZ:Int_t                  12   # mm
+PadRows:Int_t                  108   #
+PadLayers:Int_t                112   #
+AnodeWirePlaneY:Double_t     -4.05   # mm
+GroundWirePlaneY:Double_t     -8.1   # mm
+GatingWirePlaneY:Double_t      -14   # mm
+EField:Double_t                 14000   # V/m -- the field this v_d was computed AT. The old par said 5000 V/m
+NumTbs:Int_t                   512
+SamplingRate:Int_t                  6   # MHz; 512 tb / 6 MHz = 85.3 us, and the 100 cm drift takes 75.8 us
+DriftVelocity:Double_t         1.3194   # cm/us  MAGBOLTZ, 3He+5%CO2 300 torr 50 V/cm, B = 3.9 T (+-0.06%)
+DriftLength:Double_t          1000   # mm //ATTPC : 1000 - Prototype : 500
+YDivider:Int_t                1000   # Full drift length will be divided by this number when finding cluster
+GasFile:Int_t                    2
+PadPlaneFile:Int_t               3
+PadShapeFile:Int_t               4   # might not be needed because the shape is simply rectangle
+BField:Double_t                   3.9   # Tesla
+TiltAng:Double_t               0.0   # Degrees
+TB0:Int_t                       98   # Time Bucket reference for micromegas position (DEPRECATED)
+LorentzAngle:Double_t          0.0   # Lorentz Angle
+TBEntrance:Int_t               480   # Beam position at detector entrance in TB
+ZPadPlane:Double_t          1000.0   # Position of the micromegas pad plane
+ReverseDrift:Int_t                  1   # beam enters through the PAD PLANE; drift = z_beam. See docs/REVERSED_DETECTOR.md.
+Density:Double_t            0.0831   # mg/cm3. 3He + 5% CO2 at 300 torr, 293.15 K
+ThetaPad:Double_t            110.9   # AT-TPC pad plane rotation
+ThetaRot:Double_t              0.0   # Second Lorentz Angle
+GasPressure:Double_t           300   # Gas pressure in torr
+EIonize:Double_t              40.9   # eV. ESTIMATED, ignores Penning transfer -- see the header
+Fano:Double_t                 0.17   # Fano factor, helium
+CoefL:Double_t             0.00059833   # cm^2/us  from D_L = 301.2 um/sqrt(cm)
+CoefT:Double_t            5.73892e-05   # cm^2/us  from D_T = 93.3 um/sqrt(cm)
+Gain:Double_t               150000   # NOT tuned for this gas -- carried over from a1975
+GETGain:Double_t              1000   # Gain of the GET electronics in fC
+PeakingTime:Int_t              720   # Electronic peaking time in ns
+MaxRange:Double_t            500.0   # Maximum range from Beam energy in mm
+################################################################################

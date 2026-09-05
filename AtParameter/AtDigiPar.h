@@ -21,21 +21,6 @@ private:
    // Detector geometry
    Int_t fTBEntrance{};
    Double_t fZPadPlane{};
-   /// REVERSED DETECTOR: the beam enters through the PAD PLANE and leaves through the cathode,
-   /// so ionisation electrons drift *with* the beam instead of against it. 0 = normal (default).
-   ///
-   /// This is the ONLY thing that changes. The digi-frame hit z keeps its meaning in both modes
-   /// (z_digi = ZPadPlane - z_beam, i.e. 0 at the pad plane), so the hit cloud, the pattern
-   /// recognition, the fitters' z_lab = ZPadPlane - z_digi and every downstream convention are
-   /// untouched. What differs is the DRIFT LENGTH of a given point: normal drift = ZPadPlane -
-   /// z_beam, reversed drift = z_beam. That changes the diffusion each hit picks up and which
-   /// time bucket it lands in, and nothing else.
-   ///
-   /// IT LIVES IN THE PAR, NOT IN A TASK SETTER, ON PURPOSE. Digitisation (AtClusterize) and
-   /// reconstruction (AtPSA) must agree about which end the pad plane is on; a setter on each
-   /// would let a job digitise reversed and reconstruct normal, which produces a plausible
-   /// mirrored z rather than an error. Sharing one par makes that disagreement impossible.
-   Int_t fReverseDrift{0};
 
    // Gas properties
    Double_t fEIonize{};       //< effective ionization energy [eV]
@@ -51,6 +36,29 @@ private:
    Int_t fSamplingRate{};
    Double_t fGETGain{};  //< Gain from get electronics in fC
    Int_t fPeakingTime{}; //< Peaking time of the electronics in ns
+
+   /// APPENDED DELIBERATELY, AND ANY FUTURE MEMBER MUST BE TOO. The getters are inline, so a
+   /// module compiled against an older header keeps the OLD member offsets; inserting a member
+   /// mid-class shifts every member after it and such a module then reads the wrong field with no
+   /// error. Appending leaves existing offsets alone, and it is also what ROOT schema evolution
+   /// wants for a class with a streamer (AtDigiPar is `+` in AtParLinkDef.h). A full rebuild is
+   /// still required after changing this header.
+   ///
+   /// REVERSED DETECTOR: the beam enters through the PAD PLANE and leaves through the cathode,
+   /// so ionisation electrons drift *with* the beam instead of against it. 0 = normal (default).
+   ///
+   /// This is the ONLY thing that changes. The digi-frame hit z keeps its meaning in both modes
+   /// (z_digi = ZPadPlane - z_beam, i.e. 0 at the pad plane), so the hit cloud, the pattern
+   /// recognition, the fitters' z_lab = ZPadPlane - z_digi and every downstream convention are
+   /// untouched. What differs is the DRIFT LENGTH of a given point: normal drift = ZPadPlane -
+   /// z_beam, reversed drift = z_beam. That changes the diffusion each hit picks up and which
+   /// time bucket it lands in, and nothing else.
+   ///
+   /// IT LIVES IN THE PAR, NOT IN A TASK SETTER, ON PURPOSE. Digitisation (AtClusterize) and
+   /// reconstruction (AtPSA) must agree about which end the pad plane is on; a setter on each
+   /// would let a job digitise reversed and reconstruct normal, which produces a plausible
+   /// mirrored z rather than an error. Sharing one par makes that disagreement impossible.
+   Int_t fReverseDrift{0};
 
 public:
    // Constructors and Destructors

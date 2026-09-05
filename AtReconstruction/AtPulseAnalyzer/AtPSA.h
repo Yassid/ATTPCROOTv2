@@ -52,11 +52,15 @@ protected:
    Double_t fWindowTB{0};       //< time bucket of the window plane (z=0 reference)
    Double_t fMicromegasTB{10};  //< time bucket of the micromegas/pad plane (z=length reference)
    Double_t fDetLength{1000};   //< detector active length in mm
-   /// Beam enters through the pad plane (AtDigiPar::ReverseDrift). Read from the par, never set
-   /// by hand: digitisation and PSA must agree, and a mismatch mirrors z instead of erroring.
-   Bool_t fReverseDrift{kFALSE};
    // Optional per-pad time-bucket offset (electronics-timing calibration; padNum -> offset in TB).
    std::map<Int_t, Double_t> fPadTimeOffset; //!< transient: loaded per run, not persisted
+   /// Beam enters through the pad plane (AtDigiPar::ReverseDrift). Read from the par, never set
+   /// by hand: digitisation and PSA must agree, and a mismatch mirrors z instead of erroring.
+   ///
+   /// APPENDED at the end of the members on purpose -- AtPSA has a streamer (`+` in
+   /// AtReconstructionLinkDef.h) and inserting mid-class shifts every later member's offset for
+   /// any translation unit still compiled against the old header.
+   Bool_t fReverseDrift{kFALSE};
 
    using HitVector = std::vector<std::unique_ptr<AtHit>>;
 
