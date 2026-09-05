@@ -90,10 +90,25 @@ void compare_reco_3Hed(TString refFile, TString newFile, Double_t tol = 1e-6, In
    printf("  events with differing hit count : %ld\n", nCountMismatch);
    printf("  hits differing in position/charge: %ld  (largest deviation %.3g)\n", nPosMismatch, worst);
 
-   if (NA == NB && nCountMismatch == 0 && nPosMismatch == 0)
-      printf("\n  [IDENTICAL] normal-mode output is unchanged, hit for hit.\n\n");
+   // CONTENT AND COVERAGE ARE SEPARATE VERDICTS, and conflating them gives a false alarm.
+   // Comparing a deliberately short run against a full reference is a normal thing to do -- a
+   // 400-event spot check against a 12000-event product -- and the first version of this macro
+   // called that DIFFER even with every compared hit matching exactly. What makes a regression is
+   // the CONTENT of the events that were actually compared; a differing event count is a caveat
+   // about how much was covered, and is only itself a failure if the shorter run was supposed to
+   // be complete (which this macro cannot know).
+   if (nCountMismatch == 0 && nPosMismatch == 0)
+      printf("\n  [IDENTICAL] over the %lld events compared, the output is unchanged hit for hit.\n", N);
    else
-      printf("\n  [DIFFER] the two reconstructions are NOT the same. If no deliberate change to the\n"
-             "  normal path was intended, this is a regression -- check the guard in\n"
-             "  AtPSA::CalculateZGeo and the ternary in AtClusterize::getCurrentPointLocation.\n\n");
+      printf("\n  [DIFFER] the two reconstructions are NOT the same over the %lld events compared.\n"
+             "  If no deliberate change to the normal path was intended, this is a regression --\n"
+             "  check the guard in AtPSA::CalculateZGeo and the ternary in\n"
+             "  AtClusterize::getCurrentPointLocation.\n",
+             N);
+   if (NA != NB)
+      printf("  [COVERAGE] the files hold %lld and %lld events, so only the first %lld were compared.\n"
+             "  That is expected for a short spot check against a full product; it is a REGRESSION\n"
+             "  only if the shorter run was meant to be complete.\n",
+             NA, NB, N);
+   printf("\n");
 }
