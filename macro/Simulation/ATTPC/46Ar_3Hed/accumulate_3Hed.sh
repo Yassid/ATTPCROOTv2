@@ -42,6 +42,7 @@ case "$(awk -v b="$BT" 'BEGIN{printf "%.2f", b}')" in
    2.00) PAR=ATTPC.46Ar_3Hed_sim_B20.par  ;;
    2.85) PAR=ATTPC.46Ar_3Hed_sim_B285.par ;;
    3.80) PAR=ATTPC.46Ar_3Hed_sim_B38.par  ;;
+   3.90) PAR=ATTPC.46Ar_3Hed_sim_B39.par  ;;
    *) echo "no par for B = $BT T -- add it to make_3Hed_pars.sh and re-run that script"; exit 2 ;;
 esac
 [ -f "$REPO/parameters/$PAR" ] || { echo "MISSING PAR $PAR -- run make_3Hed_pars.sh"; exit 2; }

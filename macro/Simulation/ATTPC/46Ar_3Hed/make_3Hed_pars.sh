@@ -77,5 +77,10 @@ echo "Magboltz-derived pars at E = $EPOINT V/cm = $EFIELD_VM V/m, sampling $SAMP
 emit 2.0  B20
 emit 2.85 B285
 emit 3.8  B38
+# 3.9 T is the upper field of the two-field x two-pad-plane matrix (2026-09-04). It is a
+# SEPARATE Magboltz point, not the 3.8 T one relabelled: D_T is what the field acts on here and
+# 3.8 -> 3.9 T moves it, so reusing the 3.8 numbers would reintroduce exactly the frozen-transport
+# defect this script exists to remove.
+emit 3.9  B39
 echo
 echo "NOTE: ATTPC.46Ar_3Hed_sim_B38.par is OVERWRITTEN -- the old one held the H2 placeholders."
