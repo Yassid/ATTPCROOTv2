@@ -54,6 +54,7 @@ void AtPSA::Init()
    fEField = fPar->GetEField();
    fZk = fPar->GetZPadPlane();
    fEntTB = (Int_t)fPar->GetTBEntrance();
+   fReverseDrift = fPar->GetReverseDrift();
 
    auto timeToPadPlane = fZk / (fDriftVelocity * 1e-2); //[ns]
    fTB0 = fEntTB - timeToPadPlane / fTBTime;
@@ -66,6 +67,8 @@ void AtPSA::Init()
    std::cout << " ==== Entrance TB : " << fEntTB << std::endl;
    std::cout << " ==== Pad plane TB : " << fTB0 << std::endl;
    std::cout << " ==== NumTbs : " << fNumTbs << std::endl;
+   std::cout << " ==== Drift direction : "
+             << (fReverseDrift ? "REVERSED (beam enters through the pad plane)" : "normal") << std::endl;
 }
 
 void AtPSA::SetSimulatedEvent(TClonesArray *MCSimPointArray)
@@ -93,7 +96,23 @@ Double_t AtPSA::CalculateZ(Double_t peakIdx)
 
 Double_t AtPSA::CalculateZGeo(Double_t peakIdx)
 {
-   return fZk - (fEntTB - peakIdx) * fTBTime * fDriftVelocity / 100.;
+   // (fEntTB - peakIdx) * mm-per-TB is (fullDrift - drift), so this returns the DRIFT LENGTH:
+   // z = 0 at the pad plane and z = ZPadPlane at the far end of the volume. That is the digi
+   // frame the whole chain is built on, and the fitters undo it as z_lab = ZPadPlane - z_digi.
+   const Double_t zDrift = fZk - (fEntTB - peakIdx) * fTBTime * fDriftVelocity / 100.;
+   if (!fReverseDrift)
+      return zDrift;
+
+   // REVERSED DETECTOR. The measurement is still the drift length -- the electronics cannot tell
+   // us anything else -- but the beam now enters AT the pad plane, so a point's distance along the
+   // beam is the drift length itself rather than its complement. Returning ZPadPlane - drift keeps
+   // z_digi meaning exactly what it meant before (0 at the pad plane, ZPadPlane at the far end
+   // *of the beam path*), so the fitters' z_lab = ZPadPlane - z_digi still recovers the distance
+   // along the beam and NOTHING downstream needs to know which way round the detector is.
+   //
+   // Do not "simplify" this by flipping z_lab in the fitters instead: that convention lives in
+   // AtGenfitter, AtFitterUKF, AtGenfit and several macros, and they would drift apart.
+   return fZk - zDrift;
 }
 
 void AtPSA::LoadPadTimeOffsets(const char *csvFile)
@@ -130,9 +149,24 @@ Double_t AtPSA::CalibrateZ(Double_t peakIdx, Int_t padNum)
       if (it != fPadTimeOffset.end())
          peakIdx += it->second; // per-pad electronics-timing correction
    }
-   if (fWindowTB > 0) // Spyral-style two-point calibration
-      return (fWindowTB - peakIdx) / (fWindowTB - fMicromegasTB) * fDetLength;
-   return CalculateZGeo(peakIdx); // par-file geometric calibration
+   if (fWindowTB > 0) {
+      // Spyral-style two-point calibration.
+      //
+      // !! THIS BRANCH USES THE OPPOSITE z CONVENTION FROM CalculateZGeo, AND ALWAYS HAS. !!
+      // It returns 0 at the WINDOW and fDetLength at the micromegas, i.e. distance along the beam
+      // (Spyral's own frame); CalculateZGeo returns 0 at the PAD PLANE, i.e. the drift length.
+      // Since the fitters apply z_lab = ZPadPlane - z_digi, which is correct for CalculateZGeo,
+      // a chain that enabled SetSpyralZ would get a MIRRORED z_lab. No production macro does --
+      // only a1975/D2_UKF/_archive/unpackPSA_compare.C, whose own comment says it enables this
+      // "so z is comparable to Spyral (no flip)". Left as it is rather than silently changed,
+      // because flipping it would move every number any user of that branch has taken.
+      const Double_t zSpy = (fWindowTB - peakIdx) / (fWindowTB - fMicromegasTB) * fDetLength;
+      // In reversed running the two frames coincide (beam entry IS the pad plane), so this branch
+      // needs no flip -- and applying one would make it disagree with CalculateZGeo differently
+      // than it already does.
+      return zSpy;
+   }
+   return CalculateZGeo(peakIdx); // par-file geometric calibration (drift frame, reversal-aware)
 }
 
 void AtPSA::TrackMCPoints(std::multimap<Int_t, std::size_t> &map, AtHit &hit)

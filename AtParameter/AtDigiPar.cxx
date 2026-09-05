@@ -100,6 +100,16 @@ Bool_t AtDigiPar::getParams(FairParamList *paramList) // TODO Change all these p
          LOG(fatal) << "Cannot find PeakingTime parameter!";
          return kFALSE;
       }
+
+      // OPTIONAL, AND IT MUST STAY OPTIONAL: every par file in the repository predates it, and a
+      // missing entry has to mean "normal detector" rather than a fatal. Absence is the default,
+      // so an old par keeps behaving exactly as it did.
+      if (!(paramList->fill("ReverseDrift", &fReverseDrift)))
+         fReverseDrift = 0;
+      if (fReverseDrift != 0)
+         LOG(warn) << "*** REVERSED DETECTOR: beam enters through the PAD PLANE, drift length is "
+                   << "z_beam instead of ZPadPlane - z_beam. Digitisation and PSA both follow this "
+                   << "par, so they cannot disagree. ***";
    }
 
    return kTRUE;
@@ -117,6 +127,7 @@ void AtDigiPar::putParams(FairParamList *paramList)
 
    paramList->add("TBEntrance", fTBEntrance);
    paramList->add("ZPadPlane", fZPadPlane);
+   paramList->add("ReverseDrift", fReverseDrift);
 
    paramList->add("EIonize", fEIonize);
    paramList->add("Fano", fFano);

@@ -28,6 +28,7 @@ void AtClusterize::GetParameters(const AtDigiPar *fPar)
    fCoefL = fPar->GetCoefDiffusionLong();  // [cm^2/us]
 
    fDetPadPlane = fPar->GetZPadPlane(); //[mm]
+   fReverseDrift = fPar->GetReverseDrift();
 
    LOG(info) << "  Ionization energy of gas: " << fEIonize << " MeV";
    LOG(info) << "  Fano factor of gas: " << fFano;
@@ -35,6 +36,8 @@ void AtClusterize::GetParameters(const AtDigiPar *fPar)
    LOG(info) << "  Longitudal coefficient of diffusion: " << fCoefL;
    LOG(info) << "  Transverse coefficient of diffusion: " << fCoefT;
    LOG(info) << "  Position of the pad plane (Z): " << fDetPadPlane;
+   LOG(info) << "  Drift direction: " << (fReverseDrift ? "REVERSED (beam enters through the pad plane)"
+                                                        : "normal (beam enters through the window)");
 }
 
 void AtClusterize::FillTClonesArray(TClonesArray &array, std::vector<SimPointPtr> &vec)
@@ -125,7 +128,19 @@ uint64_t AtClusterize::getNumberOfElectronsGenerated(const AtMCPoint &mcPoint)
 
 AtClusterize::XYZPoint AtClusterize::getCurrentPointLocation(const AtMCPoint &mcPoint)
 {
-   auto zInCm = fDetPadPlane / 10. - mcPoint.GetZ();
+   // THE ONE LINE THE REVERSED DETECTOR CHANGES.
+   //
+   // mcPoint.GetZ() is measured along the beam from where it enters the drift volume (0 at the
+   // window end of the geometry, ZPadPlane at the far end). The drift length is the distance from
+   // the ionisation to the PAD PLANE, so which end the pad plane is on is the whole difference:
+   //
+   //   normal   : pad plane at the far end  -> drift = ZPadPlane - z_beam
+   //   reversed : pad plane at the near end -> drift = z_beam
+   //
+   // Nothing else here moves. The point is stored as (x, y, driftTime) and AtPulse works purely
+   // in drift time, so the digitisation downstream of this line is identical in both modes; what
+   // changes is how much diffusion a given track picks up and which time bucket it lands in.
+   auto zInCm = fReverseDrift ? mcPoint.GetZ() : (fDetPadPlane / 10. - mcPoint.GetZ());
    auto driftTime = TMath::Abs(zInCm) / fVelDrift; // us
 
    return {mcPoint.GetX() * 10., mcPoint.GetY() * 10., driftTime};

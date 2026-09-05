@@ -33,6 +33,7 @@ protected:
    double fCoefT{};       //!< Transversal diffusion coefficient. [cm^2/us]
    double fCoefL{};       //!< Longitudinal diffusion coefficient. [cm^2/us]
    double fDetPadPlane{}; //!< Position of the pad plane with respect to the entrance [mm]
+   bool fReverseDrift{false}; //!< Beam enters through the pad plane; drift = z_beam (AtDigiPar)
 
    static thread_local XYZPoint fPrevPoint; //!< The previous point we recorded charge.
    static thread_local int fTrackID;        //!< The current track ID

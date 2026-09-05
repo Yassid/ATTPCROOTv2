@@ -21,6 +21,21 @@ private:
    // Detector geometry
    Int_t fTBEntrance{};
    Double_t fZPadPlane{};
+   /// REVERSED DETECTOR: the beam enters through the PAD PLANE and leaves through the cathode,
+   /// so ionisation electrons drift *with* the beam instead of against it. 0 = normal (default).
+   ///
+   /// This is the ONLY thing that changes. The digi-frame hit z keeps its meaning in both modes
+   /// (z_digi = ZPadPlane - z_beam, i.e. 0 at the pad plane), so the hit cloud, the pattern
+   /// recognition, the fitters' z_lab = ZPadPlane - z_digi and every downstream convention are
+   /// untouched. What differs is the DRIFT LENGTH of a given point: normal drift = ZPadPlane -
+   /// z_beam, reversed drift = z_beam. That changes the diffusion each hit picks up and which
+   /// time bucket it lands in, and nothing else.
+   ///
+   /// IT LIVES IN THE PAR, NOT IN A TASK SETTER, ON PURPOSE. Digitisation (AtClusterize) and
+   /// reconstruction (AtPSA) must agree about which end the pad plane is on; a setter on each
+   /// would let a job digitise reversed and reconstruct normal, which produces a plausible
+   /// mirrored z rather than an error. Sharing one par makes that disagreement impossible.
+   Int_t fReverseDrift{0};
 
    // Gas properties
    Double_t fEIonize{};       //< effective ionization energy [eV]
@@ -48,6 +63,8 @@ public:
 
    Int_t GetTBEntrance() const { return fTBEntrance; }
    Double_t GetZPadPlane() const { return fZPadPlane; }
+   /// True when the beam enters through the pad plane (see fReverseDrift).
+   Bool_t GetReverseDrift() const { return fReverseDrift != 0; }
 
    Double_t GetEIonize() const { return fEIonize; }
    Double_t GetFano() const { return fFano; }
