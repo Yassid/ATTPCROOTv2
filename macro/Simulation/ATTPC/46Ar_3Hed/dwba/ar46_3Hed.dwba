@@ -1,0 +1,7 @@
+# 46Ar(3He,d)47K at 13 MeV/u -- the three states of the proposal.
+# ELab is written per nucleon of the PROJECTILE (3He), which is the same 13 MeV/u as the
+# 46Ar beam: MeV/u is frame-independent, so 13MeV/u = 39 MeV of 3He in normal kinematics.
+# Potentials: p = Pang (2009) 3He in, A = An & Cai (2006) deuteron out.
+46Ar(3He,d)47K  0+  1s1/2  1/2+  0     13MeV/u  pA
+46Ar(3He,d)47K  0+  0d3/2  3/2+  0.36  13MeV/u  pA
+46Ar(3He,d)47K  0+  0f7/2  7/2-  2.02  13MeV/u  pA

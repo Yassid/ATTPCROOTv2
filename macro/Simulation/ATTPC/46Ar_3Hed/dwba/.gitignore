@@ -1,0 +1,5 @@
+# Ptolemy's full text log is regenerable from the deck via run_dwba.sh; only the parsed angular
+# distributions in dat/ are tracked, since the macros read those. Same convention as the a1954
+# ptolemy tree. (*.out is already ignored repo-wide by the "Executables" rule, which is why only
+# the .err files ever showed up here.)
+outputs/
