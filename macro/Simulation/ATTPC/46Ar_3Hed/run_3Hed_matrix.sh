@@ -71,9 +71,19 @@ echo $$ > "$DRVLOCK/pid"
 trap 'rm -rf "$DRVLOCK"' EXIT INT TERM
 
 # field : par suffix : sim directory (generation lives here, shared by both pad arms)
+# REV=1 runs the REVERSED detector: beam in through the pad plane, which is the configuration
+# this experiment will actually use. The par suffix and the output directory move TOGETHER -- a
+# reversed reconstruction must never be able to land in a normal-mode output directory, because
+# the two differ only in diffusion and would be indistinguishable afterwards.
+REVSFX=""
+if [ "${REV:-0}" != "0" ]; then
+  REVSFX="_rev"
+  echo "*** REVERSED DETECTOR RUN: pars *_rev.par, outputs ar46_3hed_mx_*_rev_* ***"
+fi
+
 FIELDS=(
-  "2.85:B285:/mnt/f/ar46_3hed_OLD_2.85T_placeholder"
-  "3.9:B39:/mnt/f/ar46_3hed_gen_B39"
+  "2.85:B285${REVSFX}:/mnt/f/ar46_3hed_OLD_2.85T_placeholder"
+  "3.9:B39${REVSFX}:/mnt/f/ar46_3hed_gen_B39"
 )
 # pad tag : padSize_mm argument (<=0 keeps the real AT-TPC plane)
 PADS=( "attpc:-1" "2mm:2.0" )
@@ -112,7 +122,8 @@ EOF
 
   if [ ! -f "$OUT/$J.marker" ]; then
     say "$SFX/$PTAG $J accumulate (B = $BT T, pads $PARG)"
-    "$HERE/accumulate_3Hed.sh" "$ST" "$SEED" "$NEV" "$OUT" "$BT" "$PARG" "$SIMDIR" \
+    PAR_OVERRIDE="ATTPC.46Ar_3Hed_sim_${SFX}.par" \
+      "$HERE/accumulate_3Hed.sh" "$ST" "$SEED" "$NEV" "$OUT" "$BT" "$PARG" "$SIMDIR" \
        >> "$MASTER" 2>&1 || { say "$SFX/$PTAG $J ACCUMULATE_FAILED"; return 1; }
   fi
 

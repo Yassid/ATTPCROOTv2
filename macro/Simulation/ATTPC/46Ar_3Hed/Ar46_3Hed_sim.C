@@ -48,7 +48,14 @@
 void Ar46_3Hed_sim(Int_t nEvents = 2000, Double_t thetaMinCM = 15.0, Double_t thetaMaxCM = 80.0,
                    TString mcEngine = "TGeant4", Double_t bFieldkG = -28.5,
                    TString outFile = "./data/attpcsim.root", Double_t resEx = 0.0, UInt_t seed = 0,
-                   Double_t Ebeam = 598.0)
+                   Double_t Ebeam = 598.0,
+                   // FORWARD TELESCOPE, OFF BY DEFAULT. Adding a module changes the geometry, so
+                   // switching it on makes new sims differ from every sim already on disk. It is
+                   // opt-in for exactly that reason: an unqualified rerun must reproduce what is
+                   // there. Pass kTRUE to place the two DSSDs behind the cathode -- only useful
+                   // for the REVERSED detector, where the beam leaves through the cathode.
+                   Bool_t withTelescope = kFALSE,
+                   TString telescopeGeo = "Ar46_telescope_v1.0.root")
 {
    // Parallel jobs with no seed produce byte-identical events, so "more statistics" would be the
    // same sample copied. seed = 0 keeps ROOT's time-based default; pass a distinct value per job.
@@ -75,6 +82,16 @@ void Ar46_3Hed_sim(Int_t nEvents = 2000, Double_t thetaMinCM = 15.0, Double_t th
    FairDetector *ATTPC = new AtTpc("ATTPC", kTRUE);
    ATTPC->SetGeometryFileName("ATTPC_He3CO2_300torr.root"); // 3He + 5% CO2, 300 torr, 8.3128e-5 g/cm3
    run->AddModule(ATTPC);
+
+   // The dE-E telescope is a SEPARATE active module producing AtSiPoint, the same arrangement the
+   // HELIOS macros use for AtSiArray. Its geometry (geometry/Ar46_telescope.C) places the two
+   // DSSDs at z = 105 and 106 cm, i.e. past the 100 cm drift volume, so it cannot overlap the TPC.
+   if (withTelescope) {
+      FairDetector *tel = new AtSiArray("Ar46Telescope", kTRUE);
+      tel->SetGeometryFileName(telescopeGeo);
+      run->AddModule(tel);
+      std::cout << "  FORWARD TELESCOPE ON: " << telescopeGeo << " (AtSiPoint branch will be written)\n";
+   }
 
    // Field sign follows the a1954/a1975 lesson: generate in the DATA convention so the sense of
    // rotation matches, otherwise anything inferring direction from curvature rejects most of the

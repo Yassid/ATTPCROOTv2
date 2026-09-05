@@ -45,6 +45,14 @@ case "$(awk -v b="$BT" 'BEGIN{printf "%.2f", b}')" in
    3.90) PAR=ATTPC.46Ar_3Hed_sim_B39.par  ;;
    *) echo "no par for B = $BT T -- add it to make_3Hed_pars.sh and re-run that script"; exit 2 ;;
 esac
+# EXPLICIT PAR OVERRIDE, for configurations that are not selected by field alone -- the reversed
+# detector being the case this was added for (ATTPC.46Ar_3Hed_sim_B285_rev.par is the same field as
+# ATTPC.46Ar_3Hed_sim_B285.par and the case statement above cannot tell them apart). Unset, the
+# field-based default below is used exactly as before, so every existing caller is unaffected.
+if [ -n "${PAR_OVERRIDE:-}" ]; then
+   PAR="$PAR_OVERRIDE"
+   echo "[cfg] par OVERRIDDEN to $PAR"
+fi
 [ -f "$REPO/parameters/$PAR" ] || { echo "MISSING PAR $PAR -- run make_3Hed_pars.sh"; exit 2; }
 mkdir -p "$OUT" "$SIMDIR"
 set +u; source "$REPO/build/config.sh" >/dev/null 2>&1; set -u
