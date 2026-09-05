@@ -244,7 +244,15 @@ Bool_t AtSiArray::CheckIfSensitive(std::string name)
 {
 
    TString tsname = name;
-   if (tsname.Contains("silicon")) {
+   // "CsI" is accepted alongside "silicon" so a dE-E-CsI telescope can be built as ONE module.
+   // This is purely additive: no geometry currently driven by AtSiArray contains a CsI volume
+   // (the HELIOS arrays are silicon only), and APOLLO's CsI is read out by AtApollo, not by this
+   // class -- so nothing that works today changes behaviour.
+   //
+   // NOTE the shape of this test: sensitivity is decided by a SUBSTRING of the volume name. A
+   // volume named anything else is silently non-sensitive -- it still builds, still draws, still
+   // logs "Constructing Si Array geometry", and records nothing at all, with no error.
+   if (tsname.Contains("silicon") || tsname.Contains("CsI")) {
       LOG(info) << " Si Array geometry: Sensitive volume found: " << tsname;
       return kTRUE;
    }

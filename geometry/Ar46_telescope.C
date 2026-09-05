@@ -8,27 +8,24 @@
 /// so the exit aperture can be large without removing pads -- which is what makes this telescope
 /// possible. It sits just past the end of the drift volume and catches the heavy residual.
 ///
-/// THICKNESSES: 20 um dE + 200 um E, SET BY YASSID (2026-09-05). Si_forward_telescope.C's
-/// 500 um dE is far too thick for this beam whichever stopping model you believe.
+/// THE STACK IS THE REAL HARDWARE (Yassid, 2026-09-05):
 ///
-/// !! THE STOPPING POWER HERE IS UNRESOLVED -- DO NOT TREAT THE NUMBERS BELOW AS SETTLED. !!
-/// Two calculations disagree by a factor ~4.5 for a 461 MeV 47K in silicon:
+///     dE    500 um silicon DSSD
+///     E    1000 um silicon DSSD
+///     CsI  array of 18 x 18 mm elements, 25 mm deep
 ///
-///     AtELossCATIMA        60 MeV in 100 um   (range ~570 um)
-///     GEANT4, as measured in this simulation      279 MeV in 100 um   (stops in ~150-200 um)
+/// which is also what geometry/Si_forward_telescope.C had for the silicon -- my earlier 20/200
+/// suggestion came from my own stopping-power estimate and was wrong. The CsI is there precisely
+/// because ions punch through 1.5 mm of silicon, so the CsI is not optional decoration; it is
+/// where the remaining energy is measured.
 ///
-/// A scaling of this simulation's own gas energy loss (the beam loses 96 MeV over 8.3e-3 g/cm2,
-/// i.e. ~11600 MeV/(g/cm2), scaled to Si by Z/A) lands near the GEANT4 value -- but Yassid has
-/// flagged the argument as not right and it is to be revisited. So the thicknesses here are a
-/// DECISION, not a derivation, and the CATIMA/GEANT4 discrepancy is an open item that also
-/// affects AtELossCATIMA wherever else this analysis uses it.
-///
-/// The CsI of the original is dropped -- nothing gets that far under either model.
-///
-/// WHY A dE-E TELESCOPE AT ALL: Z TAGGING. The residual (Z = 19) and the unreacted beam (Z = 18)
-/// arrive at the same place with similar energies, and dE goes as Z^2, so they separate by
-/// (19/18)^2 - 1 = 11.4 % in dE. That ratio is INDEPENDENT of the dE thickness, so the thickness
-/// is chosen purely on signal size and punch-through, as above.
+/// !! AN OPEN DISCREPANCY, RECORDED SO IT IS NOT REDISCOVERED. !! GEANT4 in this simulation has
+/// a 461 MeV 47K depositing 279 MeV in only 100 um of silicon, i.e. stopping in ~150-200 um,
+/// which cannot be reconciled with a stack that deliberately puts CsI behind 1.5 mm of silicon.
+/// AtELossCATIMA disagrees with GEANT4 by a factor ~4.5 on the same case. Something in that chain
+/// is wrong and it has NOT been resolved -- so read the deposits this geometry produces as a
+/// measurement to be checked against the real detector, not as a prediction to trust. The same
+/// question hangs over AtELossCATIMA wherever else this analysis uses it.
 ///
 /// SIZE AND STANDOFF. The residual stays within 3.33 deg of the axis over the proposal's
 /// theta_cm 15-80 deg window, but the vertex is spread over the whole metre of gas, so the lever
@@ -66,6 +63,7 @@ const TString FileName1 = geoVersion + "_geomanager.root";
 
 const TString MediumSi = "silicon";
 const TString MediumVacuum = "vacuum4";
+const TString MediumCsI = "CsI";
 
 TGeoManager *gGeoMan = new TGeoManager("Ar46Tel", "Ar46Tel");
 
@@ -75,8 +73,15 @@ const Double_t kYSize = 10.0;  ///< active height [cm]
 const Double_t kDriftEnd = 100.0; ///< z of the cathode = end of the drift volume [cm]
 const Double_t kGap = 5.0;     ///< clearance between the cathode and the first DSSD [cm]
 const Double_t kZFront = kDriftEnd + kGap;
-const Double_t kDEThick = 0.0020; ///< dE DSSD,  20 um  (set by Yassid; see the header)
-const Double_t kEThick = 0.0200;  ///< E  DSSD, 200 um  (set by Yassid; see the header)
+const Double_t kDEThick = 0.0500; ///< dE DSSD,  500 um
+const Double_t kEThick = 0.1000;  ///< E  DSSD, 1000 um
+// CsI array: 18 x 18 mm entrance face, 25 mm deep. 5 x 5 covers 90 x 90 mm, i.e. the 10 x 10 cm
+// silicon in front of it -- the element size is the hardware, the 5 x 5 count is an assumption
+// and is the first thing to change if the real array differs.
+const Int_t kNCsI = 5;            ///< elements per side
+const Double_t kCsIFace = 1.8;    ///< entrance face [cm]
+const Double_t kCsIDepth = 2.5;   ///< depth [cm]
+const Double_t kCsIGap = 0.5;     ///< gap between the E DSSD and the CsI front face [cm]
 const Double_t kSep = 1.0;        ///< gap between the two DSSDs [cm]
 
 void create_materials_from_media_file();
@@ -120,7 +125,10 @@ void Ar46_telescope()
    std::cout << "\n  wrote " << FileName << " and " << FileName1 << "\n"
              << "  dE  DSSD: " << kDEThick * 1e4 << " um at z = " << kZFront << " cm\n"
              << "  E   DSSD: " << kEThick * 1e4 << " um at z = " << kZFront + kSep << " cm\n"
-             << "  active  : " << kXSize << " x " << kYSize << " cm, "
+             << "  CsI     : " << kNCsI << " x " << kNCsI << " of " << kCsIFace * 10 << " x "
+             << kCsIFace * 10 << " mm, " << kCsIDepth * 10 << " mm deep, front face at z = "
+             << kZFront + kSep + kEThick + kCsIGap << " cm\n"
+             << "  Si active: " << kXSize << " x " << kYSize << " cm, "
              << kGap << " cm beyond the cathode at z = " << kDriftEnd << " cm\n\n";
 
    // Opens the OpenGL viewer when run interactively (root -l). Skipped under -b so the batch
@@ -145,12 +153,14 @@ void create_materials_from_media_file()
    // media past Ar90CF4_250mbar has hung FairGeoMedia and taken the machine out of memory before.
    FairGeoMedium *silicon = geoMedia->getMedium("silicon");
    FairGeoMedium *vacuum4 = geoMedia->getMedium("vacuum4");
-   if (!silicon || !vacuum4) {
-      std::cerr << "MISSING MEDIUM: silicon or vacuum4 not found in media.geo\n";
+   FairGeoMedium *csi = geoMedia->getMedium("CsI");
+   if (!silicon || !vacuum4 || !csi) {
+      std::cerr << "MISSING MEDIUM: silicon, vacuum4 or CsI not found in media.geo\n";
       return;
    }
    geoBuild->createMedium(silicon);
    geoBuild->createMedium(vacuum4);
+   geoBuild->createMedium(csi);
 }
 
 TGeoVolume *create_detector()
@@ -176,6 +186,30 @@ TGeoVolume *create_detector()
    TGeoVolume *E = gGeoManager->MakeBox("silicon_Ar46_E", silicon, kXSize / 2, kYSize / 2, kEThick / 2);
    gGeoMan->GetVolume(geoVersion)->AddNode(E, 0, new TGeoTranslation(0.0, 0.0, kZFront + kSep + kEThick / 2));
    E->SetLineColor(kAzure + 2);
+
+   // --- CsI array ------------------------------------------------------------------------------
+   // Each element is its own volume and its own node, so AtSiPoint carries which element fired and
+   // the array is position sensitive at the element level without any strip decoding.
+   //
+   // The name must contain "CsI": AtSiArray::CheckIfSensitive tests substrings of the volume name,
+   // and anything it does not recognise is silently non-sensitive.
+   TGeoMedium *csi = gGeoMan->GetMedium(MediumCsI);
+   if (!csi) {
+      std::cerr << "MISSING MEDIUM: CsI not found -- the array will not be built\n";
+      return dE;
+   }
+   const Double_t zCsI = kZFront + kSep + kEThick + kCsIGap;
+   for (Int_t ix = 0; ix < kNCsI; ++ix) {
+      for (Int_t iy = 0; iy < kNCsI; ++iy) {
+         const Double_t x = (ix - (kNCsI - 1) / 2.0) * kCsIFace;
+         const Double_t y = (iy - (kNCsI - 1) / 2.0) * kCsIFace;
+         TGeoVolume *el = gGeoManager->MakeBox(Form("CsI_Ar46_%d_%d", ix, iy), csi, kCsIFace / 2,
+                                               kCsIFace / 2, kCsIDepth / 2);
+         el->SetLineColor(kYellow - 9);
+         gGeoMan->GetVolume(geoVersion)->AddNode(el, ix * kNCsI + iy,
+                                                 new TGeoTranslation(x, y, zCsI + kCsIDepth / 2));
+      }
+   }
 
    return dE;
 }

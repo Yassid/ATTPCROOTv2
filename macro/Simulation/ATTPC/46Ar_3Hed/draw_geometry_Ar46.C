@@ -68,7 +68,9 @@ void draw_geometry_Ar46(TString outPng = "plots/geometry_Ar46.png")
          const auto &b = boxes[i];
          const bool tel = (i >= n0);
          if (b.z1 < zlo || b.z0 > zhi) continue;
-         int col = tel ? (b.name.Contains("dE") ? kGreen + 2 : kAzure + 2) : kGray + 1;
+         int col = !tel ? kGray + 1
+                        : b.name.Contains("_dE") ? kGreen + 2
+                        : b.name.Contains("CsI") ? kOrange - 3 : kAzure + 2;
          // A SOLID volume (rmin = 0) spans -rmax..+rmax as ONE band. Only a hollow one (a vessel
          // shell, rmin > 0) is two bands. Drawing the solid case as a single positive band was
          // wrong and made the DSSDs look like half-detectors.
@@ -93,7 +95,7 @@ void draw_geometry_Ar46(TString outPng = "plots/geometry_Ar46.png")
 
    c->cd(1);
    gPad->SetGridx(); gPad->SetGridy(); gPad->SetLeftMargin(0.07); gPad->SetRightMargin(0.02);
-   drawFrame(-5, 115, 30, "full setup -- REVERSED: beam enters at the pad plane (z=0), leaves through the cathode (z=100)");
+   drawFrame(-5, 118, 30, "full setup -- REVERSED: beam enters at the pad plane (z=0), leaves through the cathode (z=100)");
    {
       auto *t = new TLatex(); t->SetTextSize(0.055);
       t->SetTextColor(kGray + 3); t->DrawLatex(30, 22, "AT-TPC drift volume (gas)");
@@ -103,7 +105,7 @@ void draw_geometry_Ar46(TString outPng = "plots/geometry_Ar46.png")
 
    c->cd(2);
    gPad->SetGridx(); gPad->SetGridy(); gPad->SetLeftMargin(0.07); gPad->SetRightMargin(0.02);
-   drawFrame(99.5, 107, 7, "zoom on the telescope -- the two DSSDs (dE green, E blue)");
+   drawFrame(99.5, 110.5, 7, "zoom -- dE 500 um (green), E 1000 um (blue), CsI array 18x18x25 mm (orange)");
 
    gSystem->mkdir("plots", kTRUE);
    c->SaveAs(outPng);
