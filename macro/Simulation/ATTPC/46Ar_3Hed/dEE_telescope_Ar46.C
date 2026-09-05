@@ -15,7 +15,11 @@
 /// Everything is keyed on the MC-truth track, so the species is known rather than inferred; this
 /// is a detector-response plot, not a demonstration of particle identification. A real PID plot
 /// would have to work without that.
-void dEE_telescope_Ar46(TString files, TString labels, TString outPng = "plots/dEE_telescope_Ar46.png")
+/// @param dEum  dE thickness in um, FOR THE AXIS LABEL ONLY. It is not read from the geometry, so
+///              passing the wrong value mislabels the plot without changing anything it shows --
+///              which is exactly what happened when a 20 um run was drawn as "500 um".
+void dEE_telescope_Ar46(TString files, TString labels, TString outPng = "plots/dEE_telescope_Ar46.png",
+                        Double_t dEum = 500.)
 {
    gSystem->Load("libAtSimulationData.so");
    gStyle->SetOptStat(0);
@@ -25,7 +29,10 @@ void dEE_telescope_Ar46(TString files, TString labels, TString outPng = "plots/d
    std::unique_ptr<TObjArray> al(labels.Tokenize(","));
    const int NF = af->GetEntries();
 
-   auto *hAll = new TH2D("hAll", "", 200, 0, 700, 200, 0, 700);
+   // y range follows the dE thickness: a 20 um layer deposits ~40 MeV and would be an
+   // invisible line at the bottom of a 700 MeV axis. Frame on the data.
+   const double yHi = (dEum > 200.) ? 700. : 120.;
+   auto *hAll = new TH2D("hAll", "", 200, 0, 700, 200, 0, yHi);
    std::vector<TGraph *> gr;
    int cols[4] = {kBlack, kRed + 1, kAzure + 2, kGreen + 3};
 
@@ -81,8 +88,8 @@ void dEE_telescope_Ar46(TString files, TString labels, TString outPng = "plots/d
 
    c->cd(1);
    gPad->SetGridx(); gPad->SetGridy(); gPad->SetLeftMargin(0.13); gPad->SetRightMargin(0.03);
-   TH1F *fr = gPad->DrawFrame(0, 0, 700, 700);
-   fr->SetTitle("^{47}K in the telescope;E after the #DeltaE (E + CsI)  [MeV];#DeltaE  (500 #mum Si)  [MeV]");
+   TH1F *fr = gPad->DrawFrame(0, 0, 700, yHi);
+   fr->SetTitle(Form("^{47}K in the telescope;E after the #DeltaE (E + CsI)  [MeV];#DeltaE  (%.0f #mum Si)  [MeV]", dEum));
    fr->GetYaxis()->SetTitleOffset(1.3);
    auto *lg = new TLegend(0.45, 0.72, 0.95, 0.90);
    lg->SetBorderSize(0); lg->SetFillStyle(0); lg->SetTextSize(0.036);
@@ -99,7 +106,7 @@ void dEE_telescope_Ar46(TString files, TString labels, TString outPng = "plots/d
    c->cd(2);
    gPad->SetGridx(); gPad->SetGridy(); gPad->SetLeftMargin(0.13); gPad->SetRightMargin(0.13);
    gPad->SetLogz();
-   hAll->SetTitle("all states together;E after the #DeltaE (E + CsI)  [MeV];#DeltaE  (500 #mum Si)  [MeV]");
+   hAll->SetTitle(Form("all states together;E after the #DeltaE (E + CsI)  [MeV];#DeltaE  (%.0f #mum Si)  [MeV]", dEum));
    hAll->GetYaxis()->SetTitleOffset(1.3);
    hAll->Draw("colz");
 

@@ -57,9 +57,9 @@
 
 #include <iostream>
 
-const TString geoVersion = "Ar46_telescope_v1.0";
-const TString FileName = geoVersion + ".root";
-const TString FileName1 = geoVersion + "_geomanager.root";
+TString geoVersion = "Ar46_telescope_v1.0";
+TString FileName = geoVersion + ".root";
+TString FileName1 = geoVersion + "_geomanager.root";
 
 const TString MediumSi = "silicon";
 const TString MediumVacuum = "vacuum4";
@@ -73,8 +73,8 @@ const Double_t kYSize = 10.0;  ///< active height [cm]
 const Double_t kDriftEnd = 100.0; ///< z of the cathode = end of the drift volume [cm]
 const Double_t kGap = 5.0;     ///< clearance between the cathode and the first DSSD [cm]
 const Double_t kZFront = kDriftEnd + kGap;
-const Double_t kDEThick = 0.0500; ///< dE DSSD,  500 um
-const Double_t kEThick = 0.1000;  ///< E  DSSD, 1000 um
+Double_t kDEThick = 0.0500; ///< dE DSSD,  500 um  (overridden by the argument)
+Double_t kEThick = 0.1000;  ///< E  DSSD, 1000 um  (overridden by the argument)
 // CsI array: 18 x 18 mm entrance face, 25 mm deep. 5 x 5 covers 90 x 90 mm, i.e. the 10 x 10 cm
 // silicon in front of it -- the element size is the hardware, the 5 x 5 count is an assumption
 // and is the first thing to change if the real array differs.
@@ -87,8 +87,19 @@ const Double_t kSep = 1.0;        ///< gap between the two DSSDs [cm]
 void create_materials_from_media_file();
 TGeoVolume *create_detector();
 
-void Ar46_telescope()
+/// @param dEum   dE silicon thickness in um. Default 500 = the hardware.
+/// @param Eum    E  silicon thickness in um. Default 1000 = the hardware.
+/// @param tag    appended to the geometry name, so alternative stacks get their OWN files instead
+///               of overwriting the hardware one. Empty keeps Ar46_telescope_v1.0.
+void Ar46_telescope(Double_t dEum = 500., Double_t Eum = 1000., TString tag = "")
 {
+   kDEThick = dEum * 1e-4;
+   kEThick = Eum * 1e-4;
+   if (tag.Length()) {
+      geoVersion = "Ar46_telescope_" + tag;
+      FileName = geoVersion + ".root";
+      FileName1 = geoVersion + "_geomanager.root";
+   }
    create_materials_from_media_file();
 
    gGeoMan = (TGeoManager *)gROOT->FindObject("FAIRGeom");
