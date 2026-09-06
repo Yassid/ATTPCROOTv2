@@ -66,7 +66,17 @@ void fitGenfitter_a1975_deuterium(TString fileName = "run_0016", Long64_t nEvent
                                   // Set findC2Max from the MEASURED distribution -- median
                                   // chi2/ndf is 0.09 here (1.48 backward), so the usual cut of 5
                                   // never fires.
-                                  Bool_t findLongest = kFALSE, Double_t findC2Max = 0)
+                                  Bool_t findLongest = kFALSE, Double_t findC2Max = 0,
+                                  // Keep the PRA's cluster order instead of AtGenfitter's z sort.
+                                  // The z sort is valid only while the helix advances in z faster
+                                  // than the z resolution; on a1975 (d,p) backward tracks it often
+                                  // does not (1.42 mm per cluster against 1.84 mm for one time
+                                  // bucket), so the sort orders NOISE and genfit integrates energy
+                                  // loss along a path the particle never flew.
+                                  // KNOWN NOT UNIFORMLY SAFE (2026-09-05): of five tracks tested,
+                                  // one lost its fit entirely and one swung theta by 100 deg. That
+                                  // loss rate is what a full-run comparison has to measure.
+                                  Bool_t useClusterOrder = kFALSE)
 {
    gSystem->Load("libAtReconstruction.so");
    FairLogger::GetLogger()->SetLogScreenLevel("WARNING");
@@ -154,6 +164,11 @@ void fitGenfitter_a1975_deuterium(TString fileName = "run_0016", Long64_t nEvent
                 << " % of the clusters FROM THE VERTEX END (floor 8 clusters). "
                    "Judge this on Ex, NOT on chi2 -- chi2 falls monotonically as points are "
                    "removed.\033[0m\n";
+   }
+   if (useClusterOrder) {
+      fitter->SetUseClusterOrder(kTRUE);
+      std::cout << "  \033[1;35mCLUSTER ORDER KEPT: AtGenfitter's z sort is OFF, the PRA order is "
+                   "the measurement order\033[0m\n";
    }
    if (findLongest && findC2Max > 0) {
       fitter->SetFindLongest(kTRUE, findC2Max);
