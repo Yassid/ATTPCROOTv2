@@ -22,6 +22,7 @@
 /// unstoppable from inside the session. See reference-gate-drawers.
 
 #include <algorithm>
+#include <numeric>
 #include <fstream>
 #include <vector>
 
@@ -207,18 +208,51 @@ public:
       // stopping end, while the vertex is the last cluster). Reordering the array itself means the
       // index window, the box selection, the markers and the fit all speak the same order, and
       // index 0 means the vertex everywhere.
+      // *** THE ARRAY IS PUT INTO AtGenfitter's OWN MEASUREMENT ORDER (addSeq) ***
+      // It used to be the STORED cluster order with an optional reversal. That was wrong for an
+      // index window, because the stored order is AtPRA's greedy nearest-neighbour walk, which
+      // must consume every cluster and therefore APPENDS the ones it skipped at the end. Measured
+      // on 797 long tracks: z total-variation / z span is 1.06 below 100 clusters but 2.20 at
+      // 100-300, 3.64 at 300-600 -- i.e. above ~300 clusters the walk crosses the z range three or
+      // four times, and 58 % of long tracks U-turn. Reversing such an array puts the LEFTOVERS
+      // first: on run_0016 e31316 the first 100 clusters after reversal were two disconnected
+      // clumps at z ~ 530 and z ~ 280, not the vertex region at all. A window of "clusters 0 to N"
+      // then means nothing, and cannot be compared with what FIND truncates.
+      //
+      // AtGenfitter ignores the cluster order entirely (unless SetUseClusterOrder): it sorts by
+      // z_lab = 1000 - z_cluster ascending, and with backwardSeedFix a PRA-backward track is fitted
+      // from the far end of that sort. Reproducing exactly that here makes index 0 genfit's FIRST
+      // MEASUREMENT POINT, so an index window is the same prefix FIND would take.
       if (fVertexFirst && fVertexFirst->IsOn()) {
+         const double gt = fTrack.GetGeoTheta() * TMath::RadToDeg();
+         const bool backwardSeed = std::isfinite(gt) && gt >= 90.0;
+         std::vector<int> ord(fClusters.size());
+         std::iota(ord.begin(), ord.end(), 0);
+         // z_lab ascending == z_cluster DESCENDING
+         std::sort(ord.begin(), ord.end(), [&](int a, int b) {
+            return fClusters[a].GetPosition().Z() > fClusters[b].GetPosition().Z(); });
+         if (backwardSeed) std::reverse(ord.begin(), ord.end());
+         std::vector<AtHitCluster> re; re.reserve(ord.size());
+         for (int i : ord) re.push_back(fClusters[i]);
+         fClusters = std::move(re);
+         // how badly was the stored order broken? same metric as zuturn_dp.C, for context.
+         double tv = 0, zlo = 1e30, zhi = -1e30;
+         for (size_t i = 0; i < fClusters.size(); ++i) {
+            double z = fClusters[i].GetPosition().Z();
+            zlo = std::min(zlo, z); zhi = std::max(zhi, z);
+         }
          int v[3] = {0, 0, 0};
          const bool revPhys = guiNeedsReverse(fClusters, v);
-         const double gt = fTrack.GetGeoTheta() * TMath::RadToDeg();
-         const bool revFw = std::isfinite(gt) && gt >= 90.0;
-         const bool rev = (fDirPhys && fDirPhys->IsOn()) ? revPhys : revFw;
-         if (rev) std::reverse(fClusters.begin(), fClusters.end());
-         fLog->AddLine(Form("  cluster order: %s  (radius %+d, charge %+d, |xy| %+d ; framework %s,"
-                            " physics %s, GeoTheta %.1f)%s",
-                            rev ? "REVERSED so cluster 0 is the vertex" : "kept: cluster 0 already the vertex",
-                            v[1], v[2], v[0], revFw ? "reverse" : "keep", revPhys ? "reverse" : "keep",
-                            gt, (revFw == revPhys) ? "" : "   <<< framework and physics DISAGREE"));
+         fLog->AddLine(Form("  cluster order: PRODUCTION (z sort%s) -- index 0 is genfit's first "
+                            "measurement.  GeoTheta %.1f -> backwardSeed %s ; physics vote says %s",
+                            backwardSeed ? " + backwardSeedFix reversal" : "", gt,
+                            backwardSeed ? "ON" : "off", revPhys ? "reverse" : "keep"));
+         fLog->AddLine(Form("  z now runs %.1f -> %.1f mm monotonically (the stored PRA walk order "
+                            "is discarded; above ~300 clusters it U-turns on ~85%% of tracks)",
+                            fClusters.front().GetPosition().Z(), fClusters.back().GetPosition().Z()));
+      } else {
+         fLog->AddLine("  cluster order: RAW STORED (AtPRA greedy walk) -- an index window here is "
+                       "NOT a contiguous piece of track on long tracks");
       }
       fI0->SetNumber(0);
       fI1->SetNumber(fClusters.size() - 1);
@@ -723,7 +757,7 @@ private:
       add(par, new TGLabel(par, "longest chi2<"), 10);
       fC2Max = new TGNumberEntry(par, 5.0, 5, -1, TGNumberFormat::kNESRealOne); add(par, fC2Max, 1);
       auto *bLong = new TGTextButton(par, "find"); bLong->Connect("Clicked()", "DpFitGui", this, "OnLongest()"); add(par, bLong, 1);
-      fVertexFirst = new TGCheckButton(par, "cluster 0 = vertex"); fVertexFirst->SetOn();
+      fVertexFirst = new TGCheckButton(par, "production order (z-sort)"); fVertexFirst->SetOn();
       fVertexFirst->Connect("Clicked()", "DpFitGui", this, "OnReorder()"); add(par, fVertexFirst, 8);
       fDirPhys = new TGCheckButton(par, "dir from physics");
       fDirPhys->Connect("Clicked()", "DpFitGui", this, "OnReorder()"); add(par, fDirPhys, 2);
