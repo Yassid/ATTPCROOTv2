@@ -607,11 +607,28 @@ AtFittedTrack *AtGenfitter::GetFittedTrack(AtTrack *track, AtFitMetadata * /*fit
    // so the usual cut of 5 would never fire.
    int findPct = 100;
    if (fFindLongest && fFindC2Max > 0) {
-      const double c2n0 = (ndf > 0) ? chi2 / ndf : -1.0;
-      if (!ok || c2n0 < 0 || c2n0 >= fFindC2Max) {
-         const int nFull = static_cast<int>(addSeq.size());
-         bool found = false;
-         for (double pct : {90.0, 75.0, 50.0, 25.0}) {
+      const double step = (fFindStepPct > 0.5) ? fFindStepPct : 5.0;
+      const double floorPct = (fFindMinPct > 0) ? fFindMinPct : 25.0;
+      // ladder start: never above 100-step (full length is handled separately, not as a rung)
+      const double topPct = std::min(100.0 - step, (fFindMaxPct > 0) ? fFindMaxPct : 100.0 - step);
+      const int nFull = static_cast<int>(addSeq.size());
+      const double c2n0 = (ok && ndf > 0) ? chi2 / ndf : -1.0;
+
+      if (fFindMode == 1 && ok && c2n0 >= 0 && c2n0 < fFindC2Max) {
+         // FULL LENGTH ALREADY PASSES. Keep it: it is the longest prefix and it is under the
+         // limit, so it has the most information AND acceptable quality. Nothing shorter can be
+         // preferred on chi2 alone -- a smaller chi2/ndf below the limit is not a better
+         // measurement, just fewer points.
+         findPct = 100;
+      } else if (fFindMode == 1) {
+         // --- FULL LENGTH FAILED: scan the ladder ----------------------------------------------
+         // Prefer the LONGEST rung that gets under c2Max. Only if NOTHING gets under it does the
+         // minimum chi2/ndf decide, as a fallback so a hopeless track still returns its best
+         // available fit rather than the full-length divergence.
+         int bestPct = -1;                       // longest passing
+         double bestC2 = 1e18; int minPct = 100; // fallback: outright minimum
+         if (c2n0 >= 0) { bestC2 = c2n0; minPct = 100; }
+         for (double pct = topPct; pct >= floorPct - 1e-9; pct -= step) {
             const int m = static_cast<int>(std::lround(nFull * pct / 100.0));
             if (m < fTruncMinClusters)
                break;
@@ -619,23 +636,35 @@ AtFittedTrack *AtGenfitter::GetFittedTrack(AtTrack *track, AtFitMetadata * /*fit
             if (!doFit())
                continue;
             const double c2n = (ndf > 0) ? chi2 / ndf : -1.0;
-            if (c2n >= 0 && c2n < fFindC2Max) {
-               findPct = static_cast<int>(pct);
-               found = true;
-               ok = true;
+            if (c2n < 0)
+               continue;
+            if (c2n < fFindC2Max && bestPct < 0) bestPct = static_cast<int>(pct); // first = longest
+            if (c2n < bestC2) { bestC2 = c2n; minPct = static_cast<int>(pct); }
+         }
+         findPct = (bestPct > 0) ? bestPct : minPct;
+         // refit the winner: the loop leaves its LAST attempt in the fitter, which would
+         // otherwise be returned instead of the chosen one.
+         const int mBest = (findPct >= 100) ? nUse
+                                            : static_cast<int>(std::lround(nFull * findPct / 100.0));
+         fillCand(mBest);
+         ok = doFit();
+      } else if (!ok || c2n0 < 0 || c2n0 >= fFindC2Max) {
+         // --- LONGEST PASSING (default) --------------------------------------------------------
+         bool found = false;
+         for (double pct = topPct; pct >= floorPct - 1e-9; pct -= step) {
+            const int m = static_cast<int>(std::lround(nFull * pct / 100.0));
+            if (m < fTruncMinClusters)
                break;
-            }
+            fillCand(m);
+            if (!doFit())
+               continue;
+            const double c2n = (ndf > 0) ? chi2 / ndf : -1.0;
+            if (c2n >= 0 && c2n < fFindC2Max) { findPct = static_cast<int>(pct); found = true; ok = true; break; }
          }
-         if (!found) {
-            // nothing passed: restore the full-length fit rather than keeping the last, shortest
-            // attempt -- silently returning a 25 % fit because no prefix passed would be the worst
-            // of both, a heavily truncated track with no quality guarantee behind it.
-            fillCand(nUse);
-            ok = doFit();
-            findPct = 100;
-         }
+         if (!found) { fillCand(nUse); ok = doFit(); findPct = 100; }
       }
    }
+   fLastFindPct = findPct;
 
    if (!ok && !fNoMatEffects && fMatEffectsFallback) {
       // material-effects fit failed (e.g. a stopping multi-turn spiral whose RK

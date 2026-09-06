@@ -165,7 +165,28 @@ public:
       auto trks = ev->GetTrackArray();
       for (auto &tr : trks)
          if (tr.GetTrackID() == fTid) { fTrack = tr; fClusters = *tr.GetHitClusterArray(); }
+      // --- the STORED fit: what the production (and FIND) actually produced for this track ---
+      fStoredPts.clear(); fStoredKE = fStoredTh = fStoredC2 = fStoredVxy = -1; fStoredNpts = 0;
+      for (auto &sft : ev->GetFittedTracks()) {
+         if (!sft || sft->GetTrackID() != fTid) continue;
+         auto &sk = sft->GetKinematicsXtr();
+         double sndf = sft->GetTrackMetadata()->GetNdf(), sc2 = sft->GetTrackMetadata()->GetChi2();
+         auto sv = sft->GetVertex();
+         fStoredKE = sk.kineticEnergy; fStoredTh = sk.theta * TMath::RadToDeg();
+         fStoredC2 = (sndf > 0) ? sc2 / sndf : -1;
+         fStoredVxy = std::hypot(sv.X(), sv.Y());
+         for (auto &m : sft->GetSmoothedPositions())
+            fStoredPts.push_back({m.X(), m.Y(), 1000.0 - m.Z()});   // -> cluster frame
+         fStoredNpts = (int)fStoredPts.size();
+         break;
+      }
       if (fClusters.empty()) { fLog->AddLine("track not found"); return; }
+      if (fStoredKE > 0)
+         fLog->AddLine(Form("  STORED fit (%s): KE %.3f  theta %.2f  chi2/ndf %.3f  vtx|xy| %.1f  pts %d",
+                            gSystem->BaseName(fGfDir.Data()), fStoredKE, fStoredTh, fStoredC2,
+                            fStoredVxy, fStoredNpts));
+      else
+         fLog->AddLine("  STORED fit: none in this production for this track");
 
       // Replay AtPRA's theta determination on the UNTOUCHED hit array, before any reordering
       // below -- pane 4 must show what the production PRA saw, not what this GUI rearranged.
@@ -420,6 +441,10 @@ public:
                auto *sN = new TMarker(0,0,21); sN->SetMarkerColor(kOrange+7); sN->SetMarkerSize(1.3);
                lg->AddEntry(s0, "genfit point 0  (vertex end)", "p");
                lg->AddEntry(sN, "genfit last point  (far end)", "p");
+               auto *lS = new TGraph(2); lS->SetLineColor(kGreen+2); lS->SetLineWidth(3);
+               auto *lL = new TGraph(2); lL->SetLineColor(kRed+1); lL->SetLineWidth(2); lL->SetLineStyle(2);
+               lg->AddEntry(lS, "STORED production fit (what FIND chose)", "l");
+               lg->AddEntry(lL, "live refit in this window (no FIND)", "l");
                lg->Draw();
             }
          }
@@ -461,11 +486,21 @@ public:
                jl->SetLineColor(kRed); jl->SetLineWidth(2); jl->SetLineStyle(2); jl->Draw("L same");
             }
          }
+         // THE STORED PRODUCTION FIT (green): what FIND actually chose and what the physics was
+         // built from. Drawn UNDER the live refit so the two are visibly distinct -- if they
+         // differ, the window is telling you the production did something the GUI would not.
+         if (fStoredPts.size() > 1) {
+            auto *gs = new TGraph();
+            for (size_t i = 0; i < fStoredPts.size(); ++i)
+               gs->SetPoint(i, getv(fStoredPts[i], ax[pane]), getv(fStoredPts[i], ay[pane]));
+            gs->SetLineColor(kGreen + 2); gs->SetLineWidth(3); gs->SetLineStyle(1);
+            gs->Draw("L same");
+         }
          if (fFitPts.size() > 1) {
             auto *gf = new TGraph();
             for (size_t i = 0; i < fFitPts.size(); ++i)
                gf->SetPoint(i, getv(fFitPts[i], ax[pane]), getv(fFitPts[i], ay[pane]));
-            gf->SetLineColor(kRed + 1); gf->SetLineWidth(2); gf->Draw("L same");
+            gf->SetLineColor(kRed + 1); gf->SetLineWidth(2); gf->SetLineStyle(2); gf->Draw("L same");
          }
       }
 
@@ -722,6 +757,12 @@ private:
    TFile *fFile = nullptr;
    AtTrack fTrack;
    PraTheta fPra;   //<! AtPRA's arc-vs-z construction, recomputed for the theta pane
+   //<! THE FIT AS STORED IN THE PRODUCTION FILE -- i.e. what FIND actually chose. The GUI's own
+   //<! Refit() is a LIVE full-length fit and never applies FIND, so without this the window shows
+   //<! a fit the production never made, identically whichever gfDir it is pointed at.
+   std::vector<std::array<double,3>> fStoredPts;
+   double fStoredKE{-1}, fStoredTh{-1}, fStoredC2{-1}, fStoredVxy{-1};
+   int fStoredNpts{0};
    std::vector<AtHitCluster> fClusters;
    std::vector<std::array<double,3>> fFitPts;
    std::vector<std::tuple<TString,Long64_t,int>> fList;

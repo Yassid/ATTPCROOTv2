@@ -110,7 +110,33 @@ public:
    /// the full-length fit is restored. Default OFF.
    /// Set c2Max from the MEASURED chi2 distribution: with measSigma 4 mm the median chi2/ndf is
    /// 0.09 (1.48 backward), so the production cut of 5 would never fire.
-   void SetFindLongest(Bool_t on, Double_t c2Max) { fFindLongest = on; fFindC2Max = c2Max; }
+   /// stepPct/minPct set the ladder: prefixes are tried at 100-step, 100-2*step, ... down to
+   /// minPct, and the FIRST (i.e. LONGEST) one passing c2Max is kept. A 5 % step costs up to
+   /// 15 extra fits on a failing track against 4 for the old 90/75/50/25, so it is only paid by
+   /// tracks that fail at full length.
+   /// maxPct is where the LADDER starts. The full-length fit is always tried first and kept if it
+   /// is already under c2Max, so maxPct < 100 does not skip full length -- it skips the rungs just
+   /// below it, which are the ones a long track is least likely to be rescued by.
+   void SetFindLongest(Bool_t on, Double_t c2Max, Double_t stepPct = 5.0, Double_t minPct = 25.0,
+                       Double_t maxPct = 95.0)
+   { fFindLongest = on; fFindC2Max = c2Max; fFindStepPct = stepPct; fFindMinPct = minPct;
+     fFindMaxPct = maxPct; }
+
+   /// FIND selection mode. EXPERIMENT SPECIFIC -- which is right depends on the channel, so it is
+   /// an option and the default preserves the original behaviour.
+   ///   0 = LONGEST PASSING (default). Fit at full length; if it converges with chi2/ndf < c2Max
+   ///       keep it and stop. Only failing tracks walk the ladder, so clean tracks cost nothing.
+   ///   1 = SCAN ALL, MINIMUM chi2/ndf. Every rung including 100 % is fitted and the best chi2/ndf
+   ///       wins. Costs the full ladder on EVERY track.
+   ///       Justified because chi2/ndf is NOT monotonic in prefix length -- measured on
+   ///       run_0016 e11488 it has a real minimum at 75 % (chi2/ndf 42.4 -> 5.1 -> 9.7 -> 184.6),
+   ///       so a full-length fit that merely PASSES a threshold can hide a much better one a few
+   ///       rungs down. On a well-behaved track the KE barely moves across the ladder
+   ///       (2.79-2.83 MeV over 30-100 % on run_0020 e9789), so scanning costs little there.
+   void SetFindMode(Int_t mode) { fFindMode = mode; }
+   Int_t GetFindMode() const { return fFindMode; }
+   /// Percentage FIND actually kept for the last fitted track (100 = full length).
+   Int_t GetLastFindPct() const { return fLastFindPct; }
 
    /// Back-extrapolate the vertex-end state to the beam axis before reading position and
    /// momentum off it. genfit's getFittedState() with no argument is the FIRST MEASUREMENT
@@ -363,6 +389,11 @@ private:
    Int_t fTruncMinClusters{8};   //<! floor, so a percentage can never starve a short track
    Bool_t fFindLongest{kFALSE};  //<! refit failing tracks at 90/75/50/25 %, keep longest passing
    Double_t fFindC2Max{0};       //<! the chi2/ndf threshold FIND tests against
+   Double_t fFindStepPct{5.0};   //<! ladder step in percent
+   Double_t fFindMinPct{25.0};   //<! shortest prefix FIND will try
+   Double_t fFindMaxPct{95.0};   //<! longest LADDER rung (full length is tried separately)
+   Int_t fFindMode{0};           //<! 0 = longest passing, 1 = scan all and take min chi2
+   Int_t fLastFindPct{100};      //<! what FIND kept on the last track, so it is not lost
    Bool_t fBackExtrapToAxis{kFALSE};   // extrapolate the vertex-end state to the beam axis (see setter)
    std::unique_ptr<AtTools::AtELossModel> fManualELoss; // optional hand-applied dE/dx over the vertex gap
    Bool_t fMatEffectsFallback{kTRUE};  // retry a failed matFX fit without material effects (flagged; see setter)

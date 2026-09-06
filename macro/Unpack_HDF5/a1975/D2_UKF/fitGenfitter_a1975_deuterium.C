@@ -76,7 +76,27 @@ void fitGenfitter_a1975_deuterium(TString fileName = "run_0016", Long64_t nEvent
                                   // KNOWN NOT UNIFORMLY SAFE (2026-09-05): of five tracks tested,
                                   // one lost its fit entirely and one swung theta by 100 deg. That
                                   // loss rate is what a full-run comparison has to measure.
-                                  Bool_t useClusterOrder = kFALSE)
+                                  Bool_t useClusterOrder = kFALSE,
+                                  // FIND ladder, LAST so no existing positional caller shifts:
+                                  // prefixes at 100-step, 100-2*step ... down to findMinPct, and
+                                  // the LONGEST passing one is kept. A 5 % step costs up to 15
+                                  // extra fits on a FAILING track (4 for the old 90/75/50/25);
+                                  // tracks passing at full length still cost nothing.
+                                  Double_t findStepPct = 5.0, Double_t findMinPct = 25.0,
+                                  // FIND selection, EXPERIMENT SPECIFIC (default keeps the
+                                  // original behaviour):
+                                  //   0 = longest passing -- only tracks failing chi2 < findC2Max
+                                  //       walk the ladder, so clean tracks cost nothing
+                                  //   1 = scan every rung including 100 % and keep the MINIMUM
+                                  //       chi2/ndf. Costs the full ladder on EVERY track, but a
+                                  //       full-length fit that merely passes is still challenged
+                                  //       -- chi2/ndf is not monotonic in prefix length.
+                                  Int_t findMode = 0,
+                                  // where the LADDER starts. Full length is always tried first and
+                                  // kept if already under findC2Max, so this does not skip it --
+                                  // it skips the rungs just below full length, which are the ones
+                                  // a long track is least likely to be rescued by.
+                                  Double_t findMaxPct = 95.0)
 {
    gSystem->Load("libAtReconstruction.so");
    FairLogger::GetLogger()->SetLogScreenLevel("WARNING");
@@ -171,9 +191,16 @@ void fitGenfitter_a1975_deuterium(TString fileName = "run_0016", Long64_t nEvent
                    "the measurement order\033[0m\n";
    }
    if (findLongest && findC2Max > 0) {
-      fitter->SetFindLongest(kTRUE, findC2Max);
+      fitter->SetFindLongest(kTRUE, findC2Max, findStepPct, findMinPct, findMaxPct);
+      fitter->SetFindMode(findMode);
       std::cout << "  \033[1;35mFIND ON: tracks failing chi2/ndf < " << findC2Max
-                << " are refitted at 90/75/50/25 % from the vertex end, longest passing kept\033[0m\n";
+                << " are refitted in " << findStepPct << " % steps from " << findMaxPct << " down to " << findMinPct
+                << " % from the vertex end, "
+                << (findMode == 1
+                       ? "kept at FULL LENGTH if already under the limit; else the LONGEST rung "
+                         "under it, and only if none is, the outright minimum chi2/ndf"
+                       : "LONGEST passing, full length tried first (only failing tracks pay)")
+                << "\033[0m\n";
    }
    if (matEffects && !matFallback)
       std::cout << "  \033[1;33mmatFX fallback DISABLED: failed material-effects fits are dropped, "
