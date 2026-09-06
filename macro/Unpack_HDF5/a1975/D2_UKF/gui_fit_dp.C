@@ -629,7 +629,10 @@ public:
       if (fClusters.empty()) return;
       const double c2Max = fC2Max->GetNumber();
       const int n = fClusters.size();
-      const int step = 5, floorPct = 25;
+      // down to 5 %. The 25 % floor was inherited from the original coarse ladder and had no
+      // evidence behind it: on run_0016 e11488 a better fit sits at 14 % of the track, which a
+      // floor of 25 could never find. The 8-cluster guard below still stops it going absurd.
+      const int step = 5, floorPct = 5;
       int bestPct = -1;                 // longest passing
       int minPct = -1; double minC2 = 1e30;   // fallback
       for (int pct = 100; pct >= floorPct; pct -= step) {
