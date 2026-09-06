@@ -319,30 +319,19 @@ AtFittedTrack *AtGenfitter::GetFittedTrack(AtTrack *track, AtFitMetadata * /*fit
    if (backwardSeed)
       std::reverse(addSeq.begin(), addSeq.end());
 
-   for (int oi = 0; oi < n; ++oi) {
-      const int ci = addSeq[oi];
-      double Ldrift_cm = std::max(0.0, (fZPadPlane - pos[ci].Z()) / 10.0);   // drift distance (cm)
-      double varT = s2 + fDiffTransMM * fDiffTransMM * Ldrift_cm;            // transverse (mm^2)
-      double varZ = fZLongFactor * s2 + fDiffLongMM * fDiffLongMM * Ldrift_cm; // drift-z (mm^2)
-      if (fChargeRefForCov > 0) {
-         double q = hc->at(ci).GetCharge();
-         double scale = (q > 0) ? std::clamp(fChargeRefForCov / q, 0.25, 4.0) : 1.0;
-         varT *= scale;
-         varZ *= scale;
-      }
-      TMatrixDSym measCov(3);
-      measCov.Zero();
-      measCov(0, 0) = varT;
-      measCov(1, 1) = varT;
-      measCov(2, 2) = varZ;
-
-      AtHitCluster cl = hc->at(ci);
-      cl.SetPosition({pos[ci].X(), pos[ci].Y(), pos[ci].Z()}); // lab-frame
-      cl.SetCovMatrix(measCov);
-      int idx = fHitClusterArray->GetEntriesFast();
-      new ((*fHitClusterArray)[idx]) AtHitCluster(cl);
-      trackCand.addHit(fTPCDetID, idx);
+   // --- OPTIONAL TRUNCATION (fTruncPct, default OFF) ------------------------------------------
+   // addSeq starts at the VERTEX end by construction (above), so keeping its first fTruncPct %
+   // keeps the clusters where the particle still has close to its vertex momentum and drops the
+   // tightening, decelerating tail that biases a single-circle radius low. With fTruncPct 0 or
+   // >= 100 nothing changes and nUse == n, so every existing production is byte-for-byte
+   // unaffected. Only the MEASUREMENTS are truncated: the range constraint below still walks the
+   // full `order`, because range is a property of the whole track.
+   int nUse = static_cast<int>(addSeq.size());
+   if (fTruncPct > 0 && fTruncPct < 100) {
+      const int m = static_cast<int>(std::lround(addSeq.size() * fTruncPct / 100.0));
+      nUse = std::max(fTruncMinClusters, std::min(nUse, m));
    }
+
 
    // --- RANGE CONSTRAINT: energy from how far the particle went, for tracks that STOPPED -----
    // Curvature is the weakest observable on a short track; range is the strongest. Only tracks
@@ -433,9 +422,44 @@ AtFittedTrack *AtGenfitter::GetFittedTrack(AtTrack *track, AtFitMetadata * /*fit
    covSeed.Zero();
    for (int d = 0; d < 3; ++d) covSeed(d, d) = 0.01;        // 1 mm^2 in cm^2
    for (int d = 3; d < 6; ++d) covSeed(d, d) = std::pow(0.3 * p_GeV, 2) + 1e-6;
-   trackCand.setCovSeed(covSeed);
-   trackCand.setPosMomSeed(posSeed, momSeed, fZ);
-   trackCand.setPdgCode(fPDG);
+   // --- the measurement fill, made RE-RUNNABLE ------------------------------------------------
+   // Building the candidate is now a function of how many clusters to keep, so the same track can
+   // be refitted at several truncations without rebuilding anything else. The seed does NOT depend
+   // on the fill (nothing between the ordering and here touches trackCand or fHitClusterArray),
+   // so it is simply reapplied each time. Called once with nUse below: with truncation off that is
+   // every cluster and the candidate is byte-for-byte what it always was.
+   auto fillCand = [&](int nKeep) {
+      fHitClusterArray->Clear("C");
+      trackCand = genfit::TrackCand();
+      for (int oi = 0; oi < nKeep && oi < (int)addSeq.size(); ++oi) {
+         const int ci = addSeq[oi];
+         double Ldrift_cm = std::max(0.0, (fZPadPlane - pos[ci].Z()) / 10.0);   // drift distance (cm)
+         double varT = s2 + fDiffTransMM * fDiffTransMM * Ldrift_cm;            // transverse (mm^2)
+         double varZ = fZLongFactor * s2 + fDiffLongMM * fDiffLongMM * Ldrift_cm; // drift-z (mm^2)
+         if (fChargeRefForCov > 0) {
+            double q = hc->at(ci).GetCharge();
+            double scale = (q > 0) ? std::clamp(fChargeRefForCov / q, 0.25, 4.0) : 1.0;
+            varT *= scale;
+            varZ *= scale;
+         }
+         TMatrixDSym measCov(3);
+         measCov.Zero();
+         measCov(0, 0) = varT;
+         measCov(1, 1) = varT;
+         measCov(2, 2) = varZ;
+
+         AtHitCluster cl = hc->at(ci);
+         cl.SetPosition({pos[ci].X(), pos[ci].Y(), pos[ci].Z()}); // lab-frame
+         cl.SetCovMatrix(measCov);
+         int idx = fHitClusterArray->GetEntriesFast();
+         new ((*fHitClusterArray)[idx]) AtHitCluster(cl);
+         trackCand.addHit(fTPCDetID, idx);
+      }
+      trackCand.setCovSeed(covSeed);
+      trackCand.setPosMomSeed(posSeed, momSeed, fZ);
+      trackCand.setPdgCode(fPDG);
+   };
+   fillCand(nUse);
 
    TVector3 posRes, momRes;
    TVector3 momFit;       // momentum at the FIRST MEASUREMENT POINT, before any extrapolation
@@ -566,6 +590,53 @@ AtFittedTrack *AtGenfitter::GetFittedTrack(AtTrack *track, AtFitMetadata * /*fit
    }
 
    bool ok = doFit();
+
+   // --- FIND: the LONGEST PREFIX that still passes chi2/ndf < fFindC2Max (default OFF) --------
+   // Only tracks that FAIL at full length pay for this: a track already under the threshold is
+   // kept as-is and costs nothing extra, so over a production the price is paid only by the
+   // pathological spirals this is for.
+   //
+   // Longest-passing, NOT best-chi2. chi2/ndf falls monotonically as clusters are removed, so
+   // "best chi2" selects the FEWEST points and returns a badly biased KE (13 % measured). The
+   // monotonicity is exactly what makes longest-passing well posed instead: there is a single
+   // crossing of the threshold, and taking the longest prefix keeps the most information
+   // consistent with it.
+   //
+   // fFindC2Max must be set from the MEASURED chi2 distribution, not from the production cut:
+   // measSigma 4.0 mm against ~0.6 mm residuals puts the median chi2/ndf at 0.09 (1.48 backward),
+   // so the usual cut of 5 would never fire.
+   int findPct = 100;
+   if (fFindLongest && fFindC2Max > 0) {
+      const double c2n0 = (ndf > 0) ? chi2 / ndf : -1.0;
+      if (!ok || c2n0 < 0 || c2n0 >= fFindC2Max) {
+         const int nFull = static_cast<int>(addSeq.size());
+         bool found = false;
+         for (double pct : {90.0, 75.0, 50.0, 25.0}) {
+            const int m = static_cast<int>(std::lround(nFull * pct / 100.0));
+            if (m < fTruncMinClusters)
+               break;
+            fillCand(m);
+            if (!doFit())
+               continue;
+            const double c2n = (ndf > 0) ? chi2 / ndf : -1.0;
+            if (c2n >= 0 && c2n < fFindC2Max) {
+               findPct = static_cast<int>(pct);
+               found = true;
+               ok = true;
+               break;
+            }
+         }
+         if (!found) {
+            // nothing passed: restore the full-length fit rather than keeping the last, shortest
+            // attempt -- silently returning a 25 % fit because no prefix passed would be the worst
+            // of both, a heavily truncated track with no quality guarantee behind it.
+            fillCand(nUse);
+            ok = doFit();
+            findPct = 100;
+         }
+      }
+   }
+
    if (!ok && !fNoMatEffects && fMatEffectsFallback) {
       // material-effects fit failed (e.g. a stopping multi-turn spiral whose RK
       // extrapolation throws). Retry this track WITHOUT material effects so it still

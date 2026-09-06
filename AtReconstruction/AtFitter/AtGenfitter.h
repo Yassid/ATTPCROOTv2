@@ -90,6 +90,28 @@ public:
    void SetBackwardSeedFix(Bool_t on) { fBackwardSeedFix = on; }
    void SetUseClusterOrder(Bool_t on) { fUseClusterOrder = on; }
 
+   /// Fit only the first `pct` % of the measurement sequence, counted FROM THE VERTEX END.
+   /// 0 (default) or >=100 disables it and the sequence is byte-for-byte what it was.
+   ///
+   /// WHY: a whole-track circle averages a radius that shrinks along a decelerating spiral
+   /// (0.964 -> 0.734 from vertex to stopping end, measured on 14C(d,p) at 2.85 T), so the
+   /// momentum read from it is biased low -- 0.895^2 = 0.80, i.e. the -20 % KE bias. Keeping the
+   /// vertex-end fraction measures the curvature where the particle still has its vertex momentum.
+   ///
+   /// NOTE this truncates the MEASUREMENTS ONLY. The range constraint, if enabled, still uses the
+   /// full path -- range is a property of the whole track and must not be truncated with it.
+   void SetTruncatePercent(Double_t pct) { fTruncPct = pct; }
+   Double_t GetTruncatePercent() const { return fTruncPct; }
+   /// Never truncate below this many clusters, whatever the percentage asks for.
+   void SetTruncateMinClusters(Int_t n) { fTruncMinClusters = n; }
+
+   /// FIND: refit at 90/75/50/25 % and keep the LONGEST prefix with chi2/ndf < c2Max. Only tracks
+   /// that fail at full length are refitted, so clean tracks cost nothing. If no prefix passes,
+   /// the full-length fit is restored. Default OFF.
+   /// Set c2Max from the MEASURED chi2 distribution: with measSigma 4 mm the median chi2/ndf is
+   /// 0.09 (1.48 backward), so the production cut of 5 would never fire.
+   void SetFindLongest(Bool_t on, Double_t c2Max) { fFindLongest = on; fFindC2Max = c2Max; }
+
    /// Back-extrapolate the vertex-end state to the beam axis before reading position and
    /// momentum off it. genfit's getFittedState() with no argument is the FIRST MEASUREMENT
    /// POINT, not the reaction vertex: between them lies unmeasured gas in which the ejectile
@@ -337,6 +359,10 @@ private:
    /// advance per cluster falls below the z noise and below one time bucket, so the sort orders
    /// noise. Pair with AtPRA::SetUseArcWalk(true), whose kNN walk orders without reference to z.
    Bool_t fUseClusterOrder{kFALSE};
+   Double_t fTruncPct{0};        //<! fit only this % of the sequence from the vertex end; 0 = off
+   Int_t fTruncMinClusters{8};   //<! floor, so a percentage can never starve a short track
+   Bool_t fFindLongest{kFALSE};  //<! refit failing tracks at 90/75/50/25 %, keep longest passing
+   Double_t fFindC2Max{0};       //<! the chi2/ndf threshold FIND tests against
    Bool_t fBackExtrapToAxis{kFALSE};   // extrapolate the vertex-end state to the beam axis (see setter)
    std::unique_ptr<AtTools::AtELossModel> fManualELoss; // optional hand-applied dE/dx over the vertex gap
    Bool_t fMatEffectsFallback{kTRUE};  // retry a failed matFX fit without material effects (flagged; see setter)

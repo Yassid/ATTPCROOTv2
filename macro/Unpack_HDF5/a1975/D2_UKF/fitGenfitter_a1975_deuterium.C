@@ -46,7 +46,27 @@ void fitGenfitter_a1975_deuterium(TString fileName = "run_0016", Long64_t nEvent
                                   // so most of these tracks spend most of their path in the region
                                   // the table serves -- unlike (p,d), where ~20 MeV deuterons only
                                   // touch it near the endpoint. Last params: old callers unaffected.
-                                  Bool_t catimaELoss = kFALSE, Bool_t catimaELossFull = kFALSE)
+                                  Bool_t catimaELoss = kFALSE, Bool_t catimaELossFull = kFALSE,
+                                  // TRUNCATION, default OFF. Fit only the first truncPct % of the
+                                  // clusters counted FROM THE VERTEX END. 0 or >=100 disables it
+                                  // and the fit is byte-for-byte what it was, so (d,t) and every
+                                  // existing (d,p) production are unaffected.
+                                  // Intended use: run the production at 25 / 50 / 75 / 90 into
+                                  // separate output dirs and compare the Ex spectra, because a
+                                  // whole-track circle averages a radius that shrinks along a
+                                  // decelerating spiral and biases the momentum low.
+                                  // chi2 is NOT a valid referee here -- it falls monotonically as
+                                  // clusters are removed, so judge on Ex, not on the fit quality.
+                                  Double_t truncPct = 0,
+                                  // FIND: instead of one fixed fraction, refit only the tracks
+                                  // that FAIL chi2/ndf < findC2Max at full length, walking
+                                  // 90/75/50/25 % and keeping the LONGEST that passes; if none
+                                  // does, the full-length fit is restored. Clean tracks cost
+                                  // nothing. OFF unless findC2Max > 0.
+                                  // Set findC2Max from the MEASURED distribution -- median
+                                  // chi2/ndf is 0.09 here (1.48 backward), so the usual cut of 5
+                                  // never fires.
+                                  Bool_t findLongest = kFALSE, Double_t findC2Max = 0)
 {
    gSystem->Load("libAtReconstruction.so");
    FairLogger::GetLogger()->SetLogScreenLevel("WARNING");
@@ -125,6 +145,20 @@ void fitGenfitter_a1975_deuterium(TString fileName = "run_0016", Long64_t nEvent
       fitter->SetRangeConstraint(kTRUE, manualElossDensity > 0 ? manualElossDensity : 6.61e-5, matA);
       std::cout << "  \033[1;32mRANGE CONSTRAINT ON: stopping tracks get a FullMeasurement on |p| "
                    "from their path length\033[0m\n";
+   }
+   // Truncation: measurements only, counted from the vertex end. Loud when on, because it is a
+   // real change to what is being fitted and must never be inferred from a filename alone.
+   if (truncPct > 0 && truncPct < 100) {
+      fitter->SetTruncatePercent(truncPct);
+      std::cout << "  \033[1;35mTRUNCATION ON: fitting the first " << truncPct
+                << " % of the clusters FROM THE VERTEX END (floor 8 clusters). "
+                   "Judge this on Ex, NOT on chi2 -- chi2 falls monotonically as points are "
+                   "removed.\033[0m\n";
+   }
+   if (findLongest && findC2Max > 0) {
+      fitter->SetFindLongest(kTRUE, findC2Max);
+      std::cout << "  \033[1;35mFIND ON: tracks failing chi2/ndf < " << findC2Max
+                << " are refitted at 90/75/50/25 % from the vertex end, longest passing kept\033[0m\n";
    }
    if (matEffects && !matFallback)
       std::cout << "  \033[1;33mmatFX fallback DISABLED: failed material-effects fits are dropped, "

@@ -204,6 +204,18 @@ public:
       fKeep.assign(fClusters.size(), 1);   // a fresh track starts with everything selected
    }
 
+   /// The cluster list Refit() would use right now -- the index window ANDed with the box mask.
+   /// Kept as its own method so a view-only redraw cannot drift from what the fit actually used.
+   std::vector<AtHitCluster> CurrentSelection() const
+   {
+      std::vector<AtHitCluster> use;
+      const int i0 = std::max(0, (int)fI0->GetNumber());
+      const int i1 = std::min((int)fClusters.size() - 1, (int)fI1->GetNumber());
+      for (int i = i0; i <= i1; ++i)
+         if (i < (int)fKeep.size() && fKeep[i]) use.push_back(fClusters[i]);
+      return use;
+   }
+
    void Refit()
    {
       if (fClusters.empty()) { fLog->AddLine("no clusters loaded"); return; }
@@ -411,6 +423,44 @@ public:
                lg->Draw();
             }
          }
+         // ---- optional layer: the RAW HITS under the clusters ---------------------------
+         // The clusters are charge-weighted centroids; the hits are what they were made from.
+         // Seeing both tells a clustering artefact from a real feature of the track.
+         if (fShowHits && fShowHits->IsOn()) {
+            auto *gh = new TGraph();
+            int nh = 0;
+            for (auto &h : fTrack.GetHitArray()) {
+               auto p = h->GetPosition();
+               gh->SetPoint(nh++, get(p, ax[pane]), get(p, ay[pane]));
+            }
+            if (nh) { gh->SetMarkerStyle(1); gh->SetMarkerColor(kGray + 2); gh->Draw("P same"); }
+         }
+         // ---- optional layer: the STORED CLUSTER ORDER, drawn as a stroke ------------------
+         // This is the thing to judge. A good ordering is one clean stroke along the track; a
+         // broken one throws long chords across it (median largest jump measured at 124 mm for
+         // the nearest-neighbour walk, 77 mm for a z sort, on 800 long tracks).
+         if (fShowOrder && fShowOrder->IsOn() && fClusters.size() > 1) {
+            auto *go = new TGraph();
+            for (size_t i = 0; i < fClusters.size(); ++i) {
+               auto p = fClusters[i].GetPosition();
+               go->SetPoint(i, get(p, ax[pane]), get(p, ay[pane]));
+            }
+            go->SetLineColor(kMagenta + 1); go->SetLineWidth(1); go->Draw("L same");
+            // mark where the order jumps, so a bad link is visible and not just implied
+            double mean = 0; int nst = 0;
+            for (size_t i = 1; i < fClusters.size(); ++i) {
+               mean += (fClusters[i].GetPosition() - fClusters[i-1].GetPosition()).R(); ++nst; }
+            if (nst) mean /= nst;
+            for (size_t i = 1; i < fClusters.size(); ++i) {
+               double d = (fClusters[i].GetPosition() - fClusters[i-1].GetPosition()).R();
+               if (d <= 3.0 * mean) continue;
+               auto p0 = fClusters[i-1].GetPosition(), p1 = fClusters[i].GetPosition();
+               auto *jl = new TGraph(2);
+               jl->SetPoint(0, get(p0, ax[pane]), get(p0, ay[pane]));
+               jl->SetPoint(1, get(p1, ax[pane]), get(p1, ay[pane]));
+               jl->SetLineColor(kRed); jl->SetLineWidth(2); jl->SetLineStyle(2); jl->Draw("L same");
+            }
+         }
          if (fFitPts.size() > 1) {
             auto *gf = new TGraph();
             for (size_t i = 0; i < fFitPts.size(); ++i)
@@ -469,6 +519,8 @@ public:
 
    // ---- slots ----
    void OnRefit() { Refit(); }
+   /// view-only: redraw with the current selection, WITHOUT refitting
+   void OnRedraw() { Draw(CurrentSelection()); }
    /// Re-read the track so the reordering is redone from the untouched cluster array -- reversing
    /// in place twice would just flip back and forth.
    void OnReorder() { Load(); Refit(); }
@@ -640,6 +692,14 @@ private:
       fVertexFirst->Connect("Clicked()", "DpFitGui", this, "OnReorder()"); add(par, fVertexFirst, 8);
       fDirPhys = new TGCheckButton(par, "dir from physics");
       fDirPhys->Connect("Clicked()", "DpFitGui", this, "OnReorder()"); add(par, fDirPhys, 2);
+      // VIEW-ONLY toggles: they call Draw(), never Refit(), so switching a layer on cannot change
+      // the fit you are looking at. "hits" shows the raw AtHit cloud under the clusters; "order"
+      // joins the clusters in STORED ARRAY ORDER, which is the thing to judge -- a good ordering
+      // draws a single clean stroke along the track, a broken one draws long jumps across it.
+      fShowHits = new TGCheckButton(par, "hits");
+      fShowHits->Connect("Clicked()", "DpFitGui", this, "OnRedraw()"); add(par, fShowHits, 8);
+      fShowOrder = new TGCheckButton(par, "order");
+      fShowOrder->Connect("Clicked()", "DpFitGui", this, "OnRedraw()"); add(par, fShowOrder, 2);
       auto *bAll = new TGTextButton(par, "all 3 orderings"); bAll->Connect("Clicked()", "DpFitGui", this, "OnAllModes()"); add(par, bAll, 2);
       auto *bPng = new TGTextButton(par, "PNG"); bPng->Connect("Clicked()", "DpFitGui", this, "OnSavePng()"); add(par, bPng, 2);
       auto *bQuit = new TGTextButton(par, "Quit"); bQuit->Connect("Clicked()", "DpFitGui", this, "Quit()"); add(par, bQuit, 2);
@@ -672,6 +732,7 @@ private:
                  *fMaxIt=nullptr, *fI0=nullptr, *fI1=nullptr;
    TGComboBox *fOrder = nullptr;
    TGCheckButton *fKeepBox = nullptr, *fDirPhys = nullptr, *fVertexFirst = nullptr;
+   TGCheckButton *fShowHits = nullptr, *fShowOrder = nullptr;
    TGNumberEntry *fC2Max = nullptr;
    double fLastC2 = -1;
    TGNumberEntry *fQMin = nullptr;
