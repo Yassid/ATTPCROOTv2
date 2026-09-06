@@ -618,24 +618,46 @@ public:
    /// Fit the LONGEST prefix (from cluster 0 -- the vertex, in mode 3) still under the chi2/ndf
    /// threshold. NOT the best chi2: chi2 falls monotonically with fewer points, so "best" picks
    /// the fewest clusters -- on run_0020/9789 that is 15 of 298 and a 13%-biased KE.
+   /// The production FIND rule, reproduced exactly (AtGenfitter::SetFindMode(1)):
+   ///   full length is kept IF it is already under c2Max -- it is the longest prefix AND passing,
+   ///   so nothing shorter can beat it (a smaller chi2 below the limit is fewer points, not a
+   ///   better measurement). If it FAILS, walk down and keep the LONGEST rung under c2Max; and
+   ///   only if NOTHING gets under it does the outright MINIMUM chi2/ndf decide, so a hopeless
+   ///   track still ends on its best available fit rather than on the last rung tried.
    void OnLongest()
    {
       if (fClusters.empty()) return;
       const double c2Max = fC2Max->GetNumber();
       const int n = fClusters.size();
-      for (int pct = 100; pct >= 25; pct -= 5) {
+      const int step = 5, floorPct = 25;
+      int bestPct = -1;                 // longest passing
+      int minPct = -1; double minC2 = 1e30;   // fallback
+      for (int pct = 100; pct >= floorPct; pct -= step) {
          int m = (int)std::lround(n * pct / 100.0);
          if (m < 8) break;
          fI0->SetNumber(0); fI1->SetNumber(m - 1);
          Refit();
-         if (fLastC2 > 0 && fLastC2 < c2Max) {
-            fLog->AddLine(Form("  LONGEST PASSING: %d%% = %d clusters, chi2/ndf %.2f < %.1f",
-                               pct, m, fLastC2, c2Max));
-            fLog->ShowBottom();
-            return;
-         }
+         if (fLastC2 <= 0) continue;
+         if (fLastC2 < minC2) { minC2 = fLastC2; minPct = pct; }
+         if (fLastC2 < c2Max && bestPct < 0) { bestPct = pct; break; }  // first = longest
       }
-      fLog->AddLine(Form("  no prefix down to 25%% reached chi2/ndf < %.1f", c2Max));
+      const int keep = (bestPct > 0) ? bestPct : minPct;
+      if (keep < 0) {
+         fLog->AddLine(Form("  no prefix from 100 %% down to %d %% returned a fit at all", floorPct));
+         fLog->ShowBottom();
+         return;
+      }
+      // re-apply the winner: the loop leaves its LAST attempt selected, which would otherwise be
+      // shown and fitted instead of the chosen one.
+      const int m = (int)std::lround(n * keep / 100.0);
+      fI0->SetNumber(0); fI1->SetNumber(m - 1);
+      Refit();
+      if (bestPct > 0)
+         fLog->AddLine(Form("  LONGEST PASSING: %d %% = %d clusters, chi2/ndf %.3f < %.3f",
+                            keep, m, fLastC2, c2Max));
+      else
+         fLog->AddLine(Form("  nothing reached chi2/ndf < %.3f -- FALLBACK to the MINIMUM: "
+                            "%d %% = %d clusters, chi2/ndf %.3f", c2Max, keep, m, fLastC2));
       fLog->ShowBottom();
    }
 
@@ -755,7 +777,10 @@ private:
       par = par2;
       auto *bFit = new TGTextButton(par, "  REFIT  "); bFit->Connect("Clicked()", "DpFitGui", this, "OnRefit()"); add(par, bFit, 12);
       add(par, new TGLabel(par, "longest chi2<"), 10);
-      fC2Max = new TGNumberEntry(par, 5.0, 5, -1, TGNumberFormat::kNESRealOne); add(par, fC2Max, 1);
+      // 0.1, the production FIND threshold. NOT the chi2<5 production CUT: measSigma 4 mm against
+      // ~0.6 mm residuals puts the median chi2/ndf at 0.09 (1.48 backward), so a limit of 5 would
+      // accept essentially everything and the button would stop at 100 % on every track.
+      fC2Max = new TGNumberEntry(par, 0.1, 5, -1, TGNumberFormat::kNESRealThree); add(par, fC2Max, 1);
       auto *bLong = new TGTextButton(par, "find"); bLong->Connect("Clicked()", "DpFitGui", this, "OnLongest()"); add(par, bLong, 1);
       fVertexFirst = new TGCheckButton(par, "production order (z-sort)"); fVertexFirst->SetOn();
       fVertexFirst->Connect("Clicked()", "DpFitGui", this, "OnReorder()"); add(par, fVertexFirst, 8);
