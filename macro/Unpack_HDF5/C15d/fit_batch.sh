@@ -51,8 +51,15 @@ TRUNC_PCT="${TRUNC_PCT:-0}"
 FIND="${FIND:-0}"
 FIND_C2MAX="${FIND_C2MAX:-0}"
 FIND_STEP="${FIND_STEP:-5.0}"
-FIND_MIN="${FIND_MIN:-25.0}"
-FIND_MAX="${FIND_MAX:-95.0}"
+# The ladder runs FIND_MAX -> FIND_MIN in FIND_STEP steps: 80, 75, ... 10, 5 = 16 rungs. Full
+# length is tried FIRST and separately, so FIND_MAX=80 does not skip it -- it skips the 95/90/85
+# rungs, which are the ones a long track is least likely to be rescued by.
+# ⚠ SetTruncateMinClusters (default 8) breaks the ladder early: a rung needs
+# round(nClusters * pct/100) >= 8, so 5 % is only REACHED by tracks with >= 160 clusters. Shorter
+# tracks stop at whatever rung first falls under 8. The floor is right -- a percentage must not be
+# allowed to starve a short track -- but it means the effective floor is per-track, not 5 %.
+FIND_MIN="${FIND_MIN:-5.0}"
+FIND_MAX="${FIND_MAX:-80.0}"
 FIND_MODE="${FIND_MODE:-0}"
 FIND_ON=$([[ "$FIND" == "1" ]] && echo kTRUE || echo kFALSE)
 

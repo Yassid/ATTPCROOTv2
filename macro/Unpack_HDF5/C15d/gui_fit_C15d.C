@@ -824,6 +824,10 @@ private:
    }
 
    TString fRunTag, fGfDir, fEloss;
+   /// Which fit file the CLUSTERS are read from -- <run>_genfit_<fSpecies>.root. The refit itself
+   /// is always a proton (pdg 2212 below), so reading the deuteron-gated file means refitting
+   /// those clusters under the proton hypothesis. Point this at "p" once a proton pass exists.
+   TString fSpecies{"d"};
    Long64_t fEntry; int fTid; int fIdx = 0;
    TFile *fFile = nullptr;
    AtTrack fTrack;
