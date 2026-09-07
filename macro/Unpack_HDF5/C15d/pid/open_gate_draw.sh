@@ -30,10 +30,16 @@ case "$species" in
    *) echo "unknown species '$species' -- use proton, deuteron or triton" >&2; exit 1 ;;
 esac
 
-# IC window from pid/ic_C15d.json (single-pulse), and the beam energy this analysis measured
-# from its own elastic ridge, used only to draw the optional locus overlay.
-IC_LO=-1
-IC_HI=-1
+# ★ THE IC WINDOW MUST MATCH THE ONE THE FIT WILL USE. gate_events_C15d.C reduces each run to
+# IC [1045, 1225] single-pulse BEFORE fitting, so a gate drawn on any other plane selects
+# something different from what it will select in production. These were -1/-1, i.e. OFF, while
+# the comment above them claimed they came from pid/ic_C15d.json -- so the drawer was showing the
+# FULL COCKTAIL, of which carbon is only ~40 %, and a band drawn there is drawn over five beams.
+# ⚠ pid/ic_C15d.json still holds [930.6, 1413.3], which is the a1975 window and does NOT describe
+# this beam: the a2091 D2 IC spectrum has two structures in the carbon region, 1135 and 1365, and
+# a window spanning both mixes them. Do not "fix" this by reading that file.
+IC_LO=1045
+IC_HI=1225
 EBEAM=206
 XMAX=45.0
 YMAX=1.6
