@@ -45,6 +45,8 @@ set(SRCS
   AtPID/AtParticleID.cxx
   AtPID/AtPIDEstimator.cxx
   AtPID/AtSpyralPID.cxx
+
+  AtELossBetheBloch.cxx
   )
 
 Set(DEPENDENCIES
@@ -86,6 +88,7 @@ set(TEST_SRCS
   DataCleaning/AtkNNTest.cxx
   AtELossTableTest.cxx
   AtPropagatorTest.cxx
+  AtELossBetheBlochTest.cxx
 )
 if(CATIMA_FOUND)
   set(TEST_SRCS ${TEST_SRCS}

@@ -1,3 +1,4 @@
+*.pdf
 *.swp
 *.root
 *.log
@@ -58,3 +59,6 @@ macros/data
 .nfs*
 compiled/E20009Analysis/.NabinWorkDir/
 build_genfit
+
+.claude/plans/*
+
