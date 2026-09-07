@@ -242,15 +242,19 @@ public:
       gAlt->SetLineStyle(2);
       gAlt->Draw("L same");
       gUse->Draw("L same");
-      // 12C 3.368 MeV 2+ : the first excited state, so the g.s. band can be told from its neighbour
-      auto *gEx = dpLocusGraph(fFlip, fEbeam, 3.368, kMagenta + 1, fM3, fM4);
-      gEx->SetLineStyle(7);
-      gEx->Draw("L same");
+      // A second locus at finite Ex, so the g.s. band can be told from its neighbours.
+      // ⚠ This was 3.368 -- the 12C 2+, inherited from the (p,t) drawer this file was ported from
+      // and MEANINGLESS against a 15C residual (levels 0, 0.740, 3.103, 4.220, 4.657). The a1975
+      // drawer hit the same inherited constant and fixed it there; this copy never got the fix.
+      // Now adjustable in the GUI rather than compiled in, because which level is worth drawing
+      // depends on what you are trying to separate.
+      TGraph *gEx = (fExGuide > 0) ? dpLocusGraph(fFlip, fEbeam, fExGuide, kMagenta + 1, fM3, fM4) : nullptr;
+      if (gEx) { gEx->SetLineStyle(7); gEx->Draw("L same"); }
       auto *leg = new TLegend(0.60, 0.72, 0.88, 0.88);
       leg->SetBorderSize(0);
       leg->SetFillStyle(0);
-      leg->AddEntry(gUse, Form("(p,t) g.s., E_{b}=%.0f", fEbeam), "l");
-      leg->AddEntry(gEx, "(p,t) 12C 3.368 (2^{+})", "l");
+      leg->AddEntry(gUse, Form("g.s. locus, E_{b}=%.2f", fEbeam), "l");
+      if (gEx) leg->AddEntry(gEx, Form("E_{x} = %.3f MeV", fExGuide), "l");
       leg->AddEntry(gAlt, "other polar convention", "l");
       leg->Draw();
       c2->cd(2);
@@ -431,12 +435,21 @@ public:
       ApplyAxes();
    }
 
-   /// Show or hide the (p,d) deuteron band.
+   /// Show or hide the elastic 15C(d,d)15C deuteron band.
    void ToggleDeuteron()
    {
       fShowDeut = !fShowDeut;
-      printf("deuteron (p,d) band %s\n", fShowDeut ? "ON (violet, dashed)" : "OFF");
+      printf("elastic 15C(d,d) deuteron band %s\n", fShowDeut ? "ON (violet, dashed)" : "OFF");
       Redraw();
+   }
+
+   /// Re-read the guide level. LocusCheck builds the curve, so the panel has to be rebuilt for
+   /// the change to show -- Redraw() alone repaints the PID plane, which does not carry it.
+   void ApplyEx()
+   {
+      fExGuide = fEEx->GetNumber();
+      printf("Ex guide locus -> %.3f MeV\n", fExGuide);
+      LocusCheck();
    }
 
    void ToggleLocus()
@@ -458,9 +471,9 @@ public:
          fOnLocus->SetMarkerSize(0.45);
          if (fOnLocus->GetN() > 0) fOnLocus->Draw("P same");
       }
-      // the 14C(p,d)13C deuteron band, drawn so the triton gate can be placed AWAY from it rather
-      // than by eye. Deuterons are the natural contaminant here: same Z, so the same charge state,
-      // and a rigidity that runs through the same region of the plane.
+      // The elastic 15C(d,d)15C deuteron band -- masses 2.0141 / 15.0106, Ex = 0. The CURVE was
+      // always right for this experiment; only its label was stale, carried over from the a1954
+      // (p,t) drawer where it was the 14C(p,d)13C contaminant band used to place a triton gate.
       if (fShowDeut) {
          if (!fDeutLoc) fDeutLoc = dpLocusGraph(fFlip, fEbeam, 0.0, kViolet + 1, 2.01410178, 15.0105993);
          if (fDeutLoc && fDeutLoc->GetN() > 1) { fDeutLoc->SetLineWidth(3); fDeutLoc->SetLineStyle(2); fDeutLoc->Draw("L same"); }
@@ -614,7 +627,7 @@ private:
                                fZ, fA));
       auto *bar = new TGHorizontalFrame(main);
       const char *lbl[] = {"Draw new gate", "Evaluate", "Locus check", "Locus dots on/off",
-                           "(p,d) band on/off", "Save JSON", "Save PNG", "Redraw", "Quit"};
+                           "(d,d) band on/off", "Save JSON", "Save PNG", "Redraw", "Quit"};
       const char *slot[] = {"DrawGate()", "Evaluate()", "LocusCheck()", "ToggleLocus()",
                             "ToggleDeuteron()", "Save()", "SavePNG()", "Redraw()", "Quit()"};
       for (int i = 0; i < 9; ++i) {
@@ -622,6 +635,13 @@ private:
          b->Connect("Clicked()", "C15dGateDraw", this, slot[i]);
          bar->AddFrame(b, new TGLayoutHints(kLHintsLeft, 5, 4, 4, 4));
       }
+      // The guide-locus level. Which 15C state is worth drawing depends on what you are trying to
+      // separate, so it is a control and not a constant.
+      bar->AddFrame(new TGLabel(bar, "Ex guide [MeV]:"),
+                    new TGLayoutHints(kLHintsLeft | kLHintsCenterY, 12, 2, 4, 4));
+      fEEx = new TGNumberEntry(bar, fExGuide, 6, -1, TGNumberFormat::kNESRealThree);
+      fEEx->Connect("ValueSet(Long_t)", "C15dGateDraw", this, "ApplyEx()");
+      bar->AddFrame(fEEx, new TGLayoutHints(kLHintsLeft | kLHintsCenterY, 2, 6, 4, 4));
       bar->AddFrame(new TGLabel(bar, "name:"), new TGLayoutHints(kLHintsLeft | kLHintsCenterY, 12, 2, 4, 4));
       // Default the name to the output file's stem: a gate whose "name" says one species while
       // its filename says another is how triton_14C_proton got written.
@@ -707,7 +727,11 @@ private:
    TGNumberEntry *fEThLo = nullptr, *fEThHi = nullptr;
    double fThLo = 0.0, fThHi = 180.0;
    TGraph *fDeutLoc = nullptr;
+   TGNumberEntry *fEEx = nullptr;
    bool fShowDeut = true;
+   /// Ex of the guide locus, in MeV. 0.740 is the 15C first excited state; the other levels are
+   /// 3.103, 4.220 and 4.657. Set in the GUI -- see the Ex box on the button bar.
+   double fExGuide = 0.740;
    TGNumberEntry *fEXlo = nullptr, *fEXhi = nullptr, *fEYlo = nullptr, *fEYhi = nullptr;
    TGNumberEntry *fENbx = nullptr, *fENby = nullptr;
    double fXlo = 0.0, fXhi = 30.0, fYlo = 0.0, fYhi = 3.0;

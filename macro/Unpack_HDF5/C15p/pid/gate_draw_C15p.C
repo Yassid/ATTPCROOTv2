@@ -240,15 +240,19 @@ public:
       gAlt->SetLineStyle(2);
       gAlt->Draw("L same");
       gUse->Draw("L same");
-      // 12C 3.368 MeV 2+ : the first excited state, so the g.s. band can be told from its neighbour
-      auto *gEx = dpLocusGraph(fFlip, fEbeam, 3.368, kMagenta + 1, fM3, fM4);
-      gEx->SetLineStyle(7);
-      gEx->Draw("L same");
+      // A second locus at finite Ex, so the g.s. band can be told from its neighbours.
+      // ⚠ This was hardcoded to 3.368 -- the 12C 2+, inherited from the a1954 (p,t) drawer this
+      // file was ported from. This drawer serves SEVERAL channels (see the table above), so no
+      // single level is right for all of them: it is a GUI control now, and it defaults to 0,
+      // meaning OFF. A guide at Ex = 0 would sit on top of the g.s. curve and read as a second
+      // state that is not there, so nothing is drawn until a level is actually chosen.
+      TGraph *gEx = (fExGuide > 0) ? dpLocusGraph(fFlip, fEbeam, fExGuide, kMagenta + 1, fM3, fM4) : nullptr;
+      if (gEx) { gEx->SetLineStyle(7); gEx->Draw("L same"); }
       auto *leg = new TLegend(0.60, 0.72, 0.88, 0.88);
       leg->SetBorderSize(0);
       leg->SetFillStyle(0);
-      leg->AddEntry(gUse, Form("(p,t) g.s., E_{b}=%.0f", fEbeam), "l");
-      leg->AddEntry(gEx, "(p,t) 12C 3.368 (2^{+})", "l");
+      leg->AddEntry(gUse, Form("g.s. locus, E_{b}=%.2f", fEbeam), "l");
+      if (gEx) leg->AddEntry(gEx, Form("E_{x} = %.3f MeV", fExGuide), "l");
       leg->AddEntry(gAlt, "other polar convention", "l");
       leg->Draw();
       c2->cd(2);
@@ -437,6 +441,15 @@ public:
       Redraw();
    }
 
+   /// Re-read the guide level. LocusCheck builds the curve, so the panel is rebuilt for the
+   /// change to show -- Redraw() alone repaints the PID plane, which does not carry it.
+   void ApplyEx()
+   {
+      fExGuide = fEEx->GetNumber();
+      printf("Ex guide locus -> %.3f MeV%s\n", fExGuide, fExGuide > 0 ? "" : "  (off)");
+      LocusCheck();
+   }
+
    void ToggleLocus()
    {
       fShowLocus = !fShowLocus;
@@ -620,6 +633,11 @@ private:
          b->Connect("Clicked()", "C15pGateDraw", this, slot[i]);
          bar->AddFrame(b, new TGLayoutHints(kLHintsLeft, 5, 4, 4, 4));
       }
+      bar->AddFrame(new TGLabel(bar, "Ex guide [MeV]:"),
+                    new TGLayoutHints(kLHintsLeft | kLHintsCenterY, 12, 2, 4, 4));
+      fEEx = new TGNumberEntry(bar, fExGuide, 6, -1, TGNumberFormat::kNESRealThree);
+      fEEx->Connect("ValueSet(Long_t)", "C15pGateDraw", this, "ApplyEx()");
+      bar->AddFrame(fEEx, new TGLayoutHints(kLHintsLeft | kLHintsCenterY, 2, 6, 4, 4));
       bar->AddFrame(new TGLabel(bar, "name:"), new TGLayoutHints(kLHintsLeft | kLHintsCenterY, 12, 2, 4, 4));
       // Default the name to the output file's stem: a gate whose "name" says one species while
       // its filename says another is how triton_14C_proton got written.
@@ -705,6 +723,9 @@ private:
    TGNumberEntry *fEThLo = nullptr, *fEThHi = nullptr;
    double fThLo = 0.0, fThHi = 180.0;
    TGraph *fDeutLoc = nullptr;
+   TGNumberEntry *fEEx = nullptr;
+   /// Ex of the guide locus, MeV. 0 = off. Channel-dependent, so there is no safe default.
+   double fExGuide = 0.0;
    bool fShowDeut = true;
    TGNumberEntry *fEXlo = nullptr, *fEXhi = nullptr, *fEYlo = nullptr, *fEYhi = nullptr;
    TGNumberEntry *fENbx = nullptr, *fENby = nullptr;

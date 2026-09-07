@@ -51,6 +51,7 @@ SCRIPT = '''
 (function(){
   const cv = document.getElementById('cRun'), tip = document.getElementById('tipRun');
   const note = document.getElementById('runNote');
+  let noteBase = '';
   if (!cv || typeof SETS === 'undefined' || !HAS_RUN) return;
   const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
   const loI = document.getElementById('runLo'), hiI = document.getElementById('runHi');
@@ -95,6 +96,10 @@ SCRIPT = '''
 
   function draw(){
     if (!M) return;
+    // Say so when the picture is a frame behind: the rebuild is coalesced onto the end of a drag,
+    // and a map silently lagging its controls is exactly how a wrong conclusion gets drawn.
+    if (note && noteBase)
+      note.textContent = noteBase + (typeof stale !== 'undefined' && stale ? '  \u00b7  recomputing\u2026' : '');
     const dpr = window.devicePixelRatio || 1;
     const cw = cv.clientWidth || 900;
     const rowH = Math.max(3, Math.min(9, Math.floor(420/Math.max(1,RUNS.length))));
@@ -182,16 +187,30 @@ SCRIPT = '''
   if (allBtn) allBtn.addEventListener('click', () => setRuns(RUNS[0], RUNS[RUNS.length-1]));
   [loI,hiI].forEach(el => el && el.addEventListener('input', draw));
 
-  // the map depends on ebeam and every cut, so rebuild whenever the page re-renders
+  /* The map depends on ebeam and every cut, so it must follow the page's renders -- but a
+     rebuild is a FULL pass over every track (pass + thCorr + kine2b each), and render() fires on
+     every slider tick. Rebuilding per tick made dragging a slider unusable once this panel was
+     restored on a 353,860-track cache. So: redraw the existing map immediately, and coalesce the
+     rebuild onto the trailing edge of the drag. The picture stays live; only the recomputation
+     waits, and a stale map is visibly marked while it does. */
+  let rebuildTimer = null, stale = false;
+  function scheduleRebuild(){
+    if (rebuildTimer) clearTimeout(rebuildTimer);
+    stale = true;
+    draw();                       // cheap: repaint what we have, with the staleness marker
+    rebuildTimer = setTimeout(() => { rebuildTimer = null; stale = false; refresh(); }, 140);
+  }
+  window.__runPanelStale = () => stale;
   const _render = window.render;
-  window.render = function(){ _render.apply(this, arguments); refresh(); };
+  window.render = function(){ _render.apply(this, arguments); scheduleRebuild(); };
 
   addEventListener('resize', draw);
   matchMedia('(prefers-color-scheme:dark)').addEventListener('change', draw);
   new MutationObserver(draw).observe(document.documentElement, {attributes:true, attributeFilter:['data-theme']});
 
-  note.textContent = RUNS.length + ' runs, ' + RUNS[0] + '-' + RUNS[RUNS.length-1]
+  noteBase = RUNS.length + ' runs, ' + RUNS[0] + '-' + RUNS[RUNS.length-1]
     + ' \\u00b7 each row normalised to its own maximum, so run length does not set brightness';
+  note.textContent = noteBase;
   refresh();
 })();
 </script>
