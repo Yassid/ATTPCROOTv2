@@ -1,10 +1,25 @@
 /// Baseline (d,p) cache vs the FIND cache. Population level -- the pk tree carries no entry/tid,
 /// so track-by-track matching has to be done at the genfit level with cmp_gf_dirs.C.
 ///
-/// The referee is NOT the raw Ex IQR: that is dominated by the level structure plus continuum, so
-/// it cannot see a resolution change. What CAN see a curvature-averaging bias is the drift of Ex
-/// with theta_cm -- Ex must not depend on angle, and track length (hence spiral tightness)
-/// correlates strongly with angle. A bias that grows with spiralling shows up as a slope.
+/// !!! dEx/dtheta_cm IS NOT A CLEAN REFEREE FOR 17C. Established 2026-09-07. Ex cannot depend on
+/// emission angle, so a slope is "some systematic" -- but FOUR things enter it and this fit cannot
+/// separate them:
+///   1. reconstruction bias correlated with angle          <- the only one intended
+///   2. a wrong BEAM ENERGY: dEx/dEbeam runs 0.118 -> 0.001 across the angular range, and Ebeam is
+///      NOT settled for (d,p) (see cache_dp_dv1104.sh's own header)
+///   3. REAL PHYSICS: different levels populate at different theta_cm, so the centroid of a
+///      multi-state Ex distribution moves with angle with NO reconstruction error. Unsuppressed
+///      here because this is an unweighted line fit to the WHOLE distribution, not to a peak.
+///   4. acceptance varying with angle
+/// It was adopted for (d,t), where the levels are few and known. For 17C, with unbound overlapping
+/// strength, term 3 is expected to dominate.
+///
+/// CONSEQUENCE: slopes from this macro must NOT be quoted as evidence for or against a
+/// reconstruction change on this channel. To make the comparison meaningful, restrict to the
+/// COMMON SET of tracks fitted in ALL productions -- then Ebeam, the level structure and the
+/// acceptance are identical by construction and only the reconstruction differs.
+///
+/// The raw Ex IQR printed below is weaker still: it is dominated by the level structure.
 #include <vector>
 static void exVsTheta(TTree *t, const char *cut, double &slope, double &err, long &n)
 {
@@ -44,7 +59,7 @@ void cmp_find_cache(TString a="/mnt/f/a1975/caches/dp_kin_dv1104.root",
       printf("    IQR Ex       %8.3f   %8.3f   (%+.3f)   [weak metric -- level structure]\n", q1,q2,q2-q1);
       double s1,e1,s2,e2; long k1,k2;
       exVsTheta(ta,cuts[c],s1,e1,k1); exVsTheta(tb,cuts[c],s2,e2,k2);
-      printf("    dEx/dtheta_cm %7.4f+-%.4f  %7.4f+-%.4f   MeV/deg   <== THE REFEREE\n", s1,e1,s2,e2);
+      printf("    dEx/dtheta_cm %7.4f+-%.4f  %7.4f+-%.4f   MeV/deg   <== NOT a clean referee, see header\n", s1,e1,s2,e2);
    }
    double m1,q1,m2,q2; long n1,n2;
    stat(ta,"chi2ndf","",m1,q1,n1); stat(tb,"chi2ndf","",m2,q2,n2);
