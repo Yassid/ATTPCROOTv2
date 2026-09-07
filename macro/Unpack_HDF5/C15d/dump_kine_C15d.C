@@ -107,7 +107,12 @@ void dump_kine_C15d(TString fileName = "run_0017", TString suffix = "_dd",
          if (!ft)
             continue;
          ++nFit;
-         o_event = (Int_t)i;
+         // Prefer the event number carried on the event itself. For a fit run on GATED input
+         // the tree index is a gated-file index, not the raw event, and every downstream join on
+         // (run, event, trackID) would mismatch. pid/gate_events_C15d.C stamps the original index
+         // via SetEventID; fall back to the tree index for ungated input, where they are the same.
+         const ULong_t evId = ev->GetEventID();
+         o_event = (evId > 0 || i == 0) ? (Int_t)evId : (Int_t)i;
          o_track = ft->GetTrackID();
          if (!keep.empty() && keep.find(key(runNo, o_event, o_track)) == keep.end())
             continue;

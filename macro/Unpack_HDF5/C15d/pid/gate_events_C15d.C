@@ -31,7 +31,10 @@
 void gate_events_C15d(TString run, TString gateFile = "pid/proton_C15d.json",
                       TString inDir = "/home/yassid/C15d_reco/",
                       TString outDir = "/home/yassid/C15d_fit/in/", TString icDir = "/home/yassid/C15d_ic/",
-                      Double_t icLo = 931, Double_t icHi = 1413, TString gainTable = "gainmatch_C15d.csv",
+                      // a2091 CARBON peak. The old default [931,1413] was the a1975 window and does not describe
+                      // this beam: the a2091 D2 IC spectrum has TWO large structures in the carbon region,
+                      // 1135 and 1365, and a window spanning both mixes them.
+                      Double_t icLo = 1045, Double_t icHi = 1225, TString gainTable = "gainmatch_C15d.csv",
                       Double_t bField = 2.85, Double_t thMinDeg = -1, Bool_t requireSinglePulse = kTRUE)
 {
    gSystem->Load("libAtTools.so");
@@ -93,26 +96,37 @@ void gate_events_C15d(TString run, TString gateFile = "pid/proton_C15d.json",
          fin->Close();
          return;
       }
-      // FRIB and GET agree on most runs but not all (run_0022 has 47 % MORE FRIB events, run_0023
-      // 98 % fewer). A positional join across a mismatch pairs tracks with another event's beam.
-      if (std::llabs(ti->GetEntries() - nReco) > 1) {
-         printf("\033[1;31m%s: IC has %lld entries vs %lld reco events -- REFUSING to gate.\033[0m\n",
+      // ★ JOIN ON THE TRUE EVENT NUMBER, exactly as pid/make_points_C15d.C does. /get and /frib
+      // are in ONE merged file and both name their datasets by event number, so event N is the
+      // same trigger in both. The counts DO differ -- they are separate DAQs; run_0118 has 31446
+      // GET against 64844 FRIB -- and refusing on that mismatch discarded the beam gate for a
+      // fifth of the run set. `evtid` (written by the corrected icsum_C15d.C) makes the join
+      // exact; empty events carry evtid = -1 and are skipped, not treated as gaps.
+      // WITHOUT evtid the old positional behaviour is kept unchanged, so other experiments and
+      // older IC summaries are unaffected.
+      const bool hasEvtId = (ti->GetBranch("evtid") != nullptr);
+      if (!hasEvtId && std::llabs(ti->GetEntries() - nReco) > 1) {
+         printf("\033[1;31m%s: IC has %lld entries vs %lld reco events and no evtid -- REFUSING to "
+                "gate.\033[0m\n",
                 run.Data(), (long long)ti->GetEntries(), (long long)nReco);
          fi->Close();
          fin->Close();
          return;
       }
-      Int_t e_, np_;
+      Int_t e_, np_, ev_ = -1;
       Float_t im_;
       ti->SetBranchAddress("entry", &e_);
       ti->SetBranchAddress("icmax", &im_);
       ti->SetBranchAddress("npulse", &np_);
+      if (hasEvtId)
+         ti->SetBranchAddress("evtid", &ev_);
       for (Long64_t i = 0; i < ti->GetEntries(); ++i) {
          ti->GetEntry(i);
-         if (e_ < 0 || e_ >= (Int_t)icKeep.size())
+         const Int_t e_idx = hasEvtId ? ev_ : e_;
+         if (e_idx < 0 || e_idx >= (Int_t)icKeep.size())
             continue;
          if (im_ >= icLo && im_ <= icHi && (!requireSinglePulse || np_ == 1)) {
-            icKeep[e_] = 1;
+            icKeep[e_idx] = 1;
             ++nIC;
          }
       }
@@ -195,6 +209,12 @@ void gate_events_C15d(TString run, TString gateFile = "pid/proton_C15d.json",
       if (keep.empty())
          continue;
       nTrk += keep.size();
+      // ★ STAMP THE ORIGINAL EVENT NUMBER. The gated file contains only passing events, so its
+      // tree index runs 0..N and no longer matches the raw event. Anything joined afterwards on
+      // (run, event, trackID) -- the IC value, the pulse multiplicity -- then mismatches: after a
+      // gated fit only 7.9 % of tracks got an IC value, and the viewer's default multiplicity cut
+      // silently discarded 92 % of the sample. Carrying the original index through costs nothing.
+      p->SetEventID((ULong_t)i);
       p->SetTrackCand(std::move(keep));
       nt->Fill();
       ++nEvt;

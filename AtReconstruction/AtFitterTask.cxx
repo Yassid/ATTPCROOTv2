@@ -133,6 +133,15 @@ void AtFitterTask::Exec(Option_t *option)
    AtPatternEvent *patternEvent = dynamic_cast<AtPatternEvent *>(fPatternEventArray->At(0));
    std::vector<AtTrack> &tracks = patternEvent->GetTrackCand();
 
+   // Carry the event identifier from the pattern event to the tracking event. Without this the
+   // fitted output has no way to say WHICH event it came from, so every downstream join on
+   // (run, event, trackID) has to fall back on the tree index -- which is wrong whenever the
+   // fitter ran on a pre-gated file, because that file contains only the passing events and
+   // renumbers them from zero. Symptom: after a gated fit only 7.9 % of tracks could be matched
+   // back to their ion-chamber value, and a viewer's default multiplicity cut then silently
+   // discarded 92 % of the sample.
+   trackingEvent->SetEventID(patternEvent->GetEventID());
+
    std::cout << "\r Fitting event " << fEventCnt << " (" << tracks.size() << " tracks)..." << std::flush;
 
    fFitter->FitEvent(trackingEvent, patternEvent, fitMetadata, rawEvent, event);

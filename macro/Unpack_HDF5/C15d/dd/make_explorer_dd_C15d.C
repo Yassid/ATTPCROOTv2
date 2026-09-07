@@ -33,8 +33,31 @@ static Long64_t dump_pk(TTree *t, FILE *o)
    // the IC control when the column is absent rather than showing one that selects nothing.
    float ic = -1;
    int npulse = 0, runNo = 0;
-   const bool hasIc = t->GetBranch("ic") != nullptr;
-   const bool hasNp = t->GetBranch("npulse") != nullptr;
+   // ★ ic is only trustworthy when the fit ran on the FULL reco. With gated input,
+   // pid/gate_events_C15d.C writes a new file containing just the passing events, RENUMBERED from
+   // zero, so the kin ntuple's event index is a gated-file index and the (run,event,trackID) join
+   // back to points_C15d.root mismatches -- 7.9 % of tracks got a value. Such a sample is already
+   // IC-gated upstream anyway, so the honest thing is to omit the control rather than offer one
+   // that filters on garbage. Require most tracks to carry a value before exposing it.
+   bool hasIc = t->GetBranch("ic") != nullptr;
+   if (hasIc) {
+      const Long64_t good = t->GetEntries("ic>=0");
+      if (good < t->GetEntries() / 2) {
+         printf("  ic present but only %lld of %lld tracks carry a value -- omitting the IC column "
+                "(this sample is already IC-gated upstream)\n", good, t->GetEntries());
+         hasIc = false;
+      }
+   }
+   // npulse rides with ic: it comes from the SAME (run,event,trackID) join, so if that join was
+   // unreliable npulse is 0 for most tracks -- and the page's default multiplicity cut of [1,1]
+   // then silently discards them. That is exactly what happened: 353,860 tracks in the cache and
+   // only 18,169 visible, with no indication why. Drop them together.
+   bool hasNp = t->GetBranch("npulse") != nullptr;
+   if (hasNp && !hasIc) {
+      printf("  npulse dropped with ic (same join) -- the page would otherwise apply a "
+             "multiplicity cut against a column that is 0 for most tracks\n");
+      hasNp = false;
+   }
    // run rides along so a feature can be asked "is this one run or all of them?" in the page,
    // which is the first question to put to any structure that has no known counterpart.
    const bool hasRun = t->GetBranch("run") != nullptr;
