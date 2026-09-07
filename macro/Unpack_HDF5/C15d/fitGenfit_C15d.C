@@ -56,7 +56,32 @@ void fitGenfit_C15d(TString fileName = "run_0017", Long64_t nEvents = -1,
                     Bool_t seedFromSpyral = kFALSE,
                     // Per-run dE/dx gain matching of the persisted AtPIDEvent. Opt-in task; see the
                     // caveat printed below about SetPIDGate.
-                    Bool_t gainMatch = kTRUE, TString gainTable = "")
+                    Bool_t gainMatch = kTRUE, TString gainTable = "",
+                    // ---- TRUNCATED-SPIRAL FITTING, ported from the 16C(d,p) work (eed0a6e0). ----
+                    // A whole-track circle averages a radius that SHRINKS along a decelerating
+                    // spiral -- 0.964 -> 0.734 from vertex to stopping end at 2.85 T -- so the
+                    // momentum read from it is biased low: 0.895^2 = 0.80, the -20 % KE bias.
+                    // Fitting only the vertex-end prefix measures the curvature where the particle
+                    // still has close to its vertex momentum.
+                    //
+                    // truncPct: fixed truncation, fit the first truncPct % of the measurement
+                    // sequence (which starts at the VERTEX end by construction). 0 = off.
+                    // ⚠ Judge truncation on Ex, NEVER on chi2: chi2/ndf falls monotonically as
+                    // points are removed, so it always "improves".
+                    Double_t truncPct = 0,
+                    // FIND: fit at full length first; ONLY tracks failing chi2/ndf < findC2Max are
+                    // refitted down a ladder and the LONGEST passing prefix kept. If none passes,
+                    // the full-length fit is RESTORED, so no track is silently left as a stub.
+                    // Clean tracks cost nothing. Set findC2Max from THIS dataset's measured chi2
+                    // distribution -- the production cut of 5 would never fire.
+                    Bool_t findLongest = kFALSE, Double_t findC2Max = 0,
+                    // The ladder: prefixes at findMaxPct, findMaxPct-step, ... down to findMinPct.
+                    Double_t findStepPct = 5.0, Double_t findMinPct = 25.0, Double_t findMaxPct = 95.0,
+                    // 0 = longest passing (only failing tracks pay). 1 = scan every rung and take
+                    // the minimum chi2/ndf -- chi2/ndf is NOT monotonic in prefix length, so a
+                    // full-length fit that merely passes can hide a much better one a few rungs
+                    // down. Mode 1 costs the full ladder on EVERY track.
+                    Int_t findMode = 0)
 {
    gSystem->Load("libAtReconstruction.so");
    FairLogger::GetLogger()->SetLogScreenLevel("WARNING");
@@ -142,6 +167,25 @@ void fitGenfit_C15d(TString fileName = "run_0017", Long64_t nEvents = -1,
       fitter->SetRangeConstraint(kTRUE, gasDensity, matA);
       std::cout << "  \033[1;32mRANGE CONSTRAINT ON: stopping tracks get a FullMeasurement on |p| from "
                    "their path length\033[0m\n";
+   }
+   // Truncation and FIND are loud when active: both are a real change to WHAT IS BEING FITTED and
+   // must never have to be inferred from a filename.
+   if (truncPct > 0 && truncPct < 100) {
+      fitter->SetTruncatePercent(truncPct);
+      std::cout << "  \033[1;35mTRUNCATION ON: fitting the first " << truncPct
+                << " % of the clusters FROM THE VERTEX END (floor 8 clusters). "
+                   "Judge this on Ex, NOT on chi2 -- chi2 falls monotonically as points are "
+                   "removed.\033[0m\n";
+   }
+   if (findLongest && findC2Max > 0) {
+      fitter->SetFindLongest(kTRUE, findC2Max, findStepPct, findMinPct, findMaxPct);
+      fitter->SetFindMode(findMode);
+      std::cout << "  \033[1;35mFIND ON: tracks failing chi2/ndf < " << findC2Max << " are refitted in "
+                << findStepPct << " % steps from " << findMaxPct << " down to " << findMinPct
+                << " % from the vertex end, "
+                << (findMode == 1 ? "SCAN ALL rungs and keep the minimum chi2/ndf"
+                                  : "LONGEST passing, full length tried first (only failing tracks pay)")
+                << "\033[0m\n";
    }
    fitter->SetThetaWindow(thetaMinDeg, thetaMaxDeg);
    fitter->SetBackwardSeedFix(backwardSeedFix);

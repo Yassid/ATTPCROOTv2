@@ -43,6 +43,18 @@ NEVENTS="${4:--1}"
 # less fitting. Empty = fit everything, which is what the (d,d') pass did.
 GATE="${5:-}"
 BACKEXTRAP="${6:-kTRUE}"
+# ---- truncated-spiral fitting, all OFF by default (see fitGenfit_C15d.C for why) --------------
+# TRUNC_PCT=50            fixed truncation to the first 50 % from the vertex end
+# FIND=1 FIND_C2MAX=0.1   FIND: only tracks failing chi2/ndf < 0.1 walk the ladder
+# FIND_MODE=1             scan every rung and keep the minimum chi2/ndf (costs the ladder on all)
+TRUNC_PCT="${TRUNC_PCT:-0}"
+FIND="${FIND:-0}"
+FIND_C2MAX="${FIND_C2MAX:-0}"
+FIND_STEP="${FIND_STEP:-5.0}"
+FIND_MIN="${FIND_MIN:-25.0}"
+FIND_MAX="${FIND_MAX:-95.0}"
+FIND_MODE="${FIND_MODE:-0}"
+FIND_ON=$([[ "$FIND" == "1" ]] && echo kTRUE || echo kFALSE)
 
 case "$SPECIES" in
    p) PDG=2212;       MASS=1.00782503207; ZED=1;;
@@ -76,6 +88,10 @@ echo "  parallel : $NPAR"
 echo "  B        : $BFIELD T"
 echo "  gate     : ${GATE:-none (fitting everything)}"
 echo "  backExtr : $BACKEXTRAP"
+if [[ "$TRUNC_PCT" != "0" || "$FIND" == "1" ]]; then
+   echo "  truncate : ${TRUNC_PCT} %"
+   echo "  FIND     : $FIND  c2max $FIND_C2MAX  ladder ${FIND_MAX}->${FIND_MIN} step ${FIND_STEP}  mode $FIND_MODE"
+fi
 echo "  out      : $FIT_DIR"
 echo "  free     : $(df -BG --output=avail "$FIT_DIR" | tail -1 | tr -d ' G') GB (guard ${MIN_FREE_GB})"
 echo
@@ -119,7 +135,7 @@ do_fit() {
       # killed job must never leave one under its final name.
       local part="$FIT_DIR/.part/$run"
       rm -rf "$part"; mkdir -p "$part"
-      if root -b -q "$HERE/fitGenfit_C15d.C(\"$run\", $NEVENTS, \"$recoDir\", \"\", \"$part/\", $BFIELD, 2, 5, \"\", 4.0, 5.0, 178.0, kTRUE, kTRUE, $PDG, $MASS, $ZED, \"$SPECIES\", \"_reco\", \"ATTPC_D300torr_v2_geomanager.root\", \"ATTPC.C15d_a2091_D2.par\", 6.5643e-5, 2, kFALSE, kTRUE, kTRUE, kTRUE, kFALSE, $BACKEXTRAP)" \
+      if root -b -q "$HERE/fitGenfit_C15d.C(\"$run\", $NEVENTS, \"$recoDir\", \"\", \"$part/\", $BFIELD, 2, 5, \"\", 4.0, 5.0, 178.0, kTRUE, kTRUE, $PDG, $MASS, $ZED, \"$SPECIES\", \"_reco\", \"ATTPC_D300torr_v2_geomanager.root\", \"ATTPC.C15d_a2091_D2.par\", 6.5643e-5, 2, kFALSE, kTRUE, kTRUE, kTRUE, kFALSE, $BACKEXTRAP, kFALSE, kFALSE, kTRUE, \"\", $TRUNC_PCT, $FIND_ON, $FIND_C2MAX, $FIND_STEP, $FIND_MIN, $FIND_MAX, $FIND_MODE)" \
             >"$log" 2>&1 && [[ -s "$part/${run}_genfit_${SPECIES}.root" ]]; then
          mv -f "$part/${run}_genfit_${SPECIES}.root" "$fit"
          rm -rf "$part"
@@ -145,6 +161,7 @@ do_fit() {
 }
 export -f do_fit
 export HERE RECO_DIR FIT_DIR LOG_DIR MIN_FREE_GB NEVENTS SPECIES PDG MASS ZED BFIELD GATE BACKEXTRAP
+export TRUNC_PCT FIND_ON FIND_C2MAX FIND_STEP FIND_MIN FIND_MAX FIND_MODE
 
 printf '%s\n' "${RUNS[@]}" | xargs -P "$NPAR" -I{} bash -c 'do_fit "$@"' _ {}
 
