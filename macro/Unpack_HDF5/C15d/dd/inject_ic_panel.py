@@ -37,8 +37,9 @@ CARD = '''
           <span><i class="swatch" style="background:var(--refdim)"></i>all multiplicities</span>
           <span><i class="swatch" style="background:var(--data)"></i>selected multiplicity</span>
           <span><i class="swatch" style="background:var(--accent);opacity:.35;height:9px;width:9px;border-radius:2px"></i>selection</span>
+          <span id="icLegFit" style="display:none"><i class="swatch" style="background:var(--ink-3);opacity:.18;height:9px;width:9px;border-radius:2px"></i>not fitted</span>
           <span class="spacer" style="flex:1"></span>
-          <button id="icSnap" style="font-size:11px;padding:2px 8px">use [931, 1413]</button>
+          <button id="icSnap" style="font-size:11px;padding:2px 8px">use gate</button>
           <button id="icOff" style="font-size:11px;padding:2px 8px">clear</button>
           <label class="check" style="gap:5px"><input type="checkbox" id="icLog" checked> log y</label>
         </div>
@@ -113,6 +114,10 @@ SCRIPT = '''
       + (w ? ('window [' + Math.round(w[0]) + ', ' + Math.round(w[1]) + '] keeps ' + fmt(inWin)
               + ' = ' + (100 * inWin / Math.max(1, selTot)).toFixed(1) + '%')
            : 'no window \\u2014 drag across the plot to set one')
+      + ((IC.fitLo >= 0 && IC.fitHi > IC.fitLo)
+           ? ' \\u00b7 fits exist only in [' + Math.round(IC.fitLo) + ', ' + Math.round(IC.fitHi)
+             + '] \\u2014 the grey region has none'
+           : '')
       + ' \\u00b7 all: ' + IC.cnt.map((c, m) => ['1','2','3','4+'][m] + ':' + fmt(c)).join('  ');
     draw();
   }
@@ -132,6 +137,18 @@ SCRIPT = '''
     const px = (w) => L + (w - IC.lo) / (IC.hi - IC.lo) * pw;
     const py = (v) => T + ph - yv(v) * ph;
     geo = {L, T, pw, ph, chh};
+
+    /* The spectrum is every reconstructed track, but the fits were gated on an IC window BEFORE
+       fitting, so outside fitLo/fitHi there are no fitted tracks for a selection to act on.
+       Grey those regions rather than let the obvious experiment -- drag onto the 2058 component --
+       return an empty page that reads as a broken viewer. */
+    const fitOn = (IC.fitLo >= 0 && IC.fitHi > IC.fitLo);
+    if (fitOn){
+      x.fillStyle = css('--ink-3'); x.globalAlpha = .18;
+      if (IC.fitLo > IC.lo) x.fillRect(px(IC.lo), T, px(IC.fitLo) - px(IC.lo), ph);
+      if (IC.fitHi < IC.hi) x.fillRect(px(IC.fitHi), T, px(IC.hi) - px(IC.fitHi), ph);
+      x.globalAlpha = 1;
+    }
 
     // selection band first, so the histogram draws over it
     const w = drag ? [Math.min(drag.a, drag.b), Math.max(drag.a, drag.b)] : win();
@@ -224,7 +241,13 @@ SCRIPT = '''
   cv.addEventListener('mouseleave', () => { tip.style.display = 'none'; });
 
   const snap = document.getElementById('icSnap'), off = document.getElementById('icOff');
-  if (snap) snap.addEventListener('click', () => setWin(IC.gateLo, IC.gateHi));
+  if (snap){
+    snap.textContent = 'use [' + Math.round(IC.gateLo) + ', ' + Math.round(IC.gateHi) + ']';
+    snap.addEventListener('click', () => setWin(IC.gateLo, IC.gateHi));
+  }
+  if (IC.fitLo >= 0 && IC.fitHi > IC.fitLo){
+    const lf = document.getElementById('icLegFit'); if (lf) lf.style.display = '';
+  }
   if (off)  off.addEventListener('click', () => { if (loI){ loI.value = -1; hiI.value = 4000;
               loI.dispatchEvent(new Event('input', {bubbles:true})); } refresh(); });
   [loI, hiI, npI, npH].forEach(el => el && el.addEventListener('input', refresh));

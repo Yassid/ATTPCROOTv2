@@ -229,7 +229,7 @@ void make_explorer_dd_C15d(TString cache = "", TString outHtml = "", TString tag
    if (tG)
       cacheNames += TString(" + ") + gSystem->BaseName(cacheGenfit);
    TString cfg = TString::Format(
-      "{\"tag\":\"%s\",\"title\":\"%s excitation explorer\",\"eyebrow\":\"a1975 D2 . AT-TPC\","
+      "{\"tag\":\"%s\",\"title\":\"%s excitation explorer\",\"eyebrow\":\"a2091 D2 300 torr . AT-TPC\","
       "\"cache\":\"%s\",\"pngName\":\"explorer_%s\",\"ebeam0\":%.4f,\"beamA\":%d,"
       "\"mBeamAmu\":%.6f,\"mTargAmu\":%.6f,\"mEjectAmu\":%.6f,\"mResidAmu\":%.6f,"
       "\"refEx\":%s}",
