@@ -81,7 +81,9 @@ static TGraph *dpLocusGraph(bool flip, double Eb, double exStar, int colour,
    if (!(Eb > 0))
       return nullptr;
    auto *g = new TGraph();
-   for (double th = 1; th <= 179; th += 1.0) {
+   // 0.25 deg: the curve has to be finer than the finest grid the panel can be set to,
+   // or a smooth locus renders as a staircase over a finely binned map.
+   for (double th = 1; th <= 179; th += 0.25) {
       double b = dpBrhoC15d(th, Eb, exStar, m3Amu, m4Amu);
       if (b <= 0) continue;
       g->SetPoint(g->GetN(), flip ? 180.0 - th : th, b);
@@ -194,10 +196,13 @@ public:
          return;
       }
       auto *c2 = new TCanvas("clocus", "Brho vs polar -- inside the gate", 1000, 780);
-      // Binning: the selected sample is a few thousand tracks over a narrow Brho band, so the
-      // 180x200 grid used before put ~0.2 counts in a typical bin and the locus read as noise.
-      // 1 deg in polar and a Brho range clipped to what the GATE actually spans (padded 20 %)
-      // puts the structure where it can be seen. colz, not markers -- markers hide density.
+      // Binning: the selected sample is a few thousand tracks over a narrow Brho band, so a grid
+      // that is too fine puts ~0.2 counts in a typical bin and the locus reads as noise -- that is
+      // why this was coarsened to 180x120 once. It is now a CONTROL ("locus bins" on the bar),
+      // because the right value depends on how many tracks the gate selects: a gate holding
+      // 140k tracks can carry 0.25 deg bins that a 3k gate cannot. The Brho range stays clipped to
+      // what the GATE actually spans (padded 20 %), so the finer bins are spent on the band rather
+      // than on empty axis. colz, not markers -- markers hide density.
       double ylo = 1e9, yhi = -1e9;
       for (size_t i = 0; i < fX.size(); ++i)
          if (fNew->IsInside(fX[i], fY[i])) {
@@ -215,8 +220,8 @@ public:
                            Form("B#rho vs polar, INSIDE the gate  (%zu tracks)"
                                 ";#theta_{polar} [deg];B#rho [T#upointm]",
                                 fX.size()),
-                           180, 0, 180, 120, ylo, yhi);
-      auto *hall = new TH2F("hall", "", 180, 0, 180, 120, ylo, yhi);
+                           fLocNbx, 0, 180, fLocNby, ylo, yhi);
+      auto *hall = new TH2F("hall", "", fLocNbx, 0, 180, fLocNby, ylo, yhi);
       long nin = 0;
       for (size_t i = 0; i < fX.size(); ++i) {
          hall->Fill(fPol[i], fY[i]);
@@ -445,6 +450,15 @@ public:
 
    /// Re-read the guide level. LocusCheck builds the curve, so the panel has to be rebuilt for
    /// the change to show -- Redraw() alone repaints the PID plane, which does not carry it.
+   /// Re-bin the locus panel. Rebuilds it, since the histogram is created inside LocusCheck.
+   void ApplyLocusBins()
+   {
+      fLocNbx = std::max(10, (int)fELocX->GetNumber());
+      fLocNby = std::max(10, (int)fELocY->GetNumber());
+      printf("locus grid -> %d x %d  (%.3f deg per bin in polar)\n", fLocNbx, fLocNby, 180.0 / fLocNbx);
+      LocusCheck();
+   }
+
    void ApplyEx()
    {
       fExGuide = fEEx->GetNumber();
@@ -642,6 +656,16 @@ private:
       fEEx = new TGNumberEntry(bar, fExGuide, 6, -1, TGNumberFormat::kNESRealThree);
       fEEx->Connect("ValueSet(Long_t)", "C15dGateDraw", this, "ApplyEx()");
       bar->AddFrame(fEEx, new TGLayoutHints(kLHintsLeft | kLHintsCenterY, 2, 6, 4, 4));
+      bar->AddFrame(new TGLabel(bar, "locus bins #theta/B#rho:"),
+                    new TGLayoutHints(kLHintsLeft | kLHintsCenterY, 12, 2, 4, 4));
+      fELocX = new TGNumberEntry(bar, fLocNbx, 5, -1, TGNumberFormat::kNESInteger,
+                                 TGNumberFormat::kNEAPositive);
+      fELocX->Connect("ValueSet(Long_t)", "C15dGateDraw", this, "ApplyLocusBins()");
+      bar->AddFrame(fELocX, new TGLayoutHints(kLHintsLeft | kLHintsCenterY, 2, 2, 4, 4));
+      fELocY = new TGNumberEntry(bar, fLocNby, 5, -1, TGNumberFormat::kNESInteger,
+                                 TGNumberFormat::kNEAPositive);
+      fELocY->Connect("ValueSet(Long_t)", "C15dGateDraw", this, "ApplyLocusBins()");
+      bar->AddFrame(fELocY, new TGLayoutHints(kLHintsLeft | kLHintsCenterY, 2, 6, 4, 4));
       bar->AddFrame(new TGLabel(bar, "name:"), new TGLayoutHints(kLHintsLeft | kLHintsCenterY, 12, 2, 4, 4));
       // Default the name to the output file's stem: a gate whose "name" says one species while
       // its filename says another is how triton_14C_proton got written.
@@ -728,6 +752,9 @@ private:
    double fThLo = 0.0, fThHi = 180.0;
    TGraph *fDeutLoc = nullptr;
    TGNumberEntry *fEEx = nullptr;
+   TGNumberEntry *fELocX = nullptr, *fELocY = nullptr;
+   /// Locus-check grid. 360 x 300 is 0.5 deg x (band/300); raise it when the gate is large.
+   int fLocNbx = 360, fLocNby = 300;
    bool fShowDeut = true;
    /// Ex of the guide locus, in MeV. 0.740 is the 15C first excited state; the other levels are
    /// 3.103, 4.220 and 4.657. Set in the GUI -- see the Ex box on the button bar.

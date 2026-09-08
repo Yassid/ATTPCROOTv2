@@ -40,6 +40,12 @@ esac
 # a window spanning both mixes them. Do not "fix" this by reading that file.
 IC_LO=1045
 IC_HI=1225
+# ★ THE STORED POLAR IS 180 - theta_lab, MEASURED. Over 299,850 proton-like IC-gated single-pulse
+# tracks, Brho/locus has median 3.371 with the polar as stored (5.0 % within 20 %) against 0.898
+# flipped (37.3 % within 20 %). This was hardcoded `false`, so [Locus check] compared every band
+# against a MIRRORED curve -- the drawer's own comment says "if the selection follows the DASHED
+# curve, the flipPolar argument is set the wrong way round", and it did.
+FLIP_POLAR=true
 EBEAM=206
 XMAX=45.0
 YMAX=1.6
@@ -58,7 +64,7 @@ LOG="/home/yassid/C15d_logs/gate_draw_${species}.log"
 mkdir -p "$(dirname "$LOG")"
 
 ARGS="\"pid/${species}_C15d.json\",\"pid/points_C15d.root\",\"\",\"\",\
-${XMAX},${YMAX},${IC_LO},${IC_HI},false,${EBEAM},true,${Z},${A}"
+${XMAX},${YMAX},${IC_LO},${IC_HI},false,${EBEAM},${FLIP_POLAR},${Z},${A}"
 
 echo "opening the ${species} gate drawer (Z=${Z} A=${A}) on DISPLAY=${DISPLAY}"
 echo "  plane : pid/points_C15d.root, IC [${IC_LO}, ${IC_HI}], single pulse"
