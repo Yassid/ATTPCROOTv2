@@ -229,6 +229,32 @@ void AtDecoder2Task::Exec(Option_t *opt)
 
    if (fRawEvent == NULL)
       fRawEvent = fDecoder->GetRawEvent(fEventID++);
+
+   // End of data. The bulk driver sizes each run from its byte count rather than paying for
+   // a second full read to count events, so it deliberately overshoots by a percent or two;
+   // without this guard the overshoot dereferences a null and segfaults, losing the whole run
+   // at the very end. Emit an empty, not-good event instead and let the caller drop it, and
+   // log the true event count so the driver can report it.
+   //
+   // The GetNumPads() test is a second, weaker net: AtCore2::GetRawEvent returns NULL only
+   // when EVERY CoBo is out of data (NumPads == 0 && !IsGood), so a run whose CoBos end at
+   // different points keeps yielding events past the end. Every real event here has all 9216
+   // pads. NOTE this does NOT cure the separate failure where a decode balloons to tens of GB
+   // (~4% of the Dec 2014 alpha runs): when one CoBo ends the other eight still supply ~8192
+   // pads, so this threshold never fires. That one is still undiagnosed and is contained by an
+   // external RSS watchdog instead.
+   if (fRawEvent != NULL && fRawEvent->GetNumPads() < 1000)
+      fRawEvent = NULL;
+
+   if (fRawEvent == NULL) {
+      if (!fPastEnd) {
+         fPastEnd = kTRUE;
+         std::cout << " ==== End of data after " << fInternalID << " events." << std::endl;
+      }
+      fInternalID++;
+      new ((*fRawEventArray)[0]) AtRawEvent();
+      return;
+   }
    fInternalID++;
    // Was "% 1", i.e. one line per event. Throttled so a bulk unpack stays readable.
    if (fInternalID % 1000 == 0)

@@ -129,6 +129,7 @@ private:
    TString fXtalkMap;
 
    Long64_t fInternalID;
+   Bool_t fPastEnd{kFALSE}; ///< set once GetRawEvent has run off the end of the data
 
    Int_t fNumCobo;
    Int_t fMask;
