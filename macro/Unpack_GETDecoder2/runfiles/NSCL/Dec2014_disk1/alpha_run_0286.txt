@@ -3,7 +3,6 @@
 /media/yassid/alphas-dec14-disk1/alphas/run_0286/CoBo2_run_0286_23Dec14_15h06m06s.graw
 /media/yassid/alphas-dec14-disk1/alphas/run_0286/CoBo3_run_0286_23Dec14_15h06m06s.graw
 /media/yassid/alphas-dec14-disk1/alphas/run_0286/CoBo4_run_0286_23Dec14_15h06m06s.graw
-/media/yassid/alphas-dec14-disk1/alphas/run_0286/CoBo6_run_0286_23Dec14_15h06m06s.graw
 /media/yassid/alphas-dec14-disk1/alphas/run_0286/CoBo7_run_0286_23Dec14_15h06m06s.graw
 /media/yassid/alphas-dec14-disk1/alphas/run_0286/CoBo8_run_0286_23Dec14_15h06m06s.graw
 /media/yassid/alphas-dec14-disk1/alphas/run_0286/CoBo9_run_0286_23Dec14_15h06m06s.graw
