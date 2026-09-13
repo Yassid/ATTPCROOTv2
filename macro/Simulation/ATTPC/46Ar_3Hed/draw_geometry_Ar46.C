@@ -16,7 +16,8 @@ void draw_geometry_Ar46(TString outPng = "plots/geometry_Ar46.png")
    TString dir = gSystem->Getenv("VMCWORKDIR");
    if (dir.IsNull()) dir = "/home/yassid/fair_install/ATTPCROOTv2-OpenKF";
 
-   struct Box { TString name; double z0, z1, r0, r1; };
+   struct Box { TString name; double z0, z1, r0, r1; bool slab = false;
+                double xc = 0, yc = 0, dx = 0, dy = 0; };
    std::vector<Box> boxes;
 
    // Walk one geometry file's top volume and record every placed node as (z range, r range).
@@ -35,13 +36,23 @@ void draw_geometry_Ar46(TString outPng = "plots/geometry_Ar46.png")
          bool assembly = v->IsAssembly();
          if (!assembly && bb) {
             double dz = bb->GetDZ(), dx = bb->GetDX(), dy = bb->GetDY();
-            double rmax = std::max(dx, dy);
-            double rmin = 0;
-            if (TString(v->GetShape()->ClassName()) == "TGeoTube") {
+            // THE TRANSVERSE OFFSET MATTERS. An array element is placed off-axis, and ignoring
+            // tr[0] drew all 36 CsI elements stacked on the beam axis -- a picture that hid
+            // exactly the thing the array is for (covering the silicon face). x is used as the
+            // vertical here since this is an x-z section.
+            double xc = tr[0], yc = tr[1];
+            double rmin = 0, rmax = std::max(dx, dy);
+            bool tube = TString(v->GetShape()->ClassName()) == "TGeoTube";
+            if (tube) {
                auto *tb = (TGeoTube *)v->GetShape();
                rmin = tb->GetRmin(); rmax = tb->GetRmax();
             }
-            boxes.push_back({TString(v->GetName()), z - dz, z + dz, rmin, rmax});
+            // a tube is symmetric about the axis; a box is a slab centred on xc
+            if (tube)
+               boxes.push_back({TString(v->GetName()), z - dz, z + dz, rmin, rmax});
+            else
+               boxes.push_back({TString(v->GetName()), z - dz, z + dz, xc - dx, xc + dx, true,
+                                xc, yc, dx, dy});
          }
          for (int i = 0; i < v->GetNdaughters(); ++i) walk(v->GetNode(i), z);
       };
@@ -75,7 +86,9 @@ void draw_geometry_Ar46(TString outPng = "plots/geometry_Ar46.png")
          // shell, rmin > 0) is two bands. Drawing the solid case as a single positive band was
          // wrong and made the DSSDs look like half-detectors.
          std::vector<std::pair<double, double>> bands;
-         if (b.r0 <= 0)
+         if (b.slab)
+            bands.push_back({b.r0, b.r1});   // signed limits already, do not mirror
+         else if (b.r0 <= 0)
             bands.push_back({-b.r1, b.r1});
          else {
             bands.push_back({b.r0, b.r1});
@@ -106,6 +119,33 @@ void draw_geometry_Ar46(TString outPng = "plots/geometry_Ar46.png")
    c->cd(2);
    gPad->SetGridx(); gPad->SetGridy(); gPad->SetLeftMargin(0.07); gPad->SetRightMargin(0.02);
    drawFrame(99.5, 110.5, 7, "zoom -- dE 500 um (green), E 1000 um (blue), CsI array 18x18x25 mm (orange)");
+
+   // --- face-on view -------------------------------------------------------------------------
+   // AN x-z SECTION CANNOT SHOW AN ARRAY. The CsI elements tile contiguously in x, so in a side
+   // view all 36 collapse into one solid bar and the segmentation -- and whether the array
+   // actually covers the silicon -- is invisible. This panel looks down the beam, which is the
+   // only projection in which "does the CsI cover the DSSD" is a question you can answer.
+   TCanvas *c2 = new TCanvas("cgf", "face on", 620, 620);
+   gPad->SetGridx(); gPad->SetGridy(); gPad->SetLeftMargin(0.13);
+   TH1F *ff = gPad->DrawFrame(-7, -7, 7, 7);
+   ff->SetTitle("looking down the beam;x [cm];y [cm]");
+   for (const auto &b : boxes) {
+      if (!b.slab) continue;
+      const bool csi = b.name.Contains("CsI");
+      auto *bx = new TBox(b.xc - b.dx, b.yc - b.dy, b.xc + b.dx, b.yc + b.dy);
+      bx->SetFillStyle(0);
+      bx->SetLineColor(csi ? kOrange - 3 : (b.name.Contains("_dE") ? kGreen + 2 : kAzure + 2));
+      bx->SetLineWidth(csi ? 1 : 3);
+      bx->Draw("l");
+   }
+   {
+      auto *t = new TLatex(); t->SetTextSize(0.033);
+      t->SetTextColor(kGreen + 2); t->DrawLatex(-6.6, 6.1, "DSSD 10 x 10 cm (dE green, E blue behind)");
+      t->SetTextColor(kOrange - 3); t->DrawLatex(-6.6, 5.5, "CsI array, 18 x 18 mm elements");
+   }
+   TString facePng = outPng; facePng.ReplaceAll(".png", "_faceon.png");
+   gSystem->mkdir("plots", kTRUE);
+   c2->SaveAs(facePng);
 
    gSystem->mkdir("plots", kTRUE);
    c->SaveAs(outPng);

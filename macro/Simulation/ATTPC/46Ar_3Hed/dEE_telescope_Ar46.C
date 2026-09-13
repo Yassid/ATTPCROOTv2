@@ -18,8 +18,14 @@
 /// @param dEum  dE thickness in um, FOR THE AXIS LABEL ONLY. It is not read from the geometry, so
 ///              passing the wrong value mislabels the plot without changing anything it shows --
 ///              which is exactly what happened when a 20 um run was drawn as "500 um".
+/// @param pdgs  comma-separated PDG code per file, so one call can overlay DIFFERENT SPECIES --
+///              which is the only way this plot demonstrates anything. A single-species dE-E is a
+///              detector-response plot; the question a forward telescope has to answer is whether
+///              the residual is separable from the UNREACTED BEAM, and the beam locus comes from a
+///              no-reaction run (Ar46_3Hed_sim.C with maxELossArg = 1e5). Default: 47K everywhere.
+///              47K = 1000190470, 46Ar = 1000180460, 48Ca = 1000200480.
 void dEE_telescope_Ar46(TString files, TString labels, TString outPng = "plots/dEE_telescope_Ar46.png",
-                        Double_t dEum = 500.)
+                        Double_t dEum = 500., TString pdgs = "")
 {
    gSystem->Load("libAtSimulationData.so");
    gStyle->SetOptStat(0);
@@ -27,12 +33,68 @@ void dEE_telescope_Ar46(TString files, TString labels, TString outPng = "plots/d
 
    std::unique_ptr<TObjArray> af(files.Tokenize(","));
    std::unique_ptr<TObjArray> al(labels.Tokenize(","));
+   std::unique_ptr<TObjArray> ap(pdgs.Tokenize(","));
    const int NF = af->GetEntries();
 
-   // y range follows the dE thickness: a 20 um layer deposits ~40 MeV and would be an
-   // invisible line at the bottom of a 700 MeV axis. Frame on the data.
-   const double yHi = (dEum > 200.) ? 700. : 120.;
-   auto *hAll = new TH2D("hAll", "", 200, 0, 700, 200, 0, yHi);
+   // FRAME ON THE DATA, in two passes. A fixed 0-700 x 0-120 frame put the whole 40 um result in
+   // a corner and made the 47K and the unreacted 46Ar look like one blob when they are 10.6 %
+   // apart in dE. x always keeps 0 so that "stopped in the dE" stays visible as the left edge;
+   // y is taken from the points. The first pass below only measures the extent.
+   double xHi = 0, yLo = 1e30, yHi = 0;
+   std::vector<double> allDE;
+   for (int i = 0; i < NF; ++i) {
+      TFile *f0 = TFile::Open(((TObjString *)af->At(i))->GetString());
+      if (!f0 || f0->IsZombie()) continue;
+      TTree *t0 = (TTree *)f0->Get("cbmsim");
+      TClonesArray *si0 = nullptr, *mc0 = nullptr;
+      t0->SetBranchAddress("AtSiArrayPoint", &si0);
+      t0->SetBranchAddress("MCTrack", &mc0);
+      const int pdg0 = (i < ap->GetEntries()) ? ((TObjString *)ap->At(i))->GetString().Atoi() : 1000190470;
+      for (Long64_t e = 0; e < t0->GetEntries(); ++e) {
+         t0->GetEntry(e);
+         int id = -1;
+         for (int k = 0; k < mc0->GetEntriesFast(); ++k) {
+            auto *m = (AtMCTrack *)mc0->At(k);
+            if (m->GetMotherId() == -1 && m->GetPdgCode() == pdg0) { id = k; break; }
+         }
+         if (id < 0) continue;
+         double de = 0, rest = 0;
+         for (int k = 0; k < si0->GetEntriesFast(); ++k) {
+            auto *p = (AtSiPoint *)si0->At(k);
+            if (p->GetTrackID() != id) continue;
+            double el = p->GetEnergyLoss() * 1000.0;
+            if (el <= 0) continue;
+            if (TString(p->GetVolName()).Contains("_dE")) de += el; else rest += el;
+         }
+         if (de <= 0) continue;
+         if (rest > xHi) xHi = rest;
+         allDE.push_back(de);
+      }
+      f0->Close();
+   }
+   // PERCENTILES, NOT MIN/MAX. A dozen stray low-dE points (grazing incidence at the very edge of
+   // the wafer) would otherwise set the bottom of the axis and leave the whole lower half of the
+   // frame empty -- the same failure the fixed 0-120 frame had. How many points this pushes off
+   // the frame is PRINTED, so nothing is hidden silently.
+   long nOut = 0;
+   if (allDE.empty()) { yLo = 0; yHi = 1; xHi = 1; }
+   else {
+      std::sort(allDE.begin(), allDE.end());
+      const size_t n = allDE.size();
+      yLo = allDE[(size_t)(0.005 * n)];
+      yHi = allDE[std::min(n - 1, (size_t)(0.995 * n))];
+      const double pad = 0.10 * (yHi - yLo) + 1e-6;
+      yLo = std::max(0.0, yLo - pad);
+      yHi += pad;
+      for (double v : allDE) if (v < yLo || v > yHi) ++nOut;
+   }
+   // A stack that stops everything has EVERY point at E = 0, so the measured x extent is zero and
+   // the frame would be degenerate. Fall back to the dE scale, which keeps the "all on E = 0"
+   // signature readable instead of drawing nothing.
+   xHi = (xHi > 0) ? xHi * 1.06 : yHi;
+   printf("\n  frame: E 0 - %.0f MeV, dE %.1f - %.1f MeV  (%ld of %zu points outside)\n",
+          xHi, yLo, yHi, nOut, allDE.size());
+   auto *hAll = new TH2D("hAll", "", 200, 0, xHi, 200, yLo, yHi);
    std::vector<TGraph *> gr;
    int cols[4] = {kBlack, kRed + 1, kAzure + 2, kGreen + 3};
 
@@ -52,9 +114,10 @@ void dEE_telescope_Ar46(TString files, TString labels, TString outPng = "plots/d
       for (Long64_t e = 0; e < t->GetEntries(); ++e) {
          t->GetEntry(e);
          int kid = -1;
+         const int wantPdg = (i < ap->GetEntries()) ? ((TObjString *)ap->At(i))->GetString().Atoi() : 1000190470;
          for (int k = 0; k < mc->GetEntriesFast(); ++k) {
             auto *m = (AtMCTrack *)mc->At(k);
-            if (m->GetMotherId() == -1 && m->GetPdgCode() == 1000190470) { kid = k; break; }
+            if (m->GetMotherId() == -1 && m->GetPdgCode() == wantPdg) { kid = k; break; }
          }
          if (kid < 0) continue;
          ++nK;
@@ -88,8 +151,8 @@ void dEE_telescope_Ar46(TString files, TString labels, TString outPng = "plots/d
 
    c->cd(1);
    gPad->SetGridx(); gPad->SetGridy(); gPad->SetLeftMargin(0.13); gPad->SetRightMargin(0.03);
-   TH1F *fr = gPad->DrawFrame(0, 0, 700, yHi);
-   fr->SetTitle(Form("^{47}K in the telescope;E after the #DeltaE (E + CsI)  [MeV];#DeltaE  (%.0f #mum Si)  [MeV]", dEum));
+   TH1F *fr = gPad->DrawFrame(0, yLo, xHi, yHi);
+   fr->SetTitle(Form("in the telescope;E after the #DeltaE (E + CsI)  [MeV];#DeltaE  (%.0f #mum Si)  [MeV]", dEum));
    fr->GetYaxis()->SetTitleOffset(1.3);
    auto *lg = new TLegend(0.45, 0.72, 0.95, 0.90);
    lg->SetBorderSize(0); lg->SetFillStyle(0); lg->SetTextSize(0.036);

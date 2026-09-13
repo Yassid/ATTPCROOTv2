@@ -55,7 +55,13 @@ void Ar46_3Hed_sim(Int_t nEvents = 2000, Double_t thetaMinCM = 15.0, Double_t th
                    // there. Pass kTRUE to place the two DSSDs behind the cathode -- only useful
                    // for the REVERSED detector, where the beam leaves through the cathode.
                    Bool_t withTelescope = kFALSE,
-                   TString telescopeGeo = "Ar46_telescope_v1.0.root")
+                   TString telescopeGeo = "Ar46_telescope_v1.0.root",
+                   // NO-REACTION MODE. Pass a threshold far above the 95.7 MeV a beam traversal
+                   // actually deposits (e.g. 1e5) and no reaction ever fires, so the BEAM crosses
+                   // the whole chamber and reaches the telescope. That is the only way to get the
+                   // unreacted beam's dE-E locus, which is what the residual has to be separated
+                   // from. Default 96.0 is the production value and is unchanged.
+                   Double_t maxELossArg = 96.0)
 {
    // Parallel jobs with no seed produce byte-identical events, so "more statistics" would be the
    // same sample copied. seed = 0 keeps ROOT's time-based default; pass a distinct value per job.
@@ -87,6 +93,16 @@ void Ar46_3Hed_sim(Int_t nEvents = 2000, Double_t thetaMinCM = 15.0, Double_t th
    // HELIOS macros use for AtSiArray. Its geometry (geometry/Ar46_telescope.C) places the two
    // DSSDs at z = 105 and 106 cm, i.e. past the 100 cm drift volume, so it cannot overlap the TPC.
    if (withTelescope) {
+      // ABORT ON A MISSING TELESCOPE GEOMETRY. FairModule reports it as "[FATAL] ... not found in
+      // standard path" and then CARRIES ON: the module stays in the list, nothing is placed, and
+      // the run completes with an empty AtSiPoint branch. That produced a full 12000-event sample
+      // whose telescope recorded zero of 5673 residuals -- indistinguishable from a real null
+      // result until the log was read.
+      if (gSystem->AccessPathName(dir + "/geometry/" + telescopeGeo)) {
+         std::cout << "\n  FATAL: telescope geometry " << telescopeGeo << " is not in "
+                   << dir << "/geometry/ -- build it with geometry/Ar46_telescope.C\n\n";
+         return;
+      }
       FairDetector *tel = new AtSiArray("Ar46Telescope", kTRUE);
       tel->SetGeometryFileName(telescopeGeo);
       run->AddModule(tel);
@@ -141,7 +157,7 @@ void Ar46_3Hed_sim(Int_t nEvents = 2000, Double_t thetaMinCM = 15.0, Double_t th
    // The kinematics are NOT affected by this knob: startReactionEvent() hands the generator
    // gMC->Etot() (AtTpc.cxx:257), the true transported energy, so the residual beam energy at the
    // vertex is right whatever maxELoss is. maxELoss only places the vertex.
-   Double_t maxELoss = 96.0; // MeV
+   Double_t maxELoss = maxELossArg; // MeV, default 96.0 -- see the argument
 
    AtTPCIonGenerator *ionGen =
       new AtTPCIonGenerator("Ion", z, a, q, m, px, py, pz, BExcEner, Bmass, NomEnergy, maxELoss);

@@ -19,13 +19,51 @@
 /// because ions punch through 1.5 mm of silicon, so the CsI is not optional decoration; it is
 /// where the remaining energy is measured.
 ///
-/// !! AN OPEN DISCREPANCY, RECORDED SO IT IS NOT REDISCOVERED. !! GEANT4 in this simulation has
-/// a 461 MeV 47K depositing 279 MeV in only 100 um of silicon, i.e. stopping in ~150-200 um,
-/// which cannot be reconciled with a stack that deliberately puts CsI behind 1.5 mm of silicon.
-/// AtELossCATIMA disagrees with GEANT4 by a factor ~4.5 on the same case. Something in that chain
-/// is wrong and it has NOT been resolved -- so read the deposits this geometry produces as a
-/// measurement to be checked against the real detector, not as a prediction to trust. The same
-/// question hangs over AtELossCATIMA wherever else this analysis uses it.
+/// !! THE 500/1000 um STACK CANNOT WORK FOR THIS RESIDUAL, AND THE OLD "FACTOR 4.5" NOTE WAS
+/// WRONG -- BUT THE CODES DO NOT AGREE EITHER. !! (measured 2026-09-09)
+///
+/// RANGE. The 47K residual arrives at 9.5-10.9 MeV/u (arrival KE 477 +- 14 MeV, measured) and its
+/// range in silicon is 119-172 um. catima called directly gives 133.5 um at 461 MeV, and
+/// AtELossCATIMA::GetRange gives 133.7 um -- that path is a direct catima::range call and is not
+/// step-dependent. A Bethe-Barkas hand check agrees: a 10 MeV proton in Si loses 35.8 MeV cm2/g
+/// (PSTAR says 35.5), and Z_eff = 17.5 for K at this velocity gives Z_eff^2 = 307, hence
+/// 2561 MeV/mm -- catima's own entrance value to 0.1 %. The old note here claiming a 573 um range
+/// is simply wrong.
+///
+/// dE/dx. GEANT4 in this simulation is LOW against all of that, by 15-30 %:
+///
+///     layer      arrival      GEANT4 dE      catima dE     catima/GEANT4
+///     100 um     461 MeV       278.6 MeV      315.2 MeV        1.13
+///      40 um     476 MeV        81.5 MeV      107.3 MeV        1.32
+///
+/// (the ratio is not constant because at 100 um the ion is already into its Bragg peak, and the
+/// two codes put that peak in different places.) catima is the one that matches the hand check,
+/// so GEANT4's heavy-ion stopping here is the suspect -- most likely the physics list's ion
+/// parameterisation. NOT RESOLVED, but it is a 25 % question, not a factor of 4.5.
+///
+/// !! THE TRAP THAT MANUFACTURED THE OLD DISAGREEMENT !! AtELossCATIMA integrates in steps of
+/// fRangeStepSize, DEFAULT 0.1 mm -- one single step for a 100 um layer. Its deposit for the case
+/// above runs 256.0 / 279.1 / 306.8 / 315.2 MeV at steps of 0.1 / 0.05 / 0.01 / 0.001 mm. The
+/// default underestimates by 19 %, and 256 MeV happens to sit close to GEANT4's 279, which is what
+/// made the two look like they agreed. CALL SetRangeStepSize() BEFORE USING GetEnergy OR
+/// GetEnergyLoss ON ANYTHING THINNER THAN A FEW MILLIMETRES. GetRange(E, 0) is unaffected.
+///
+/// WHAT THIS MEANS FOR THE STACK -- and it is the same answer under either code. The hardware
+/// stack is a TOTAL-ENERGY detector for 47K and carries no dE-E information: measured on 12000
+/// events per state, 5680 of 5688 residuals stop in the 500 um dE, NOTHING reaches the E layer,
+/// and the CsI -- behind 1.5 mm of silicon -- never fires. The CsI is presumably there for light
+/// ejectiles, but in this reaction the deuteron goes BACKWARD (theta_lab 60-134 deg) and never
+/// reaches the telescope at all.
+///
+/// A WORKING STACK NEEDS A THIN dE. Build one with the thickness arguments:
+///   root -l 'geometry/Ar46_telescope.C(40,200,"40_200")'
+/// Measured on 12000 events: 5655 of 5665 residuals deposit in the 40 um dE and 5650 punch through
+/// into the E layer -- 99.8 % -- with a mean dE of 81.4 MeV, and the CsI still empty. 200 um of E
+/// stops the rest with margin. The species separate by ~9 % in dE per unit of Z (46Ar / 47K /
+/// 48Ca), nearly independent of the dE thickness, while the energy-loss straggling is 0.05-0.3 %,
+/// so the separation is limited by DETECTOR resolution, not physics: ~1 % silicon leaves it
+/// ~9 sigma. That 9 % is a Z_eff^2 scaling both codes share, so the GEANT4/catima gap above does
+/// not put it in doubt.
 ///
 /// SIZE AND STANDOFF. The residual stays within 3.33 deg of the axis over the proposal's
 /// theta_cm 15-80 deg window, but the vertex is spread over the whole metre of gas, so the lever
@@ -38,6 +76,16 @@
 /// and what is clipped is always the large-theta_cm corner, where the DWBA is weakest -- so the
 /// real loss is smaller than those flat numbers. 5 cm is the default here as a compromise with
 /// whatever the vessel actually needs; move it with kZFront.
+///
+/// MEASURED, 2026-09-09, and it BEATS that table: 99.9 % of the 47K residuals deposit in the dE
+/// (5680 of 5688 on 12000 events, at 2.85 T with a 5 cm gap). The analytic numbers above are
+/// straight lines and are therefore pessimistic -- the solenoid FOCUSES a residual emitted from a
+/// point on its own axis, and the median radius at the dE comes out 2.15 cm against a
+/// straight-line 2.43 cm. Do not read the field as a nuisance here; it helps.
+///
+/// That 99.9 % only became visible once the residual stopped being truncated in flight: see
+/// AtGenerators/AtTPCIonGenerator.cxx. Before that fix this telescope measured 46 %, and the
+/// deficit was NOT geometric.
 ///
 /// POSITION. Both layers are position sensitive. Strip pitch is NOT in this geometry -- Geant4
 /// records the true hit position in AtSiPoint and the strips are applied in analysis, which is
@@ -55,6 +103,7 @@
 #include "TString.h"
 #include "TSystem.h"
 
+#include <cmath>
 #include <iostream>
 
 TString geoVersion = "Ar46_telescope_v1.0";
@@ -75,11 +124,14 @@ const Double_t kGap = 5.0;     ///< clearance between the cathode and the first 
 const Double_t kZFront = kDriftEnd + kGap;
 Double_t kDEThick = 0.0500; ///< dE DSSD,  500 um  (overridden by the argument)
 Double_t kEThick = 0.1000;  ///< E  DSSD, 1000 um  (overridden by the argument)
-// CsI array: 18 x 18 mm entrance face, 25 mm deep. 5 x 5 covers 90 x 90 mm, i.e. the 10 x 10 cm
-// silicon in front of it -- the element size is the hardware, the 5 x 5 count is an assumption
-// and is the first thing to change if the real array differs.
-const Int_t kNCsI = 5;            ///< elements per side
-const Double_t kCsIFace = 1.8;    ///< entrance face [cm]
+// CsI array: 18 x 18 mm entrance face, 25 mm deep -- the element size and depth are the hardware.
+// THE COUNT IS DERIVED, NOT CHOSEN, so the array always COVERS THE DSSD: a fixed 5 x 5 spans only
+// 90 x 90 mm against a 100 x 100 mm silicon and leaves the corners -- and therefore the largest
+// theta_cm, which is where the residual lands -- unwatched. ceil() rounds up, so the array
+// slightly overhangs the silicon rather than falling short, and it follows kXSize/kYSize
+// automatically if the DSSD size is ever changed.
+const Int_t kNCsI = (Int_t)std::ceil(std::max(kXSize, kYSize) / 1.8); ///< elements per side
+const Double_t kCsIFace = 1.8;    ///< entrance face [cm] -- hardware
 const Double_t kCsIDepth = 2.5;   ///< depth [cm]
 const Double_t kCsIGap = 0.5;     ///< gap between the E DSSD and the CsI front face [cm]
 const Double_t kSep = 1.0;        ///< gap between the two DSSDs [cm]
@@ -124,6 +176,19 @@ void Ar46_telescope(Double_t dEum = 500., Double_t Eum = 1000., TString tag = ""
    gGeoMan->CheckOverlaps(0.001);
    gGeoMan->PrintOverlaps();
    gGeoMan->Test();
+
+   // WRITE INTO $VMCWORKDIR/geometry, NOT THE CURRENT DIRECTORY. FairModule::SetGeometryFileName
+   // searches only the standard geometry path, and a file it cannot find there is reported as
+   // "[FATAL] ... not found in standard path" -- which does NOT stop the job. A 12000-event run
+   // was produced that way with a telescope present in the module list, no geometry behind it and
+   // ZERO AtSiPoints, and it looked like a physics result (0 of 5673 residuals in the dE) rather
+   // than a missing file.
+   TString outDir = gSystem->Getenv("VMCWORKDIR");
+   if (outDir.IsNull())
+      outDir = "..";
+   outDir += "/geometry/";
+   FileName = outDir + FileName;
+   FileName1 = outDir + FileName1;
 
    TFile *outfile = new TFile(FileName, "RECREATE");
    top->Write();
