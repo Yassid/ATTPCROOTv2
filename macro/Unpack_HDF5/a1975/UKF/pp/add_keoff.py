@@ -71,10 +71,19 @@ _new_col = ("const REF_COL = ['#ff7f0e','#2ca02c','#8f9aa4','#e6194b','#911eb4',
             "const refColor = i => REF_COL[i] || css('--refdim');")
 if _old_col in s0:
     s0 = s0.replace(_old_col, _new_col, 1)
-    # solid for g.s., 0.740 and 3.103; dashed for the Sn threshold and the higher ones
+    # Dashed: the separation-energy threshold itself, and everything from the SECOND unbound
+    # level up. Solid: the bound states and the first unbound level, which is the one worth
+    # picking out of the heat map.
+    # This was `i === 2 || i > 3` -- the same rule, but hardcoded to Sn sitting at index 2, which
+    # is true only for the (d,t) list it was written for. On the (d,p) list
+    # (0, 0.217, 0.331, 0.729:Sn, 2.763, ...) that dashed a real bound state and drew Sn solid.
+    # Anchoring on Sn's LABEL reproduces the (d,t) styling exactly (SN_I = 2 there) and is
+    # correct for any channel. The fallback keeps the old behaviour if no level is labelled Sn.
     s0 = s0.replace("const loci = REF_EX.map((r, i) => [r.ex, refColor(i), i < 2 ? [] : [5,4]]);",
-                    "const loci = REF_EX.map((r, i) => [r.ex, refColor(i), (i === 2 || i > 3) ? [5,4] : []]);", 1)
-    print("  reference loci recoloured: g.s. orange, 0.740 green, 3.103 red (solid)")
+                    "const SN_I = REF_EX.findIndex(r => /\\bSn\\b/i.test(r.label || ''));\n"
+                    "const dashed = i => SN_I >= 0 ? (i === SN_I || i > SN_I + 1) : (i === 2 || i > 3);\n"
+                    "const loci = REF_EX.map((r, i) => [r.ex, refColor(i), dashed(i) ? [5,4] : []]);", 1)
+    print("  reference loci recoloured; Sn dashed, bound states + first unbound level solid")
 else:
     print("  WARNING: refColor not found, loci left as they were")
 
