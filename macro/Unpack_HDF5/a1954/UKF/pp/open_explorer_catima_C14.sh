@@ -30,13 +30,64 @@ LEVELS="0:g.s.,6.094:1-,6.728:3-,7.012:2+,7.341:2-,8.317:2+,8.176:Sn"
 root -b -l -q "$MK(\"$CACHE\",\"$OUT\",\"14C(p,p')\",$EBEAM,14.003242,1.007825,1.007825,14.003242,14,\"$LEVELS\",\"\",\"\",\"GENFIT_CATIMA\")" || true
 [[ -s "$OUT" ]] || { echo "ERROR: explorer not written"; exit 1; }
 
+# The 1n phase space baked by phasespace_1n_C14.C, embedded so the global-fit panel can use the
+# exact shape the ROOT macros fit with (the panel also generates its own, live, at the page's E_beam).
+PS_ROOT="$HERE/plots/phasespace_1n_C14.root"
+PS_JSON="$HERE/plots/.phasespace_1n_C14.json"
+[[ -s "$PS_ROOT" ]] || { echo "ERROR: missing $PS_ROOT -- run phasespace_1n_C14.C"; exit 1; }
+root -b -l -q -e 'TFile f("'"$PS_ROOT"'"); auto h = (TH1D*)f.Get("hPS"); if (!h) { printf("NOHPS\n"); return; }
+  printf("GFHPS{\"lo\":%g,\"hi\":%g,\"v\":[", h->GetXaxis()->GetXmin(), h->GetXaxis()->GetXmax());
+  for (int b = 1; b <= h->GetNbinsX(); ++b) printf("%.6g%s", h->GetBinContent(b), b < h->GetNbinsX() ? "," : "");
+  printf("]}\n");' 2>/dev/null | grep '^GFHPS' | sed 's/^GFHPS//' > "$PS_JSON" || true
+[[ -s "$PS_JSON" ]] || { echo "ERROR: could not read hPS from $PS_ROOT"; exit 1; }
+
 # the generator stamps a2091; and set the adopted defaults on the controls
-python3 - "$OUT" <<'EOF'
+python3 - "$OUT" "$HERE/explorer_globalfit_C14.js" "$PS_JSON" <<'EOF'
 import re, sys
 p = sys.argv[1]
 s = open(p, encoding='utf-8').read()
 n0 = len(s)
+gf = open(sys.argv[2], encoding='utf-8').read()
+if gf.count('/*@@GF_HPS@@*/null') != 1:
+    sys.exit("ERROR: GF_HPS placeholder not found exactly once in explorer_globalfit_C14.js")
+gf = gf.replace('/*@@GF_HPS@@*/null', open(sys.argv[3], encoding='utf-8').read().strip())
 subs = [
+    # ---- global-fit panel (explorer_globalfit_C14.js): render hook, exports, and the code itself
+    ("  $('foot').textContent = CFG.tag", "  globalFit(s);\n  $('foot').textContent = CFG.tag"),
+    ("const panelIds = () => ['cEx','cKT','cEt','cSl','cVz']", "const panelIds = () => ['cEx','cKT','cEt','cSl','cVz','cGf']"),
+    ("cSl:'Ex_slice', cVz:'Ex_vs_vertexz'};", "cSl:'Ex_slice', cVz:'Ex_vs_vertexz', cGf:'Ex_globalfit'};"),
+    ("    if (v.kind === 'hist') {", "    if (v.kind === 'gfit') { lines.push(...v.csv); continue; }\n    if (v.kind === 'hist') {"),
+    # the stitched figure assumed exactly one wide panel at an even index; lay panels out in order,
+    # wide ones at full width and their own aspect ratio
+    ("""    const w = cs[0].width, h = cs[0].height, rows = Math.ceil(cs.length/2);
+    const out = document.createElement('canvas');
+    out.width = w*2; out.height = h*rows;
+    const g = out.getContext('2d');
+    g.fillStyle = css('--plot'); g.fillRect(0,0,out.width,out.height);
+    cs.forEach((cv, i) => {
+      if (cv.id === 'cVz') g.drawImage(cv, 0, Math.floor(i/2)*h, w*2, h);
+      else g.drawImage(cv, (i%2)*w, Math.floor(i/2)*h, w, h);
+    });""",
+     """    const w = cs[0].width, h = cs[0].height, place = [];
+    let y = 0, col = 0;
+    for (const cv of cs) {
+      if (cv.id === 'cVz' || cv.id === 'cGf') {
+        if (col) { y += h; col = 0; }
+        const hh = Math.round(cv.height/cv.width*w*2);
+        place.push([cv, 0, y, w*2, hh]); y += hh;
+      } else {
+        place.push([cv, col*w, y, w, h]);
+        if (col) { y += h; col = 0; } else col = 1;
+      }
+    }
+    if (col) y += h;
+    const out = document.createElement('canvas');
+    out.width = w*2; out.height = y;
+    const g = out.getContext('2d');
+    g.fillStyle = css('--plot'); g.fillRect(0,0,out.width,out.height);
+    for (const [cv, x0, y0, ww, hh] of place) g.drawImage(cv, x0, y0, ww, hh);"""),
+    ("\ninit();\n</script>", "\n" + gf + "\ninit();\n</script>"),
+    # ---- adopted defaults
     ('"eyebrow":"a2091 . AT-TPC"', '"eyebrow":"a1954 . AT-TPC . GENFIT+CATIMA"'),
     ('id="hdrEyebrow">a2091 &middot; AT-TPC', 'id="hdrEyebrow">a1954 &middot; AT-TPC'),
     ('<input type="checkbox" id="kcOn">', '<input type="checkbox" id="kcOn" checked>'),
