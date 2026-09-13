@@ -96,7 +96,16 @@ void fitGenfitter_a1975_deuterium(TString fileName = "run_0016", Long64_t nEvent
                                   // kept if already under findC2Max, so this does not skip it --
                                   // it skips the rungs just below full length, which are the ones
                                   // a long track is least likely to be rescued by.
-                                  Double_t findMaxPct = 95.0)
+                                  Double_t findMaxPct = 95.0,
+                                  // THE FLOOR THAT ACTUALLY BINDS once findMinPct is small.
+                                  // AtGenfitter has always had this guard (fTruncMinClusters,
+                                  // default 8) but nothing could set it, so the percentage looked
+                                  // like the floor when it is not: at findMinPct = 1 a 500-cluster
+                                  // track hits 8 clusters at 1.6 %, and a 100-cluster track at
+                                  // 8 %, so for most tracks THIS is the real limit and the
+                                  // percentage never bites.  Default 8 = the previous behaviour
+                                  // exactly, so passing nothing changes nothing.
+                                  Int_t findMinClusters = 8)
 {
    gSystem->Load("libAtReconstruction.so");
    FairLogger::GetLogger()->SetLogScreenLevel("WARNING");
@@ -193,6 +202,7 @@ void fitGenfitter_a1975_deuterium(TString fileName = "run_0016", Long64_t nEvent
    if (findLongest && findC2Max > 0) {
       fitter->SetFindLongest(kTRUE, findC2Max, findStepPct, findMinPct, findMaxPct);
       fitter->SetFindMode(findMode);
+      fitter->SetTruncateMinClusters(findMinClusters);
       std::cout << "  \033[1;35mFIND ON: tracks failing chi2/ndf < " << findC2Max
                 << " are refitted in " << findStepPct << " % steps from " << findMaxPct << " down to " << findMinPct
                 << " % from the vertex end, "

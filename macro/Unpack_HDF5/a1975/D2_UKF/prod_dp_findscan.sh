@@ -77,6 +77,12 @@ export C2MAX="${C2MAX:-0.1}"
 export STEP="${STEP:-5.0}"
 export MINPCT="${MINPCT:-25.0}"
 export MAXPCT="${MAXPCT:-95.0}"   # where the LADDER starts; full length is always tried first
+# THE GUARD THAT ACTUALLY BINDS once MINPCT is small.  AtGenfitter has always had it
+# (fTruncMinClusters, default 8) and nothing could set it, so the percentage looked like the floor
+# when it is not: at MINPCT=1 a 500-cluster track reaches 8 clusters at 1.6 % and a 100-cluster one
+# at 8 %, so for most tracks THIS is the limit and the percentage never bites.  8 reproduces every
+# earlier production exactly.
+export MINCL="${MINCL:-8}"
 
 # A missing gate would NOT stop the fitter -- fitGenfitter treats an empty/absent pidGate as
 # "no gate" and happily fits every track in the file, which is a 47-run production of garbage
@@ -106,7 +112,7 @@ one() {
   fi
   root -l -b -q "fitGenfitter_a1975_deuterium.C(\"${r}_multifit\",-1,\"$REC\",\"\",\"$GF\",\
 -2.85,2,5,\"$GATE\",4.0,10.0,170.0,kTRUE,kTRUE,2212,1.00782503207,1,\"p\",\"_reco\",\
-\"ATTPC_D300torr_v2_geomanager.root\",kTRUE,0,2,\"$PAR\",kFALSE,kFALSE,kFALSE,\"$TAB\",kTRUE,kTRUE,${CEL},${CFULL},0,kTRUE,${C2MAX},kFALSE,${STEP},${MINPCT},1,${MAXPCT})" \
+\"ATTPC_D300torr_v2_geomanager.root\",kTRUE,0,2,\"$PAR\",kFALSE,kFALSE,kFALSE,\"$TAB\",kTRUE,kTRUE,${CEL},${CFULL},0,kTRUE,${C2MAX},kFALSE,${STEP},${MINPCT},1,${MAXPCT},${MINCL})" \
     > "${LOG}gf_${r}.log" 2>&1
   if grep -qi 'segmentation violation' "${LOG}gf_${r}.log" || [ ! -s "$fo" ]; then
     echo "[FAIL] $r  (see ${LOG}gf_${r}.log)"; rm -f "$fo"
@@ -115,12 +121,22 @@ one() {
       || echo "[WARN] $r: CATIMA line missing from the log -- backend may not be active"
     grep -q "dE/dx from CATIMA" "${LOG}gf_${r}.log" \
       || echo "[WARN] $r: CATIMA dE/dx banner missing -- fell back to the table"
-    touch "${fo}.done"; echo "[ok] $r  $(date '+%H:%M:%S')"
+    # VALIDATE BEFORE MARKING, not only on resume.  `[ ! -s "$fo" ]` above only rejects an EMPTY
+    # file: a job killed mid-write (the OOM killer, or a memory watchdog) leaves a large but
+    # TRUNCATED file that passes -s, and the run was then marked [ok] with a .done marker while
+    # root_ok.C says "INVALID recovered".  That happened to run_0017 on 2026-09-08.  The resume
+    # check does read the product back, so a rerun would eventually catch it -- but only if
+    # somebody reruns, and the merged cache would be wrong until then.
+    vr=$(root -b -l -q "pid/root_ok.C(\"$fo\")" 2>/dev/null | grep -E '^(VALID|INVALID)' | head -1)
+    case "$vr" in
+      VALID*) touch "${fo}.done"; echo "[ok] $r  $(date '+%H:%M:%S')  (${vr})" ;;
+      *)      echo "[FAIL] $r  (${vr:-unreadable}) -- removing the truncated file"; rm -f "$fo" "${fo}.done" ;;
+    esac
   fi
 }
 export -f one
 
-echo "=== (d,p) FIND SCAN: full length kept only if chi2/ndf < $C2MAX, else ladder in $STEP % steps from $MAXPCT % to $MINPCT %: $(echo $RUNS | wc -w) runs, $NPAR parallel -> $GF ==="
+echo "=== (d,p) FIND SCAN: full length kept only if chi2/ndf < $C2MAX, else ladder in $STEP % steps from $MAXPCT % to $MINPCT % (never below $MINCL clusters): $(echo $RUNS | wc -w) runs, $NPAR parallel -> $GF ==="
 echo "    gate $GATE   table $TAB"
 printf '%s\n' $RUNS | xargs -P "$NPAR" -I{} bash -c 'one "$@"' _ {}
 echo "=== done: $(ls "$GF"/*_genfitter_p.root 2>/dev/null | wc -l) fit files in $GF ==="
