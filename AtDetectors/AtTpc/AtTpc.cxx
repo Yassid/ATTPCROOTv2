@@ -209,6 +209,12 @@ void AtTpc::correctPosOut()
 
 bool AtTpc::reactionOccursHere()
 {
+   // fTrackID == 0 DOES NOT MEAN "the beam". In the REACTION event no beam track is added, so the
+   // heavy residual is the first primary and is trackID 0 as well. What keeps this test from
+   // firing on the residual is that AtTPCIonGenerator disarms the threshold on reaction events --
+   // see the long comment there. Do NOT guard this with AtVertexPropagator::IsBeamEvent(): that
+   // flag is flipped by AtReactionGenerator::ReadEvent during GENERATION, so by stepping time its
+   // sense is inverted and the guard disables the real trigger instead of the spurious one.
    bool atEnergyLoss = fELossAcc * 1000 > AtVertexPropagator::Instance()->GetRndELoss();
    bool isPrimaryBeam = fTrackID == 0;
    bool isInRightVolume = fVolName.Contains("drift_volume") || fVolName.Contains("cell");

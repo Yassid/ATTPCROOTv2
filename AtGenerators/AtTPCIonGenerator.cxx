@@ -161,6 +161,27 @@ Bool_t AtTPCIonGenerator::ReadEvent(FairPrimaryGenerator *primGen)
          LOG(info) << cGREEN << " Random Energy AtTPCIonGenerator : " << Er << cNORMAL << std::endl;
       } else
          AtVertexPropagator::Instance()->SetRndELoss(std::numeric_limits<double>::max());
+   } else {
+      // DISARM THE THRESHOLD ON REACTION EVENTS. Until this was added it kept the value the beam
+      // had just consumed reaching the vertex, and AtTpc::reactionOccursHere() -- which recognises
+      // the beam only as fTrackID == 0 -- then fired again on the HEAVY RESIDUAL, because no beam
+      // track is added to a reaction event and the residual is therefore trackID 0 too. The
+      // residual was StopTrack()ed as soon as it deposited that same energy, i.e. after travelling
+      // roughly the vertex depth over again, and startReactionEvent() additionally called
+      // ResetVertex() mid-event, wiping the per-track energy/angle map the light ejectile's
+      // AtMCPoint EIni/AIni are read from.
+      //
+      // Measured on 46Ar(3He,d)47K with the forward telescope, 2000 events: only 46.8 % of the 47K
+      // reached the end of the drift volume, every one of them from a vertex past z = 50 cm, and
+      // each stopped residual's deposit tracked its own beam event's deposit to an RMS of 0.24 MeV
+      // over a 4-53 MeV range. Nothing before this noticed because every analysis so far used the
+      // LIGHT ejectile, which is trackID 1 and was never touched.
+      //
+      // The fix belongs here and not in AtTpc: AtVertexPropagator's beam/reaction flag is flipped
+      // by AtReactionGenerator::ReadEvent during GENERATION, so at stepping time its sense is
+      // inverted and a guard written there disables the real trigger instead of the spurious one.
+      // Here the flag still means what it says.
+      AtVertexPropagator::Instance()->SetRndELoss(std::numeric_limits<double>::max());
    }
 
    // We only want to add a beam track if it is a beam event or it is a reaction event and we are not doing a reaction
