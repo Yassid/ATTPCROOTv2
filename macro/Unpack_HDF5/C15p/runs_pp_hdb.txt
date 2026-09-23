@@ -1,0 +1,51 @@
+# a2091 15C+p PROTON-target runs for the MultiFit+HDBSCAN reco, 0138-0182.
+# Missing from the raw disk entirely: 0154 0155 0156 0168.  ->  41 runs.
+#
+# ONE RUN PER LINE. fit_batch.sh parses this with `mapfile` and takes each LINE as one run name,
+# so a wrapped list silently becomes a handful of bogus runs that all report "no reco, skipping".
+# reco_batch_C15p.sh tokenizes whitespace and tolerates either, which is how the mismatch hid.
+#
+# run_0140 IS INCLUDED here, unlike runs_pp.txt: its old reco was a 288-byte zombie but the raw
+# HDF5 is intact and it now reconstructs to 31,800 events.
+# run_0180 unpacks to 1 event -- broken in this AND the old analysis, cause unknown.
+run_0138
+run_0139
+run_0140
+run_0141
+run_0142
+run_0143
+run_0144
+run_0145
+run_0146
+run_0147
+run_0148
+run_0149
+run_0150
+run_0151
+run_0152
+run_0153
+run_0157
+run_0158
+run_0159
+run_0160
+run_0161
+run_0162
+run_0163
+run_0164
+run_0165
+run_0166
+run_0167
+run_0169
+run_0170
+run_0171
+run_0172
+run_0173
+run_0174
+run_0175
+run_0176
+run_0177
+run_0178
+run_0179
+run_0180
+run_0181
+run_0182

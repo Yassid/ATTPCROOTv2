@@ -35,9 +35,17 @@ esac
 # from its own elastic ridge, used only to draw the optional locus overlay.
 IC_LO=979.508
 IC_HI=1278.8
-EBEAM=202
+# 198 MeV, confirmed. The elastic ridge of pp/ebeam_pp_C15p.C independently returns 199.8-200.4
+# over six fit windows (locus estimator 202), so the locus overlay and [Locus check] are drawn on
+# a calibrated energy rather than the 195/157/170 guesses that preceded it.
+EBEAM="${EBEAM:-198}"
 XMAX=45.0
 YMAX=1.6
+# The plane to draw on. Defaults to the MultiFit+HDBSCAN rebuild of 2026-09-22; set POINTS to
+# pid/points_C15p.root to go back to the old PSAMax+TriplClust plane.
+POINTS="${POINTS:-pid/points_hdb_C15p.root}"
+# Draw the two-body Brho(theta) locus on the plane from the start, not just in [Locus check].
+SHOWLOCUS="${SHOWLOCUS:-true}"
 
 set +u
 # shellcheck disable=SC1091
@@ -47,16 +55,22 @@ set -u
 [[ -n "${DISPLAY:-}" ]] || { echo "ERROR: DISPLAY is unset -- the drawer needs an X display" >&2; exit 1; }
 
 cd "$HERE"
-[[ -s pid/points_C15p.root ]] || { echo "ERROR: pid/points_C15p.root missing (run pid/make_points_C15p.C)" >&2; exit 1; }
+[[ -s "$POINTS" ]] || { echo "ERROR: $POINTS missing (run pid/make_points_C15p.C)" >&2; exit 1; }
 
 LOG="/home/yassid/C15p_logs/gate_draw_${species}.log"
 mkdir -p "$(dirname "$LOG")"
 
-ARGS="\"pid/${species}_C15p.json\",\"pid/points_C15p.root\",\"\",\"\",\
-${XMAX},${YMAX},${IC_LO},${IC_HI},false,${EBEAM},true,${Z},${A}"
+# Reference gates drawn as overlays (not edited): REFP red, REFD green. Use them to check a
+# polygon against the locus of a DIFFERENT channel -- e.g. a gate drawn while the proton locus was
+# displayed, re-examined against the (p,d) one.
+REFP="${REFP:-}"
+REFD="${REFD:-}"
+ARGS="\"pid/${species}_C15p.json\",\"${POINTS}\",\"${REFP}\",\"${REFD}\",\
+${XMAX},${YMAX},${IC_LO},${IC_HI},${SHOWLOCUS},${EBEAM},true,${Z},${A}"
 
 echo "opening the ${species} gate drawer (Z=${Z} A=${A}) on DISPLAY=${DISPLAY}"
-echo "  plane : pid/points_C15p.root, IC [${IC_LO}, ${IC_HI}], single pulse"
+echo "  plane : ${POINTS}, IC [${IC_LO}, ${IC_HI}], single pulse"
+echo "  locus : Ebeam ${EBEAM} MeV, overlay ${SHOWLOCUS}  ([Locus check] enabled)"
 echo "  out   : pid/${species}_C15p.json   (existing file is backed up to .bak on save)"
 echo "  log   : $LOG"
 

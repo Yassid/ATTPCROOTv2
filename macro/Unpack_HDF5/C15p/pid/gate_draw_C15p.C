@@ -117,6 +117,16 @@ static void c15pChannelMasses(int Z, int A, double &m3Amu, double &m4Amu)
 
 class C15pGateDraw : public TObject {
 public:
+   /// "15C(p,p')", "15C(p,d)14C", ... derived from fZ/fA so it cannot disagree with the masses.
+   TString ChannelName() const
+   {
+      if (fZ == 1 && fA == 1) return "15C(p,p')";
+      if (fZ == 1 && fA == 2) return "15C(p,d)14C";
+      if (fZ == 1 && fA == 3) return "15C(p,t)13C";
+      if (fZ == 2 && fA == 3) return "15C(p,3He)13B";
+      if (fZ == 2 && fA == 4) return "15C(p,a)12B";
+      return Form("15C(p,Z%dA%d)", fZ, fA);
+   }
    C15pGateDraw(TString outJson, TString cache, TString refP, TString refD, double xMax, double yMax,
               double icLo, double icHi, bool showLocus, double eBeam, bool flipPolar, int Z, int A)
       : fOut(outJson), fXmax(xMax), fYmax(yMax), fIcLo(icLo), fIcHi(icHi), fShowLocus(showLocus),
@@ -133,8 +143,11 @@ public:
       fXhi = xMax; fYhi = yMax;
       Load(cache);
       if (fOnLocus && fShowLocus)
-         printf("=== %d tracks lie on the (d,p) g.s. locus (+-%.0f%%), drawn as red dots ===\n",
-                fOnLocus->GetN(), 100 * fLocusTol);
+         // Name the channel from the masses actually in use. This said "(d,p)" unconditionally,
+         // a string left over from the a1975 port, so a (p,p') locus reported itself as (d,p)
+         // and read as a wrong-channel bug when it was only a wrong label.
+         printf("=== %d tracks lie on the %s g.s. locus (+-%.0f%%), drawn as red dots ===\n",
+                fOnLocus->GetN(), ChannelName().Data(), 100 * fLocusTol);
       fRefP = LoadRef(refP, kRed + 1, "proton gate");
       fRefD = LoadRef(refD, kGreen + 2, "deuteron gate");
       MakeGui();

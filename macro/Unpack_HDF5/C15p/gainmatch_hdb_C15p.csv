@@ -1,0 +1,49 @@
+# C15p dE/dx gain-match factors, measured from this analysis's own PID plane
+# anchor      : most-probable dEdx for valid tracks with brho in [0.3,0.4] T*m
+# reference   : 150.883 (statistics-weighted pooled peak)
+# estimator   : interquartile truncated mean
+# run range   : 138-182
+# min tracks  : 200 per run; thinner runs are interpolated in run number
+# apply       : dEdx *= factor, sqrt_dEdx *= sqrt(factor)
+run,factor,source,peak,ntracks
+138,0.916891,measured,164.56,2050
+139,0.926127,measured,162.918,1975
+140,0.947429,measured,159.255,907
+141,0.957262,measured,157.619,2136
+142,0.957902,measured,157.514,2244
+143,0.968532,measured,155.785,785
+144,0.963805,interp,-1,20
+145,0.959078,measured,157.321,2350
+146,0.95778,measured,157.534,2398
+147,0.974579,measured,154.819,2211
+148,0.981277,interp,-1,191
+149,0.987975,measured,152.72,3028
+150,0.994473,measured,151.722,679
+151,0.994841,measured,151.666,1279
+152,1.0123,measured,149.05,2056
+153,1.02102,measured,147.776,1417
+157,1.02445,measured,147.282,1947
+158,1.0436,measured,144.58,1720
+159,1.01489,measured,148.67,1368
+160,1.02304,measured,147.485,1122
+161,1.03444,measured,145.86,895
+162,1.03934,measured,145.172,619
+163,1.01455,measured,148.719,1396
+164,1.11674,measured,135.11,752
+165,1.03209,measured,146.192,676
+166,1.01445,measured,148.734,661
+167,1.00813,measured,149.666,608
+169,1.02534,interp,-1,59
+170,1.03394,measured,145.93,1014
+171,1.03982,measured,145.105,2000
+172,1.04576,measured,144.281,1390
+173,1.03595,measured,145.647,1723
+174,1.03048,measured,146.42,1615
+175,1.04142,measured,144.883,2342
+176,1.03575,measured,145.676,1197
+177,1.04883,measured,143.859,1029
+178,1.04501,measured,144.385,489
+179,1.047,interp,-1,26
+180,1.04899,interp,-1,0
+181,1.05098,interp,-1,86
+182,1.05297,measured,143.293,743

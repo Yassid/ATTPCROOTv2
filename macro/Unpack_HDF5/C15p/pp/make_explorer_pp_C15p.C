@@ -98,13 +98,17 @@ static Long64_t dump_pk(TTree *t, FILE *o, Long64_t stride = 1)
 }
 
 /// beamA is 15, not 14: it was left at the a1954 value by the port, which mislabels every
-/// nuclide the page typesets. ebeam0 defaults to the calibrated 170 MeV (elastic ridge +
-/// Ex-vs-theta tilt on the IC+PID-gated sample), not the old 195 placeholder.
+/// nuclide the page typesets. ebeam0 is 198 MeV, confirmed independently. The elastic ridge of
+/// pp/ebeam_pp_C15p.C agrees: on the proton-gated Sep sample it walks 9 slices and returns
+/// 199.8-200.4 MeV over six fit windows (locus-count estimator 202), i.e. within 1 % of 198 --
+/// which is also the evidence that the reconstructed proton KE carries no significant bias.
+/// The 157 that stood here, and the 170 of the July a2091 analysis, came from the pre-CATIMA
+/// GenFit fits and are superseded.
 void make_explorer_pp_C15p(TString cache = "", TString outHtml = "", TString tag = "15C(p,p')",
                         // Ebeam from THIS analysis's own 15C(p,p) elastic ridge (pp/ebeam_pp_C15p.C),
                         // not an external number -- so the g.s. landing at Ex = 0 here is a
                         // self-consistency check, not a calibration.
-                        double ebeam0 = 157.0, double mBeamAmu = 15.0105993, double mTargAmu = 1.00782503,
+                        double ebeam0 = 198.0, double mBeamAmu = 15.0105993, double mTargAmu = 1.00782503,
                         // (p,p'): the ejectile is the PROTON and the residual is 15C itself.
                         double mEjectAmu = 1.00782503, double mResidAmu = 15.0105993, int beamA = 15,
                         TString refExCSV = "", TString cacheGenfit = "", TString cacheThird = "",

@@ -8,3 +8,7 @@ plots_*/
 *.json.bak
 .overnight_DONE
 .overnight_runs.txt
+.overnight_hdb_DONE
+pid/pid_hdb_C15p.csv
+pid/points_hdb_C15p.root
+pid/*.MISTAGGED-*

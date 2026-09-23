@@ -1,5 +1,5 @@
 /// @file kin_pp_C15p.C
-/// @brief (p,p') kinematics: select the gated deuterons from the fitted sample and map KE vs theta.
+/// @brief (p,p') kinematics: select the gated PROTONS from the fitted sample and map KE vs theta.
 ///
 ///   root -b -q 'pp/kin_pp_C15p.C()'
 ///
@@ -7,7 +7,7 @@
 /// run/event/trackID), and writes the KE-vs-theta_lab map plus a compact `dd` ntuple.
 ///
 /// ★ WHAT THE MAP IS FOR. 15C(p,p)15C elastic is a two-body reaction with the beam energy as its
-/// only free parameter, so the recoil-deuteron ridge KE(theta) MEASURES the beam energy:
+/// only free parameter, so the recoil-PROTON ridge KE(theta) MEASURES the beam energy:
 ///
 ///     T_d = 2 m_d p1^2 cos^2(theta) / [ (E1 + m_d)^2 - p1^2 cos^2(theta) ]
 ///
@@ -27,7 +27,11 @@ void kin_pp_C15p(TString fitDir = "/home/yassid/C15p_fit/", TString selFile = "p
                  /// Every earlier IC decision was baked into a selection file, which meant changing
                  /// the window cost a full rebuild and there was no way to see what a window was
                  /// actually selecting before committing to it.
-                 TString pointsFile = "pid/points_C15p.root")
+                 TString pointsFile = "pid/points_C15p.root",
+                 /// Ejectile suffix of the fit outputs: "p" reads <run>_kin_p.root, "d" the
+                 /// deuterons of 15C(p,d)14C, "t" the tritons. This was hardcoded to "p", so a
+                 /// deuteron production silently chained ZERO files and wrote an empty cache.
+                 TString species = "p")
 {
    gSystem->mkdir(outDir, kTRUE);
 
@@ -50,7 +54,7 @@ void kin_pp_C15p(TString fitDir = "/home/yassid/C15p_fit/", TString selFile = "p
          keep.insert(key(r, e, t));
       }
       fs->Close();
-      std::cout << "  selection : " << keep.size() << " gated deuteron tracks\n";
+      std::cout << "  selection : " << keep.size() << " gated proton tracks\n";
    }
 
    // ---- IC join ------------------------------------------------------------------------------
@@ -82,7 +86,7 @@ void kin_pp_C15p(TString fitDir = "/home/yassid/C15p_fit/", TString selFile = "p
    }
 
    TChain ch("kin");
-   const int nf = ch.Add(fitDir + "*_kin_p.root");
+   const int nf = ch.Add(fitDir + "*_kin_" + species + ".root");
    Int_t run, event, track, ndf, fwd;
    Double_t ke, th, keX, thX, vz, c2;
    ch.SetBranchAddress("run", &run);
@@ -97,10 +101,11 @@ void kin_pp_C15p(TString fitDir = "/home/yassid/C15p_fit/", TString selFile = "p
    ch.SetBranchAddress("ndf", &ndf);
    ch.SetBranchAddress("dirFwd", &fwd);
 
-   auto *h = new TH2D("hdd", "15C(p,p') gated deuterons;#theta_{lab} [deg];KE [MeV]", 180, 0, 180, 240, 0, keMax);
+   auto *h = new TH2D("hdd", "15C(p,p') gated protons;#theta_{lab} [deg];KE [MeV]", 180, 0, 180, 240, 0, keMax);
    auto *hAll = new TH2D("hddAll", "all fitted deuterons;#theta_{lab} [deg];KE [MeV]", 180, 0, 180, 240, 0, keMax);
 
-   TFile fo(outDir + "pp_kin_C15p.root", "RECREATE");
+   TString outName = (species == "p") ? "pp_kin_C15p.root" : ("pp_kin_C15p_" + species + ".root");
+   TFile fo(outDir + outName, "RECREATE");
    TTree dd("dd", "gated (p,p') kinematics");
    dd.Branch("run", &run, "run/I");
    dd.Branch("event", &event, "event/I");
@@ -143,7 +148,7 @@ void kin_pp_C15p(TString fitDir = "/home/yassid/C15p_fit/", TString selFile = "p
    c->SetLogz();
    c->SetRightMargin(0.13);
    h->Draw("colz");
-   c->SaveAs(outDir + "pp_kin_C15p.png");
+   c->SaveAs(outDir + TString(outName).ReplaceAll(".root",".png"));
    fo.Close();
 
    std::cout << "\033[1;33m=== (p,p') kinematics ===\033[0m\n"
@@ -153,5 +158,5 @@ void kin_pp_C15p(TString fitDir = "/home/yassid/C15p_fit/", TString selFile = "p
              << "  backward   : " << nBack << " = " << (nSel ? 100.0 * nBack / nSel : 0.)
              << "%  (elastic recoils in inverse kinematics should be FORWARD -- a large backward "
                 "fraction means the ejectile or the seeding is wrong)\n"
-             << "  \033[1;32mwrote\033[0m " << outDir << "pp_kin_C15p.{root,png}\n";
+             << "  \033[1;32mwrote\033[0m " << outDir << outName << " (+ .png)\n";
 }
