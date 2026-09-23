@@ -40,10 +40,15 @@ MK="$HERE/../../../a2091/UKF/pp/make_explorer_html.C"
 [[ -f "$MK" ]]    || { echo "ERROR: generator missing at $MK"; exit 1; }
 set +u; source "$HOME/fair_install/ATTPCROOTv2-OpenKF/build/config.sh" >/dev/null 2>&1; set -u
 
-root -b -l -q "$HERE/mkexp_pp.C(\"$CACHE\",\"$TMP/exp_dpfindscan.root\",1e9,$ICMIN,$ICMAX)"
+# THE SLIM NTUPLE NAME IS DERIVED FROM THE CACHE, not hardcoded. It used to be a fixed
+# exp_dpfindscan.root, so `CACHE=...find805 ./open_explorer_dp_findscan.sh` wrote find805 data into
+# a file named "findscan" and the params JSON the page exports then recorded a provenance that was
+# a lie. dp_kin_find805.root -> exp_dp_find805.root.
+EXPN="exp_$(basename "$CACHE" .root | sed 's/^dp_kin_/dp_/')"
+root -b -l -q "$HERE/mkexp_pp.C(\"$CACHE\",\"$TMP/${EXPN}.root\",1e9,$ICMIN,$ICMAX)"
 # 17C levels: the three BOUND states (unresolved here at FWHM ~0.85), Sn, then the resonances
 # from the C17_dp_fits analysis.
-root -b -l -q "$MK(\"$TMP/exp_dpfindscan.root\",\"$OUT\",\"16C(d,p)17C  dv 1.10424  CATIMA\",$EBEAM,16.0147013,2.0135532,1.00727646688,17.0225864,16,\"0:g.s.,0.217:1/2+,0.331:5/2+,0.729:Sn,2.763,3.661,4.231,4.841\",\"\")"
+root -b -l -q "$MK(\"$TMP/${EXPN}.root\",\"$OUT\",\"16C(d,p)17C  dv 1.10424  CATIMA\",$EBEAM,16.0147013,2.0135532,1.00727646688,17.0225864,16,\"0:g.s.,0.217:1/2+,0.331:5/2+,0.729:Sn,2.763,3.661,4.231,4.841\",\"\")"
 [[ -s "$OUT" ]] || { echo "ERROR: explorer not written"; exit 1; }
 THCUTLO="$THCUTLO" THCUTHI="$THCUTHI" KECUTHI="$KECUTHI" python3 - "$OUT" <<'PY'
 import sys
@@ -80,5 +85,9 @@ s=s.replace("${ACTIVE.toUpperCase()}","${lbl(ACTIVE).toUpperCase()}")
 open(p,'w',encoding='utf-8').write(s)
 PY
 python3 "$HERE/add_keoff.py" "$OUT"
+# Ebeam(vz): the beam loses ~11 MeV/m in the gas and a constant beam energy makes the
+# reconstructed Ex drift +0.45 MeV across the chamber. Measured on the g.s. simulation with truth
+# only. Added DEFAULT OFF, so the page opens exactly as before until the box is ticked.
+python3 "$HERE/add_ebvz.py" "$OUT"
 cp "$OUT" /mnt/c/Users/Yassid/Desktop/ 2>/dev/null && echo "copied to Desktop"
 echo "explorer -> $OUT"
