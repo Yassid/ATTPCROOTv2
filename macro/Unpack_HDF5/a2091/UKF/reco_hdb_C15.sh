@@ -5,7 +5,7 @@
 #
 #   ./reco_hdb_C15.sh "run_0138 run_0056 ..." 2
 RUNS="${1:-run_0138}"; NPAR="${2:-2}"
-REPO="/home/yassid/fair_install/ATTPCROOTv2"
+REPO="/home/yassid/fair_install/ATTPCROOTv2-OpenKF"
 HERE="$REPO/macro/Unpack_HDF5/a2091/UKF"
 IN="/media/yassid/Seagate Hub/ATTPC/Data/a2091/"
 OUT="/home/yassid/a2091_C15_reco"; LOG="$OUT/logs"; mkdir -p "$LOG"

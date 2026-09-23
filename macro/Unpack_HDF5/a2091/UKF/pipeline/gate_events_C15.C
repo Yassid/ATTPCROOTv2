@@ -34,7 +34,7 @@ static int CountPulses(const std::vector<Double_t> &adc, double thr, int tbLo, i
 void gate_events_C15(TString run, TString inDir = "/home/yassid/a2091_C15_reco/",
                       TString outDir = "/home/yassid/a2091_C15_fit/in/", TString refReco = "", double icLo = 979.5,
                       double icHi = 1278.8, Int_t icTbLo = 1050, Int_t icTbHi = 1250, double bField = 2.85,
-                      TString protonGate = "/home/yassid/fair_install/ATTPCROOTv2/macro/Unpack_HDF5/a2091/"
+                      TString protonGate = "/home/yassid/fair_install/ATTPCROOTv2-OpenKF/macro/Unpack_HDF5/a2091/"
                                            "UKF/pid/proton_15C.json",
                       double thMin = 90.0, double peakThr = 200, Int_t pkTbLo = 800, Int_t pkTbHi = 1500,
                       TString icDir = "/home/yassid/a2091_C15_ic/")

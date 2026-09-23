@@ -15,7 +15,7 @@
 # and 15.0105993 for 15C:  deuteron 2.014102, 14C 14.003242. (ex_C15.C's docstring suggests
 # 2.013553, which is the deuteron NUCLEAR mass -- mixing conventions would shift Ex.)
 set -u
-REPO=/home/yassid/fair_install/ATTPCROOTv2
+REPO=/home/yassid/fair_install/ATTPCROOTv2-OpenKF
 HERE=$REPO/macro/Unpack_HDF5/a2091/UKF
 RECO=/home/yassid/a2091_C15_reco            # symlink -> Seagate, shared with (p,p')
 IC=/home/yassid/a2091_C15_ic

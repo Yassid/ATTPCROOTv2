@@ -11,7 +11,7 @@
 # were reco'd before AtPIDTask was added to the chain, so the PID is not stored in the files.
 # Everything lands under the Seagate-symlinked fit directory.
 set -u
-REPO=/home/yassid/fair_install/ATTPCROOTv2
+REPO=/home/yassid/fair_install/ATTPCROOTv2-OpenKF
 HERE=$REPO/macro/Unpack_HDF5/a2091/UKF
 RECO=/home/yassid/a2091_C15_reco          # symlink -> Seagate
 IC=/home/yassid/a2091_C15_ic              # symlink -> Seagate

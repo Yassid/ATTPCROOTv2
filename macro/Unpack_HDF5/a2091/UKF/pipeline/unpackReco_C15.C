@@ -20,7 +20,11 @@ void unpackReco_C15(TString fileName = "run_0138", Long64_t nEvents = 0, Bool_t 
                      Bool_t applyTimeCorr = false, TString psaType = "multifit", Double_t primSigma = 0,
                      Double_t thr = 20, TString praType = "tc", int hdMcs = 20, int hdMs = 8, Double_t fitChi2 = 0,
                      Double_t relErr = 0.1, TString parFile = "ATTPC.a2091_C15.par", Bool_t doClean = kTRUE,
-                     Double_t bField = 2.85, Bool_t doPID = kTRUE)
+                     Double_t bField = 2.85, Bool_t doPID = kTRUE,
+                     // a2091 is H2 at 300 torr. ATTPC_H1bar.root stood here, is not generated in this
+                     // clone, and FairRunAna::SetGeomFile SEGFAULTS on the missing file rather than
+                     // reporting it -- the crash is in SetGeomFile with no "file not found" message.
+                     TString geoName = "ATTPC_H300torr_RT_geomanager.root")
 {
    gSystem->Load("libAtReconstruction.so");
    gSystem->Load("libAtTools.so");
@@ -34,7 +38,7 @@ void unpackReco_C15(TString fileName = "run_0138", Long64_t nEvents = 0, Bool_t 
    gSystem->Setenv("GEOMPATH", (dir + "/geometry/").Data());
    TString outputFile = outDir + fileName + "_reco.root";
    TString digiParFile = dir + "/parameters/" + parameterFile;
-   TString geoManFile = dir + "/geometry/ATTPC_H1bar.root";
+   TString geoManFile = dir + "/geometry/" + geoName;
    TString zlutFile = dir + "/resources/corrections/a1954/zLUT.txt";
    TString radlutFile = dir + "/resources/corrections/a1954/radLUT.txt";
    TString tralutFile = dir + "/resources/corrections/a1954/traLUT.txt";

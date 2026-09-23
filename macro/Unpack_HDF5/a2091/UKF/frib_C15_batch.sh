@@ -2,7 +2,7 @@
 # Unpack the FRIB/IC group from the a2091 HDF5 on F -> local <run>_FRIB.root (small).
 #   ./frib_C15_batch.sh "run_0138 run_0056 ..." 4
 RUNS="${1:-run_0138}"; NPAR="${2:-4}"
-REPO="/home/yassid/fair_install/ATTPCROOTv2"
+REPO="/home/yassid/fair_install/ATTPCROOTv2-OpenKF"
 HERE="$REPO/macro/Unpack_HDF5/a2091/UKF"
 IN="/media/yassid/Seagate Hub/ATTPC/Data/a2091/"
 OUT="/home/yassid/a2091_C15_reco_slim/"; LOG="${OUT}logs"; mkdir -p "$LOG"

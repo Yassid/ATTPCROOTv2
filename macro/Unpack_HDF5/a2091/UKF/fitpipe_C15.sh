@@ -10,7 +10,7 @@
 RUNS="${1:-run_0138}"; NPAR="${2:-4}"
 DENSITY="${DENSITY:-3.308e-5}"        # g/cm3, H2 at 300 torr
 GEONAME="${GEONAME:-ATTPC_H300torr_RT}"  # genfit navigation/material geometry
-REPO="/home/yassid/fair_install/ATTPCROOTv2"
+REPO="/home/yassid/fair_install/ATTPCROOTv2-OpenKF"
 HERE="$REPO/macro/Unpack_HDF5/a2091/UKF"
 SLIM="/home/yassid/a2091_C15_reco_slim/"
 FREF="/home/yassid/a2091_C15_reco/"

@@ -73,7 +73,7 @@ void make_explorer_html(TString cache = "", TString outHtml = "", TString tag = 
    if (cache.IsNull()) {
       cache = here + "/plots/proton_kin_g_ukf.root";
       if (gSystem->AccessPathName(cache)) cache = here + "/plots/proton_kin_gated.root";
-      if (gSystem->AccessPathName(cache)) cache = here + "/plots/proton_kin_ukf_E195.root";
+      if (gSystem->AccessPathName(cache)) cache = here + "/plots/proton_kin_ukf.root";
    }
    // Derive the GENFIT sibling FROM THE UKF CACHE NAME -- never from a fixed path. Hardcoding
    // proton_kin_g_genfit_nomat.root here silently paired the (p,p') GENFIT protons with the

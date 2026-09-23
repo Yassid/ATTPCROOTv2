@@ -4,7 +4,7 @@
 # Absolute paths everywhere -- a relative ./ launch is what silently killed the previous
 # chained job when the caller's cwd had moved.
 set -u
-REPO="/home/yassid/fair_install/ATTPCROOTv2"
+REPO="/home/yassid/fair_install/ATTPCROOTv2-OpenKF"
 HERE="$REPO/macro/Unpack_HDF5/a2091/UKF"
 P="$HERE/pp/plots"
 MATDIR="/home/yassid/a2091_C15_genfit_mat/"

@@ -10,7 +10,7 @@
 #
 # Everything in S3/S4 is idempotent, so re-running the chain is safe.
 # ============================================================================
-REPO=/home/yassid/fair_install/ATTPCROOTv2
+REPO=/home/yassid/fair_install/ATTPCROOTv2-OpenKF
 HERE=$REPO/macro/Unpack_HDF5/a2091/UKF
 RECO=/home/yassid/a2091_C15_reco
 FIT=/home/yassid/a2091_C15_fit

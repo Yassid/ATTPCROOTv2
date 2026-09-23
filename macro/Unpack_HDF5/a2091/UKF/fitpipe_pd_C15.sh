@@ -4,7 +4,7 @@
 # purpose (UKF beats it on this data set, see ANALYSIS_REPORT).
 #   ./fitpipe_pd_C15.sh "run_0143 run_0147" 4 [thMin]
 RUNS="${1:-run_0143}"; NPAR="${2:-4}"; THMIN="${3:-0}"
-REPO="/home/yassid/fair_install/ATTPCROOTv2"
+REPO="/home/yassid/fair_install/ATTPCROOTv2-OpenKF"
 HERE="$REPO/macro/Unpack_HDF5/a2091/UKF"
 SLIM="/home/yassid/a2091_C15_reco_slim/"
 FREF="/home/yassid/a2091_C15_reco/"

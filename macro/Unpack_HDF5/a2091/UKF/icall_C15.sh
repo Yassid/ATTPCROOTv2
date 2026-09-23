@@ -14,7 +14,7 @@
 #   ./icall_C15.sh              # all runs in runs_pp.txt, 4 parallel
 #   ./icall_C15.sh "run_0177" 1
 set -u
-REPO=/home/yassid/fair_install/ATTPCROOTv2
+REPO=/home/yassid/fair_install/ATTPCROOTv2-OpenKF
 HERE=$REPO/macro/Unpack_HDF5/a2091/UKF
 IN="/media/yassid/Seagate Hub/ATTPC/Data/a2091/"
 OUT=/home/yassid/a2091_C15_ic

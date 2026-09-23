@@ -13,7 +13,7 @@
 #   ./genfit_mat_C15.sh "run_0138 run_0056 ..." 4
 RUNS="${1:-run_0056}"; NPAR="${2:-4}"
 GEONAME="${GEONAME:-ATTPC_H300torr_RT}"
-REPO="/home/yassid/fair_install/ATTPCROOTv2"
+REPO="/home/yassid/fair_install/ATTPCROOTv2-OpenKF"
 HERE="$REPO/macro/Unpack_HDF5/a2091/UKF"
 IN="${IN:-/home/yassid/a2091_C15_fit_300torr/in/}"
 OUTDIR="${OUTDIR:-/home/yassid/a2091_C15_genfit_mat/}"; LOG="${OUTDIR}logs"

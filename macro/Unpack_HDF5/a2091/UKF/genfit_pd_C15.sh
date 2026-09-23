@@ -6,7 +6,7 @@
 # ATTPC_H600torr. Output dir bumped so the pre-fix results stay available.
 #   ./genfit_pd_C15.sh "run_0143 run_0147" 4
 RUNS="${1:-run_0143}"; NPAR="${2:-4}"
-REPO="/home/yassid/fair_install/ATTPCROOTv2"
+REPO="/home/yassid/fair_install/ATTPCROOTv2-OpenKF"
 HERE="$REPO/macro/Unpack_HDF5/a2091/UKF"
 FITDIR="/home/yassid/a2091_C15_fit_pd/"; IN="${FITDIR}in/"; LOG="${FITDIR}logs"
 OUTDIR="${OUTDIR:-/home/yassid/a2091_C15_genfix_pd/}"; mkdir -p "$OUTDIR"

@@ -17,7 +17,7 @@
 #   ./fitall_C15.sh "run_0138 run_0179" 4
 # ============================================================================
 NPAR="${2:-6}"
-REPO="/home/yassid/fair_install/ATTPCROOTv2"
+REPO="/home/yassid/fair_install/ATTPCROOTv2-OpenKF"
 HERE="$REPO/macro/Unpack_HDF5/a2091/UKF"
 RECO="${RECO:-/home/yassid/a2091_C15_reco}"
 FIT="${FIT:-/home/yassid/a2091_C15_fit}"

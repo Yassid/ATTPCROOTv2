@@ -4,7 +4,7 @@
 # a2091 notes); the Seagate has 1.7 TB. Migrating rather than recomputing also saves
 # ~3 h of CPU, and it makes fitall skip the 28 UKF fits it would otherwise redo.
 set -o pipefail
-HERE=/home/yassid/fair_install/ATTPCROOTv2/macro/Unpack_HDF5/a2091/UKF
+HERE=/home/yassid/fair_install/ATTPCROOTv2-OpenKF/macro/Unpack_HDF5/a2091/UKF
 SRC=/home/yassid/a2091_C15_fit
 DST="/media/yassid/Seagate Hub/ATTPC/a2091_C15_fit"
 LOG=/home/yassid/a2091_C15_reco/logs

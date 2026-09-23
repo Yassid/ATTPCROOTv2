@@ -9,7 +9,7 @@
 #   ./pidall_C15.sh                 # every reco'd run, 8 parallel
 #   ./pidall_C15.sh "run_0138 run_0179" 4
 set -u
-REPO=/home/yassid/fair_install/ATTPCROOTv2
+REPO=/home/yassid/fair_install/ATTPCROOTv2-OpenKF
 HERE=$REPO/macro/Unpack_HDF5/a2091/UKF
 RECO=/home/yassid/a2091_C15_reco
 PLOTS=$HERE/pid/plots

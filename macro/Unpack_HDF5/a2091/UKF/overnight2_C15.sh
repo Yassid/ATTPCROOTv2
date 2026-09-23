@@ -12,7 +12,7 @@
 # fit directory. Log lives OUTSIDE any directory that might get migrated.
 # ============================================================================
 set -u
-REPO=/home/yassid/fair_install/ATTPCROOTv2
+REPO=/home/yassid/fair_install/ATTPCROOTv2-OpenKF
 HERE=$REPO/macro/Unpack_HDF5/a2091/UKF
 GIN=/home/yassid/a2091_C15_fit/in
 GFIT=/home/yassid/a2091_C15_fit/gated

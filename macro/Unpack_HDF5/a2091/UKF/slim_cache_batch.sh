@@ -3,7 +3,7 @@
 # One drvfs pass; afterwards all PID/fit passes read locally (~250x faster).
 #   ./slim_cache_batch.sh "run_0138 run_0056 ..." 4
 RUNS="${1:-run_0138}"; NPAR="${2:-4}"
-REPO="/home/yassid/fair_install/ATTPCROOTv2"
+REPO="/home/yassid/fair_install/ATTPCROOTv2-OpenKF"
 HERE="$REPO/macro/Unpack_HDF5/a2091/UKF"
 IN="/home/yassid/a2091_C15_reco/"
 OUT="/home/yassid/a2091_C15_reco_slim/"; LOG="${OUT}logs"; mkdir -p "$LOG"

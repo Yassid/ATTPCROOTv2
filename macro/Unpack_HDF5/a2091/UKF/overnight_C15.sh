@@ -9,7 +9,7 @@
 # need a2091 physics tuning; this produces the full three-fitter dataset.
 # ============================================================================
 set -u
-REPO=/home/yassid/fair_install/ATTPCROOTv2
+REPO=/home/yassid/fair_install/ATTPCROOTv2-OpenKF
 HERE=$REPO/macro/Unpack_HDF5/a2091/UKF
 RECO=/home/yassid/a2091_C15_reco
 FIT=/home/yassid/a2091_C15_fit
