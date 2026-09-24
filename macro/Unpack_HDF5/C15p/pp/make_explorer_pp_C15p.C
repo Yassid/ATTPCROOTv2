@@ -38,8 +38,37 @@ static Long64_t dump_pk(TTree *t, FILE *o, Long64_t stride = 1)
    // the IC control when the column is absent rather than showing one that selects nothing.
    float ic = -1;
    int npulse = 0, runNo = 0;
-   const bool hasIc = t->GetBranch("ic") != nullptr;
-   const bool hasNp = t->GetBranch("npulse") != nullptr;
+   // ★ ic IS ONLY TRUSTWORTHY WHEN THE JOIN REACHED MOST TRACKS. With gated input,
+   // pid/gate_events_C15p.C writes a file containing just the passing events, RENUMBERED FROM
+   // ZERO, so the kin ntuple's event index is a gated-file index and the (run,event,trackID) join
+   // back to the points file mismatches. Such a sample is ALREADY IC-gated upstream, so the honest
+   // thing is to omit the control rather than offer one that filters on garbage.
+   //
+   // This has now bitten twice -- C15d (0d220fc3, 92 % of 353,860 tracks hidden) and C15p (62 % of
+   // 18,264) -- because each workspace carries its own copy of these macros and a new one is
+   // ported from an older, unfixed source. The guard is what makes the next recurrence visible
+   // instead of silent, so KEEP IT when porting this file.
+   bool hasIc = t->GetBranch("ic") != nullptr;
+   if (hasIc) {
+      const Long64_t good = t->GetEntries("ic>=0");
+      if (good < t->GetEntries() / 2) {
+         printf("\033[1;31m  ic present but only %lld of %lld tracks carry a value -- OMITTING the "
+                "IC column. The (run,event,trackID) join is broken: check that gate_events stamps "
+                "SetEventID, that dump_kine reads it, and that the IC summary has an evtid "
+                "branch.\033[0m\n",
+                (long long)good, (long long)t->GetEntries());
+         hasIc = false;
+      }
+   }
+   // npulse rides with ic: it comes from the SAME join, so if that join was unreliable npulse is 0
+   // for most tracks -- and the page's default multiplicity cut of [1,1] then silently discards
+   // them. Drop them TOGETHER; dropping only ic is what let the stale npulse cut through.
+   bool hasNp = t->GetBranch("npulse") != nullptr;
+   if (hasNp && !hasIc) {
+      printf("\033[1;31m  npulse dropped with ic (same join) -- the page would otherwise apply a "
+             "multiplicity cut against a column that is 0 for most tracks\033[0m\n");
+      hasNp = false;
+   }
    // run rides along so a feature can be asked "is this one run or all of them?" in the page,
    // which is the first question to put to any structure that has no known counterpart.
    const bool hasRun = t->GetBranch("run") != nullptr;

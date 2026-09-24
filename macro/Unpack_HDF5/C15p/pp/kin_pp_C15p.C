@@ -1,3 +1,4 @@
+#include <iomanip>
 /// @file kin_pp_C15p.C
 /// @brief (p,p') kinematics: select the gated PROTONS from the fitted sample and map KE vs theta.
 ///
@@ -62,6 +63,7 @@ void kin_pp_C15p(TString fitDir = "/home/yassid/C15p_fit/", TString selFile = "p
    // window was chosen on the single-pulse spectrum, so a viewer that lets the window move has to
    // be able to reproduce the single-pulse condition too.
    std::map<Long64_t, std::pair<float, int>> icMap;
+   Long64_t nIcHit = 0;   // tracks that actually matched an IC value -- see the alarm below
    if (pointsFile.Length() && !gSystem->AccessPathName(pointsFile)) {
       TFile *fp = TFile::Open(pointsFile);
       TTree *tp = fp ? (TTree *)fp->Get("pts") : nullptr;
@@ -136,8 +138,31 @@ void kin_pp_C15p(TString fitDir = "/home/yassid/C15p_fit/", TString selFile = "p
          auto it = icMap.find(key(run, event, track));
          icv = (it == icMap.end()) ? -1.f : it->second.first;
          npul = (it == icMap.end()) ? 0 : it->second.second;
+         if (it != icMap.end())
+            ++nIcHit;
       }
       dd.Fill();
+   }
+   // ★ THE JOIN-RATE ALARM. A gated fit renumbers events from zero, so joining the IC back on
+   // (run, event, trackID) silently fails unless gate_events stamps SetEventID, AtFitterTask
+   // propagates it and dump_kine reads it back. The failure is invisible -- the cache still fills,
+   // the spectrum still looks plausible -- and it has now happened twice, in C15d and C15p,
+   // costing 92 % and 62 % of their samples. Anything below "most tracks matched" is a broken
+   // chain, not a data property, so say so LOUDLY here rather than let a viewer discover it.
+   if (!icMap.empty() && nSel > 0) {
+      const double frac = 100.0 * nIcHit / nSel;
+      if (frac < 50.0)
+         std::cout << "\033[1;31m  *** IC JOIN BROKEN: only " << nIcHit << " of " << nSel << " tracks ("
+                   << std::fixed << std::setprecision(1) << frac
+                   << " %) matched an IC value.\n"
+                   << "      A gated fit renumbers events from zero. Check: pid/gate_events_C15p.C "
+                   << "calls SetEventID, dump_kine_C15p.C reads GetEventID, and the IC summary has "
+                   << "an evtid branch (icsum_C15p.C).\n"
+                   << "      The cache is still written, but ic and npulse in it are NOT "
+                   << "trustworthy. ***\033[0m\n";
+      else
+         std::cout << "  IC matched : " << nIcHit << " of " << nSel << " tracks (" << std::fixed
+                   << std::setprecision(1) << frac << " %)\n";
    }
    fo.cd();
    dd.Write();
