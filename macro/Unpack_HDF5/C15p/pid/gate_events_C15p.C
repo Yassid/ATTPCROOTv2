@@ -30,7 +30,7 @@
 
 void gate_events_C15p(TString run, TString gateFile = "pid/proton_C15p.json",
                       TString inDir = "/home/yassid/a2091_C15_reco/",
-                      TString outDir = "/home/yassid/C15p_fit/in/", TString icDir = "/home/yassid/a2091_C15_ic/",
+                      TString outDir = "/home/yassid/C15p_fit/in/", TString icDir = "/home/yassid/Data/a2091_C15p_ic_evtid/",
                       Double_t icLo = 931, Double_t icHi = 1413, TString gainTable = "gainmatch_C15p.csv",
                       Double_t bField = 2.85, Double_t thMinDeg = -1, Bool_t requireSinglePulse = kTRUE)
 {
@@ -95,24 +95,33 @@ void gate_events_C15p(TString run, TString gateFile = "pid/proton_C15p.json",
       }
       // FRIB and GET agree on most runs but not all (run_0022 has 47 % MORE FRIB events, run_0023
       // 98 % fewer). A positional join across a mismatch pairs tracks with another event's beam.
-      if (std::llabs(ti->GetEntries() - nReco) > 1) {
+      // ★ JOIN ON THE TRUE EVENT NUMBER when the IC summary carries one. The counts DO differ --
+      // /get and /frib are separate DAQs -- and refusing on that mismatch threw whole runs away
+      // (0140, 0151). `evtid`, written by the corrected icsum_C15p.C, makes the join exact.
+      // WITHOUT evtid the old positional behaviour AND its refusal are kept, so an older IC
+      // summary still behaves exactly as before.
+      const bool hasEvtId = (ti->GetBranch("evtid") != nullptr);
+      if (!hasEvtId && std::llabs(ti->GetEntries() - nReco) > 1) {
          printf("\033[1;31m%s: IC has %lld entries vs %lld reco events -- REFUSING to gate.\033[0m\n",
                 run.Data(), (long long)ti->GetEntries(), (long long)nReco);
          fi->Close();
          fin->Close();
          return;
       }
-      Int_t e_, np_;
+      Int_t e_, np_, ev_ = -1;
       Float_t im_;
       ti->SetBranchAddress("entry", &e_);
+      if (hasEvtId)
+         ti->SetBranchAddress("evtid", &ev_);
       ti->SetBranchAddress("icmax", &im_);
       ti->SetBranchAddress("npulse", &np_);
       for (Long64_t i = 0; i < ti->GetEntries(); ++i) {
          ti->GetEntry(i);
-         if (e_ < 0 || e_ >= (Int_t)icKeep.size())
+         const Int_t e_idx = hasEvtId ? ev_ : e_;
+         if (e_idx < 0 || e_idx >= (Int_t)icKeep.size())
             continue;
          if (im_ >= icLo && im_ <= icHi && (!requireSinglePulse || np_ == 1)) {
-            icKeep[e_] = 1;
+            icKeep[e_idx] = 1;
             ++nIC;
          }
       }
@@ -195,6 +204,13 @@ void gate_events_C15p(TString run, TString gateFile = "pid/proton_C15p.json",
       if (keep.empty())
          continue;
       nTrk += keep.size();
+      // ★ CARRY THE ORIGINAL EVENT NUMBER. This writes a new reco holding only the events that
+      // pass the gate, RENUMBERED FROM ZERO, so after a gated fit the kin ntuple's event number is
+      // a gated-file index and every join on (run, event, trackID) mismatches. Measured here: only
+      // 7,059 of 18,264 (p,d) tracks could be matched back to an IC value, and the viewer's
+      // default multiplicity cut then hid 62 % of the sample with nothing on screen saying why.
+      // AtFitterTask propagates this through the fit; dump_kine_C15p.C reads it back.
+      p->SetEventID((ULong_t)i);
       p->SetTrackCand(std::move(keep));
       nt->Fill();
       ++nEvt;

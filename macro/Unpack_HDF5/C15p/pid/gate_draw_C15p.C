@@ -222,12 +222,21 @@ public:
       double pad = 0.2 * (yhi - ylo) + 1e-3;
       ylo = std::max(0.0, ylo - pad);
       yhi = yhi + pad;
+      // Binning is tunable at run time -- LOCUS_NBX (polar) and LOCUS_NBY (Brho) -- because the
+      // right choice depends on how many tracks the gate keeps. Too coarse and two bands merge;
+      // too fine and a few-thousand-track selection reads as noise, which is why this was
+      // coarsened from 180x200 once already. Defaults 360x240 = 0.5 deg, twice the old Brho
+      // resolution. Set them when the selection is large enough to carry it.
+      int nbx = 360, nby = 240;
+      if (const char *e = gSystem->Getenv("LOCUS_NBX")) { int v = atoi(e); if (v > 10 && v <= 3600) nbx = v; }
+      if (const char *e = gSystem->Getenv("LOCUS_NBY")) { int v = atoi(e); if (v > 10 && v <= 3600) nby = v; }
+      printf("[Locus check] binning %d x %d  (set LOCUS_NBX / LOCUS_NBY to change)\n", nbx, nby);
       auto *hin = new TH2F("hin",
                            Form("B#rho vs polar, INSIDE the gate  (%zu tracks)"
                                 ";#theta_{polar} [deg];B#rho [T#upointm]",
                                 fX.size()),
-                           180, 0, 180, 120, ylo, yhi);
-      auto *hall = new TH2F("hall", "", 180, 0, 180, 120, ylo, yhi);
+                           nbx, 0, 180, nby, ylo, yhi);
+      auto *hall = new TH2F("hall", "", nbx, 0, 180, nby, ylo, yhi);
       long nin = 0;
       for (size_t i = 0; i < fX.size(); ++i) {
          hall->Fill(fPol[i], fY[i]);

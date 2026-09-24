@@ -65,13 +65,17 @@ mkdir -p "$(dirname "$LOG")"
 # displayed, re-examined against the (p,d) one.
 REFP="${REFP:-}"
 REFD="${REFD:-}"
-ARGS="\"pid/${species}_C15p.json\",\"${POINTS}\",\"${REFP}\",\"${REFD}\",\
+# Output gate file. Defaults to the workspace convention pid/<species>_C15p.json; override to
+# keep a different naming (e.g. OUT=pid/deuteron_15Cp.json) without renaming afterwards.
+OUT="${OUT:-pid/${species}_C15p.json}"
+ARGS="\"${OUT}\",\"${POINTS}\",\"${REFP}\",\"${REFD}\",\
 ${XMAX},${YMAX},${IC_LO},${IC_HI},${SHOWLOCUS},${EBEAM},true,${Z},${A}"
 
 echo "opening the ${species} gate drawer (Z=${Z} A=${A}) on DISPLAY=${DISPLAY}"
 echo "  plane : ${POINTS}, IC [${IC_LO}, ${IC_HI}], single pulse"
 echo "  locus : Ebeam ${EBEAM} MeV, overlay ${SHOWLOCUS}  ([Locus check] enabled)"
-echo "  out   : pid/${species}_C15p.json   (existing file is backed up to .bak on save)"
+echo "  bins  : [Locus check] ${LOCUS_NBX:-360} x ${LOCUS_NBY:-240}  (LOCUS_NBX / LOCUS_NBY)"
+echo "  out   : ${OUT}   (existing file is backed up to .bak on save)"
 echo "  log   : $LOG"
 
 # Invoke as `root -l 'macro.C(args)'`, i.e. cling's .x, and hold stdin open with `tail -f`.

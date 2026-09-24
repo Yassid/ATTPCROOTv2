@@ -29,7 +29,7 @@
 #include "../gain_C15p.h"
 
 void make_points_C15p(TString inDir = "/home/yassid/C15p_reco/", TString outFile = "",
-                      TString gainTable = "gainmatch_C15p.csv", TString icDir = "/home/yassid/a2091_C15_ic/",
+                      TString gainTable = "gainmatch_C15p.csv", TString icDir = "/home/yassid/Data/a2091_C15p_ic_evtid/",
                       Int_t runMin = 138, Int_t runMax = 182)
 {
    TString here = gSystem->DirName(gInterpreter->GetCurrentMacroName());
@@ -88,26 +88,44 @@ void make_points_C15p(TString inDir = "/home/yassid/C15p_reco/", TString outFile
       // --- IC summary for this run, indexed by entry -------------------------------------
       std::vector<float> icv;
       std::vector<int> npv;
+      bool icHasEvtId = false;
       TString icf = TString::Format("%srun_%04d_ic.root", icDir.Data(), r);
       if (!gSystem->AccessPathName(icf)) {
          TFile *fi = TFile::Open(icf);
          TTree *ti = fi ? (TTree *)fi->Get("ic") : nullptr;
          if (ti) {
-            Int_t e_, np_;
+            Int_t e_, np_, ev_ = -1;
             Float_t im_;
             ti->SetBranchAddress("entry", &e_);
             ti->SetBranchAddress("icmax", &im_);
             ti->SetBranchAddress("npulse", &np_);
+            // ★ evtid is the TRUE event number; `entry` is only the position in the FRIB tree.
+            // Written by the corrected icsum_C15p.C. OLDER IC SUMMARIES DO NOT CARRY IT and keep
+            // the previous positional behaviour exactly, so nothing changes for them.
+            const bool hasEvtId = (ti->GetBranch("evtid") != nullptr);
+            if (hasEvtId)
+               ti->SetBranchAddress("evtid", &ev_);
             const Long64_t ni = ti->GetEntries();
-            icv.assign(ni, -1.f);
-            npv.assign(ni, 0);
+            // Size by the LARGEST event number seen, not the entry count: with evtid the IC is
+            // indexed by event number, so a run whose IC stops early still places its events at
+            // the right indices instead of being refused wholesale.
+            Long64_t maxIdx = ni;
+            if (hasEvtId)
+               for (Long64_t i = 0; i < ni; ++i) {
+                  ti->GetEntry(i);
+                  if (ev_ >= 0 && ev_ + 1 > maxIdx) maxIdx = ev_ + 1;
+               }
+            icv.assign(maxIdx, -1.f);
+            npv.assign(maxIdx, 0);
             for (Long64_t i = 0; i < ni; ++i) {
                ti->GetEntry(i);
-               if (e_ >= 0 && e_ < (Int_t)icv.size()) {
-                  icv[e_] = im_;
-                  npv[e_] = np_;
+               const Int_t idx = hasEvtId ? ev_ : e_;   // evtid = -1 marks an empty event: skipped
+               if (idx >= 0 && idx < (Int_t)icv.size()) {
+                  icv[idx] = im_;
+                  npv[idx] = np_;
                }
             }
+            icHasEvtId = hasEvtId;
          }
          if (fi) fi->Close();
       }
@@ -169,7 +187,10 @@ void make_points_C15p(TString inDir = "/home/yassid/C15p_reco/", TString outFile
          // without event IDs, which the IC summary does not carry. Being wrong here selects the
          // wrong beam silently, so the tolerance stays at what can be explained.
          const Long64_t diff = std::abs((Long64_t)icv.size() - nRef);
-         const bool ok = exact ? (diff <= 1) : (rel <= 0.02);
+         // With evtid the arrays are indexed BY EVENT NUMBER, so a count mismatch is no longer
+         // evidence of misalignment -- it just means the two DAQs recorded different numbers of
+         // events, which they do. The refusal below only applies to a positional join.
+         const bool ok = icHasEvtId ? true : (exact ? (diff <= 1) : (rel <= 0.02));
          if (!ok) {
             std::cout << "\033[1;31m  run " << r << ": IC has " << icv.size() << " entries vs " << nRef
                       << (exact ? " reco events" : " (est.) events")

@@ -12,3 +12,4 @@ plots_*/
 pid/pid_hdb_C15p.csv
 pid/points_hdb_C15p.root
 pid/*.MISTAGGED-*
+pid/ic_panel_hdb_C15p.json
