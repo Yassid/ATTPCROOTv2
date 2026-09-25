@@ -31,11 +31,16 @@ SIGN: applied backwards this DOUBLES the drift. The data's peak rises with vz an
 truth rises with vz, so the same sign applies -- an empirical check, not an assumption about which
 end the beam enters. If a future cache mirrors vz, re-check it before trusting the knob.
 
-  python add_ebvz.py <explorer.html>
+  python add_ebvz.py <explorer.html> [slope MeV/m, default 11.0] [note shown under the formula]
+
+The optional slope/note let another experiment set ITS OWN default (a1954 12Be at 600 torr H2:
+CATIMA 9.1 MeV/m). With no extra arguments the page is exactly what it always was.
 """
 import sys
 
 p = sys.argv[1]
+SLOPE = sys.argv[2] if len(sys.argv) > 2 else "11.0"
+NOTE = sys.argv[3] if len(sys.argv) > 3 else "sim says 11.0 MeV/m"
 s = open(p, encoding="utf-8").read()
 orig = len(s)
 
@@ -57,9 +62,9 @@ anchor = '<div class="row"><label class="check"><input type="checkbox" id="kcOn"
 must(anchor, "kcOn row")
 blk = anchor + '''
       <div class="row"><label class="check"><input type="checkbox" id="ebzOn"> apply E<sub>beam</sub>(v<sub>z</sub>) &mdash; beam energy loss</label></div>
-      <div class="row"><label for="ebzSlope">loss [MeV/m]</label><input type="number" id="ebzSlope" step="0.5" value="11.0"></div>
+      <div class="row"><label for="ebzSlope">loss [MeV/m]</label><input type="number" id="ebzSlope" step="0.5" value="''' + SLOPE + '''"></div>
       <div class="row"><label for="ebzPivot">pivot v<sub>z</sub> [mm]</label><input type="number" id="ebzPivot" step="25" value="500"></div>
-      <div class="row"><span class="mono num" style="font-size:11.5px;color:var(--ink-3)">E<sub>beam</sub> = ebeam &minus; loss&middot;(v<sub>z</sub>&minus;pivot); sim says 11.0 MeV/m</span></div>'''
+      <div class="row"><span class="mono num" style="font-size:11.5px;color:var(--ink-3)">E<sub>beam</sub> = ebeam &minus; loss&middot;(v<sub>z</sub>&minus;pivot); ''' + NOTE + '''</span></div>'''
 s = s.replace(anchor, blk, 1)
 
 # 4. the per-track beam energy, right after thCorr's helpers
@@ -101,5 +106,5 @@ else:
 
 open(p, "w", encoding="utf-8").write(s)
 print("  patched %s: +%d bytes" % (p, len(s) - orig))
-print("  controls: ebzOn (checkbox), ebzSlope [MeV/m, default 11.0], ebzPivot [mm, default 500]")
+print("  controls: ebzOn (checkbox), ebzSlope [MeV/m, default " + SLOPE + "], ebzPivot [mm, default 500]")
 print("  DEFAULT IS OFF -- the page opens exactly as before until the box is ticked.")

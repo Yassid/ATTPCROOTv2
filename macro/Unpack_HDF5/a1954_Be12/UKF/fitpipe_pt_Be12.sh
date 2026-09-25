@@ -16,11 +16,15 @@ RUNS="${1:-run_0143}"; NPAR="${2:-4}"; THMIN="${3:-0}"; MP="${4:-30}"
 # (p,p') and (p,d) drivers pass. The contaminant beam near IC 1900 outnumbers 12Be ~20:1 inside
 # the triton gate, so this window is doing essentially all of the beam selection.
 ICLO="${ICLO:-500}"; ICHI="${ICHI:-800}"
+# GAS: a1954 12Be ran H2 at 600 TORR (Yassid, 2026-09-25) = 6.616e-5 g/cm3 at 293 K, geometry
+# ATTPC_H600torr. This REVERSES the 2026-08-25 "300 torr" (3.308e-5, ATTPC_H300torr_RT) rebuild.
+# Both fitters get the gas EXPLICITLY here -- never rely on a macro default for it.
+GASDENS="${GASDENS:-6.616e-5}"; GEONAME="${GEONAME:-ATTPC_H600torr}"
 REPO="/home/yassid/fair_install/ATTPCROOTv2-OpenKF"
 HERE="$REPO/macro/Unpack_HDF5/a1954_Be12/UKF"
 SLIM="/home/yassid/a1954_Be12_reco_hdb_slim/"
 FREF="/mnt/h/a1954_Be12_reco_hdb/"           # reco moved off F: ; the F: copy is gone
-FITDIR="${PTDIR:-/home/yassid/a1954_Be12_fit_pt/}"; IN="${FITDIR}in/"; LOG="${FITDIR}logs"
+FITDIR="${PTDIR:-/home/yassid/a1954_Be12_fit_pt_600torr/}"; IN="${FITDIR}in/"; LOG="${FITDIR}logs"
 mkdir -p "$IN" "$LOG"
 TGATE="${TGATE:-$HERE/pid/triton_12Be.json}"
 [ -f "$TGATE" ] || { echo "ERROR: no triton gate at $TGATE -- draw it first with pid/draw_gate_Be12.C"; exit 1; }
@@ -54,11 +58,11 @@ one(){ local r="$1"; local L="$LOG/${r}.log"
   fi
   [ -f "$IN/${r}_reco.root" ] || { echo "gate failed $r"; return; }
   # 2) UKF with the TRITON mass hypothesis
-  root -b -q -l "$HERE/pipeline/fitUKF_Be12.C(\"$r\",-1,\"triton\",-1,2.85,3.308e-5,\"\",\"$IN\",0.5,0.1,1,10,\"$FITDIR\")" >> "$L" 2>&1
+  root -b -q -l "$HERE/pipeline/fitUKF_Be12.C(\"$r\",-1,\"triton\",-1,2.85,$GASDENS,\"\",\"$IN\",0.5,0.1,1,10,\"$FITDIR\")" >> "$L" 2>&1
   # 3) GENFIT, triton, material effects + CATIMA dE/dx (defaults), forward theta window
-  root -b -q -l "$HERE/pipeline/fitGenfit_Be12.C(\"$r\",-1,\"$IN\",\"\",\"$FITDIR\",-2.85,2,5,\"\",4.0,3.0,170.0,kTRUE,kFALSE,\"triton\")" >> "$L" 2>&1
+  root -b -q -l "$HERE/pipeline/fitGenfit_Be12.C(\"$r\",-1,\"$IN\",\"\",\"$FITDIR\",-2.85,2,5,\"\",4.0,3.0,170.0,kTRUE,kFALSE,\"triton\",\"$GEONAME\")" >> "$L" 2>&1
   echo "[$(date +%H:%M:%S)] $r  ukf=$([ -f $FITDIR${r}_ukf.root ]&&echo ok||echo FAIL)  genfit=$([ -f $FITDIR${r}_genfit.root ]&&echo ok||echo FAIL)"
 }
-export -f one; export HERE SLIM FREF FITDIR IN LOG TGATE THMIN MP ICLO ICHI
+export -f one; export HERE SLIM FREF FITDIR IN LOG TGATE THMIN MP ICLO ICHI GASDENS GEONAME
 printf "%s\n" $RUNS | xargs -P "$NPAR" -I{} bash -c 'one "$@"' _ {}
 echo "[$(date +%H:%M:%S)] (p,t) FIT PIPE DONE -> $FITDIR"

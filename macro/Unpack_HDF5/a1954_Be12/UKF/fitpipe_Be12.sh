@@ -10,12 +10,16 @@ HERE_PID="$HERE/pid"
 # and this morning's 300-torr refit both used 500-900, which reaches past the 12Be peak into the
 # structure near IC 1000. pid/PID_COMPARISON.md still documents 625-750; 500-800 supersedes both.
 ICLO="${ICLO:-500}"; ICHI="${ICHI:-800}"
+# GAS: a1954 12Be ran H2 at 600 TORR (Yassid, 2026-09-25) = 6.616e-5 g/cm3 at 293 K, geometry
+# ATTPC_H600torr. This REVERSES the 2026-08-25 "300 torr" (3.308e-5, ATTPC_H300torr_RT) rebuild.
+# Both fitters get the gas EXPLICITLY here -- never rely on a macro default for it.
+GASDENS="${GASDENS:-6.616e-5}"; GEONAME="${GEONAME:-ATTPC_H600torr}"
 PGATE="${PGATE:-$HERE_PID/proton_12Be.json}"
 THMIN="${THMIN:-90}"        # (p,p') protons are BACKWARD
 MP="${MP:-30}"              # must match the plane any gate was drawn on
 SLIM="/home/yassid/a1954_Be12_reco_hdb_slim/"
 FREF="/mnt/h/a1954_Be12_reco_hdb/"   # moved off F: ; F: copy is gone
-FITDIR="/home/yassid/a1954_Be12_fit/"; IN="${FITDIR}in/"; LOG="${FITDIR}logs"; mkdir -p "$IN" "$LOG"
+FITDIR="${PPDIR:-/home/yassid/a1954_Be12_fit_600torr/}"; IN="${FITDIR}in/"; LOG="${FITDIR}logs"; mkdir -p "$IN" "$LOG"
 
 source /home/yassid/fair_install/FairSoft/install/bin/thisroot.sh 2>/dev/null
 source "$REPO/build/config.sh" >/dev/null 2>&1
@@ -49,14 +53,15 @@ one(){ local r="$1"; local L="$LOG/${r}.log"; local stamp="$IN/${r}.gatecfg"
   fi
   [ -f "$IN/${r}_reco.root" ] || { echo "gate failed $r"; return; }
   # 2) UKF
-  root -b -q -l "$HERE/pipeline/fitUKF_Be12.C(\"$r\",-1,\"proton\",-1,2.85,3.308e-5,\"\",\"$IN\",0.5,0.1,1,10,\"$FITDIR\")" >> "$L" 2>&1
+  root -b -q -l "$HERE/pipeline/fitUKF_Be12.C(\"$r\",-1,\"proton\",-1,2.85,$GASDENS,\"\",\"$IN\",0.5,0.1,1,10,\"$FITDIR\")" >> "$L" 2>&1
   # 3) GENFIT
-  root -b -q -l "$HERE/pipeline/fitGenfit_Be12.C(\"$r\",-1,\"$IN\",\"\",\"$FITDIR\",-2.85,2,5,\"\",4.0,10.0,170.0,kTRUE,kFALSE,\"proton\")" >> "$L" 2>&1
+  root -b -q -l "$HERE/pipeline/fitGenfit_Be12.C(\"$r\",-1,\"$IN\",\"\",\"$FITDIR\",-2.85,2,5,\"\",4.0,10.0,170.0,kTRUE,kFALSE,\"proton\",\"$GEONAME\")" >> "$L" 2>&1
   echo "[$(date +%H:%M:%S)] $r  gated=$(grep -o 'gated-proton events[^,]*' $L|head -1)  ukf=$([ -f $FITDIR${r}_ukf.root ]&&echo ok)  genfit=$([ -f $FITDIR${r}_genfit.root ]&&echo ok)"
 }
-export -f one; export HERE HERE_PID SLIM FREF FITDIR IN LOG ICLO ICHI PGATE THMIN MP
+export -f one; export HERE HERE_PID SLIM FREF FITDIR IN LOG ICLO ICHI PGATE THMIN MP GASDENS GEONAME
 printf "%s\n" $RUNS | xargs -P "$NPAR" -I{} bash -c 'one "$@"' _ {}
 echo "[$(date +%H:%M:%S)] FIT PIPE DONE. Syncing to F..."
-mkdir -p /mnt/h/a1954_Be12_fit
-rsync -a --include='*_ukf.root' --include='*_genfit.root' --exclude='*' "$FITDIR" /mnt/h/a1954_Be12_fit/ 2>/dev/null
-echo "[$(date +%H:%M:%S)] SYNC DONE -> /mnt/h/a1954_Be12_fit/"
+# mirror named after FITDIR, so a 600-torr set never lands on top of the 300-torr mirror
+HMIR="/mnt/h/$(basename "$FITDIR")/"; mkdir -p "$HMIR"
+rsync -a --include='*_ukf.root' --include='*_genfit.root' --exclude='*' "$FITDIR" "$HMIR" 2>/dev/null
+echo "[$(date +%H:%M:%S)] SYNC DONE -> $HMIR"

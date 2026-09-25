@@ -18,8 +18,10 @@ WINHOME="/mnt/c/Users/$(ls /mnt/c/Users | grep -viE 'public|default|all users' |
 BROWSER="/mnt/c/Program Files/Google/Chrome/Application/chrome.exe"
 [[ -x "$BROWSER" ]] || BROWSER="/mnt/c/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"
 
-# CACHE is the ex_Be12.C outTag actually on disk: every channel was rebuilt on 2026-08-25 at
-# 300 torr + CATIMA with the IC 500-800 beam window, and those caches carry the "800" suffix.
+# CACHE is the ex_Be12.C outTag actually on disk. GAS=600 (default) reads the 2026-09-25 refit at
+# the REAL 600 torr (6.616e-5, ATTPC_H600torr): caches <chan>600_*, page *_600torr.html.
+# GAS=300 reads the superseded 2026-08-25 300-torr rebuild: caches <chan>800_*, the old page names.
+# Both used the IC 500-800 beam window + CATIMA.
 # REF = reference levels of the RESIDUAL nucleus, drawn as kinematic loci on the page.
 case "$CHAN" in
   pp) OUT="$HOME/a1954_Be12_pp_explorer.html"; TAG="12Be(p,p')";      MEJ=1.007825; MRES=12.026921
@@ -30,6 +32,8 @@ case "$CHAN" in
       CACHE=pt800; REF="0:g.s. 0+,3.368:2+_1,5.958:2+_2,6.179:0+_2,6.812:Sn,7.371:3-" ;;
   *)  echo "usage: $0 [pp|pd|pt]"; exit 1 ;;
 esac
+GAS="${GAS:-600}"
+if [[ "$GAS" == 600 ]]; then CACHE="${CACHE%800}600"; OUT="${OUT%.html}_600torr.html"; TAG="$TAG 600 torr"; fi
 
 set +u   # thisroot.sh reads unset vars
 source "$HOME/fair_install/FairSoft/install/bin/thisroot.sh"
@@ -48,6 +52,18 @@ if [[ -f "$KEOFF" ]]; then
   python3 "$KEOFF" "$OUT"
 else
   echo "WARNING: $KEOFF not found -- page written WITHOUT the KE-offset control" >&2
+fi
+
+# VERTEX-DEPENDENT BEAM ENERGY knob (ebzOn/ebzSlope/ebzPivot), the same one-copy a1975 patch.
+# Default slope = CATIMA 12Be 155 MeV in H2: 9.1 MeV/m at 600 torr, 4.5 at 300 (AtELossCATIMA,
+# 2026-09-25). Sign checked on DATA: the (p,p') elastic peak RISES with vz (beam enters at low vz).
+# 9.1 removes ~60 % of that drift; the (p,p') data would need ~14 MeV/m to go flat. Default OFF.
+EBVZ="$HERE/../../../a1975/UKF/pp/add_ebvz.py"
+if [[ "$GAS" == 600 ]]; then EBSL=9.1; else EBSL=4.5; fi
+if [[ -f "$EBVZ" ]]; then
+  python3 "$EBVZ" "$OUT" "$EBSL" "CATIMA 12Be in H2 $GAS torr: $EBSL MeV/m; (p,p') drift prefers ~14"
+else
+  echo "WARNING: $EBVZ not found -- page written WITHOUT the Ebeam(vz) control" >&2
 fi
 
 # the browser cannot read \\wsl$ paths reliably -> stage on the Windows side

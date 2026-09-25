@@ -121,10 +121,11 @@ void fitGenfit_Be12(TString fileName = "run_0142", Long64_t nEvents = -1,
    // the sole places the backend is consulted and neither is called with material effects off. Each
    // flag therefore WARNS instead of silently doing nothing, so a run cannot look like a valid arm
    // of an A/B when it is inert.
-   if (matEffects && geoName.Contains("600torr"))
+   // a1954 12Be ran H2 at 600 torr (Yassid, 2026-09-25): ATTPC_H600torr, 6.616e-5 g/cm3. The
+   // 2026-08-25 "300 torr" was wrong; the default geoName above is kept only for old drivers.
+   if (matEffects && !geoName.Contains("600torr"))
       std::cout << "\033[1;31mWARNING: matEffects with geoName=" << geoName
-                << " -- that gas is 6.616e-5 g/cm3, TWICE the a1954 H2 at 300 torr. "
-                   "Use ATTPC_H300torr_RT.\033[0m\n";
+                << " -- a1954 12Be ran H2 at 600 torr (ATTPC_H600torr, 6.616e-5 g/cm3).\033[0m\n";
    if (catimaMSC || catimaStraggling) {
       if (!matEffects)
          std::cout << "\033[1;31mWARNING: catima material flags set but matEffects is OFF -- inert.\033[0m\n";
