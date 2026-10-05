@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """Add a VERTEX-DEPENDENT BEAM ENERGY control to a generated explorer page.
 
+VERBATIM COPY of a1975/UKF/pp/add_ebvz.py apart from the slope caveat below -- the C15p template
+matches its anchors exactly ONCE add_keoff has run, because add_keoff creates the `_k` local this
+patches against. RUN add_keoff_C15p.py FIRST or every anchor here misses.
+
 WHY. The page computes Ex with ONE beam energy for every track. The beam loses energy traversing
 the gas, so a reaction deep in the chamber happened at a lower energy than one near the entrance,
 and a constant Ebeam therefore returns an Ex that is too high -- by more at the far end.
@@ -44,8 +48,8 @@ def must(old, what):
         raise SystemExit("add_ebvz.py: anchor missing (%s) -- the template changed, re-check the patch" % what)
 
 # 1. register the two numeric controls so readState() and the params save/load pick them up
-must("'kcDenom','kcPivot']", "IDS list")
-s = s.replace("'kcDenom','kcPivot']", "'kcDenom','kcPivot','ebzSlope','ebzPivot']", 1)
+must("'kcDenom','kcPivot','keOff'", "IDS list")
+s = s.replace("'kcDenom','kcPivot','keOff'", "'kcDenom','kcPivot','keOff','ebzSlope','ebzPivot'", 1)
 
 # 2. register the checkbox as a FLAG, same machinery as kcOn
 must("const FLAGS = ['logY','logZ','kinLines','kcOn'];", "FLAGS list")
@@ -59,7 +63,7 @@ blk = anchor + '''
       <div class="row"><label class="check"><input type="checkbox" id="ebzOn"> apply E<sub>beam</sub>(v<sub>z</sub>) &mdash; beam energy loss</label></div>
       <div class="row"><label for="ebzSlope">loss [MeV/m]</label><input type="number" id="ebzSlope" step="0.5" value="11.0"></div>
       <div class="row"><label for="ebzPivot">pivot v<sub>z</sub> [mm]</label><input type="number" id="ebzPivot" step="25" value="500"></div>
-      <div class="row"><span class="mono num" style="font-size:11.5px;color:var(--ink-3)">E<sub>beam</sub> = ebeam &minus; loss&middot;(v<sub>z</sub>&minus;pivot); 11.0 MeV/m is the a1975 16C(d,p) value -- RE-MEASURE for 15C+p</span></div>'''
+      <div class="row"><span class="mono num" style="font-size:11.5px;color:var(--ink-3)">E<sub>beam</sub> = ebeam &minus; loss&middot;(v<sub>z</sub>&minus;pivot); 11.0 MeV/m is the a1975 16C(d,p)-in-D2 value -- RE-MEASURE for 15C+p</span></div>'''
 s = s.replace(anchor, blk, 1)
 
 # 4. the per-track beam energy, right after thCorr's helpers
@@ -79,9 +83,9 @@ s = s.replace("function kcSlopeDeg(s) {", fn, 1)
 # 5. both kinematics call sites. There are exactly two and BOTH must move together, or the
 #    comparison overlay silently keeps the uncorrected Ex while the main histogram shifts --
 #    the same failure add_keoff.py had to patch separately.
-o1 = "const [ex] = kine2b(s.ebeam, thCorr(s, d.th[i], d.ke[i])*Math.PI/180, d.ke[i]);"
+o1 = "const [ex] = kine2b(s.ebeam, thCorr(s, d.th[i], _k)*Math.PI/180, _k);"
 must(o1, "exOnly kine2b")
-s = s.replace(o1, "const [ex] = kine2b(ebAt(s, d.vz ? d.vz[i] : null), thCorr(s, d.th[i], d.ke[i])*Math.PI/180, d.ke[i]);", 1)
+s = s.replace(o1, "const [ex] = kine2b(ebAt(s, d.vz ? d.vz[i] : null), thCorr(s, d.th[i], _k)*Math.PI/180, _k);", 1)
 
 o2 = "const [ex, tcm] = kine2b(s.ebeam, th*Math.PI/180, ke);"
 must(o2, "compute kine2b")
