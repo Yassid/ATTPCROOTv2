@@ -41,7 +41,8 @@
 ///   root -l 'C16_dp_sim.C(20000,2.,178.,"TGeant4",-28.5,"./data/dp_gs.root",0.0,4001,184.25)'
 void C16_dp_sim(Int_t nEvents = 20000, Double_t thetaMinCM = 2.0, Double_t thetaMaxCM = 178.0,
                 TString mcEngine = "TGeant4", Double_t bFieldkG = -28.5, TString outFile = "./data/attpcsim_dp.root",
-                Double_t resEx = 0.0, UInt_t seed = 0, Double_t Ebeam = 184.25)
+                Double_t resEx = 0.0, UInt_t seed = 0, Double_t Ebeam = 184.25,
+                Double_t maxELoss = 10.0)
 {
    // Parallel jobs with no seed produce byte-identical events, so "more statistics" would be the
    // same sample copied. seed = 0 keeps ROOT's time-based default; pass a distinct value per job.
@@ -100,7 +101,8 @@ void C16_dp_sim(Int_t nEvents = 20000, Double_t thetaMinCM = 2.0, Double_t theta
    // *** VERIFY on the output that the vertex stays flat along the drift length before reading any
    // v_z-dependent result out of this simulation. A sloped generated vertex distribution would
    // imitate the very effect being hunted. ***
-   Double_t maxELoss = 10.0; // MeV
+   // maxELoss is now an argument (default 10 = the original). 10 MeV puts the last vertices at vz ~915, short of
+   // the data, which has reactions to vz ~1000 (2026-10-12: 11.5 used to cover the far end).
 
    AtTPCIonGenerator *ionGen =
       new AtTPCIonGenerator("Ion", z, a, q, m, px, py, pz, BExcEner, Bmass, NomEnergy, maxELoss);
