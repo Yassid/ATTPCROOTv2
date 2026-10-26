@@ -50,7 +50,11 @@ def load_csv(path):
 
 
 def find_tracks(hits):
-    """One event -> dict of masks, or None if it is not a reaction candidate."""
+    """One event -> dict of masks, or None if it is not a reaction candidate.
+
+    Needs two arms; the beam is a refinement.  When no beam-like segment is present the
+    returned "beam" mask is all-False and geometry.reconstruct falls back to the tilt.
+    """
     tb, x, y, q = hits[:, 0], hits[:, 1], hits[:, 2], hits[:, 3]
     z = (tb - config.T0_BUCKETS) * config.TB_NS * 1e-3 * V_REF * 10.0
     P = np.column_stack([x, y, z])
@@ -63,19 +67,23 @@ def find_tracks(hits):
         c, d = fit_line(P[m], q[m])
         segs.append(dict(mask=m, c=c, d=d, n=int(m.sum()),
                          length=float(np.ptp(P[m] @ d)), qmean=float(q[m].mean())))
-    if len(segs) < 3:
+    if len(segs) < 2:
         return None
+    # The beam segment is OPTIONAL.  When the reaction happens near the window there is
+    # almost no beam track to find, and demanding one reconstructs the whole upper half of
+    # the energy range with ZERO efficiency (measured on simulation).  Two arms fix the
+    # vertex; the nominal tilt then supplies the entrance.  See geometry.reconstruct.
     beamish = [s for s in segs if abs(s["d"][2]) > BEAM_ALIGN]
-    if not beamish:
-        return None
-    beam = min(beamish, key=lambda s: s["qmean"])      # the beam ionises least per pad
+    beam = min(beamish, key=lambda s: s["qmean"]) if beamish else None   # beam ionises least
     arms = sorted([s for s in segs if s is not beam], key=lambda s: -s["length"])[:2]
     if len(arms) < 2:
         return None
     if closest_approach(arms[0]["c"], arms[0]["d"], arms[1]["c"], arms[1]["d"])[1] > MAX_VTX_MM:
         return None
+    nohit = np.zeros(len(tb), bool)
     return dict(tb=tb, x=x, y=y, q=q,
-                beam=beam["mask"], a1=arms[0]["mask"], a2=arms[1]["mask"])
+                beam=nohit if beam is None else beam["mask"],
+                a1=arms[0]["mask"], a2=arms[1]["mask"])
 
 
 if __name__ == "__main__":
@@ -93,13 +101,14 @@ if __name__ == "__main__":
             print(f"  skip {run} (already tracked)"); continue
         evs, groups = load_csv(path)
         found = []
-        for h in groups:
+        for e, h in zip(evs, groups):
             try:
                 r = find_tracks(h)
             except Exception:
                 r = None
             if r:
-                found.append(r)
+                r["event"] = int(e)       # keep the raw event number: needed to trace an
+                found.append(r)           # event back, and to match against MC truth
         pickle.dump({"nevents": len(evs), "cands": found}, open(out, "wb"))
         print(f"  run {run}: {len(evs)} events -> {len(found)} candidates "
               f"({100*len(found)/max(len(evs),1):.0f}%)")

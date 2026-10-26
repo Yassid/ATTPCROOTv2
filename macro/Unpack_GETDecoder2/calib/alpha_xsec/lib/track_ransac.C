@@ -24,8 +24,14 @@
 #include <fstream>
 #include <vector>
 
+// Defaults TUNED against MC truth (lib/compare_trackers.py, 3000 simulated reactions).
+// The shipped values minHits=20, distThresh=10 reject the short low-energy arms outright
+// and give eps_reco = 28.4 %; minHits=8, distThresh=7 gives 37.5 %.  Do not push minHits
+// lower with a tight threshold -- minHits=8, distThresh=4 returns MORE tracks per event
+// (3.3 vs 2.5) but fragments real tracks, and efficiency falls to 24 % with the angular
+// resolution degrading from 2.7 to 11.7 deg.
 void track_ransac(const char *in, const char *out, Long64_t nEvents = -1,
-                  int iterations = 500, int minHits = 20, double distThresh = 10.0)
+                  int iterations = 500, int minHits = 8, double distThresh = 7.0)
 {
    TFile *f = TFile::Open(in);
    if (!f || f->IsZombie()) { printf("ERROR cannot open %s\n", in); return; }
@@ -43,7 +49,7 @@ void track_ransac(const char *in, const char *out, Long64_t nEvents = -1,
    sc.SetDistanceThreshold(distThresh);
 
    std::ofstream o(out);
-   o << "event,track,pad,tb,x,y,q\n";
+   o << "event,track,pad,tb,x,y,z,q\n";
    Long64_t nTracked = 0, nTracks = 0;
    for (Long64_t i = 0; i < nRun; ++i) {
       t->GetEntry(i);
@@ -71,7 +77,7 @@ void track_ransac(const char *in, const char *out, Long64_t nEvents = -1,
          for (auto &h : *ha) {
             TVector3 p = h.GetPosition();
             o << i << "," << k << "," << h.GetHitPadNum() << "," << h.GetTimeStamp() << ","
-              << Form("%.3f,%.3f,%.4g", p.X(), p.Y(), h.GetCharge()) << "\n";
+              << Form("%.3f,%.3f,%.3f,%.4g", p.X(), p.Y(), p.Z(), h.GetCharge()) << "\n";
          }
       }
       if (i % 500 == 0) { printf("\r  %lld/%lld  tracked %lld   ", i, nRun, nTracked); fflush(stdout); }
