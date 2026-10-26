@@ -16,7 +16,8 @@
 //   root -l 'rundigi_sim.C("./data11p4/attpcsim_in.root")'
 void rundigi_sim_11p4(TString mcFile = "./data11p4/attpcsim_in.root",
                  TString outFile = "./data11p4/output_digi.root",
-                 Bool_t keepElectrons = kTRUE, Bool_t keepTraces = kTRUE)
+                 Bool_t keepElectrons = kTRUE, Bool_t keepTraces = kTRUE,
+                 Int_t psaThreshold = 3)
 {
    TStopwatch timer;
    timer.Start();
@@ -55,7 +56,7 @@ void rundigi_sim_11p4(TString mcFile = "./data11p4/attpcsim_in.root",
 
    // ---- exactly the PSA used on the experimental data ---------------------
    AtPSASimple2 *psa = new AtPSASimple2();
-   psa->SetThreshold(3);   // NOT the 20 used on real data -- the simulated ADC scale is
+   psa->SetThreshold(psaThreshold);   // NOT the 20 used on real data -- the simulated ADC scale is
                            // different, and the working sims on develop use 3 (or 0).
                            // With 20 every simulated event comes out with zero hits.
    psa->SetMaxFinder();
