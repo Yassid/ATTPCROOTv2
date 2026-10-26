@@ -24,7 +24,26 @@ from lib.eloss import RangeTable
 ev = build(config)
 tab = RangeTable(config.ELOSS, config.PRESSURE, config.P_TABLE)
 
-keep = np.abs(ev["thsum"] - 90) < config.SUM_WINDOW
+# THE KINEMATIC CEILING.  For an elastic pair E1 + E2 = E_beam, so E_cm = (E1+E2)/2 can
+# never exceed E_beam/2 whatever the angle.  Events above it have arms whose combined range
+# implies more energy than the beam ever had, so they are mis-reconstructions and NOT
+# resolution: pushed through this same chain the simulation puts 0.0% above the ceiling
+# (its maximum is 5.37 MeV) while the data put 5.6% there, reaching 9.86 MeV.
+#
+# What they are: median beam path 74.9 mm against 349 mm for the rest, and only 38% carry a
+# beam track against 90%.  Near the window the beam stub is short, the clustering absorbs it
+# into one of the arms, and that arm comes out too long.
+#
+# The simulation does not reproduce this, because its beam is truncated cleanly at the
+# vertex and it contains exactly one beam particle, where a real event carries unreacted
+# pile-up beam through the same region.  So eps_reco is OPTIMISTIC in the top E_cm bins.
+CEIL = config.E_BEAM / 2.0
+Ecm_all = (ev["E1"] + ev["E2"]) / 2.0
+elastic = np.abs(ev["thsum"] - 90) < config.SUM_WINDOW
+keep = elastic & (Ecm_all <= CEIL)
+print(f"  kinematic ceiling {CEIL:.2f} MeV: removed "
+      f"{int(np.sum(elastic & ~keep))} of {int(elastic.sum())} "
+      f"({100*np.mean(~keep[elastic]):.1f}%) unphysical events")
 if config.MIN_ARM_MM > 0:
     keep &= (ev["L1"] > config.MIN_ARM_MM) & (ev["L2"] > config.MIN_ARM_MM)
 print(f"  {keep.sum()} of {len(keep)} events pass ({100*keep.mean():.0f}%)")
@@ -70,7 +89,7 @@ out = os.path.join(config.OUT_DIR, "04_selection.png"); fig.savefig(out, dpi=140
 # MeV against ~92% at 4.75 MeV), so leaving it in distorts the shape of the excitation
 # function rather than merely its normalisation.
 dev = np.abs(ev["thsum"] - 90.0)
-side = (dev >= config.SUM_WINDOW) & (dev < 3.0 * config.SUM_WINDOW)
+side = (dev >= config.SUM_WINDOW) & (dev < 3.0 * config.SUM_WINDOW) & (Ecm_all <= CEIL)
 Ecm_side = (ev["E1"][side] + ev["E2"][side]) / 2.0
 Tcm_side = 2.0 * np.minimum(ev["th1"][side], ev["th2"][side])
 inb = (Tcm_side > 80.0) & (Tcm_side < 100.0)
