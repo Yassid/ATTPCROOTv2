@@ -78,8 +78,9 @@ eps_geo = np.interp(Ec, acc["E"], acc["eps"][:, jb].mean(axis=1))
 # Leaving migration uncorrected is defensible HERE for a specific reason: eps_reco is FLAT
 # at 0.85 - 1.00 across E_cm 2.2 - 5.5 MeV, and migration between bins of equal efficiency
 # has almost no effect.  It would NOT be defensible near the edges, which is one more
-# reason to quote only the flat region.  If the simulation is ever enlarged by an order of
-# magnitude, switch to the migration-aware factor and drop this note.
+# reason to quote only the flat region.  Enlarging the simulation does NOT fix the
+# migration factor -- that was tested -- so if it is ever needed, unfold properly with a
+# response matrix rather than a bin-by-bin ratio.
 #
 # The efficiency is evaluated on COARSE bins and interpolated onto the data's finer grid:
 # with ~20 reactions per fine bin the statistical scatter would otherwise dominate the
