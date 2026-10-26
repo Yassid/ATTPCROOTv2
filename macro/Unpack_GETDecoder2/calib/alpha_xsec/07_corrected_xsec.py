@@ -43,15 +43,25 @@ jb = (acc["T"] > T_LO) & (acc["T"] < T_HI)
 eps_geo = np.interp(Ec, acc["E"], acc["eps"][:, jb].mean(axis=1))
 
 # --- reconstruction efficiency from the simulation, same band ---
-# sim["sel"] is the flag from lib/efficiency2.py: this reaction went through the SAME
-# steps 2-4 the data go through and came out passing the 90-degree cut.  Using the pipeline
-# result rather than a track count matters -- a count of three tracks can be two arms plus
-# a fragment, and says nothing about whether the vertex or the angles came out right.
+# The correction is bin-by-bin and folds in BIN MIGRATION as well as efficiency:
+#
+#     C_i = N_generated in true bin i  /  N_selected into RECONSTRUCTED bin i
+#
+# Dividing the data's reconstructed histogram by eps(E_true) would mix two variables that
+# differ by 0.31 MeV against 0.2 MeV bins.  Counting the numerator in the reconstructed
+# variable -- the same one the data are binned in -- makes the ratio well posed.
+#
+# The caveat worth stating when quoting this: a bin-by-bin factor assumes the simulated
+# input spectrum is not too different in shape from the data's.  The simulation is close to
+# flat in E_cm while the data carry the real cross section, so treat the correction as good
+# to ~20% in regions where the efficiency varies quickly, and prefer the flat region
+# E_cm 2.2-5.5 MeV where it does not.
 sb = (sim["T"] > T_LO) & (sim["T"] < T_HI)
-num, _ = np.histogram(sim["E"][sb][sim["sel"][sb]], bins=EDGES)
-den, _ = np.histogram(sim["E"][sb], bins=EDGES)
+den, _ = np.histogram(sim["E"][sb], bins=EDGES)                    # generated, true E_cm
+rb = sim["sel"] & np.isfinite(sim["Ereco"]) & (sim["Treco"] > T_LO) & (sim["Treco"] < T_HI)
+num, _ = np.histogram(sim["Ereco"][rb], bins=EDGES)                # selected, reco E_cm
 with np.errstate(invalid="ignore", divide="ignore"):
-    eps_rec = np.where(den > 5, num / den, np.nan)
+    eps_rec = np.where(den > 5, num / np.maximum(den, 1), np.nan)
 
 dedx = tab.dEdx(2.0 * Ec)
 tot = eps_geo * eps_rec

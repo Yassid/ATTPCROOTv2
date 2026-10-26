@@ -100,6 +100,12 @@ def score(cands, label):
     # how often does the analysis get theta_cm right, not merely return a number?
     good = np.array([e in res and abs(res[e]["sum"] - 90.0) < config.SUM_WINDOW
                      and abs(res[e]["tcm"] - truth[e][1]) < 10.0 for e in evs])
+    # The RECONSTRUCTED quantities as well, so step 7 can correct for efficiency and bin
+    # migration together.  Binning the data by reconstructed E_cm and the efficiency by
+    # TRUE E_cm mixes two variables that differ by 0.31 MeV against 0.2 MeV bins.
+    nan = float("nan")
+    Er = np.array([res[e]["Ecm_arms"] if e in res else nan for e in evs])
+    Tr = np.array([res[e]["tcm"] if e in res else nan for e in evs])
     w = lambda v: 0.5 * (np.percentile(v, 84) - np.percentile(v, 16))
     print(f"\n  === {label} ===")
     print(f"    reconstructed            : {100*has.mean():5.1f} %")
@@ -109,7 +115,8 @@ def score(cands, label):
     print(f"    theta_cm  resid : {np.median(dt):+6.2f} +- {w(dt):5.2f} deg")
     print(f"    E_cm(vtx) resid : {np.median(de):+6.3f} +- {w(de):5.3f} MeV")
     print(f"    E_cm(arms)resid : {np.median(da):+6.3f} +- {w(da):5.3f} MeV")
-    return dict(E=Et, T=Tt, sel=sel, good=good, has=has, dt=dt, label=label)
+    return dict(E=Et, T=Tt, sel=sel, good=good, has=has, dt=dt, label=label,
+                Ereco=Er, Treco=Tr)
 
 A = score(cands_from_ransac(ransac_csv), "AtSampleConsensus (RANSAC)")
 B = score(cands_from_pickle(hdb_pkl), "HDBSCAN [position, orientation]")
@@ -141,5 +148,6 @@ fig.tight_layout(); fig.savefig(out_png, dpi=140)
 print(f"\n  wrote {out_png}")
 best = A if A["good"].mean() >= B["good"].mean() else B
 np.savez_compressed(os.path.join(os.path.dirname(out_png) or ".", "efficiency.npz"),
-                    E=best["E"], T=best["T"], sel=best["good"], has=best["has"])
+                    E=best["E"], T=best["T"], sel=best["good"], has=best["has"],
+                    Ereco=best["Ereco"], Treco=best["Treco"])
 print(f"  efficiency.npz written from: {best['label']}")
