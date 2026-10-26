@@ -1,4 +1,5 @@
 #include "AtTrack.h"
+#include "AtPattern.h"
 
 // FairRoot classes
 #include "FairRuntimeDb.h"
@@ -442,3 +443,8 @@ Bool_t AtTrack::SortClusterHitArrayZ()
    std::sort(fHitClusterArray.begin(), fHitClusterArray.end(), SortClusterHitZ);
    return kTRUE;
 }
+
+// Port additions for the develop-branch sample-consensus classes.  Defined here so the
+// header needs only a forward declaration of AtPattern.
+void AtTrack::SetPattern(PatternPtr pattern) { fPattern = std::move(pattern); }
+AtPatterns::AtPattern *AtTrack::GetPattern() const { return fPattern.get(); }

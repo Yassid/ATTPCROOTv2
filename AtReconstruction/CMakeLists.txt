@@ -28,6 +28,13 @@ ${CMAKE_SOURCE_DIR}/AtReconstruction/AtFilter
 ${CMAKE_SOURCE_DIR}/AtTpc
 ${CMAKE_SOURCE_DIR}/AtGenerators
 
+
+${CMAKE_SOURCE_DIR}/AtData
+${CMAKE_SOURCE_DIR}/AtData/AtPattern
+${CMAKE_SOURCE_DIR}/AtTools/AtHitSampling
+${CMAKE_SOURCE_DIR}/AtReconstruction/AtPatternRecognition
+
+${CMAKE_SOURCE_DIR}/AtTools
 )
 
 include_directories(${INCLUDE_DIRECTORIES})
@@ -94,6 +101,33 @@ GETDecoder2/GETLayeredFrame.cxx
 GETDecoder2/GETMath2.cxx
 GETDecoder2/GETFileChecker.cxx
 
+# --- ported from the develop branch: PCL-free sample-consensus pattern recognition -----
+# These replace the old AtRansac, which sits behind if(PCL_FOUND) below and is therefore
+# not built here.  They are deliberately OUTSIDE that guard: they need no PCL.
+AtPatternRecognition/AtSampleConsensus.cxx
+AtPatternRecognition/AtSampleEstimator.cxx
+AtPatternRecognition/AtEstimatorMethods.cxx
+../AtData/AtContainerManip.cxx
+../AtData/AtPattern/AtPattern.cxx
+../AtData/AtPattern/AtPatternLine.cxx
+../AtData/AtPattern/AtPatternTypes.cxx
+../AtData/AtPattern/AtPatternCircle2D.cxx
+../AtData/AtPattern/AtPatternRay.cxx
+../AtData/AtPattern/AtPatternY.cxx
+../AtData/AtPattern/AtPatternFission.cxx
+../AtData/AtPattern/AtPadPlaneElement.cxx
+../AtTools/AtHitSampling/AtSample.cxx
+../AtTools/AtHitSampling/AtSampleMethods.cxx
+../AtTools/AtHitSampling/AtIndependentSample.cxx
+../AtTools/AtHitSampling/AtSampleFromReference.cxx
+../AtTools/AtHitSampling/AtUniform.cxx
+../AtTools/AtHitSampling/AtChargeWeighted.cxx
+../AtTools/AtHitSampling/AtGaussian.cxx
+../AtTools/AtHitSampling/AtWeightedGaussian.cxx
+../AtTools/AtHitSampling/AtWeightedGaussianTrunc.cxx
+../AtTools/AtHitSampling/AtY.cxx
+../AtTools/AtHitSampling/AtWeightedY.cxx
+# ---------------------------------------------------------------------------------------
 AtDecoder/AtCore.cxx
 AtDecoder/AtCore2.cxx
 AtDecoder/AtCoreSpecMAT.cxx

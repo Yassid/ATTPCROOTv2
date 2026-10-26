@@ -12,6 +12,9 @@
 
 // AtTPCROOT
 #include "AtHit.h"
+
+namespace AtPatterns { class AtPattern; }   // forward declared; defined in the .cxx
+#include <memory>
 #include "AtHitCluster.h"
 
 #define cRED "\033[1;31m"
@@ -22,6 +25,13 @@
 class AtTrack : public TObject {
 
 public:
+   // Port addition for the develop-branch sample-consensus classes, which attach the
+   // fitted pattern to the track.  Safe to add here: AtTrack is never written to the
+   // .root files this analysis reads -- those hold AtEvent/AtHit only.
+   using PatternPtr = std::unique_ptr<AtPatterns::AtPattern>;
+   void SetPattern(PatternPtr pattern);
+   AtPatterns::AtPattern *GetPattern() const;
+
    AtTrack();
    // AtTrack(const AtTrack &obj);
    ~AtTrack();
@@ -138,6 +148,10 @@ public:
    FitPar FitParameters;
 
 protected:
+   // Port addition: the pattern the sample-consensus solver fitted to this track.
+   // Marked //! so it is NOT streamed -- AtTrack's on-disk layout is unchanged.
+   std::shared_ptr<AtPatterns::AtPattern> fPattern{nullptr}; //!
+
    std::vector<AtHit> fHitArray;
    std::vector<AtHitCluster> fHitClusterArray; ///< Clusterized hits container
    Int_t fTrackID;

@@ -119,4 +119,17 @@
 
 //#pragma link C++ function AtHoughSpaceLine::CalcGenHoughSpace<AtEvent*>(GenHough event);
 
+
+// --- ported from develop: PCL-free sample-consensus pattern recognition ---------------
+#pragma link C++ namespace AtPatterns;
+#pragma link C++ class AtPatterns::AtPattern+;
+#pragma link C++ class AtPatterns::AtPatternLine+;
+#pragma link C++ class AtPatterns::AtPatternCircle2D+;
+#pragma link C++ class AtPatterns::AtPatternRay+;
+#pragma link C++ class AtPatterns::AtPatternY+;
+#pragma link C++ class AtPatterns::AtPatternFission+;
+#pragma link C++ namespace SampleConsensus;
+#pragma link C++ class SampleConsensus::AtSampleConsensus+;
+// --------------------------------------------------------------------------------------
+
 #endif

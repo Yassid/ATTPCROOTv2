@@ -4,6 +4,7 @@
 #include "TROOT.h"
 #include "TObject.h"
 #include "TVector3.h"
+#include <Math/Point3D.h>
 
 class AtHit : public TObject {
 public:
@@ -69,6 +70,11 @@ public:
    Int_t GetHitID() const;
    //!< Position getter
    TVector3 GetPosition() const;
+   // Shim for the pattern-recognition classes ported from the develop branch, which work
+   // in ROOT::Math::XYZPoint.  Inline and stateless, so the AtHit streamer -- and every
+   // .root file already written with it -- is untouched.
+   using XYZPoint = ROOT::Math::XYZPoint;
+   XYZPoint GetPositionXYZ() const { TVector3 v = GetPosition(); return {v.X(), v.Y(), v.Z()}; }
    //!< Position sigma getter
    TVector3 GetPositionCorr() const;
    TVector3 GetPosSigma() const;

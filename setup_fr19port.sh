@@ -17,7 +17,9 @@ export SIMPATH=${SIMPATH_DIR}
 export FAIRROOTPATH=${FAIRROOT_DIR}
 source ${ATTPCROOT_DIR}/build/config.sh > /dev/null 2>&1
 
-export ROOT_INCLUDE_PATH=${ATTPCROOT_DIR}/install/include:${FAIRROOT_DIR}/include:${SIMPATH_DIR}/include/vmc:${SIMPATH_DIR}/include/root:${SIMPATH_DIR}/include
+# The sample-consensus classes ported from develop live in the source tree, not in
+# install/include, so cling needs their directories explicitly.
+export ROOT_INCLUDE_PATH=${ATTPCROOT_DIR}/AtReconstruction/AtPatternRecognition:${ATTPCROOT_DIR}/AtData:${ATTPCROOT_DIR}/AtData/AtPattern:${ATTPCROOT_DIR}/AtTools/AtHitSampling:${ATTPCROOT_DIR}/AtReconstruction/AtDecoder:${ATTPCROOT_DIR}/install/include:${FAIRROOT_DIR}/include:${SIMPATH_DIR}/include/vmc:${SIMPATH_DIR}/include/root:${SIMPATH_DIR}/include
 
 
 # Geant4 data. build/config.sh on this branch sets none of these, so any simulation dies
