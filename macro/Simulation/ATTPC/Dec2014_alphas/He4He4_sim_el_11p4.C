@@ -38,7 +38,7 @@ void He4He4_sim_el_11p4(Int_t nEvents = 10000, TString mcEngine = "TGeant4", UIn
    // ------------------------------------------------------------------------
 
    // -----   Create media   -------------------------------------------------
-   run->SetMaterials("media.geo"); // Materials (heco2_150 = He:CO2 90/10 at 150 torr)
+   run->SetMaterials("media.geo"); // heco2_300 = He:CO2 90/10 at 299.5 torr
    // ------------------------------------------------------------------------
 
    // -----   Create geometry   ----------------------------------------------
@@ -54,7 +54,9 @@ void He4He4_sim_el_11p4(Int_t nEvents = 10000, TString mcEngine = "TGeant4", UIn
    run->AddModule(pipe);*/
 
    FairDetector *ATTPC = new AtTpc("ATTPC", kTRUE);
-   ATTPC->SetGeometryFileName("ATTPC_HeCO2_150torr.root");
+   ATTPC->SetGeometryFileName("ATTPC_HeCO2_300torr.root");  // 299.5 torr: the gas the B=0 runs used.
+   // The 150 torr geometry halves the beams energy loss, so the beam leaves the chamber
+   // with far too much energy and the reaction never fires at depth.
    // ATTPC->SetModifyGeometry(kTRUE);
    run->AddModule(ATTPC);
 
@@ -87,7 +89,16 @@ void He4He4_sim_el_11p4(Int_t nEvents = 10000, TString mcEngine = "TGeant4", UIn
    Double_t Bmass = 4.00260325415;
    Double_t NomEnergy = 11.4; // MeV
 
-   AtTPCIonGenerator *ionGen = new AtTPCIonGenerator("Ion", z, a, q, m, px, py, pz, BExcEner, Bmass, NomEnergy);
+   // The last argument is the MAXIMUM ENERGY LOSS before the reaction is allowed to happen:
+   // the generator draws it uniformly from (0, eLoss).  Left at its default (-1) it is set
+   // to the full beam energy, so the beam is often asked to lose more than it physically
+   // can inside the chamber -- and those events produce no vertex at all.  Here the beam
+   // has a 1071 mm range in a 1006 mm path and leaves with 2.13 MeV, so the most it can
+   // lose is 9.27 MeV; 9.0 keeps every draw achievable and spans E_cm 1.2-5.7 MeV, which
+   // is the range the real data covers.
+   Double_t MaxELoss = 9.0; // MeV
+   AtTPCIonGenerator *ionGen =
+      new AtTPCIonGenerator("Ion", z, a, q, m, px, py, pz, BExcEner, Bmass, NomEnergy, MaxELoss);
    ionGen->SetSpotRadius(0, -100, 0);
    // add the ion generator
 
