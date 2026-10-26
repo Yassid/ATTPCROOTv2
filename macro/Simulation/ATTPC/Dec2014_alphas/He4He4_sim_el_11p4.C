@@ -80,9 +80,14 @@ void He4He4_sim_el_11p4(Int_t nEvents = 10000, TString mcEngine = "TGeant4", UIn
    Int_t q = 0;  // Charge State
    Int_t m = 1;  // Multiplicity  NOTE: Due the limitation of the TGenPhaseSpace accepting only pointers/arrays the
                  // maximum multiplicity has been set to 10 particles.
-   Double_t px = 0.000 / a; // X-Momentum / per nucleon!!!!!!
-   Double_t py = 0.000 / a; // Y-Momentum / per nucleon!!!!!!
-   Double_t pz = 0.291743 / a; // Z-Momentum per nucleon. 4He at 11.40 MeV -> p = 291.743 MeV/c
+   // THE BEAM MUST BE TILTED.  The detector sits at 6.47 deg to the beam, so in detector
+   // coordinates the beam enters at that angle (azimuth 13 deg, measured from the data) and
+   // walks ~113 mm across the pad plane on its way through.  With px = py = 0 it travels
+   // straight down z, stays inside a single pad column, and leaves only ~7 hits where the
+   // real beam leaves 21-27 -- too few for the track finder to see it as a segment at all.
+   Double_t px = 0.032032 / a; // X-Momentum per nucleon
+   Double_t py = 0.007395 / a; // Y-Momentum per nucleon
+   Double_t pz = 0.289885 / a; // Z-Momentum per nucleon. 4He at 11.40 MeV -> p = 291.743 MeV/c
    // 11.40 MeV is the real beam energy (paper + measured from the data). The Excel run
    // log's 1.95 MeV/u = 7.80 MeV is WRONG and was used by the earlier version of this macro.
    Double_t BExcEner = 0.0;
@@ -99,7 +104,12 @@ void He4He4_sim_el_11p4(Int_t nEvents = 10000, TString mcEngine = "TGeant4", UIn
    Double_t MaxELoss = 9.0; // MeV
    AtTPCIonGenerator *ionGen =
       new AtTPCIonGenerator("Ion", z, a, q, m, px, py, pz, BExcEner, Bmass, NomEnergy, MaxELoss);
-   ionGen->SetSpotRadius(0, -100, 0);
+   // Start the beam AT the entrance window, on the detector axis.  The tilt pivots there,
+   // so the beam is on-axis at z = entrance and walks off it going deeper -- that is the
+   // geometry the whole analysis relies on (the entrance is found as the beam line's
+   // closest approach to x = y = 0).  Starting it 100 cm upstream instead puts it 113 mm
+   // off-axis before it even enters.
+   ionGen->SetSpotRadius(0, 0, 0);
    // add the ion generator
 
    primGen->AddGenerator(ionGen);
