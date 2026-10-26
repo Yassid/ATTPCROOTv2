@@ -28,7 +28,8 @@ def build(config, max_files=None, force=False, quiet=False):
         raise SystemExit(f"no track files in {config.CANDS_DIR} -- run ./01_dump.sh then 02_track.py")
 
     cols = {k: [] for k in ("run", "th1", "th2", "thsum", "opening",
-                            "L1", "L2", "E1", "E2", "path", "vz", "nhit1", "nhit2")}
+                            "L1", "L2", "E1", "E2", "path", "vz", "nhit1", "nhit2",
+                            "hasbeam", "event")}
     for i, path in enumerate(files):
         run = int(os.path.basename(path).split("_")[-1].split(".")[0])
         if not quiet:
@@ -46,6 +47,10 @@ def build(config, max_files=None, force=False, quiet=False):
             cols["E2"].append(float(tab.energy_of_range(L2)))
             cols["path"].append(r["path"]); cols["vz"].append(r["vertex"][2])
             cols["nhit1"].append(int(rec["a1"].sum())); cols["nhit2"].append(int(rec["a2"].sum()))
+            # whether a beam track was actually found.  The vertex is better defined when
+            # it was, so this is the handle for splitting the sample as a systematic.
+            cols["hasbeam"].append(int(rec["beam"].sum() >= 2))
+            cols["event"].append(int(rec.get("event", -1)))
     if not quiet:
         print()
     out = {k: np.asarray(v) for k, v in cols.items()}
