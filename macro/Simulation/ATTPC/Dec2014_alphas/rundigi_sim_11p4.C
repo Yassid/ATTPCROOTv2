@@ -51,7 +51,9 @@ void rundigi_sim_11p4(TString mcFile = "./data11p4/attpcsim_in.root",
 
    // ---- exactly the PSA used on the experimental data ---------------------
    AtPSASimple2 *psa = new AtPSASimple2();
-   psa->SetThreshold(20);                // same as run_unpack_Dec2014_alphas.C
+   psa->SetThreshold(3);   // NOT the 20 used on real data -- the simulated ADC scale is
+                           // different, and the working sims on develop use 3 (or 0).
+                           // With 20 every simulated event comes out with zero hits.
    psa->SetMaxFinder();
    psa->SetBaseCorrection(kTRUE);
    psa->SetTimeCorrection(kFALSE);
@@ -74,28 +76,33 @@ void rundigi_sim_11p4(TString mcFile = "./data11p4/attpcsim_in.root",
              << " s, CPU " << timer.CpuTime() << " s" << std::endl;
 }
 
-/* STATUS, 2026-10-23 -- the chain runs end to end but is NOT yet tuned.
+/* STATUS -- the chain runs end to end; the REACTION RATE is the open problem.
  *
  *   Geant4 -> AtClusterizeTask -> AtPulseTask -> AtPSAtask -> AtEvent -> tracker
  *
- * all works, and the AtEvent it produces is the same class the real data produces, so the
- * tracker runs on both identically.  But the response does not match the experiment yet:
+ * all works, and produces the same AtEvent class the real data does, so the tracker runs
+ * on both identically.  Settings that had to be right before anything appeared at all:
  *
- *                       simulated   real (run 38)
- *     hits / event             40             154
- *     events tracked       36/200         200/200
- *     events with >=3        3/200          63/200
+ *   PSA threshold 3, NOT the 20 used on real data.  The simulated ADC scale is different;
+ *   the working sims on develop use 3 or 0.  At 20 every event comes out with zero hits
+ *   and nothing reports an error.
  *
- * Do NOT take an efficiency from this until those agree -- it would be wrong by more than
- * an order of magnitude, and in the direction that matters.
+ *   Gain 20000 and CoefL/CoefT 0.00002/0.0002, from ATTPC.e20020_sim.par.  Taking these
+ *   from the EXPERIMENTAL par file instead gives Gain 0.28 -- a different quantity, the
+ *   measured pulses being already amplified -- and pulses peak at 0.03 ADC.
  *
- * First thing to check: whether the INCOMING BEAM is being digitised at all.  In the real
- * data the beam segment is present in every candidate and carries a large share of the
- * hits; if AtVertexPropagator stops the beam at the vertex, only the two products are
- * digitised, which would explain both the low hit count and why so few events yield the
- * three segments the analysis requires.
+ * REMAINING PROBLEM: the two-body reaction fires in only 32% of attempts, and when it
+ * does, only at shallow vertices.  Measured over 200 events:
  *
- * Second: Gain = 5000 in the par file was tuned at 150 torr.  At 299.5 torr it needs
- * re-tuning, and the way to do it is to match the simulated charge-per-hit and
- * hits-per-event distributions to the measured ones, not to guess.
+ *     reaction attempts                  200
+ *     vertex energy <= 0, no reaction    137  (68%)
+ *     vertex energy when it fires        7.0 - 10.6 MeV, median 8.2
+ *
+ * So the simulated sample covers E_cm 3.5-5.3 MeV only -- the low-energy half, where the
+ * 8Be 2+ sits, is never populated.  AtTPC2Body.cxx:225 requires a non-zero vertex energy
+ * from AtVertexPropagator and its comment says "not punch through".  This beam HAS a
+ * 1071 mm range in a 1000 mm chamber, so it punches through with ~2.1 MeV in hand -- which
+ * is physically correct and is the same fact that sets the E_cm >= 1.07 MeV floor in the
+ * data.  The propagator appears to treat a beam that does not stop inside as having no
+ * valid vertex.  That is what to fix before any efficiency is taken from this.
  */

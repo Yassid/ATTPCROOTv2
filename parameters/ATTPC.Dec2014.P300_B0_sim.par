@@ -38,9 +38,9 @@ ThetaPad:Double_t            110.9   # AT-TPC pad plane rotation
 ThetaRot:Double_t              0.0   # Second Lorentz Angle
 GasPressure:Double_t           299.5   # Gas pressure in torr
 EIonize:Double_t            15.603   # Ionization energy of gas in eV
-CoefL:Double_t               0.0009   # longitudinal diffusion used by the simulation
-CoefT:Double_t               0.0009   # transverse diffusion used by the simulation
-Gain:Double_t                 5000   # micromegas gain, as in ATTPC.alpha_150torr_sim.par
+CoefL:Double_t               0.00002   # longitudinal diffusion [cm^2/us], simulation value
+CoefT:Double_t               0.0002   # transverse diffusion [cm^2/us], simulation value
+Gain:Double_t                 20000   # micromegas gain, as in the working ATTPC.e20020_sim.par
 MaxRange:Double_t           1032.0   # Maximum range from Beam energy in mm
 Fano:Double_t                 0.24   # Fano factor of the gas
 GETGain:Double_t              1000   # Gain of the GET electronics in fC
