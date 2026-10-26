@@ -16,7 +16,7 @@
 //   root -l 'rundigi_sim.C("./data11p4/attpcsim_in.root")'
 void rundigi_sim_11p4(TString mcFile = "./data11p4/attpcsim_in.root",
                  TString outFile = "./data11p4/output_digi.root",
-                 Bool_t keepElectrons = kTRUE)
+                 Bool_t keepElectrons = kTRUE, Bool_t keepTraces = kTRUE)
 {
    TStopwatch timer;
    timer.Start();
@@ -46,7 +46,11 @@ void rundigi_sim_11p4(TString mcFile = "./data11p4/attpcsim_in.root",
 
    // ---- pad response and electronics --------------------------------------
    AtPulseTask *pulse = new AtPulseTask();
-   pulse->SetPersistence(kTRUE);
+   // The pad TRACES are the other bulk term.  AtPSAtask consumes them in memory inside the
+   // same run, so they only need to reach disk if you intend to look at waveforms later.
+   // With keepElectrons and keepTraces both off, a 6000-event digi.root goes from 50 GB to
+   // a few tens of MB -- which is what makes high-statistics efficiency runs possible.
+   pulse->SetPersistence(keepTraces);
    pulse->SetSaveMCInfo();               // keeps the MC point each pad signal came from
 
    // ---- exactly the PSA used on the experimental data ---------------------
