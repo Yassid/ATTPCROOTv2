@@ -64,7 +64,20 @@ ax[1].set_title("two independent energy scales"); ax[1].legend(fontsize=8); ax[1
 fig.tight_layout()
 out = os.path.join(config.OUT_DIR, "04_selection.png"); fig.savefig(out, dpi=140)
 
+# Also keep a SIDEBAND sample -- the shoulders of the theta1+theta2 peak, twice as wide as
+# the signal window.  Step 7 uses it to subtract the background under the 90-degree cut,
+# which is necessary because the purity is strongly energy dependent (~57% at E_cm = 2.25
+# MeV against ~92% at 4.75 MeV), so leaving it in distorts the shape of the excitation
+# function rather than merely its normalisation.
+dev = np.abs(ev["thsum"] - 90.0)
+side = (dev >= config.SUM_WINDOW) & (dev < 3.0 * config.SUM_WINDOW)
+Ecm_side = (ev["E1"][side] + ev["E2"][side]) / 2.0
+Tcm_side = 2.0 * np.minimum(ev["th1"][side], ev["th2"][side])
+inb = (Tcm_side > 80.0) & (Tcm_side < 100.0)
+print(f"  sideband sample: {int(side.sum())} events, {int(inb.sum())} in the 90 deg band")
+
 np.savez_compressed(os.path.join(config.OUT_DIR, "selected.npz"),
+                    Ecm_side=Ecm_side[inb], Tcm_side=Tcm_side[inb],
                     Ecm=Ecm_arms, Ecm_vtx=Ecm_vtx, Tcm=Tcm,
                     th1=ev["th1"][keep], th2=ev["th2"][keep],
                     L1=ev["L1"][keep], L2=ev["L2"][keep], path=ev["path"][keep])
