@@ -16,8 +16,8 @@
 //   root -l 'rundigi_sim.C("./data11p4/attpcsim_in.root")'
 void rundigi_sim_11p4(TString mcFile = "./data11p4/attpcsim_in.root",
                  TString outFile = "./data11p4/output_digi.root",
-                 Bool_t keepElectrons = kTRUE, Bool_t keepTraces = kTRUE,
-                 Int_t psaThreshold = 3)
+                 Bool_t keepElectrons = kFALSE, Bool_t keepTraces = kFALSE,
+                 Int_t psaThreshold = 1000)
 {
    TStopwatch timer;
    timer.Start();
@@ -56,9 +56,14 @@ void rundigi_sim_11p4(TString mcFile = "./data11p4/attpcsim_in.root",
 
    // ---- exactly the PSA used on the experimental data ---------------------
    AtPSASimple2 *psa = new AtPSASimple2();
-   psa->SetThreshold(psaThreshold);   // NOT the 20 used on real data -- the simulated ADC scale is
-                           // different, and the working sims on develop use 3 (or 0).
-                           // With 20 every simulated event comes out with zero hits.
+   // CALIBRATED, do not guess at this.  It is not transferable from the real data's 20:
+   // the simulated ADC scale is different.  It was set by scanning it against the measured
+   // hit density -- at 1000 the simulation gives 23 beam hits and 57 arm hits per event
+   // against the data's 14-20 and 58.  At the old default of 3 the tracks carry TWICE the
+   // hits they should, which makes the track finder look better than it is.
+   // Note 3 -> 35 barely changes anything: hits per track are set by the pads crossed, so
+   // this is really a gain mismatch and the threshold is the knob that compensates it.
+   psa->SetThreshold(psaThreshold);
    psa->SetMaxFinder();
    psa->SetBaseCorrection(kTRUE);
    psa->SetTimeCorrection(kFALSE);
