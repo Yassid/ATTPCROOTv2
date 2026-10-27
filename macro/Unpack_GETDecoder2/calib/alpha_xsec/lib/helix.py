@@ -8,7 +8,7 @@ to twenty times the granularity, not by a little.
 What the curvature BUYS, and the reason this is worth doing: the radius gives the momentum
 directly,
 
-    p_T [MeV/c] = 0.29979 * B[T] * q * R[mm] / 10      (q = 2 for an alpha)
+    p_T [MeV/c] = 0.29979 * B[T] * q * R[mm]           (q = 2 for an alpha)
 
 so the magnet-on data carry an energy measurement that needs neither the range table nor
 the reconstructed path length.  That is a third, independent handle on the energy scale
@@ -98,7 +98,10 @@ def tangent_at(fit, x, y, sense=+1):
 
 def momentum_MeV(R_mm, lam, B_T, q=Q_ALPHA):
     """Momentum from the curvature.  R in mm, B in tesla."""
-    pT = 0.29979 * B_T * q * (R_mm / 10.0)       # MeV/c, R in cm
+    # p[GeV/c] = 0.29979 * B[T] * R[m] * q, so with R in mm the 1/1000 and the GeV->MeV
+    # 1000 cancel exactly and the constant is used as-is.  Getting this wrong by the
+    # obvious factor of ten puts an 11 MeV alpha at 0.1 MeV, which is how it was caught.
+    pT = 0.29979 * B_T * q * R_mm                # MeV/c, R in mm
     return pT / max(np.cos(lam), 1e-6)
 
 
