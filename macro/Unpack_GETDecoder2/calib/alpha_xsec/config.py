@@ -37,8 +37,26 @@ T0_BUCKETS   = -34.0   # drift-time origin:  z = V_DRIFT * (tb - T0_BUCKETS) * T
 #   2.142  from the beam's Bragg peak
 #   2.237  from the arm-arm opening angle
 #   2.278  from the theta1+theta2 = 90 deg constraint   <- currently preferred
-V_DRIFT      = float(os.environ.get("DEC2014_VD", 2.278))
-V_DRIFT_SET  = (2.142, 2.237, 2.278)
+# THE DRIFT VELOCITY IS SETTLED at 2.265 cm/us.  The "6% spread between three methods"
+# that this analysis carried as its dominant systematic was NOT real:
+#
+#   * The value 2.142 came from assigning 145 time buckets to 497 mm, taken as 90% of the
+#     range of a 7.80 MeV alpha.  That beam energy was later corrected to 11.40 MeV, whose
+#     range (1071 mm) EXCEEDS the 1006 mm the tilted chamber offers -- so the beam never
+#     stops inside and there is no Bragg peak there to measure.  The determination was
+#     invalid, not merely imprecise.
+#   * 2.237 and 2.278 were the same kinematic constraint read off coarsely.
+#
+# So there is ONE valid determination, the theta1 + theta2 = 90 degree constraint, and it is
+# cleaner than it looks: the sum is insensitive to the beam direction to first order,
+# because rotating the beam within the reaction plane raises one arm angle and lowers the
+# other.  It therefore measures v_D alone and does NOT trade off against the tilt.
+#
+# Measured on all 68 runs, peak centroid against v_D:
+#     2.245 -> 90.492     2.255 -> 90.244     2.265 -> 89.995     2.275 -> 89.748
+# The +-1% band below moves the peak by about +-0.25 degrees, against a 4 degree FWHM.
+V_DRIFT      = float(os.environ.get("DEC2014_VD", 2.265))
+V_DRIFT_SET  = (2.245, 2.265, 2.285)   # the +-1% band, see below
 
 # ---------------------------------------------------------------- analysis cuts
 SUM_WINDOW   = 6.0    # deg; keep events with |theta1 + theta2 - 90| < this
