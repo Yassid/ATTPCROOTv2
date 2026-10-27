@@ -122,3 +122,61 @@ def find_tracks_conformal(P, vertex, q=None, r_min=12.0, min_hits=10, scale=1.0e
         full[kidx[m]] = True
         out.append(dict(mask=full, xc=circ[0] + vertex[0], yc=circ[1] + vertex[1], R=circ[2]))
     return out
+
+
+def straightness(P, vertex, r_min=12.0, scale=1.0e4, n_dir=36):
+    """How line-like is the conformal picture about this candidate vertex?
+
+    In conformal coordinates about the TRUE vertex every track is a straight line; about a
+    wrong vertex they are not.  So the vertex can be found with no seed, as the point that
+    maximises straightness.
+
+    The first version of this scored badly (median vertex error 145 mm) for two reasons
+    worth recording, because both are easy to repeat:
+      * it histogrammed with FIXED bins over a 1/r dynamic range, so almost every point
+        landed in the central bins whatever the vertex, and the score barely moved;
+      * it took the max over directions, rewarding ONE line, where the signal is that
+        THREE lines exist at once.
+    This version normalises the projection by its own spread before binning, and sums the
+    best few directions instead of taking the single best.
+    """
+    UV, keep = to_conformal(P, vertex, r_min=r_min, scale=scale)
+    if len(UV) < 12:
+        return -1.0
+    scores = []
+    for th in np.linspace(0, np.pi, n_dir, endpoint=False):
+        nrm = np.array([-np.sin(th), np.cos(th)])
+        proj = UV @ nrm
+        sd = np.std(proj)
+        if sd <= 0:
+            continue
+        # scale-free: bin in units of the projection's own spread, so the score measures
+        # concentration rather than the absolute size of the conformal cloud
+        h, _ = np.histogram(proj / sd, bins=np.linspace(-3, 3, 31))
+        scores.append(float(h.max()) / len(UV))
+    if not scores:
+        return -1.0
+    scores.sort(reverse=True)
+    return float(np.mean(scores[:3]))   # three tracks -> three good directions
+
+
+def find_vertex(P, q=None, r_scan=None, n_coarse=13, n_fine=9, r_min=12.0):
+    """Locate the vertex as the point maximising conformal straightness.
+
+    Two passes: a coarse grid over the hit cloud, then a fine grid around the best cell.
+    """
+    P = np.asarray(P, float)
+    if r_scan is None:
+        r_scan = 0.5 * max(np.ptp(P[:, 0]), np.ptp(P[:, 1]))
+    c = np.array([np.median(P[:, 0]), np.median(P[:, 1])])
+    best = (-1.0, c)
+    for npts, rad in ((n_coarse, r_scan), (n_fine, 2.0 * r_scan / max(n_coarse - 1, 1))):
+        gx = np.linspace(best[1][0] - rad, best[1][0] + rad, npts)
+        gy = np.linspace(best[1][1] - rad, best[1][1] + rad, npts)
+        for x in gx:
+            for y in gy:
+                v = np.array([x, y])
+                sc = straightness(P, v, r_min=r_min)
+                if sc > best[0]:
+                    best = (sc, v)
+    return best[1], best[0]
