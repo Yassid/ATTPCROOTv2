@@ -39,13 +39,23 @@ void dump_hits(const char *in, const char *out, Long64_t nEvents = -1)
    Long64_t nmax = (nEvents < 0) ? t->GetEntries() : nEvents;
 
    const char *P = "AtEventH.fHitArray";
+   // WHICH POSITION.  AtPSASimple2 stores TWO: fPosition is the raw pad position, and
+   // fPositionCorr has the E x B (Lorentz) displacement removed.  At B = 0 they are
+   // identical, so it never mattered for the magnet-off analysis -- but with the field on
+   // the drifting electrons are pushed sideways by up to ~80 mm, growing with drift
+   // distance, and reading fPosition gives sheared tracks that are no longer circles.
+   // DEC2014_CORR=1 selects the corrected field; the default stays fPosition so that the
+   // B = 0 results are bit-for-bit unchanged.
+   const bool useCorr = (gSystem->Getenv("DEC2014_CORR") != nullptr);
+   const char *POS = useCorr ? "fPositionCorr" : "fPosition";
+   if (useCorr) printf("  using fPositionCorr (E x B corrected)\n");
    // Entry$ on its own yields ONE value per entry, not one per hit.  Multiplying by
    // 0 * (a hit-array expression) forces it to be evaluated per hit, so it broadcasts to
    // the hit multiplicity and lines up with the other columns.
    auto ev  = col(t, Form("Entry$+0*%s.fTimeStamp", P), nmax);
-   auto x   = col(t, Form("%s.fPosition.fX", P),    nmax);
-   auto y   = col(t, Form("%s.fPosition.fY", P),    nmax);
-   auto z   = col(t, Form("%s.fPosition.fZ", P),    nmax);
+   auto x   = col(t, Form("%s.%s.fX", P, POS),    nmax);
+   auto y   = col(t, Form("%s.%s.fY", P, POS),    nmax);
+   auto z   = col(t, Form("%s.%s.fZ", P, POS),    nmax);
    auto tb  = col(t, Form("%s.fTimeStamp", P),      nmax);
    auto q   = col(t, Form("%s.fCharge", P),         nmax);
    auto pad = col(t, Form("%s.fPadNum", P),         nmax);
