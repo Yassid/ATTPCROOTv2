@@ -16,6 +16,7 @@
 #include "AtEvent.h"
 #include "AtHit.h"
 #include "AtSampleConsensus.h"
+#include "AtPatternTypes.h"
 #include "AtTrack.h"
 
 #include <TClonesArray.h>
@@ -30,8 +31,13 @@
 // lower with a tight threshold -- minHits=8, distThresh=4 returns MORE tracks per event
 // (3.3 vs 2.5) but fragments real tracks, and efficiency falls to 24 % with the angular
 // resolution degrading from 2.7 to 11.7 deg.
+// pattern: 0 = straight line (B = 0 data), 1 = circle in the pad plane (magnet-on data).
+// With B along the drift axis a track is a helix, and at these fields the sagitta is 5-59 mm
+// against a 2.8 mm pad pitch, so a line model is wrong by ten to twenty times the
+// granularity.  AtPatternCircle2D fits the XY projection and ignores z for the inlier test.
 void track_ransac(const char *in, const char *out, Long64_t nEvents = -1,
-                  int iterations = 500, int minHits = 8, double distThresh = 7.0)
+                  int iterations = 500, int minHits = 8, double distThresh = 7.0,
+                  int pattern = 0)
 {
    TFile *f = TFile::Open(in);
    if (!f || f->IsZombie()) { printf("ERROR cannot open %s\n", in); return; }
@@ -44,6 +50,8 @@ void track_ransac(const char *in, const char *out, Long64_t nEvents = -1,
    Long64_t nRun = (nEvents < 0 || nEvents > nAll) ? nAll : nEvents;
 
    SampleConsensus::AtSampleConsensus sc;
+   sc.SetPatternType(pattern == 1 ? AtPatterns::PatternType::kCircle2D
+                                  : AtPatterns::PatternType::kLine);
    sc.SetNumIterations(iterations);
    sc.SetMinHitsPattern(minHits);
    sc.SetDistanceThreshold(distThresh);

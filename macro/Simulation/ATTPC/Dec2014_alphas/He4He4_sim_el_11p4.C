@@ -64,8 +64,14 @@ void He4He4_sim_el_11p4(Int_t nEvents = 10000, TString mcEngine = "TGeant4", UIn
 
    // -----   Magnetic field   -------------------------------------------
    // Constant Field
+   // THE FIELD MUST BE ZERO HERE.  This macro models the B = 0 setting, and it was
+   // inherited with 5.691 kG still set -- which silently gave every simulated track the
+   // curvature of the 0.5691 T runs.  An arm at the kinematic ceiling has a sagitta of
+   // ~22 mm under that field, eight pad pitches of bend that the real B = 0 data do not
+   // have, so the straight-line finder was being scored against tracks it could never
+   // have seen.  Use He4He4_sim_b057.C for the magnet-on setting.
    AtConstField *fMagField = new AtConstField();
-   fMagField->SetField(0., 0., 5.691);                    // 0.5691 T, Dec 2014 (kG)
+   fMagField->SetField(0., 0., 0.0);                      // B = 0 runs
    fMagField->SetFieldRegion(-50, 50, -50, 50, -10, 230); // values are in cm
                                                           //  (xmin,xmax,ymin,ymax,zmin,zmax)
    run->SetField(fMagField);
