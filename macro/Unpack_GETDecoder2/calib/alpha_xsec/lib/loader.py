@@ -10,7 +10,10 @@ from .eloss import RangeTable
 
 
 def build(config, max_files=None, force=False, quiet=False):
-    tag = f"events_vd{config.V_DRIFT:.3f}".replace(".", "p")
+    # The cache holds E1/E2, which come from the range table and therefore depend on the
+    # PRESSURE as well as on v_D.  Tagging by v_D alone silently returns energies computed
+    # at a different density -- which is exactly the trap when studying the density itself.
+    tag = (f"events_vd{config.V_DRIFT:.3f}_p{config.PRESSURE:.1f}").replace(".", "p")
     if max_files:
         tag += f"_n{max_files}"
     cache = os.path.join(config.OUT_DIR, tag + ".npz")

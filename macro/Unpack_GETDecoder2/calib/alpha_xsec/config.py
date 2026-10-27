@@ -22,7 +22,7 @@ OUT_DIR   = os.path.join(os.path.dirname(os.path.abspath(__file__)), "out")
 # ---------------------------------------------------------------- beam and gas
 # These are SETTLED.  Do not change them without reading the guide's status table.
 E_BEAM   = 11.40     # MeV, 4He entering the gas.  NOT the 1.95 MeV/u in the Excel run log.
-PRESSURE = 299.5     # torr, He:CO2 90/10 by volume
+PRESSURE = float(os.environ.get("DEC2014_P", 299.5))   # torr; DEC2014_P overrides for the density study
 P_TABLE  = 150.0     # the range table is tabulated at this pressure; ranges scale as P/P_TABLE
 TILT     = 6.47      # degrees, detector tilt relative to the beam
 
