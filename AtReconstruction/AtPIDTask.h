@@ -1,6 +1,7 @@
 #ifndef ATPIDTASK_H
 #define ATPIDTASK_H
 
+#include "AtHelix3D.h"
 #include "AtPIDEstimator.h"
 #include "AtSpyralPID.h"
 
@@ -18,6 +19,8 @@
  * Spyral-style AtTools::AtSpyralPID (first-arc + spline arclength). Results are
  * written to an AtPIDEvent branch (parallel per-track vectors) so the two methods
  * can be compared with full statistics. The legacy estimator is kept untouched.
+ * It also runs AtTools::AtHelix3D (3D estimator, default ON, SetRunHelix3D(false) to skip), passing it
+ * the Spyral direction as one of its three direction votes.
  */
 class AtPIDTask : public FairTask {
 private:
@@ -33,6 +36,8 @@ private:
 
    AtTools::AtPIDEstimator fClassicEst;
    AtTools::AtSpyralPID fSpyralEst;
+   AtTools::AtHelix3D fHelix3DEst;
+   Bool_t fRunHelix3D{kTRUE};
 
 public:
    AtPIDTask();
@@ -45,6 +50,11 @@ public:
    /// downstream. That default is the documented cause of ~99.94 % of PID rejections (knee at
    /// 15-20). Whatever value a production persists is the plane its gates must be drawn on.
    void SetMinPoints(Int_t n) { fSpyralEst.SetMinPoints(n); }
+   void SetRunHelix3D(Bool_t v) { fRunHelix3D = v; }
+   /// z_lab = zPadPlane - z_digi for the 3D estimator's lab-frame outputs (theta, vertex, backward)
+   void SetZPadPlane(Double_t z) { fHelix3DEst.SetZTransform(-1, z); }
+   /// direct access to tune the 3D estimator (blob removal, guards, expected rotation sense, ...)
+   AtTools::AtHelix3D &GetHelix3D() { return fHelix3DEst; }
    /// 0 = exact-equality z-tie collapse (historical), which can make the arclength spline singular.
    void SetZTieTolerance(Double_t t) { fSpyralEst.SetZTieTolerance(t); }
    void SetPersistence(Bool_t v) { fIsPersistence = v; }

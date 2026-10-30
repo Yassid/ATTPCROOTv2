@@ -84,6 +84,6 @@
 #pragma link C++ class AtTools::AtSpyralPID - !;
 #pragma link C++ struct AtTools::AtSpyralResult + ;
 #pragma link C++ class AtTools::AtHelix3D - !;
-#pragma link C++ struct AtTools::AtHelix3DResult - !;
+#pragma link C++ struct AtTools::AtHelix3DResult + ;
 
 #endif

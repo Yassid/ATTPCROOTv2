@@ -11,6 +11,7 @@ AtPIDTask::AtPIDTask()
    : FairTask("AtPIDTask"), fPIDArray("AtPIDEvent", 1), fClassicEst(fBField, fSmallPadRadius)
 {
    fSpyralEst.SetBField(fBField);
+   fHelix3DEst.SetBField(fBField);
 }
 
 void AtPIDTask::SetBField(Double_t b)
@@ -18,6 +19,7 @@ void AtPIDTask::SetBField(Double_t b)
    fBField = b;
    fClassicEst.SetBField(b);
    fSpyralEst.SetBField(b);
+   fHelix3DEst.SetBField(b);
 }
 
 void AtPIDTask::SetSmallPadRadius(Double_t r)
@@ -25,6 +27,7 @@ void AtPIDTask::SetSmallPadRadius(Double_t r)
    fSmallPadRadius = r;
    fClassicEst.SetSmallPadRadius(r);
    fSpyralEst.SetSmallPadRadius(r);
+   fHelix3DEst.SetSmallPadRadius(r);
 }
 
 InitStatus AtPIDTask::Init()
@@ -68,7 +71,11 @@ void AtPIDTask::Exec(Option_t * /*opt*/)
       pidEvent->AddClassic(cl);
       // AtSpyralPID stamps trackID/nClusters itself, before its own early returns, so even
       // tracks with an invalid PID come back identified.
-      pidEvent->AddSpyral(fSpyralEst.Estimate(tr));
+      auto sp = fSpyralEst.Estimate(tr);
+      pidEvent->AddSpyral(sp);
+      // the Spyral direction is one of AtHelix3D's three votes
+      if (fRunHelix3D)
+         pidEvent->AddHelix3D(fHelix3DEst.Estimate(tr, sp.valid ? sp.direction : -1));
    }
 }
 

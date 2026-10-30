@@ -2,6 +2,7 @@
 #define ATHELIX3D_H
 
 #include <Math/Point3D.h>
+#include <Rtypes.h>
 
 #include <vector>
 
@@ -9,37 +10,40 @@ class AtTrack;
 
 namespace AtTools {
 
-/// Result of AtHelix3D::Estimate. Lab frame: z_lab = zSign * z_digi + zOffset (see SetZTransform).
+/// Result of AtHelix3D::Estimate, persisted in AtPIDEvent (one per pattern track, parallel to the
+/// Spyral results). Lab frame: z_lab = zSign * z_digi + zOffset (see AtHelix3D::SetZTransform).
 struct AtHelix3DResult {
-   bool valid{false};
+   Bool_t valid{false};
    /// 0 ok; 1 fewer than minHits hits; 2 no backbone / end fits; 3 no PID segment on the small pads
-   int failCode{0};
+   Int_t failCode{0};
+   Int_t trackID{-1};  ///< source AtTrack::GetTrackID() -- match on it, never on the array position
+   Int_t nClusters{0}; ///< hit clusters on the source track (the usual PID quality cut)
 
    // --- direction (vertex end) ---
-   int vertexEnd{-1};      ///< 0 = backbone end A, 1 = end B
-   bool ambiguous{true};   ///< the 2-of-3 vote tied or nobody voted -> treat the direction as unreliable
-   int nFor{0}, nVotes{0}; ///< votes agreeing with the chosen end / votes cast (max 3)
-   int voteSense{-1}, voteSpyral{-1}, voteBragg{-1}; ///< each voter's end, -1 = abstained
-   double braggRatio{0};   ///< charge(last third)/charge(first third) on the small pads, A -> B
-   double zLabVertexEnd{0}, zLabOtherEnd{0}; ///< lab z of the two track ends
-   bool backward{false};   ///< the vertex end has the HIGHER z_lab (the track travels toward -z_lab)
+   Int_t vertexEnd{-1};      ///< 0 = backbone end A, 1 = end B
+   Bool_t ambiguous{true};   ///< the 2-of-3 vote tied or nobody voted -> the direction is unreliable
+   Int_t nFor{0}, nVotes{0}; ///< votes agreeing with the chosen end / votes cast (max 3)
+   Int_t voteSense{-1}, voteSpyral{-1}, voteBragg{-1}; ///< each voter's end, -1 = abstained
+   Double_t braggRatio{0};   ///< charge(last third)/charge(first third) on the small pads, A -> B
+   Double_t zLabVertexEnd{0}, zLabOtherEnd{0}; ///< lab z of the two track ends [mm]
+   Bool_t backward{false};   ///< the vertex end has the HIGHER z_lab (the track travels toward -z_lab)
 
    // --- kinematics / PID from the vertex end ---
-   double theta{-1};      ///< polar angle of travel, lab frame [rad]
-   double brho{0};        ///< [T m]
-   double radius{0};      ///< vertex-end helix radius [mm]
-   double dca{1e9};       ///< closest approach of that helix to the beam axis [mm]
+   Double_t theta{-1};          ///< polar angle of travel, lab frame [rad]
+   Double_t brho{0};            ///< [T m]
+   Double_t radius{0};          ///< vertex-end helix radius [mm]
+   Double_t dca{1e9};           ///< closest approach of that helix to the beam axis [mm]
    ROOT::Math::XYZPoint vertex; ///< helix extrapolated to its closest approach to the axis (lab) [mm]
-   double dEdx{0};        ///< charge per mm of helix path, first arc on the small pads
-   double sqrtdEdx{0};
-   double pidPath{0};     ///< helix path used for dE/dx [mm]
+   Double_t dEdx{0};            ///< charge per mm of helix path, first arc on the small pads
+   Double_t sqrtdEdx{0};
+   Double_t pidPath{0}; ///< helix path used for dE/dx [mm]
 
    // --- track quality ---
-   int nHits{0}, nDropped{0}; ///< hits in, hits removed as stray blobs
-   double spacing{0};         ///< backbone length / backbone nodes [mm]; noise clouds are > ~6
-   double length{0};          ///< backbone length [mm]
-   bool guarded{false};       ///< vertex-end circle replaced by the whole-track circle
-   bool axisConstrained{false}; ///< vertex-end circle refitted through the beam axis
+   Int_t nHits{0}, nDropped{0};   ///< hits in, hits removed as stray blobs
+   Double_t spacing{0};           ///< backbone length / backbone nodes [mm]; noise clouds are > ~6
+   Double_t length{0};            ///< backbone length [mm]
+   Bool_t guarded{false};         ///< vertex-end circle replaced by the whole-track circle
+   Bool_t axisConstrained{false}; ///< vertex-end circle refitted through the beam axis
 };
 
 /// Direction-free 3D track estimator: vertex end, Brho, theta and dE/dx without sorting hits by z.

@@ -738,6 +738,92 @@ inline bool firstArcPID(const Result &r, int end, double rPad, double &brho, dou
    return true;
 }
 
+
+/// TRUNCATED-MEAN variant of firstArcPID: the same first-arc, small-pad, inlier segment of the vertex-end
+/// helix is cut into consecutive samples of at least sampleLen mm of HELIX path; each sample's dE/dx =
+/// its charge / its helix path; sqrt(dE/dx) is taken from the mean of the lowest keepFrac of the
+/// samples, which removes the Landau tail (the classic TPC estimator). keepFrac >= 1 reproduces the
+/// plain charge-over-path ratio only approximately (samples are averaged, not pooled).
+inline bool firstArcPIDTrunc(const Result &r, int end, double rPad, double sampleLen, double keepFrac, double &brho,
+                             double &sq, double &theta, double &path, int &nSamples)
+{
+   const auto &E = r.e[end];
+   nSamples = 0;
+   if (!E.ok || E.brho <= 0)
+      return false;
+   const int m = r.cen.size();
+   auto inl = [&](const P &p) { return std::abs(std::hypot(p.x - E.xc, p.y - E.yc) - E.R) < E.resCut; };
+   auto at = [&](int jj) { return end == 0 ? jj : m - 1 - jj; };
+   int j0 = at(0), jFar = 0;
+   for (int jj = 0; jj < m; ++jj)
+      if (inl(r.cen[at(jj)])) {
+         j0 = at(jj);
+         break;
+      }
+   double dFar = -1;
+   for (int jj = 0; jj < m; ++jj) {
+      const auto &p = r.cen[at(jj)];
+      if (!inl(p))
+         continue;
+      double d = std::hypot(p.x - r.cen[j0].x, p.y - r.cen[j0].y);
+      if (d > dFar) {
+         dFar = d;
+         jFar = jj;
+      }
+   }
+   const double pathPerRad = std::sqrt(E.R * E.R + E.dzdphi * E.dzdphi);
+   std::vector<double> samp;
+   double qS = 0, phS = 0, phPrev = 0, phAcc = 0, total = 0;
+   bool started = false;
+   for (int jj = 0; jj <= jFar; ++jj) {
+      const auto &p = r.cen[at(jj)];
+      double a = std::atan2(p.y - E.yc, p.x - E.xc);
+      if (jj == 0)
+         phPrev = a;
+      else {
+         double d = a - phPrev;
+         while (d > M_PI)
+            d -= 2 * M_PI;
+         while (d < -M_PI)
+            d += 2 * M_PI;
+         phAcc += d;
+         phPrev = a;
+      }
+      bool inner = std::hypot(p.x, p.y) <= rPad;
+      if (!inl(p))
+         continue;
+      if (!inner && started)
+         break;
+      if (!inner)
+         continue;
+      if (!started) {
+         started = true;
+         phS = phAcc;
+      }
+      qS += p.q;
+      double len = pathPerRad * std::abs(phAcc - phS);
+      if (len >= sampleLen) {
+         samp.push_back(qS / len);
+         total += len;
+         qS = 0;
+         phS = phAcc;
+      }
+   }
+   nSamples = samp.size();
+   if (nSamples < 3)
+      return false;
+   std::sort(samp.begin(), samp.end());
+   size_t k = std::max<size_t>(1, (size_t)std::lround(keepFrac * samp.size()));
+   k = std::min(k, samp.size());
+   double sum = 0;
+   for (size_t i = 0; i < k; ++i)
+      sum += samp[i];
+   brho = E.brho;
+   sq = std::sqrt(sum / k);
+   theta = E.theta;
+   path = total;
+   return true;
+}
 } // namespace Helix3D
 } // namespace AtTools
 #endif

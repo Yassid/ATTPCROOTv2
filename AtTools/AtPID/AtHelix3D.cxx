@@ -11,6 +11,10 @@ using namespace AtTools;
 AtHelix3DResult AtHelix3D::Estimate(const AtTrack &track, int spyralDirection) const
 {
    AtHelix3DResult res;
+   res.trackID = track.GetTrackID();
+   // AtTrack has no const accessor for the clusters; reading their count does not modify the track
+   if (auto *hc = const_cast<AtTrack &>(track).GetHitClusterArray())
+      res.nClusters = hc->size();
    const auto &H = track.GetHitArray();
    res.nHits = H.size();
    if (res.nHits < fMinHits) {

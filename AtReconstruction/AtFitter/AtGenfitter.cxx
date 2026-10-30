@@ -168,7 +168,7 @@ void AtGenfitter::Init()
    // The Spyral estimator is needed for the gate AND/OR for seeding, so build it if either
    // is requested.
    // the Spyral estimate is also one of AtHelix3D's three direction votes
-   if (fUsePIDGate || fSeedFromSpyral || fDirFromSpyral || fDirFrom3D) {
+   if (fUsePIDGate || fSeedFromSpyral || fDirFromSpyral || fDirFrom3D || fGateFrom3D) {
       fSpyralPID = std::make_unique<AtTools::AtSpyralPID>();
       fSpyralPID->SetBField(std::abs(fBField)); // brho uses |B|, matches AtPIDTask
    }
@@ -203,9 +203,24 @@ AtFittedTrack *AtGenfitter::GetFittedTrack(AtTrack *track, AtFitMetadata * /*fit
    // upstream PID gate: skip non-gated species before doing the fit.
    // The estimate is kept: with fSeedFromSpyral it also supplies the seed.
    AtTools::AtSpyralResult pidRes;
-   if (fSpyralPID) {
+   if (fSpyralPID)
       pidRes = fSpyralPID->Estimate(*track);
-      if (fUsePIDGate && fPidGate && (!pidRes.valid || !fPidGate->IsInside(pidRes.sqrtdEdx, pidRes.brho)))
+   // the 3D estimate serves both the gate (fGateFrom3D) and the direction (fDirFrom3D)
+   AtTools::AtHelix3DResult h3;
+   if (fDirFrom3D || fGateFrom3D) {
+      if (!fHelix3D) {
+         fHelix3D = std::make_unique<AtTools::AtHelix3D>();
+         fHelix3D->SetBField(std::abs(fBField));
+         LOG(info) << "AtGenfitter: AtHelix3D enabled (direction " << (fDirFrom3D ? "ON" : "off") << ", gate "
+                   << (fGateFrom3D ? "ON" : "off") << ")";
+      }
+      fHelix3D->SetZTransform(-1, fZPadPlane); // the same z_lab = fZPadPlane - z_digi as the clusters
+      h3 = fHelix3D->Estimate(*track, pidRes.valid ? pidRes.direction : -1);
+   }
+   if (fUsePIDGate && fPidGate) {
+      bool in = fGateFrom3D ? (h3.valid && fPidGate->IsInside(h3.sqrtdEdx, h3.brho))
+                            : (pidRes.valid && fPidGate->IsInside(pidRes.sqrtdEdx, pidRes.brho));
+      if (!in)
          return nullptr;
    }
 
@@ -252,17 +267,8 @@ AtFittedTrack *AtGenfitter::GetFittedTrack(AtTrack *track, AtFitMetadata * /*fit
       backwardGeo = (M_PI - pidRes.polar) > M_PI / 2.0;
    // 3D majority vote: vertex end decided on 3D-ordered hits; `backward` = the vertex end has the
    // higher z_lab, i.e. exactly the end the backward seed starts from. Ambiguous -> keep the above.
-   if (fDirFrom3D) {
-      if (!fHelix3D) {
-         fHelix3D = std::make_unique<AtTools::AtHelix3D>();
-         fHelix3D->SetBField(std::abs(fBField));
-         LOG(info) << "AtGenfitter: DIRECTION FROM AtHelix3D (2-of-3 majority: 3D sense, Spyral, Bragg)";
-      }
-      fHelix3D->SetZTransform(-1, fZPadPlane); // the same z_lab = fZPadPlane - z_digi as the clusters
-      auto h3 = fHelix3D->Estimate(*track, pidRes.valid ? pidRes.direction : -1);
-      if (h3.vertexEnd >= 0 && !h3.ambiguous)
-         backwardGeo = h3.backward;
-   }
+   if (fDirFrom3D && h3.vertexEnd >= 0 && !h3.ambiguous)
+      backwardGeo = h3.backward;
    bool backwardSeed = fBackwardSeedFix && backwardGeo;
    int iVtx = backwardSeed ? order.back() : order.front();
    int iSec = (order.size() > 1) ? (backwardSeed ? order[order.size() - 2] : order[1]) : iVtx;
