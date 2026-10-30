@@ -113,7 +113,13 @@ void fitGenfitter_a1975_deuterium(TString fileName = "run_0016", Long64_t nEvent
                                   // forward/backward call from AtTools::AtHelix3D (3D-ordered hits,
                                   // 2-of-3 majority: 3D rotation sense, Spyral, Bragg). Only acts with
                                   // backwardSeedFix; ambiguous votes keep the GeoTheta/Spyral call.
-                                  Bool_t dirFrom3D = kFALSE)
+                                  Bool_t dirFrom3D = kFALSE,
+                                  // per-run dE/dx gain table (AtTools::AtPIDGainTable, pid_gain_calib.C).
+                                  // Empty = no correction. If given, the run MUST be in it (abort
+                                  // otherwise) and the PID gate must have been drawn on the corrected plane.
+                                  TString gainTable = "",
+                                  // gate on the 3D (AtHelix3D) plane instead of Spyral's
+                                  Bool_t gateFrom3D = kFALSE)
 {
    gSystem->Load("libAtReconstruction.so");
    FairLogger::GetLogger()->SetLogScreenLevel("WARNING");
@@ -183,6 +189,20 @@ void fitGenfitter_a1975_deuterium(TString fileName = "run_0016", Long64_t nEvent
    fitter->SetSeedFromSpyral(seedFromSpyral);
    fitter->SetDirectionFromSpyral(dirFromSpyral);
    fitter->SetDirectionFrom3D(dirFrom3D);
+   fitter->SetPIDGateFrom3D(gateFrom3D);
+   if (gainTable.Length()) {
+      AtTools::AtPIDGainTable gt;
+      const int runNo = AtTools::AtPIDGainTable::RunFromName(fileName.Data());
+      if (!gt.Load(gainTable.Data()) || !gt.Has(runNo)) {
+         std::cout << "\033[1;31mERROR: run " << runNo << " not in gain table " << gainTable << " -- aborting\033[0m\n";
+         return;
+      }
+      fitter->SetDedxGain(gt.GetSpyral(runNo), gt.Get3D(runNo));
+      std::cout << "  \033[1;35mdE/dx GAIN run " << runNo << ": Spyral x" << gt.GetSpyral(runNo) << ", 3D x"
+                << gt.Get3D(runNo) << " (" << gainTable << ")\033[0m\n";
+   }
+   if (gateFrom3D)
+      std::cout << "  \033[1;35mPID GATE ON THE 3D PLANE\033[0m\n";
    if (dirFrom3D)
       std::cout << "  \033[1;35mDIRECTION FROM AtHelix3D (3D majority vote)\033[0m\n";
    if (dirFromSpyral)

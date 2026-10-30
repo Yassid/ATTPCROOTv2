@@ -77,8 +77,8 @@ AtHelix3DResult AtHelix3D::Estimate(const AtTrack &track, int spyralDirection) c
    }
    res.theta = th;
    res.brho = brho;
-   res.sqrtdEdx = sq;
-   res.dEdx = sq * sq;
+   res.sqrtdEdx = sq * fDedxGain;
+   res.dEdx = res.sqrtdEdx * res.sqrtdEdx;
    res.pidPath = path;
    res.valid = true;
    return res;

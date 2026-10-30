@@ -7,7 +7,10 @@
 ///   root -b -q 'pipeline/pidPass_a1975.C("run_0106","/mnt/f/a1975/reco/","/mnt/f/a1975/reco_gf/")'
 
 void pidPass_a1975(TString fileName = "run_0106", TString inDir = "/mnt/f/a1975/reco/",
-                   TString outDir = "/mnt/f/a1975/reco_gf/", Double_t bField = 2.85)
+                   TString outDir = "/mnt/f/a1975/reco_gf/", Double_t bField = 2.85,
+                   // per-run dE/dx gain table (AtTools::AtPIDGainTable, D2_UKF/pid_gain_calib.C). Empty =
+                   // no correction; if given, the run MUST be in it or the pass aborts.
+                   TString gainTable = "")
 {
    gSystem->Load("libAtReconstruction.so");
    FairLogger::GetLogger()->SetLogScreenLevel("WARNING");
@@ -31,6 +34,16 @@ void pidPass_a1975(TString fileName = "run_0106", TString inDir = "/mnt/f/a1975/
 
    AtPIDTask *pid = new AtPIDTask();
    pid->SetBField(bField);
+   if (gainTable.Length()) {
+      AtTools::AtPIDGainTable gt;
+      const int runNo = AtTools::AtPIDGainTable::RunFromName(fileName.Data());
+      if (!gt.Load(gainTable.Data()) || !gt.Has(runNo)) {
+         std::cout << "\033[1;31mERROR: run " << runNo << " not in gain table " << gainTable << " -- aborting\033[0m\n";
+         return;
+      }
+      pid->SetDedxGain(gt.GetSpyral(runNo), gt.Get3D(runNo));
+      std::cout << "  dE/dx GAIN run " << runNo << ": Spyral x" << gt.GetSpyral(runNo) << ", 3D x" << gt.Get3D(runNo) << "\n";
+   }
    pid->SetInputBranch("AtPatternEvent");
    pid->SetOutputBranch("AtPIDEvent");
    pid->SetPersistence(kTRUE);

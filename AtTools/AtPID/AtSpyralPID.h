@@ -93,6 +93,10 @@ public:
    AtSpyralResult Estimate(AtTrack &track) const;
 
    void SetBField(double b) { fBField = b; }
+   /// Per-run dE/dx gain correction: sqrtdEdx is multiplied by g (dEdx and dE by g^2). Default 1 (off).
+   /// The a1975 D2 gain falls ~20 % over the campaign; see AtPIDGainTable for the per-run factors.
+   void SetDedxGain(double g) { fDedxGain = g; }
+   double GetDedxGain() const { return fDedxGain; }
    void SetBeamRegionRadius(double r) { fBeamRegionRadius = r; }
    void SetSmoothingFactor(double s) { fSmoothing = s; }
    void SetDirectionThreshold(double t) { fDirThreshold = t; }
@@ -124,6 +128,7 @@ private:
    int Direction(const std::vector<double> &x, const std::vector<double> &y, const std::vector<double> &z) const;
 
    double fBField{2.85};           // Tesla
+   double fDedxGain{1.0};          // per-run dE/dx gain correction on sqrtdEdx
    double fBeamRegionRadius{25.0}; // mm
    double fSmoothing{100.0};       // smoothing-spline lambda (estimation)
    double fDirThreshold{0.5};      // direction winding-fraction threshold

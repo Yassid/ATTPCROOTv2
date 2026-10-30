@@ -459,10 +459,10 @@ AtSpyralResult AtSpyralPID::Estimate(AtTrack &track) const
       res.azimuthal = azimuthal;
       res.radius = radius;
       res.brho = brho;
-      res.dE = chargeDep;
+      res.dE = chargeDep * fDedxGain * fDedxGain;
       res.arclength = arclength;
-      res.dEdx = dEdx;
-      res.sqrtdEdx = std::sqrt(std::fabs(dEdx));
+      res.dEdx = dEdx * fDedxGain * fDedxGain;
+      res.sqrtdEdx = std::sqrt(std::fabs(dEdx)) * fDedxGain;
       res.direction = direction;
       res.nPoints = n;
       res.valid = true;

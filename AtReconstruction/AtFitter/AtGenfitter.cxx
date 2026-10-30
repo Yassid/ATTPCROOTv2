@@ -171,6 +171,7 @@ void AtGenfitter::Init()
    if (fUsePIDGate || fSeedFromSpyral || fDirFromSpyral || fDirFrom3D || fGateFrom3D) {
       fSpyralPID = std::make_unique<AtTools::AtSpyralPID>();
       fSpyralPID->SetBField(std::abs(fBField)); // brho uses |B|, matches AtPIDTask
+      fSpyralPID->SetDedxGain(fGainSpyral);
    }
    if (fSeedFromSpyral)
       LOG(info) << "AtGenfitter: SEEDING FROM THE SPYRAL ESTIMATE (arc circle fit + rho-vs-z regression)";
@@ -211,6 +212,7 @@ AtFittedTrack *AtGenfitter::GetFittedTrack(AtTrack *track, AtFitMetadata * /*fit
       if (!fHelix3D) {
          fHelix3D = std::make_unique<AtTools::AtHelix3D>();
          fHelix3D->SetBField(std::abs(fBField));
+         fHelix3D->SetDedxGain(fGain3D);
          LOG(info) << "AtGenfitter: AtHelix3D enabled (direction " << (fDirFrom3D ? "ON" : "off") << ", gate "
                    << (fGateFrom3D ? "ON" : "off") << ")";
       }

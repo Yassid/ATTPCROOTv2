@@ -106,6 +106,14 @@ public:
    /// Apply the PID gate (SetPIDGate) to AtHelix3D's (sqrtdEdx, Brho) instead of AtSpyralPID's. The gate
    /// must have been DRAWN on the 3D plane: the two dE/dx scales differ. Default off.
    void SetPIDGateFrom3D(Bool_t on) { fGateFrom3D = on; }
+   /// Per-run dE/dx gain correction for the internal PID estimates (gate, seed, direction votes):
+   /// sqrtdEdx multiplied by gSpyral / g3D (AtTools::AtPIDGainTable). Must match the gain the gate
+   /// was DRAWN with. Default 1 (off).
+   void SetDedxGain(Double_t gSpyral, Double_t g3D)
+   {
+      fGainSpyral = gSpyral;
+      fGain3D = g3D;
+   }
    void SetUseClusterOrder(Bool_t on) { fUseClusterOrder = on; }
 
    /// Fit only the first `pct` % of the measurement sequence, counted FROM THE VERTEX END.
@@ -400,6 +408,7 @@ private:
    Bool_t fDirFromSpyral{kFALSE};      // backward call from the Spyral estimate, not GeoTheta (see setter)
    Bool_t fDirFrom3D{kFALSE};          // backward call from AtHelix3D's majority vote (see setter)
    Bool_t fGateFrom3D{kFALSE};         // PID gate on AtHelix3D's plane (see setter)
+   Double_t fGainSpyral{1.0}, fGain3D{1.0}; // per-run dE/dx gain correction (see SetDedxGain)
    /// Keep the cluster array order from the pattern recognition instead of re-sorting the
    /// measurements by the drift coordinate z. The z sort assumes the helix advances monotonically
    /// in z along the trajectory; that fails for tracks nearly PERPENDICULAR to the beam, where the

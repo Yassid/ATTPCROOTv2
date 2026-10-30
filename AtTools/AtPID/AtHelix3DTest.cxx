@@ -1,4 +1,5 @@
 #include "AtHelix3D.h"
+#include "AtPIDGainTable.h"
 
 #include "AtHit.h"
 #include "AtTrack.h"
@@ -10,6 +11,7 @@
 #include <algorithm>
 #include <cmath>
 #include <random>
+#include <sstream>
 
 using XYZPoint = ROOT::Math::XYZPoint;
 
@@ -116,4 +118,47 @@ TEST(AtHelix3DTest, TooFewHits)
    auto r = h3.Estimate(makeHelix(80, 70, 400, 0.05));
    EXPECT_FALSE(r.valid);
    EXPECT_EQ(r.failCode, 1);
+}
+
+TEST(AtHelix3DTest, DedxGainScalesOnlyDedx)
+{
+   AtTools::AtHelix3D a, b;
+   b.SetDedxGain(1.1);
+   auto tr = makeHelix(80, 70, 400, 1.2);
+   auto ra = a.Estimate(tr), rb = b.Estimate(tr);
+   ASSERT_TRUE(ra.valid && rb.valid);
+   EXPECT_NEAR(rb.sqrtdEdx, 1.1 * ra.sqrtdEdx, 1e-9 * ra.sqrtdEdx);
+   EXPECT_NEAR(rb.dEdx, 1.21 * ra.dEdx, 1e-9 * ra.dEdx);
+   EXPECT_DOUBLE_EQ(rb.brho, ra.brho); // geometry and direction untouched
+   EXPECT_DOUBLE_EQ(rb.theta, ra.theta);
+   EXPECT_EQ(rb.vertexEnd, ra.vertexEnd);
+}
+
+TEST(AtPIDGainTableTest, ParseAndLookup)
+{
+   std::istringstream in("# run gSpyral g3D\n16 1.000 1.000\n\n97 1.113 1.127  # last run\n");
+   AtTools::AtPIDGainTable t;
+   ASSERT_TRUE(t.Load(in));
+   EXPECT_EQ(t.Size(), 2u);
+   EXPECT_DOUBLE_EQ(t.GetSpyral(97), 1.113);
+   EXPECT_DOUBLE_EQ(t.Get3D(97), 1.127);
+   EXPECT_TRUE(t.Has(16));
+   EXPECT_EQ(t.GetSpyral(20), -1); // absent run: loud, never a silent 1.0
+   EXPECT_EQ(t.Get3D(20), -1);
+}
+
+TEST(AtPIDGainTableTest, RejectsMalformedLines)
+{
+   std::istringstream bad("16 1.0\n");
+   AtTools::AtPIDGainTable t;
+   EXPECT_FALSE(t.Load(bad));
+   std::istringstream neg("16 -1.0 1.0\n");
+   EXPECT_FALSE(t.Load(neg));
+}
+
+TEST(AtPIDGainTableTest, RunFromName)
+{
+   EXPECT_EQ(AtTools::AtPIDGainTable::RunFromName("run_0016_multifit"), 16);
+   EXPECT_EQ(AtTools::AtPIDGainTable::RunFromName("/mnt/f/a1975/reco_d2_dv1104/run_0097_multifit_reco.root"), 97);
+   EXPECT_EQ(AtTools::AtPIDGainTable::RunFromName("calibration.root"), -1);
 }

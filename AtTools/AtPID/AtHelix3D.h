@@ -86,6 +86,10 @@ public:
    /// the axis by more than dcaMax is refitted through the axis. dcaMax <= 0 disables it.
    void SetAxisConstraint(double dcaMax, double rStart = 45.0) { fDcaMax = dcaMax > 0 ? dcaMax : 1e9; fRStartAxis = rStart; }
    void SetBraggVote(double thr, double rContained = 150.0) { fBraggThr = thr; fRContained = rContained; }
+   /// Per-run dE/dx gain correction: sqrtdEdx is multiplied by g (dEdx by g^2). Default 1 (off). The
+   /// Bragg vote uses a charge RATIO and is unaffected. See AtPIDGainTable.
+   void SetDedxGain(double g) { fDedxGain = g; }
+   double GetDedxGain() const { return fDedxGain; }
 
 private:
    double fBField{2.85};
@@ -101,6 +105,7 @@ private:
    double fGuardFrac{0.6};
    double fDcaMax{10.0}, fRStartAxis{45.0};
    double fBraggThr{0.2}, fRContained{150.0};
+   double fDedxGain{1.0};
 };
 
 } // namespace AtTools

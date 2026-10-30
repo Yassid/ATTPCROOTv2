@@ -51,6 +51,13 @@ public:
    /// 15-20). Whatever value a production persists is the plane its gates must be drawn on.
    void SetMinPoints(Int_t n) { fSpyralEst.SetMinPoints(n); }
    void SetRunHelix3D(Bool_t v) { fRunHelix3D = v; }
+   /// Per-run dE/dx gain correction (AtTools::AtPIDGainTable): sqrtdEdx of the Spyral and the 3D
+   /// estimators multiplied by gSpyral and g3D. Default 1 (off). The legacy estimator is not touched.
+   void SetDedxGain(Double_t gSpyral, Double_t g3D)
+   {
+      fSpyralEst.SetDedxGain(gSpyral);
+      fHelix3DEst.SetDedxGain(g3D);
+   }
    /// z_lab = zPadPlane - z_digi for the 3D estimator's lab-frame outputs (theta, vertex, backward)
    void SetZPadPlane(Double_t z) { fHelix3DEst.SetZTransform(-1, z); }
    /// direct access to tune the 3D estimator (blob removal, guards, expected rotation sense, ...)
