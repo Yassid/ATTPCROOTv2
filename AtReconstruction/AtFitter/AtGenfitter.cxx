@@ -6,6 +6,7 @@
 #include "AtParticleID.h"
 #include "AtPatternEvent.h"
 #include "AtSpacePointMeasurement.h"
+#include "AtHelix3D.h"
 #include "AtSpyralPID.h"
 #include "AtELossCATIMA.h"
 #include "AtTrack.h"
@@ -166,7 +167,8 @@ void AtGenfitter::Init()
 
    // The Spyral estimator is needed for the gate AND/OR for seeding, so build it if either
    // is requested.
-   if (fUsePIDGate || fSeedFromSpyral) {
+   // the Spyral estimate is also one of AtHelix3D's three direction votes
+   if (fUsePIDGate || fSeedFromSpyral || fDirFromSpyral || fDirFrom3D) {
       fSpyralPID = std::make_unique<AtTools::AtSpyralPID>();
       fSpyralPID->SetBField(std::abs(fBField)); // brho uses |B|, matches AtPIDTask
    }
@@ -244,7 +246,24 @@ AtFittedTrack *AtGenfitter::GetFittedTrack(AtTrack *track, AtFitMetadata * /*fit
    // hemisphere). With fBackwardSeedFix, tracks PRA-tagged backward (GeoTheta > 90 deg)
    // are seeded from the highest-z_lab end with the momentum pointing INTO the track
    // (-z_lab). Forward tracks are byte-for-byte unchanged (backwardSeed stays false).
-   bool backwardSeed = fBackwardSeedFix && (track->GetGeoTheta() > M_PI / 2.0);
+   bool backwardGeo = track->GetGeoTheta() > M_PI / 2.0;
+   // Spyral's polar is in the digi frame; z_lab = fZPadPlane - z_digi gives theta_lab = pi - polar.
+   if (fDirFromSpyral && pidRes.valid)
+      backwardGeo = (M_PI - pidRes.polar) > M_PI / 2.0;
+   // 3D majority vote: vertex end decided on 3D-ordered hits; `backward` = the vertex end has the
+   // higher z_lab, i.e. exactly the end the backward seed starts from. Ambiguous -> keep the above.
+   if (fDirFrom3D) {
+      if (!fHelix3D) {
+         fHelix3D = std::make_unique<AtTools::AtHelix3D>();
+         fHelix3D->SetBField(std::abs(fBField));
+         LOG(info) << "AtGenfitter: DIRECTION FROM AtHelix3D (2-of-3 majority: 3D sense, Spyral, Bragg)";
+      }
+      fHelix3D->SetZTransform(-1, fZPadPlane); // the same z_lab = fZPadPlane - z_digi as the clusters
+      auto h3 = fHelix3D->Estimate(*track, pidRes.valid ? pidRes.direction : -1);
+      if (h3.vertexEnd >= 0 && !h3.ambiguous)
+         backwardGeo = h3.backward;
+   }
+   bool backwardSeed = fBackwardSeedFix && backwardGeo;
    int iVtx = backwardSeed ? order.back() : order.front();
    int iSec = (order.size() > 1) ? (backwardSeed ? order[order.size() - 2] : order[1]) : iVtx;
 

@@ -50,6 +50,7 @@ class AtHitCluster;
 
 namespace AtTools {
 class AtSpyralPID;
+class AtHelix3D;
 class AtParticleID;
 class AtELossModel;
 } // namespace AtTools
@@ -88,6 +89,20 @@ public:
    /// momentum pointing into the track (-z_lab). Forward tracks are unchanged. Default
    /// off, so the validated forward (p,d)/(p,p) pipelines are byte-for-byte preserved.
    void SetBackwardSeedFix(Bool_t on) { fBackwardSeedFix = on; }
+   /// With SetBackwardSeedFix on, take the forward/backward call from the AtSpyralPID estimate
+   /// (winding sense along the z-sorted cloud, theta_lab = pi - polar) instead of AtPRA's
+   /// GeoTheta (sign of one RANSAC line slope in arc-vs-z). Falls back to GeoTheta when the Spyral
+   /// estimate is invalid. Needs the estimator built, i.e. a PID gate or SetSeedFromSpyral.
+   /// On a1975 H2 data GeoTheta disagrees with Spyral on 8 % of tracks and is the wrong one where
+   /// the elastic locus can referee. Default off.
+   void SetDirectionFromSpyral(Bool_t on) { fDirFromSpyral = on; }
+   /// With SetBackwardSeedFix on, take the forward/backward call from AtTools::AtHelix3D: the vertex
+   /// end by a 2-of-3 majority (3D rotation sense, the Spyral direction, a Bragg rise), on hits
+   /// ordered in 3D rather than by z. Where the vote is AMBIGUOUS (tie or no vote) the previous source
+   /// is kept (GeoTheta, or Spyral if SetDirectionFromSpyral). Takes precedence over
+   /// SetDirectionFromSpyral otherwise. On a1975 16C+d data: 96-97 % correct vs 93-95 % for Spyral and
+   /// 100 % on simulation truth (2026-10-30). Default off.
+   void SetDirectionFrom3D(Bool_t on) { fDirFrom3D = on; }
    void SetUseClusterOrder(Bool_t on) { fUseClusterOrder = on; }
 
    /// Fit only the first `pct` % of the measurement sequence, counted FROM THE VERTEX END.
@@ -379,6 +394,8 @@ private:
    Bool_t fInit{kFALSE};
 
    Bool_t fBackwardSeedFix{kFALSE};    // seed backward (GeoTheta>90) tracks from the far end (see setter)
+   Bool_t fDirFromSpyral{kFALSE};      // backward call from the Spyral estimate, not GeoTheta (see setter)
+   Bool_t fDirFrom3D{kFALSE};          // backward call from AtHelix3D's majority vote (see setter)
    /// Keep the cluster array order from the pattern recognition instead of re-sorting the
    /// measurements by the drift coordinate z. The z sort assumes the helix advances monotonically
    /// in z along the trajectory; that fails for tracks nearly PERPENDICULAR to the beam, where the
@@ -455,6 +472,7 @@ private:
    Bool_t fUsePIDGate{kFALSE};
    std::string fPidGateFile;
    std::unique_ptr<AtTools::AtSpyralPID> fSpyralPID;
+   std::unique_ptr<AtTools::AtHelix3D> fHelix3D; // built only with SetDirectionFrom3D
    Bool_t fSeedFromSpyral{kFALSE}; ///< seed momentum/polar from the Spyral estimate
    std::unique_ptr<AtTools::AtParticleID> fPidGate;
 

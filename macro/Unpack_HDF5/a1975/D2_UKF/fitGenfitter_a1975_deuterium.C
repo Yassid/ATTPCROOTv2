@@ -105,7 +105,15 @@ void fitGenfitter_a1975_deuterium(TString fileName = "run_0016", Long64_t nEvent
                                   // 8 %, so for most tracks THIS is the real limit and the
                                   // percentage never bites.  Default 8 = the previous behaviour
                                   // exactly, so passing nothing changes nothing.
-                                  Int_t findMinClusters = 8)
+                                  Int_t findMinClusters = 8,
+                                  // forward/backward call from the AtSpyralPID estimate instead of
+                                  // AtPRA's GeoTheta (AtGenfitter::SetDirectionFromSpyral). Only acts
+                                  // with backwardSeedFix. Default off = every existing production.
+                                  Bool_t dirFromSpyral = kFALSE,
+                                  // forward/backward call from AtTools::AtHelix3D (3D-ordered hits,
+                                  // 2-of-3 majority: 3D rotation sense, Spyral, Bragg). Only acts with
+                                  // backwardSeedFix; ambiguous votes keep the GeoTheta/Spyral call.
+                                  Bool_t dirFrom3D = kFALSE)
 {
    gSystem->Load("libAtReconstruction.so");
    FairLogger::GetLogger()->SetLogScreenLevel("WARNING");
@@ -173,6 +181,12 @@ void fitGenfitter_a1975_deuterium(TString fileName = "run_0016", Long64_t nEvent
    fitter->SetZPadPlane(1000.0);
    fitter->SetMeasSigma(measSigma);
    fitter->SetSeedFromSpyral(seedFromSpyral);
+   fitter->SetDirectionFromSpyral(dirFromSpyral);
+   fitter->SetDirectionFrom3D(dirFrom3D);
+   if (dirFrom3D)
+      std::cout << "  \033[1;35mDIRECTION FROM AtHelix3D (3D majority vote)\033[0m\n";
+   if (dirFromSpyral)
+      std::cout << "  \033[1;35mDIRECTION FROM SPYRAL (not GeoTheta)\033[0m\n";
    // When comparing matEffects ON against OFF, the fallback must be OFF. Left on, a track whose
    // material-effects fit throws is refitted with setNoEffects(true) and kept, so the "matFX"
    // sample quietly contains no-matFX tracks and the two productions are no longer a clean
