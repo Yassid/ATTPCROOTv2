@@ -673,8 +673,14 @@ inline EndVote majorityEnd(const Result &r, int spyralEnd, int expSense = 1, dou
 // inlier farthest from it in x-y) restricted to the small pads (rho <= rPad, stopping at the first
 // exit, as Spyral does), divided by the HELIX path of that segment sqrt(R^2+(dz/dphi)^2)*|dphi|.
 // The centroid polyline length zigzags across a 3-4-pad-wide track and was the dominant dE/dx noise.
+/// stopExcl [mm] / keepFrac: end the dE/dx segment stopExcl mm (backbone length) before the FAR end of
+/// the track, or at keepFrac of its length from the vertex. Defaults (0, 1) = the adopted estimator.
+/// TESTED AND REJECTED on a1975 D2 (2026-10-31): meant to fold the 'streak' of slow elastic deuterons at
+/// Brho 0.12-0.15 back onto the band, it made every score WORSE (stop 20/40/60 mm, keep 75/60 %: the
+/// streak grew 2.6 -> 3.8-7.4 %, deuteron width 0.100 -> 0.100-0.123). A 0.4 MeV deuteron is near its
+/// Bragg peak along its WHOLE track: the band genuinely bends over at low Brho. Kept for reference.
 inline bool firstArcPID(const Result &r, int end, double rPad, double &brho, double &sq, double &theta,
-                        double &path)
+                        double &path, double stopExcl = 0, double keepFrac = 1)
 {
    const auto &E = r.e[end];
    if (!E.ok || E.brho <= 0)
@@ -720,6 +726,10 @@ inline bool firstArcPID(const Result &r, int end, double rPad, double &brho, dou
          continue;
       if (!inner && started)
          break;
+      // distance along the backbone from the vertex end and to the far (stopping) end
+      const double sFromVtx = end == 0 ? r.sc[at(jj)] : r.length - r.sc[at(jj)];
+      if (started && (r.length - sFromVtx < stopExcl || sFromVtx > keepFrac * r.length))
+         break; // reached the Bragg-rise region: stop the segment here
       if (inner) {
          if (!started) {
             phFirst = phAcc;
