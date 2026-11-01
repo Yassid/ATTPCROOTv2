@@ -296,9 +296,14 @@ inline bool backbone(const std::vector<P> &h, std::vector<int> &order, int &nBac
 /// window and the phases). The start of an a1975 track, 10-40 mm off axis, is often a diffuse spray
 /// (beam-induced charge) that pulls the vertex-end circle to R 14-30 mm (2026-10-30, 19 of the 29
 /// remaining 3D proton-band deuterons). Ignored if fewer than 6 window points would remain.
+/// winMaxFrac / winMaxLen: optional cap on the window, as a fraction of the track and in mm of backbone,
+/// measured from this end (never below the minLen window). A stopping particle's radius shrinks along its
+/// path, so a whole-track circle underestimates the vertex Brho of strongly decelerating ejectiles
+/// (16C(d,t) sim tritons: -6.7 % at Brho 0.45-0.60, 2026-10-31). Defaults (1, 1e9) = no cap.
 inline End endHelix(const std::vector<P> &h, const std::vector<int> &ord, const std::vector<double> &s, double B,
                     int minPts = 10, double minLen = 40.0, double rExcl = 0.0, double guardFrac = 0.6,
-                    double dcaMax = 10.0, double rStartAxis = 45.0)
+                    double dcaMax = 10.0, double rStartAxis = 45.0, double winMaxFrac = 1.0,
+                    double winMaxLen = 1e9)
 {
    End E;
    const int n = ord.size();
@@ -347,6 +352,13 @@ inline End endHelix(const std::vector<P> &h, const std::vector<int> &ord, const 
       wNew = std::max(wNew, wMin);
       if (wNew == w) break;
       w = wNew;
+   }
+   if (winMaxFrac < 1.0 || winMaxLen < 1e9) {
+      const double capLen = std::max(needLen, std::min(winMaxFrac * total, winMaxLen));
+      int wCap = n;
+      for (int i = 0; i < n; ++i)
+         if (s[i] - s[0] > capLen) { wCap = i; break; }
+      w = std::min(w, std::max(wCap, wMin));
    }
    std::vector<int> idx = offAxis(std::vector<int>(ord.begin(), ord.begin() + w));
    if (!robustCircle(h, idx, xc, yc, R, inl, cut)) return E;
@@ -453,6 +465,9 @@ inline End endHelix(const std::vector<P> &h, const std::vector<int> &ord, const 
 /// End-fit options (defaults = the adopted configuration of 2026-10-30).
 struct EndOpt {
    double rExcl{0.0}, guardFrac{0.6}, dcaMax{10.0}, rStartAxis{45.0}, minLen{40.0};
+   double winMaxFrac{1.0}, winMaxLen{1e9}; // cap on the end-helix window (see endHelix); defaults = no cap
+   bool hitRefit{false}; // refit each end circle on the RAW hits of its window (see estimate); default off
+   bool hitRefitZ{false}; // with hitRefit: also refit the z(phi) line (polar angle) on those hits
    double blobLinMin{0.0}; // keep a small piece if its linearity (lambda1/sum) exceeds this (0 = off)
    double blobOffCircle{6.0}; // keep a small piece if it lies within this (mm, mean |d-R|) of the largest
                               // piece's circle -- chopped-off TRACK, not a blob (0 = off)
@@ -589,11 +604,61 @@ inline Result estimate(std::vector<P> h, double B = 2.85, double zSign = -1, dou
    r.sc = sc;
    std::vector<int> oc(c.size());
    for (size_t i = 0; i < c.size(); ++i) oc[i] = i;
-   r.e[0] = endHelix(c, oc, sc, B, minPts, eo.minLen, eo.rExcl, eo.guardFrac, eo.dcaMax, eo.rStartAxis);
+   r.e[0] = endHelix(c, oc, sc, B, minPts, eo.minLen, eo.rExcl, eo.guardFrac, eo.dcaMax, eo.rStartAxis,
+                    eo.winMaxFrac, eo.winMaxLen);
    std::vector<int> rev(oc.rbegin(), oc.rend());
    std::vector<double> sr(sc.size());
    for (size_t i = 0; i < sc.size(); ++i) sr[i] = r.length - sc[sc.size() - 1 - i];
-   r.e[1] = endHelix(c, rev, sr, B, minPts, eo.minLen, eo.rExcl, eo.guardFrac, eo.dcaMax, eo.rStartAxis);
+   r.e[1] = endHelix(c, rev, sr, B, minPts, eo.minLen, eo.rExcl, eo.guardFrac, eo.dcaMax, eo.rStartAxis,
+                    eo.winMaxFrac, eo.winMaxLen);
+   // HIT REFIT: the circle is refitted (robust Taubin) on the raw hits inside each end's window instead of
+   // its 4 mm centroids; window, inliers, phases and dz/dphi stay those of the centroid fit. The centroids
+   // throw away the hit-level information: on 16C(d,t)/(d,p) sim the radius spread shrinks from 2.5 to
+   // 1.5 % (tritons, Brho 0.60-0.75) and 2.2 to 1.6 % (protons, 0.45-0.60) with the same bias
+   // (2026-10-31). Skipped for axis-constrained or guarded ends, whose circle was deliberately overridden.
+   if (eo.hitRefit) {
+      const int m = c.size();
+      for (int k = 0; k < 2; ++k) {
+         End &E = r.e[k];
+         if (!E.ok || E.axisConstrained || E.guarded || E.nUsed < 1) continue;
+         const double lim = (k == 0 ? sc[E.nUsed - 1] : r.length - sc[m - E.nUsed]) + 0.5 * binW;
+         std::vector<int> wh;
+         for (size_t i = 0; i < r.order.size(); ++i)
+            if ((k == 0 ? r.s[i] : r.length - r.s[i]) <= lim) wh.push_back(r.order[i]);
+         double xc, yc, R, cut;
+         std::vector<int> inl;
+         if (wh.size() < 5 || !robustCircle(h, wh, xc, yc, R, inl, cut)) continue;
+         E.xc = xc; E.yc = yc; E.R = R;
+         // z(phi) line on the same hits (backbone order from this end, phase unwrapped round the new
+         // circle): the centroid line made the polar angle the larger Brho error (sin theta spread 1.6 %
+         // vs Spyral 0.3 %, sim tritons Brho 0.60-0.75, 2026-10-31)
+         if (eo.hitRefitZ) {
+            std::vector<int> wo = wh;
+            if (k == 1) std::reverse(wo.begin(), wo.end());
+            std::vector<char> isIn(h.size(), 0);
+            for (int i : inl) isIn[i] = 1;
+            double prev = std::atan2(h[wo[0]].y - yc, h[wo[0]].x - xc), ph = prev;
+            double sp = 0, sz = 0, spp = 0, spz = 0;
+            int nIn = 0;
+            for (size_t j = 0; j < wo.size(); ++j) {
+               double a = std::atan2(h[wo[j]].y - yc, h[wo[j]].x - xc), d = a - prev;
+               while (d > M_PI) d -= 2 * M_PI;
+               while (d < -M_PI) d += 2 * M_PI;
+               if (j) ph += d;
+               prev = a;
+               if (!isIn[wo[j]]) continue;
+               sp += ph; sz += h[wo[j]].z; spp += ph * ph; spz += ph * h[wo[j]].z; ++nIn;
+            }
+            double den = nIn * spp - sp * sp;
+            if (nIn >= 5 && std::abs(den) > 1e-12) E.dzdphi = (nIn * spz - sp * sz) / den;
+         }
+         double bz = E.dzdphi * E.sense;
+         E.theta = std::acos(bz / std::sqrt(bz * bz + R * R));
+         double sth = std::sin(E.theta);
+         E.brho = sth > 1e-3 ? B * R / 1000.0 / sth : 0;
+         E.dca = std::abs(std::hypot(xc, yc) - R);
+      }
+   }
    r.ok = r.e[0].ok && r.e[1].ok;
    // order -> indices of the CALLER's array (blob removal re-indexed the working copy)
    for (auto &o : r.order) o = h[o].id;

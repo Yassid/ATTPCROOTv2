@@ -88,6 +88,10 @@ public:
    void SetBraggVote(double thr, double rContained = 150.0) { fBraggThr = thr; fRContained = rContained; }
    /// Per-run dE/dx gain correction: sqrtdEdx is multiplied by g (dEdx by g^2). Default 1 (off). The
    /// Bragg vote uses a charge RATIO and is unaffected. See AtPIDGainTable.
+   /// Cap the end-helix (Brho) window at a fraction of the track and/or a length [mm] from the fitted end
+   void SetEndWindowCap(double maxFrac, double maxLen = 1e9) { fWinMaxFrac = maxFrac; fWinMaxLen = maxLen; }
+   /// Refit the end circles on the raw hits of their windows instead of the centroids (see AtHelix3DCore.h)
+   void SetHitRefit(bool b, bool alsoZ = false) { fHitRefit = b; fHitRefitZ = alsoZ; }
    void SetDedxGain(double g) { fDedxGain = g; }
    double GetDedxGain() const { return fDedxGain; }
 
@@ -104,6 +108,8 @@ private:
    double fBlobOffCircle{6.0}, fBlobLinMin{0.0};
    double fGuardFrac{0.6};
    double fDcaMax{10.0}, fRStartAxis{45.0};
+   double fWinMaxFrac{1.0}, fWinMaxLen{1e9};
+   bool fHitRefit{false}, fHitRefitZ{false};
    double fBraggThr{0.2}, fRContained{150.0};
    double fDedxGain{1.0};
 };

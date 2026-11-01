@@ -34,6 +34,10 @@ AtHelix3DResult AtHelix3D::Estimate(const AtTrack &track, int spyralDirection) c
    eo.rStartAxis = fRStartAxis;
    eo.blobLinMin = fBlobLinMin;
    eo.blobOffCircle = fBlobOffCircle;
+   eo.winMaxFrac = fWinMaxFrac;
+   eo.winMaxLen = fWinMaxLen;
+   eo.hitRefit = fHitRefit;
+   eo.hitRefitZ = fHitRefitZ;
    auto r = Helix3D::estimate(h, fBField, fZSign, fZOffset, 5, fBinW, fMaxEdge, fMinBlob, fBlobFrac, fMaxDropFrac, eo);
    res.nDropped = r.nDropped;
    res.length = r.length;
