@@ -114,6 +114,7 @@ AtPATTERN::AtTrackFinderTC::clustersToTrack(PointCloud &cloud, const std::vector
 {
 
    std::vector<AtTrack> tracks;
+   std::vector<AtHit> strayHits;
    // std::vector<Point> points = cloud;
    auto points = cloud;
 
@@ -143,6 +144,8 @@ AtPATTERN::AtTrackFinderTC::clustersToTrack(PointCloud &cloud, const std::vector
       } // Point indices
 
       track.SetTrackID(cluster_index);
+      for (auto &h : RemoveStrayHits(track))
+         strayHits.push_back(h);
 
       if (fUseArcWalk)
          fTrackTransformer->ClusterizeArcWalk(track, fTargetClusters, fMinHitsPerCluster, fArcWalkKNN);
@@ -176,6 +179,8 @@ AtPATTERN::AtTrackFinderTC::clustersToTrack(PointCloud &cloud, const std::vector
    auto retEvent = std::make_unique<AtPatternEvent>();
    for (const auto &point : points)
       retEvent->AddNoise(event.GetHit(point.GetID()));
+   for (auto &h : strayHits)
+      retEvent->AddNoise(h);
 
    // Filter tracks whose RANSAC circle fit failed (NaN/≤0 radius). Without
    // this they propagate to the fitter only to be dropped there with

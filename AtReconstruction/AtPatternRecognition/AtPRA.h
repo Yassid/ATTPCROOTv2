@@ -53,6 +53,9 @@ protected:
    Bool_t fUseHitsForRadius{false};  //<! Use raw hits instead of clusters for radius
    Double_t fMergeAngleThreshold{45.0}; //<! Max angle difference (degrees) for merging fragments
 
+   bool fRemoveStrayHits{false};   //<! Remove stray hits from the candidates (AtHelix3D::FindStrayHits)
+   double fStrayGuardRadius{152.0}; //<! Stray hits beyond this distance from the axis are kept [mm]
+
    bool fUseArcWalk{false};        //<! Use arc-walk clustering instead of ClusterizeSmooth3D
    int fTargetClusters{25};        //<! Target number of clusters per track (adaptive)
    int fMinHitsPerCluster{3};      //<! Minimum hits per cluster floor
@@ -86,6 +89,16 @@ public:
    void SetMaxHitsRadius(Int_t n) { fMaxHitsRadius = n; }
    /// Use raw hits instead of clusters for circle fit (default: false)
    void SetUseHitsForRadius(Bool_t use) { fUseHitsForRadius = use; }
+   /// Remove stray hits from each candidate before its initial parameters and clusters are computed (default off; the hits
+   /// move to the noise of the AtPatternEvent). Small pieces of the candidate that lie off its circle: on a1975 they are
+   /// low-charge hits 20-40 mm off the track that attach to tracks and drive genfit to a wrong helix. See
+   /// AtTools::AtHelix3D::FindStrayHits for the rule and for the guard radius. AtTrackFinderHDBSCAN and AtTrackFinderTC honour it.
+   /// It also changes what any later PID estimate receives: gates drawn on production clusters must be checked again.
+   void SetRemoveStrayHits(bool on = true, double guardRadius = 152.0)
+   {
+      fRemoveStrayHits = on;
+      fStrayGuardRadius = guardRadius;
+   }
    /// Use arc-walk clustering instead of ClusterizeSmooth3D (gap-immune)
    void SetUseArcWalk(bool use = true) { fUseArcWalk = use; }
    /// Target number of clusters per track (hits/cluster = nHits / targetClusters)
@@ -145,6 +158,8 @@ protected:
     * would make no sense to apply this function to straight tracks.
     */
    void SetTrackInitialParameters(AtTrack &track);
+   /// Removes the stray hits of the track when SetRemoveStrayHits is on, keeping the order of the others; returns them.
+   std::vector<AtHit> RemoveStrayHits(AtTrack &track);
 
    template <typename T>
    inline constexpr int GetSign(T num, std::true_type is_signed)

@@ -1,6 +1,7 @@
 #include "AtPRA.h"
 
 #include "AtContainerManip.h"
+#include "AtHelix3D.h"
 #include "AtHit.h"     // for AtHit, XYZPoint
 #include "AtPattern.h" // for AtPattern
 #include "AtPatternCircle2D.h"
@@ -33,6 +34,32 @@ ClassImp(AtPATTERN::AtPRA);
  *
  * In track, sets GeoTheta, GeoPhi, GeoCenter, GeoRadius.
  */
+std::vector<AtHit> AtPATTERN::AtPRA::RemoveStrayHits(AtTrack &track)
+{
+   std::vector<AtHit> removed;
+   if (!fRemoveStrayHits)
+      return removed;
+   AtTools::AtHelix3D finder;
+   const auto stray = finder.FindStrayHits(track, fStrayGuardRadius);
+   if (stray.empty())
+      return removed;
+   auto &hits = track.GetHitArray();
+   std::vector<char> drop(hits.size(), 0);
+   for (int i : stray) {
+      drop[i] = 1;
+      removed.push_back(*hits[i]);
+   }
+   size_t w = 0;
+   for (size_t i = 0; i < hits.size(); ++i)
+      if (!drop[i]) {
+         if (w != i)
+            hits[w] = std::move(hits[i]);
+         ++w;
+      }
+   hits.resize(w);
+   return removed;
+}
+
 void AtPATTERN::AtPRA::SetTrackInitialParameters(AtTrack &track)
 {
 

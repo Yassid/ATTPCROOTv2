@@ -608,6 +608,8 @@ std::unique_ptr<AtPatternEvent> AtPATTERN::AtTrackFinderHDBSCAN::FindTracks(AtEv
       AtTrack track;
       for (int pi : cl) { track.AddHit(event.GetHit(pi)); claimed[pi] = 1; }
       track.SetTrackID(trackID++);
+      for (auto &h : RemoveStrayHits(track))
+         retEvent->AddNoise(h);
       if (track.GetHitArray().size() > 0) {
          SetTrackInitialParameters(track);
          // Clusterize raw hits into AtHitClusters: the genfit/UKF fitters consume the track's

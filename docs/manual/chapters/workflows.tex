@@ -131,8 +131,11 @@ The field is given in the data convention ($-28.5$~kG) so that simulated tracks 
 \subsection{Digitisation and reconstruction}
 
 \code{run\_reco\_C16dt.C} reads the Monte Carlo points and runs the digitisation (\code{AtClusterizeTask},
-\code{AtPulseTask}) followed by the same reconstruction chain as the data production: multi-fit PSA, the
-\code{AtDirDeDxCleaner} cleaning and the HDBSCAN finder. Its parameter file is a copy of the data's
+\code{AtPulseTask}) followed by the same reconstruction steps as the data production: multi-fit PSA, the
+\code{AtDirDeDxCleaner} cleaning and the HDBSCAN finder. The settings are not all the same: \code{run\_reco\_batch\_dt.sh}
+uses the macro defaults (threshold 20, \code{SetMinClusterSize(20)}, \code{SetMinSamples(8)}), while the data
+production uses threshold 40 and 0 and 3 for the other two. The effect of this difference on the acceptance has not been
+measured. Its parameter file is a copy of the data's
 (\code{ATTPC.a1975\_deuterium\_dv1104\_g35000.par}, produced by \code{make\_gain\_pars.sh}) with only the gain changed,
 so that the drift velocity, \code{TBEntrance} and \code{ZPadPlane}, hence the $z$ scale, are identical. Two choices in it carry the lesson of this
 example:
@@ -143,8 +146,9 @@ example:
 \item \emph{Beam hole.} The real detector does not read out the region around the beam; the simulation inhibits the
   same pads (\code{AtBeamHole.h}), otherwise the clustering merges the beam into the ejectile tracks.
 \end{itemize}
-The simulation and the data then go through \code{fitGenfitter\_a1975\_deuterium.C} with the same settings, which is
-what makes an acceptance measured on the simulation applicable to the data.
+The simulation and the data then go through \code{fitGenfitter\_a1975\_deuterium.C} with the same settings. An acceptance
+measured on the simulation applies to the data only as far as the whole chain matches, so the differences above must be
+checked.
 
 \section{Running at scale}
 

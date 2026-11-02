@@ -129,6 +129,20 @@ scale \code{dnn} is zero), the task logs a warning and writes no entry for that 
 \code{TClonesArray} is empty. Events outside the hit-number window also produce an empty array. Readers
 must test \code{GetEntriesFast()} before \code{At(0)}.
 
+\paragraph{Stray hits.} \code{AtPRA::SetRemoveStrayHits(on, guardRadius = 152)}, off by default, removes from each
+candidate the hits that \code{AtHelix3D::FindStrayHits} marks as small pieces off its circle, and moves them to the
+noise of the \code{AtPatternEvent}. Hits farther than \code{guardRadius} from the axis are always kept, because the
+larger pads there open gaps along real tracks. \code{AtTrackFinderHDBSCAN} and \code{AtTrackFinderTC} honour it, and
+HDBSCAN computes the initial parameters of the candidate on the cleaned hits. The option is set on the finder, before
+it is passed to \code{AtPRAtask}.
+
+Measured on a1975 with the genfit chain and \emph{no PID gate}, the fraction of good fits rose from 82.3 to 91.1\,\% for
+simulated deuterons, from 94.8 to 97.5\,\% for simulated tritons, and from 76.5 to 86.3\,\% for the deuteron band of the
+data. The option also changes what later PID steps receive. In the adopted backward (d,p) proton chain, with its gate
+and FIND, the bound-state yield fell from 146 to 133 and tracks selected in both chains did not improve: most tracks
+lost had an invalid \code{AtSpyralPID} result after cleaning. It is therefore not adopted for that channel. Test it
+through the complete chain, with the PID gate, before using it.
+
 \section{The common base: \code{AtPRA}}
 \label{sec:pr:base}
 

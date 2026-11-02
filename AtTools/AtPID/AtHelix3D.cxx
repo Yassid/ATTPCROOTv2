@@ -11,6 +11,33 @@
 
 using namespace AtTools;
 
+std::vector<int> AtHelix3D::FindStrayHits(const AtTrack &track, double guardRadius) const
+{
+   std::vector<int> stray;
+   const auto &H = track.GetHitArray();
+   if ((int)H.size() < fMinHits)
+      return stray;
+   std::vector<Helix3D::P> h;
+   h.reserve(H.size());
+   for (const auto &x : H) {
+      auto p = x->GetPosition();
+      h.push_back({p.X(), p.Y(), p.Z(), x->GetCharge()});
+   }
+   Helix3D::EndOpt eo;
+   eo.blobLinMin = fBlobLinMin;
+   eo.blobOffCircle = fBlobOffCircle;
+   auto r = Helix3D::estimate(h, fBField, fZSign, fZOffset, 5, fBinW, fMaxEdge, fMinBlob, fBlobFrac, fMaxDropFrac, eo);
+   if (!r.ok)
+      return stray;
+   std::vector<char> kept(h.size(), 0);
+   for (int i : r.order)
+      kept[i] = 1;
+   for (size_t i = 0; i < h.size(); ++i)
+      if (!kept[i] && std::hypot(h[i].x, h[i].y) <= guardRadius)
+         stray.push_back(i);
+   return stray;
+}
+
 AtHelix3DResult AtHelix3D::Estimate(const AtTrack &track, int spyralDirection) const
 {
    AtHelix3DResult res;

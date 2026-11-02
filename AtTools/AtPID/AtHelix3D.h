@@ -80,6 +80,13 @@ public:
    ///        1 backward) or -1 if unavailable; it is one of the three direction votes.
    AtHelix3DResult Estimate(const AtTrack &track, int spyralDirection = -1) const;
 
+   /// STRAY HITS (2026-11-02): indices into track.GetHitArray() of the hits the blob removal of this estimator drops (see
+   /// SetBlobRemoval), except those farther than guardRadius [mm] from the beam axis: the wider spacing of the large pads
+   /// opens gaps that split the backbone, so there the "blob" is often the real outer part of the track (on a1975 simulation
+   /// deuterons at Brho 0.30-0.35 T m it was, and removing it ruined 3/4 of those tracks). Empty if the track has too few
+   /// hits or no backbone could be built. Used by AtPRA::SetRemoveStrayHits.
+   std::vector<int> FindStrayHits(const AtTrack &track, double guardRadius = 152.0) const;
+
    void SetBField(double b) { fBField = b; }                         ///< |B| [T]
    void SetZTransform(double sign, double offset) { fZSign = sign; fZOffset = offset; } ///< z_lab = sign*z_digi + offset
    void SetExpectedSense(int s) { fExpSense = s; }                    ///< see class comment

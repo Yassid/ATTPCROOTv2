@@ -306,3 +306,29 @@ TEST(AtPIDGainTableTest, PadGainMap)
    std::istringstream shortLine("27\n");
    EXPECT_TRUE(AtTools::AtPIDGainTable::LoadPadGains(shortLine).empty());
 }
+
+TEST(AtHelix3DTest, FindStrayHits)
+{
+   AtTools::AtHelix3D h3;
+   auto clean = makeHelix(80, 80, 400, 1.2);
+   EXPECT_TRUE(h3.FindStrayHits(clean).empty());
+
+   auto tr = makeHelix(80, 80, 400, 1.2);
+   const int n0 = tr.GetHitArray().size();
+   int id = 10000;
+   for (int i = 0; i < 12; ++i)
+      tr.AddHit(AtHit(id++, XYZPoint(25 + (i % 4) * 1.5, 8 + (i / 4) * 1.5, kZpad - 402), 80));
+   auto stray = h3.FindStrayHits(tr);
+   ASSERT_EQ(stray.size(), 12u);
+   for (int i : stray)
+      EXPECT_GE(i, n0); // exactly the added hits, indexed in the track's own hit array
+
+   // the guard: the same clump beyond the guard radius is kept
+   EXPECT_TRUE(h3.FindStrayHits(tr, 10.0).empty());
+
+   // too few hits: nothing is touched
+   AtTrack shortTrack;
+   for (int i = 0; i < 10; ++i)
+      shortTrack.AddHit(AtHit(i, XYZPoint(i, 0, 500), 100));
+   EXPECT_TRUE(h3.FindStrayHits(shortTrack).empty());
+}
