@@ -1,6 +1,7 @@
 # Development Documentation
 
-Agent-facing docs for the current branch state of ATTPCROOT.
+Agent-facing docs for the current branch state of ATTPCROOT. The full user and reference manual is
+[manual/attpcroot_manual.pdf](manual/attpcroot_manual.pdf) (LaTeX sources in `manual/`).
 
 ## Tasks
 

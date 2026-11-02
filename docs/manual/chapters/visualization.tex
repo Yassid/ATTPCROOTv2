@@ -1,0 +1,654 @@
+\chapter{Visualization and interactive tools}
+\label{ch:visualization}
+
+ATTPCROOTv2 has two kinds of visual tools. The first is the compiled event viewer in
+\code{AtEventDisplay/}, built on ROOT's TEve, which browses the events of a FairRoot output file
+and can re-run FairRoot tasks on the displayed event. The second is a set of interactive ROOT
+macros and one compiled class (\code{AtUKFDisplay}) that serve a narrower purpose: refitting a
+single track with live parameters, stepping through fitted events, and drawing particle-identification
+(PID) gates. This chapter describes both, starting from the viewer.
+
+\paragraph{Display requirement.} Every tool in this chapter that opens a window (the TEve
+viewer, the fitter GUIs, the gate drawers) needs an X display. The TEve viewer additionally needs
+working OpenGL; several macro headers in the a1975 workspace state that the Eve/OpenGL viewer does
+not work under WSL (for example \url{macro/Unpack_HDF5/a1975/UKF/pipeline/event_png_UKF.C}). For
+headless use, run ROOT with \code{root -l -b -q} and save canvases to files with
+\code{TCanvas::SaveAs}; Section~\ref{sec:vis-batch} lists the macros written for that purpose.
+Running an interactive tool with \code{-b} does not work: the gate drawers state explicitly that
+they must be started with \code{root -l}, never \code{-b}.
+
+\section{The event viewer: \code{AtViewerManager}}
+\label{sec:vis-viewer}
+
+\code{AtViewerManager} (\url{AtEventDisplay/AtViewerManager.h}) is the controller of the current
+viewer. It is a singleton: the constructor stores \code{this} in a static pointer, and a second
+construction aborts with \code{LOG(fatal)} (``Attempting to create a second instance of
+AtViewerManager''). \code{AtViewerManager::Instance()} returns the pointer after construction.
+The class is built in the \code{AtEventDisplay} library (\code{libAtEventDisplay.so}).
+
+\subsection{What the constructor and \code{Init()} do}
+
+The constructor takes a \code{std::shared\_ptr<AtMap>}, the pad map of the experiment, and builds
+the window:
+\begin{enumerate}
+  \item it calls \code{TEveManager::Create(true, "IV")}, which creates a mapped TEve manager
+        without the file browser;
+  \item it embeds a vertical \code{AtEventSidebar} in the left panel of the TEve browser, titled
+        ``Control'', holding \code{AtSidebarRunInfo} (input file, run ID, number of entries) and
+        \code{AtSidebarPadControl} (the selected pad);
+  \item it embeds a horizontal \code{AtEventSidebar} (the ``basebar'') in the bottom panel,
+        holding \code{AtSidebarEventControl} (event number, Prev/Next, ``Rerun Event'') and
+        \code{AtSidebarBranchControl} (three drop-down menus for the branch types);
+  \item it attaches itself as an observer of the current tree entry.
+\end{enumerate}
+
+\code{Init()} sets the palette with \code{gStyle->SetPalette(55)}, calls the
+FairRoot initialisation \code{FairRunAna::Instance()->Init()}, initialises every tab, builds the list of branches present
+in the input, fills the sidebar and basebar widgets, and loads entry 0. Because
+\code{AddTask()} and \code{Init()} both go through \code{FairRunAna::Instance()}, the macro must
+create and configure a \code{FairRunAna} (source, sink, geometry file, runtime database)
+\emph{before} constructing the viewer. Tabs must also be created after the viewer: the
+constructors of \code{AtTabMain}, \code{AtTabPad} and \code{AtTabMacro} throw the string
+``AtViewerManager must be initialized before creating tabs!'' if \code{Instance()} is null.
+
+\subsection{Public interface}
+
+\begin{center}
+\begin{tabular}{p{0.38\textwidth}p{0.55\textwidth}}
+\toprule
+Method & Effect \\
+\midrule
+Constructor, argument \code{shared\_ptr<AtMap>} & Creates the TEve window, sidebar and basebar. \\
+\code{AddTab(unique\_ptr<AtTabBase>)} & Takes ownership of a tab; tabs appear in the order added. \\
+\code{AddTask(FairTask*)} & Forwards to \code{FairRunAna::Instance()->AddTask}. The task runs
+  every time an entry is loaded. \\
+\code{Init()} & Initialises the run, the tabs and the GUI; goes to entry 0. \\
+\code{GotoEvent(Int\_t)}, \code{NextEvent()}, \code{PrevEvent()} & Navigation. \\
+\code{SetCheckBranch(AtBranch\&)} & Makes Next/Prev skip entries whose \code{AtRawEvent} in that
+  branch is not \code{IsGood()}. \\
+\code{GetSidebar()} & The left sidebar, to which add-ons are added. \\
+\code{GetMap()}, \code{GetBranchNames()} & The pad map and the type-to-branch table. \\
+\code{GetRawEventBranch()}, \code{GetEventBranch()}, \code{GetPatternEventBranch()},
+\code{GetCurrentEntry()}, \code{GetPadNum()} & The shared subjects described next. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{The subject/observer design}
+\label{sec:vis-observer}
+
+The viewer does not pass data between widgets directly. Every piece of shared state is a
+\emph{subject} (\code{DataHandling::AtSubject}, \url{AtData/AtDataSubject.h}), and every widget
+or tab that depends on it is an \emph{observer} (\code{DataHandling::AtObserver},
+\url{AtData/AtDataObserver.h}) that registers with \code{Attach()} and is called back through
+\code{Update(AtSubject*)} when the subject calls \code{Notify()}.
+
+\code{AtViewerManager} owns five subjects:
+\begin{center}
+\begin{tabular}{p{0.26\textwidth}p{0.22\textwidth}p{0.42\textwidth}}
+\toprule
+Member & Type & Meaning \\
+\midrule
+\code{fEntry} & \code{AtTreeEntry} & Current entry of the FairRoot tree. \\
+\code{fRawEventBranch} & \code{AtBranch} & Branch shown as the \code{AtRawEvent}. \\
+\code{fEventBranch} & \code{AtBranch} & Branch shown as the \code{AtEvent} (hits). \\
+\code{fPatternEventBranch} & \code{AtBranch} & Branch shown as the \code{AtPatternEvent}. \\
+\code{fPadNum} & \code{AtPadNum} = \code{AtSimpleType<int>} & Currently selected pad, initial
+  value $-1$. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The subjects carry behaviour, not only data (\url{AtEventDisplay/AtViewerManagerSubject.cxx}):
+\begin{itemize}
+  \item \code{AtTreeEntry::Set(entry)} calls \code{FairRunAna::Instance()->Run(entry)} and only
+        then notifies. Changing the entry therefore re-executes every FairTask added with
+        \code{AddTask}, so the tabs always see the output of the tasks for that entry.
+  \item \code{AtBranch::SetBranchName()} converts the name to a FairRoot branch ID;
+        \code{SetBranchId()} notifies only if the ID changed, and remembers the previous ID.
+  \item \code{AtSimpleType<T>::Set(value, notify=true)} notifies only if the value changed.
+\end{itemize}
+
+On a change of entry, \code{AtViewerManager::Update} calls \code{Exec()} on every tab and then
+\code{fPadNum.Notify()}, so pad-level views redraw for the new event even when the pad number did
+not change. \code{AtTabMain::Update} shows the pattern used by all tabs: the AtEvent-dependent
+parts (pad plane, 3D hits) redraw when \code{fEventBranch} or \code{fEntry} changed, the
+pattern-event parts when \code{fPatternEventBranch} or \code{fEntry} changed, and the trace when
+\code{fRawEventBranch}, \code{fEntry} or \code{fPadNum} changed.
+
+\paragraph{Tab data: \code{AtTabInfo}.} Each tab owns an \code{AtTabInfo}
+(\url{AtEventDisplay/AtTabs/AtTabInfo.h}), a named collection of ``augments'' that give access to
+data. \code{AtTabInfoFairRoot<T>} wraps an \code{AtBranch}: its \code{GetInfo()} re-reads the
+\code{TClonesArray} from \code{FairRootManager} whenever the selected branch name changed and
+returns element 0 cast to \code{T}, or \code{nullptr} when the array is empty. The default name
+of an augment is the class name, so a tab retrieves its event with
+\code{GetFairRootInfo<AtEvent>()}. \code{AtTabInfoTree} and \code{AtTabInfoBranch<T>}
+(\url{AtEventDisplay/AtTabs/AtTabInfoTree.h}) do the same for a non-FairRoot \code{TTree} read
+with a \code{TTreeReader}, kept in step with the viewer by observing \code{AtTreeEntry}; the
+header recommends creating each tree object once and sharing it through a \code{shared\_ptr}.
+
+\section{Opening a file and browsing events}
+\label{sec:vis-open}
+
+\subsection{A minimal launcher}
+
+The following macro is \url{macro/Unpack_HDF5/a1975/run_eve_new.C}, shortened. It opens
+\code{run\_NNNN.root} in the current directory, adds a main tab and a two-cell trace tab, and runs
+a PSA task on the fly so that the hit threshold can be changed from the sidebar.
+\begin{verbatim}
+void run_eve_new(int runNum = 11,
+                 TString OutputDataFile = "./output.reco_display.root")
+{
+   TString InputDataFile = TString::Format("./run_%04d.root", runNum);
+   TString dir = getenv("VMCWORKDIR");
+   TString GeoDataPath = dir + "/geometry/ATTPC_D300torr_v2_geomanager.root";
+   TString mapDir = dir + "/scripts/ANL2023.xml";
+
+   FairRunAna *fRun = new FairRunAna();
+   fRun->SetSource(new FairFileSource(InputDataFile));
+   fRun->SetSink(new FairRootFileSink(OutputDataFile));
+   fRun->SetGeomFile(GeoDataPath);
+   FairRuntimeDb *rtdb = fRun->GetRuntimeDb();
+   rtdb->setFirstInput(new FairParRootFileIo());
+
+   auto fMap = std::make_shared<AtTpcMap>();
+   fMap->ParseXMLMap(mapDir.Data());
+   auto eveMan = new AtViewerManager(fMap);
+
+   auto tabMain = std::make_unique<AtTabMain>();
+   tabMain->SetMultiHit(100);
+
+   auto psa = new AtPSAMax();
+   psa->SetThreshold(50);
+   AtPSAtask *psaTask = new AtPSAtask(psa);
+   psaTask->SetPersistence(false);
+   psaTask->SetOutputBranch("AtEventChange");
+   auto sidePSA = new AtSidebarPSA(eveMan->GetSidebar());
+   sidePSA->SetPSA(psa);
+   eveMan->GetSidebar()->AddSidebarFrame(sidePSA);
+   eveMan->AddTask(psaTask);
+
+   auto tabPad = std::make_unique<AtTabPad>(2, 1);
+   tabPad->DrawRawADC(0, 0);
+   tabPad->DrawADC(0, 1);
+
+   eveMan->AddTab(std::move(tabMain));
+   eveMan->AddTab(std::move(tabPad));
+   eveMan->Init();
+}
+\end{verbatim}
+It is started with \code{root -l 'run\_eve\_new.C(11)'} from a shell where the ATTPCROOT
+environment (\code{VMCWORKDIR}, library paths) is set. The pad map file and the geometry file are
+experiment specific: map XML files live in \url{scripts/}, geometry ROOT files in
+\url{geometry/}. A sink is set because \code{FairRunAna} writes an output file; the macros
+name it \code{*.reco\_display.root}.
+
+A launcher that only displays a file that already contains raw and hit branches needs no task;
+\url{macro/Unpack_HDF5/a1975/UKF/pipeline/run_eve_UKF.C} is such a case (its header notes that no
+parameter file is needed because no PSA runs). Other launchers in the repository include
+\url{macro/tests/AT-TPC/run_eve.C}, \url{macro/Simulation/ATTPC/PUMA/run_eve.C} and
+\url{macro/Unpack_HDF5/a2091/run_eve.C}.
+
+\subsection{Choosing the branches}
+
+Branches are chosen in the GUI, not in the macro. \code{GenerateBranchLists()} loops over every
+branch known to \code{FairRootManager}, keeps those that are a \code{TClonesArray}, steps through
+up to the first five entries until the array is non-empty, and files the branch under the class
+name of its first element. A branch is therefore offered in the ``Event'' menu whenever it holds
+\code{AtEvent} objects, whatever its name (\code{AtEventH}, \code{AtEventCorrected},
+\code{AtEventChange}, \ldots). The three drop-downs of \code{AtSidebarBranchControl} list the
+branches of type \code{AtRawEvent}, \code{AtEvent} and \code{AtPatternEvent}; each selects
+index 0 at start-up, i.e.\ the first branch of that type in FairRoot's branch list. A type with
+no branch in the file gets no menu.
+
+\subsection{Navigating}
+
+The basebar holds the event number entry (limited to $[0, N]$ with $N$ the number of chain
+entries), Prev and Next buttons, and ``Rerun Event''. Every route ends in
+\code{AtTreeEntry::Set}, so every navigation re-runs the attached tasks. ``Rerun Event'' sets the
+entry to its current value, which re-runs the tasks on the same event; this is how a parameter
+changed in a sidebar add-on (for example the PSA threshold) takes effect. Changing the threshold
+alone does not redraw anything. When \code{SetCheckBranch()} has been called, Next and Prev loop
+until they reach an entry whose raw event is good.
+
+\section{The tabs}
+\label{sec:vis-tabs}
+
+All tabs derive from \code{AtTabBase} (\url{AtEventDisplay/AtTabs/AtTabBase.h}).
+\code{AtTabBase::Init()} creates a new window in the right-hand tab widget of the TEve browser
+and calls the virtual \code{MakeTab()} (build the GUI) and \code{InitTab()} (register the data
+augments). \code{Exec()} is called after the run has processed each entry. Canvas-based tabs
+derive from \code{AtTabCanvas}, which provides one \code{TCanvas} divided into
+\code{rows}\,$\times$\,\code{cols} pads (the code comment says a \code{TCanvas} is used instead of
+\code{TRootEmbeddedCanvas} to keep the toolbar). Table~\ref{tab:vis-tabs} lists the tabs compiled
+into the library (\url{AtEventDisplay/CMakeLists.txt}).
+
+\begin{table}[ht]
+\centering
+\begin{tabular}{p{0.2\textwidth}p{0.17\textwidth}p{0.53\textwidth}}
+\toprule
+Tab & Base & Shows \\
+\midrule
+\code{AtTabMain} & \code{AtTabBase} & 3D hits and patterns, pad plane, trace of the selected pad. \\
+\code{AtTabPad} & \code{AtTabCanvas} & Grid of trace views of the selected pad. \\
+\code{AtTabMacro} & \code{AtTabCanvas} & Grid of pads filled by user lambdas. \\
+\code{AtTabBraggCurve} & \code{AtTabMain} & Main view plus energy loss vs range of the first track. \\
+\code{AtTabFitted} & \code{AtTabBase} & Overlay of fitted trajectories on the 3D view. \\
+\code{AtTabFission} & \code{AtTabMain} & Main view plus uncorrected and corrected fission-fragment hits. \\
+\code{AtTabEnergyLoss} & \code{AtTabCanvas} & dE/dx of two fission fragments, sums, fits and ratio. \\
+\code{AtTabFF} & \code{AtTabCanvas} & dQ/dZ of two fragments, simulated and experimental. \\
+\bottomrule
+\end{tabular}
+\caption{Tabs available in \code{AtEventDisplay/AtTabs}.}
+\label{tab:vis-tabs}
+\end{table}
+
+\subsection{\code{AtTabMain}: 3D view, pad plane and trace}
+
+\code{AtTabMain} (\url{AtEventDisplay/AtTabs/AtTabMain.h}) is the tab most launchers start with.
+\code{MakeTab} builds a horizontal pack: on the left a TEve 3D viewer with the global and event
+scenes; on the right a vertical pack with the pad-trace canvas on top and the pad-plane canvas
+below (weight 1.5). When a geometry is loaded (\code{gGeoManager} non-null) the top node is added
+to the 3D scene and the volume \code{drift\_volume} is made 80\% transparent.
+
+\paragraph{3D view.} The hits of the selected \code{AtEvent} branch are drawn as a
+\code{TEvePointSet} named ``Hits'' inside a \code{TEveEventManager} called ``AtEvent''. The hits
+of each track in the selected \code{AtPatternEvent} are drawn as separate point sets
+\code{Track\_0}, \code{Track\_1}, \ldots{} with a fixed colour list, and the noise hits of the
+pattern event as a set named ``Noise''. With \code{SetDrawProjection(true)} the projection of
+each track's \code{AtPattern} is also drawn on the pad plane.
+
+\paragraph{Pad plane.} The pad plane is the \code{TH2Poly} returned by
+\code{AtMap::GetPadPlane()}, drawn with option \code{"COL L0"} and filled with the charge of
+each hit at its $(x,y)$ position. A hit is skipped when its charge is below the threshold or when
+its pad has more hits than the multi-hit limit.
+
+\paragraph{Pad selection and trace.} A left click on the pad plane runs the
+static method \code{AtTabMain::SelectPad()} (registered with \code{TCanvas::AddExec}). It converts the click to
+a \code{TH2Poly} bin, maps the bin to a pad number with \code{AtMap::BinToPad}, and sets
+\code{fPadNum}. Every observer of \code{fPadNum} reacts: \code{AtTabMain} draws the ADC of that pad
+from the selected \code{AtRawEvent} branch (bins 0--511), \code{AtTabPad} redraws its grid, and
+\code{AtSidebarPadControl} shows the pad number and its electronics reference. A pad can also be
+typed into the sidebar entry and redrawn with ``Redraw Pad''.
+
+\paragraph{Setters} (defaults from the header):
+\begin{center}
+\begin{tabular}{p{0.38\textwidth}p{0.14\textwidth}p{0.38\textwidth}}
+\toprule
+Setter & Default & Meaning \\
+\midrule
+\code{SetThreshold(Int\_t)} & 0 & Minimum hit charge drawn. \\
+\code{SetMultiHit(Int\_t)} & 10 & Maximum hits in a pad for its hits to be drawn. \\
+\code{SetDrawProjection(Bool\_t)} & \code{false} & Draw pattern projections on the pad plane. \\
+\code{SetHitAttributes(TAttMarker)} & pink, full dot medium, size 1 & Hit marker. \\
+\code{DumpEvent(std::string)} & --- & Write the hits of the current event to a text file. \\
+\bottomrule
+\end{tabular}
+\end{center}
+The default multi-hit limit of 10 hides every pad with more than 10 hits; launchers that use PSA
+methods producing many hits per pad raise it (all a1975 launchers use \code{SetMultiHit(100)}).
+Note that \url{docs/subsystems/visualization.md} quotes 100 in its example, which is the value
+set in the macros, not the class default.
+
+\subsection{\code{AtTabPad}: trace grid}
+
+\code{AtTabPad(nRow = 1, nCol = 1, name = "AtPad")} (\url{AtEventDisplay/AtTabs/AtTabPad.h})
+divides its canvas into a grid; each cell is assigned one kind of trace of the selected pad. The
+cell is given as \code{(row, col)}:
+\begin{center}
+\begin{tabular}{p{0.38\textwidth}p{0.52\textwidth}}
+\toprule
+Call & Cell content \\
+\midrule
+\code{DrawADC(row, col)} & Pedestal-subtracted ADC of the pad. \\
+\code{DrawRawADC(row, col)} & Raw ADC. \\
+\code{DrawArrayAug(augName, row, col)} & A named array augment of the pad (e.g.\ a deconvolved
+  charge). \\
+\code{DrawAuxADC(auxName, row, col)} & An auxiliary pad by name (e.g.\ \code{"IC"}); independent of
+  the selected pad. \\
+\code{DrawFPN(row, col)} & Fixed-pattern-noise trace. \\
+\code{DrawGenTrace(id, row, col)}, \code{DrawRawGenTrace(id, row, col)} & A generic trace by ID. \\
+\code{DrawHits(row, col)} & Overlay the hits of that pad on the cell: a Gaussian of integral $Q$
+  when the hit has a $z$ variance, a point otherwise. \\
+\bottomrule
+\end{tabular}
+\end{center}
+The header states that \code{DrawHits} requires an \code{AtDigiPar} parameter container in the
+runtime database. The tab reads the selected \code{AtEvent} and \code{AtRawEvent} branches.
+
+\subsection{\code{AtTabMacro}: user-defined plots}
+
+\code{AtTabMacro(nRow = 1, nCol = 1, name = "Macro")} fills its pads by calling user functions
+at three moments:
+\begin{itemize}
+  \item \code{SetDrawTreeFunction(f, row, col)}: called once, when the tab is built;
+  \item \code{SetDrawEventFunction(f, row, col)}: called from \code{Exec()}, after each entry;
+  \item \code{SetDrawPadFunction(f, row, col)}: called when the selected pad changes, with the
+        pad number as second argument.
+\end{itemize}
+The functions receive the tab's \code{AtTabInfo*}. The tab registers no augment itself; the macro
+adds what the functions need. \url{macro/e12014/adam/unpack/run_eve_species.C} adds a HiRAEVT
+tree for a PID plot:
+\begin{verbatim}
+auto heistTree = std::make_shared<AtTabInfoTree>(
+   "E12014", evtInputDataFile, AtViewerManager::Instance()->GetCurrentEntry());
+auto heistInfo =
+   std::make_shared<AtTabInfoBranch<HTMusicIC>>(heistTree, "MUSIC");
+auto tabMac = std::make_unique<AtTabMacro>();
+tabMac->GetTabInfo()->AddAugment(std::move(heistInfo), "MusicIC");
+tabMac->GetTabInfo()->AddAugment(std::move(heistTree));
+tabMac->SetDrawTreeFunction(PlotPID);
+\end{verbatim}
+The class comment describes it as ``probably needs refactor''.
+
+\subsection{\code{AtTabFitted}: fitted trajectories}
+
+\code{AtTabFitted(name = "Fitted", branchName = "AtTrackingEvent")}
+(\url{AtEventDisplay/AtTabs/AtTabFitted.h}) builds no window of its own; it adds an
+``AtTrackingEvent'' element to the 3D scene of \code{AtTabMain} and draws one \code{TEveLine}
+per \code{AtFittedTrack}, plus a point set for the fitted vertex. It looks the branch up by name
+in \code{FairRootManager} instead of going through an \code{AtBranch}; the header explains that
+the \code{AtBranch} route resolved to the wrong branch with chained sources. Two drawing modes
+exist:
+\begin{itemize}
+  \item default: an analytical helix sampled from the fit kinematics
+        (\code{GetKinematics()}) in the field \code{SetBField(Bz)} (default 4.0~T, the PUMA value),
+        up to \code{SetHelixSampling(maxArc\_mm, nSamples)} (defaults 500~mm and 200 points);
+  \item \code{SetDrawSmoothed(true)}: the vertex followed by the stored smoothed positions. The
+        header calls this ``the honest per-filter trajectory'', valid for both UKF and genfit.
+\end{itemize}
+Frame options: \code{SetZPadPlane(z)} (default 0) maps the lab-frame $z$ stored by the fitters
+back to the digitisation frame as $z_\mathrm{digi} = z_\mathrm{pad} - z_\mathrm{lab}$ in
+smoothed mode, so the line overlays the hits; with 0, \code{SetFlipZ(bool)} multiplies $z$ by
+$\pm1$. Styling: \code{SetTrackColor} (negative keeps a per-track palette),
+\code{SetLineStyle} (default 1), \code{SetLineWidth} (default 2), \code{SetDrawVertex} (default
+true). Two instances pointed at two branches overlay two fitters, as in
+\url{macro/Unpack_HDF5/a1975/UKF/pipeline/run_eve_both_a1975.C}:
+\begin{verbatim}
+FairFileSource *source = new FairFileSource(recoFile);
+source->AddFriend(fitFile); // merge the two fit branches onto the same entries
+...
+auto tabGenfit =
+   std::make_unique<AtTabFitted>("Genfit", "AtTrackingEventGenfit");
+tabGenfit->SetDrawSmoothed(true);
+tabGenfit->SetZPadPlane(1000.0);
+tabGenfit->SetTrackColor(kRed + 1);
+auto tabUKF = std::make_unique<AtTabFitted>("UKF", "AtTrackingEventUKF");
+tabUKF->SetDrawSmoothed(true);
+tabUKF->SetZPadPlane(1000.0);
+tabUKF->SetTrackColor(kAzure + 1);
+tabUKF->SetLineStyle(2);
+\end{verbatim}
+The macro header warns that the reco file and the friend file must be entry-aligned, i.e.\ the fit
+file must have been produced from the same run over the events being browsed.
+
+\subsection{Other tabs}
+
+\begin{itemize}
+  \item \code{AtTabBraggCurve} extends \code{AtTabMain} with a canvas of energy loss versus range,
+        filled from \code{AtTrack::GetBraggCurve()} of the \emph{first} track (index 0) of the
+        selected pattern event; with no track the histogram is empty.
+  \item \code{AtTabFission} extends \code{AtTabMain} with an ``AtFissionEvent'' element holding
+        uncorrected hits and three sets of corrected hits. It owns its own \code{AtBranch}, returned
+        by \code{GetFissionBranch()}, which is passed to the two fission analysis tabs below.
+  \item \code{AtTabEnergyLoss(AtBranch\&)} computes dE/dx curves of the two fragments of an
+        \code{AtFissionEvent}: stacked curves along the track and along $z$, charge-sum and
+        Gaussian-fit dQ/dZ, their ratio, and a proxy for the fragment charge.
+  \item \code{AtTabFF(AtBranch\&, plotADC = false)} compares simulated and experimental dQ/dZ of the
+        two fragments.
+\end{itemize}
+These four tabs were written for specific experiments (e12014 fission); their exact physics
+content is defined only by the source files in \url{AtEventDisplay/AtTabs/}.
+
+\section{The sidebar and its add-ons}
+\label{sec:vis-sidebar}
+
+\code{AtEventSidebar} (\url{AtEventDisplay/AtSidebar/AtEventSidebar.h}) is a \code{TGMainFrame}
+holding a list of \code{AtSidebarFrame}s. Frames are added with \code{AddSidebarFrame()} before
+\code{Init()}; their widgets are only created in \code{FillFrame()}, which \code{Init()} calls
+after the run is initialised. The fixed frames were listed in Section~\ref{sec:vis-viewer}.
+\code{UsePictureButtons(bool)} switches Prev/Next between picture and text buttons; the source
+comment says picture buttons ``break some machines'', and the default is text buttons.
+
+User add-ons derive from \code{AtSidebarAddon}, which provides \code{AddInfoBox(label)} (a text
+field updated with \code{SetInfoString}) and \code{AddIntBox(label, function, min, max)} (an
+integer entry that calls a slot of the derived class). Available add-ons:
+\begin{center}
+\begin{tabular}{p{0.3\textwidth}p{0.6\textwidth}}
+\toprule
+Add-on & Controls \\
+\midrule
+\code{AtSidebarPSA} & ``Threshold'' (0--4000) of the \code{AtPSA} given with \code{SetPSA()};
+  initialised from \code{AtPSA::GetThreshold()}. \\
+\code{AtSidebarPSADeconv} & Threshold plus ``Filter Order'' and ``Filter Cutoff'' of a
+  deconvolution PSA. \\
+\code{AtSidebarPSAIterDeconv}, \code{AtSidebarPSATBAvg} & Parameters of the iterative-deconvolution
+  and time-bucket-averaging PSA (see their headers in \url{AtEventDisplay/AtSidebar/PSA/}). \\
+\code{AtSidebarInfoMacro} & Displays the string returned by a user \code{std::function<std::string()>};
+  refreshed on every entry change. \\
+\code{AtSidebarIntMacro} & An integer entry, bounded by \code{SetBounds(min, max)}, whose value is
+  passed to a user \code{std::function<void(int)>}. \\
+\bottomrule
+\end{tabular}
+\end{center}
+The PSA add-ons change the PSA object in place; the change reaches the display after ``Rerun
+Event'' re-executes the \code{AtPSAtask} (Section~\ref{sec:vis-open}). Pointing the PSA task at a
+new output branch (\code{"AtEventChange"} in the example) and selecting that branch in the
+``Event'' menu shows the re-analysed hits next to the stored ones.
+
+\section{The \code{Deprecated/} directory}
+\label{sec:vis-deprecated}
+
+The directory \url{AtEventDisplay/Deprecated/} holds the previous
+viewer: the event managers \code{AtEventManager}, \code{AtEventManagerProto} and
+\code{AtEventManagerS800}, and the draw tasks \code{AtEventDrawTask},
+\code{AtEventDrawTaskProto} and \code{AtEventDrawTaskS800}. In that design the event manager is a
+\code{TEveEventManager} and drawing is done by a FairTask whose branch names are fixed in the
+macro (\code{SetRawEventBranch}, \code{SetEventBranch}, \code{SetMultiHit},
+\code{Set3DHitStyleBox}, \ldots). These classes are still listed in \code{SRCS} of
+\url{AtEventDisplay/CMakeLists.txt} and in the LinkDef, so they are compiled and loadable, and
+older macros still use them (for example \url{macro/e12014/run_eve.C} and
+\url{macro/e15250/run_eve.C}). Nothing in the code marks them as deprecated other than the
+directory name, and no removal is documented. New launchers should use \code{AtViewerManager};
+the subsystem notes in \url{docs/subsystems/visualization.md} describe only the new API.
+
+Some macros mix the two generations or call methods that no longer exist: for instance
+\url{macro/e12014/curtis/viewer/run_eve_dQdtA.C} calls \code{eveMan->GetRawEventName()}, which
+\code{AtViewerManager} does not provide. Macros under \url{macro/Simulation/ATTPC/16C_pp/} also
+contain \code{eventDisplay.C}, which uses FairRoot's own \code{FairEventManager}.
+
+\section{Fitter GUIs}
+\label{sec:vis-fitter}
+
+\subsection{Design note and \code{AtUKFDisplay}}
+
+\url{docs/development/FitterGUI.md} is a design document for an interactive UKF fitter display
+modelled on GenFit's \code{EventDisplay}: a singleton with event navigation, live refitting from
+GUI parameters, and display flags (\code{C} clusters, \code{H} raw hits, \code{F} filtered,
+\code{S} smoothed, \code{R} residuals, \code{E} covariance ellipses, \code{M} MC truth). It plans
+three phases: a plotting macro, a compiled class, and advanced features (MC overlay, error bands,
+UKF/GenFit comparison, batch mode). Phase 1 exists as
+\url{macro/Simulation/ATTPC/16C_pp/display_ukf.C}. Phase 2 exists as \code{AtUKFDisplay}, but in
+\url{AtReconstruction/AtFitter/AtUKFDisplay.h} (library \code{AtReconstruction}), not in the
+\code{AtEventDisplay/AtUKFDisplay/} directory the document proposes, and it differs from the
+design in that it uses only \code{TCanvas} (\code{fUseEve} is forced to false; no OpenGL).
+
+The launcher is \url{macro/Simulation/ATTPC/16C_pp/run_ukf_display.C}:
+\begin{verbatim}
+void run_ukf_display(int startEvent = 1)
+{
+   FairLogger::GetLogger()->SetLogScreenLevel("WARNING");
+   auto *display = AtUKFDisplay::GetInstance();
+   display->LoadFiles("data/output_digi.root", "data/output_ukf_only.root",
+                      "data/attpcsim.root");
+   display->GotoEvent(startEvent);
+}
+\end{verbatim}
+\code{LoadFiles(digi, fitted = nullptr, mc = nullptr)} reads the tree \code{cbmsim} and the
+branches \code{AtPatternEvent} (required), \code{AtTrackingEvent} and \code{MCTrack} (optional).
+The GUI consists of a control frame and two canvases: \code{cUKFTrack} (XY, XZ, YZ projections of
+clusters, optional raw hits, and the fit) and \code{cUKFDiag} (cluster charge, residuals
+$|$smoothed$-$measured$|$, $z_\mathrm{lab}$ per cluster, and a text box with $p$, KE, $\theta$,
+$\phi$). The controls and their initial values, read in \code{CreateFitter()} each time a fit is
+requested:
+\begin{center}
+\begin{tabular}{p{0.34\textwidth}p{0.18\textwidth}p{0.38\textwidth}}
+\toprule
+Control & Initial value & Passed to \code{AtFitterUKF} \\
+\midrule
+Particle & Proton & mass and charge (proton, deuteron, alpha, $\pi^\pm$) \\
+UKF alpha & $10^{-3}$ & \code{SetUKFParameters(alpha, 2.0, 0.0)} \\
+Measurement sigma & 2.0 & \code{SetMeasurementSigma} \\
+Min clusters & 10 & \code{SetMinClusters} \\
+E-loss scale & 1.0 & read but not passed to the fitter in \code{CreateFitter()} \\
+ZPadPlane & 1000.0 & \code{SetZPadPlane} \\
+Momentum seed & 0 (use PR \brho) & \code{SetMomentumSeed} if $>0$ \\
+Momentum sigma fraction & 0.3 & \code{SetMomentumSigmaFrac} \\
+$B_z$ [T] & 2.85 & \code{SetBField} \\
+Gas density [g/cm$^3$] & $3.553\times10^{-5}$ & \code{AtELossCATIMA} \\
+Energy straggling, per-cluster covariance & off & corresponding setters \\
+\bottomrule
+\end{tabular}
+\end{center}
+``Re-cluster + Fit'' re-clusters the displayed track with Smooth3D (radius 10, distance 20) or
+GroupByN (15 hits per cluster) before fitting. ``Use MC truth seed'' replaces the seed momentum by
+that of the first MC track with PDG code 2212. ``Auto-fit on navigate'' fits on each event change
+when no stored fit exists. \code{SetParticle(kind)}, \code{SetBField(T)} and
+\code{SetGasDensity(g/cm$^3$)} preset the GUI from a macro after \code{LoadFiles()}.
+
+\subsection{\code{gui\_fit\_dp.C}: live genfit refit of one track}
+
+\url{macro/Unpack_HDF5/a1975/D2_UKF/gui_fit_dp.C} is an analysis-specific GUI (a1975,
+16C(d,p)) that calls \code{AtGenfitter} on one stored track with parameters from the window, about
+one second per fit according to its header. It reads
+\code{<gfDir>/<runTag>\_genfitter\_p.root}, picks the \code{AtTrackingEvent} of the given entry
+and the track with the given ID, and also shows the fit stored in the production for comparison.
+\begin{verbatim}
+root -l 'gui_fit_dp.C("run_0020_multifit",9789,0)'
+\end{verbatim}
+The parameters are the cluster ordering (production $z$-sort, stored cluster order, arc walk,
+vertex-first), measurement sigma (initial 4.0), minimum and maximum iterations (2 and 5), a cluster
+index window, and switches for material effects, CATIMA, the backward-seed fix and a Spyral seed.
+Clusters can be selected by dragging a box in a projection (keep or drop), or by a charge cut;
+``find'' searches the longest prefix of the track whose $\chi^2/\mathrm{ndf}$ is below a limit
+(initial 0.1). The canvas has three projections and a fourth pane with the RANSAC line from
+pattern recognition; ``PNG'' saves it under \code{plots/}. The header records a regression check:
+at default settings, run\_0020 entry 9789 must give KE 0.385~MeV, $\theta$ 96.92$^\circ$,
+$\chi^2/\mathrm{ndf}$ 143.66, and the banner warns if it does not. The default paths point to
+\url{/mnt/f/a1975/}, so the macro needs arguments on any other machine.
+
+\section{Other interactive and visual macros}
+\label{sec:vis-macros}
+
+\subsection{PID gate drawers}
+
+Polygon gates are stored as \code{AtTools::AtCut2D} (\url{AtTools/AtPID/AtCut2D.h}): a name,
+the two axis names, and the vertex list, read and written as JSON in the spyral\_utils
+\code{Cut2D} format (\code{LoadJSON}, \code{WriteJSON}, \code{IsInside}).
+\code{AtTools::AtParticleID} couples a cut with $Z$ and $A$. The gates are drawn interactively by
+experiment-specific macros, all of the form \code{gate\_draw\_*.C} or \code{draw\_gate\_*.C}:
+\begin{itemize}
+  \item a1975: \url{macro/Unpack_HDF5/a1975/D2_UKF/pid/gate_draw_dp.C},
+        \code{gate\_draw\_dt.C}, \code{draw\_gate\_dt.C}, \code{pid\_draw\_gate\_d2.C} (same
+        directory), and \url{macro/Unpack_HDF5/a1975/UKF/pid/gate_draw_pp.C},
+        \code{pid\_draw\_gate\_a1975.C};
+  \item other experiments: \url{macro/Unpack_HDF5/C15p/pid/gate_draw_C15p.C},
+        \url{macro/Unpack_HDF5/C15d/pid/gate_draw_C15d.C},
+        \url{macro/Unpack_HDF5/a1954_Be12/UKF/pid/gate_draw_pt_Be12.C},
+        \url{macro/Unpack_HDF5/a2091/UKF/pid/draw_gate_C15.C};
+  \item gate editors: \code{pid\_gate\_edit.C} and \code{ex\_gate\_edit.C} in
+        \url{macro/Unpack_HDF5/a1975/UKF/pp/}.
+\end{itemize}
+
+\paragraph{Example: \code{gate\_draw\_dp.C}.} The drawer reads a cached PID plane (a tree
+\code{pts} with \sqdedx, \brho, polar angle and IC amplitude, built by \code{pid\_plane\_dt.C})
+and opens a \code{TGMainFrame} with an embedded canvas and the buttons ``Draw new gate'',
+``Evaluate'', ``Locus check'', ``Locus dots on/off'', ``(d,d) band on/off'', ``Save JSON'',
+``Save PNG'', ``Redraw'' and ``Quit'', plus entries for axis ranges, binning and the IC window.
+``Draw new gate'' waits for a \code{TCutG} (\code{WaitPrimitive("CUTG")}): click the vertices
+and double-click to close. ``Locus check'' plots \brho{} against polar angle for the tracks inside
+the polygon with the two-body kinematic curve for the chosen beam energy overlaid. The defaults of
+the function signature are output \code{pid/proton\_d2\_dv1104.json}, cache
+\code{pid/pid\_plane\_dt\_dv1104.root}, $x_\mathrm{max}=55$, $y_\mathrm{max}=1.6$, IC window
+900--1300, $E_\mathrm{beam}=184.25$~MeV, $Z=1$, $A=1$. Save behaviour that matters:
+\begin{itemize}
+  \item the file name follows the name typed in the GUI, and a species keyword in that name
+        (\code{proton}, \code{deuteron}, \code{triton}, \code{3he}, \code{alpha}, \code{4he})
+        overrides $Z$ and $A$;
+  \item an existing file is copied to \code{.bak} before being replaced, with a warning.
+\end{itemize}
+Launch from the analysis directory, either at an interactive prompt or detached with stdin kept
+open (from \url{macro/Unpack_HDF5/a1975/D2_UKF/pid/run_gate_dp.C}):
+\begin{verbatim}
+cd macro/Unpack_HDF5/a1975/D2_UKF
+root -l 'pid/run_gate_dp.C'
+setsid bash -c 'tail -f /dev/null | root -l pid/run_gate_dp.C' &
+\end{verbatim}
+
+\subsection{Event steppers}
+
+\url{macro/Unpack_HDF5/a1975/UKF/pipeline/cycleEventsGui.C} opens a genfitter output file
+(branches \code{AtTrackingEvent} and \code{AtPIDEvent}), loads an \code{AtParticleID} gate, and
+shows XY, ZX and ZY projections with Prev, Next, Goto, Save PNG and a ``gated-only'' check box.
+Tracks inside the gate are drawn in colour, the others in grey. It uses a 2D canvas only and works
+over X11 without OpenGL. \code{cycleEvents.C} in the same directory does the same with terminal
+commands (Enter, \code{p}, a number, \code{s}, \code{g}, \code{q}). Both print a warning when the
+gate file does not load, because ``gated-only'' then shows no events.
+
+\subsection{Batch (headless) displays}
+\label{sec:vis-batch}
+
+These macros write PNG files and are meant for \code{root -b -q}:
+\begin{itemize}
+  \item \url{macro/Unpack_HDF5/a1975/UKF/pipeline/event_png_UKF.C}: one event of the
+        \code{AtEventH} branch as XY, XZ, YZ and a software-rendered 3D scatter
+        (\code{TGraph2D}); event $-1$ picks the event with most hits among the first
+        \code{scanN} (default 200).
+  \item \url{macro/Unpack_HDF5/a1975/UKF/pipeline/event_png_batch_UKF.C}: a contact sheet of
+        XY views over an entry range, plus one detailed PNG per event, written to
+        \code{<file>\_pngs/}.
+  \item \url{macro/Unpack_HDF5/a1975/UKF/pipeline/contactSheet.C}: a grid of XY thumbnails of
+        fitted (optionally gated) events labelled with entry, $\theta$, KE and
+        $\chi^2/\mathrm{ndf}$.
+\end{itemize}
+\begin{verbatim}
+root -b -q 'event_png_UKF.C("run_0116_disp", -1)'
+root -b -q 'pipeline/contactSheet.C("/tmp/run_0106_genfitter_gated.root",
+            "pid/deuteron_band.json","/tmp/contact.png",true,6)'
+\end{verbatim}
+(The second command is one line in practice.) Any macro that draws on a \code{TCanvas} can be
+used the same way by adding \code{c->SaveAs("file.png")} and running with \code{-b}.
+
+\section{Pitfalls}
+\label{sec:vis-pitfalls}
+
+\begin{itemize}
+  \item \textbf{Order of construction.} \code{FairRunAna} first, then \code{AtViewerManager},
+        then tabs, then \code{Init()}. Tabs created before the viewer throw; a second viewer
+        aborts the process.
+  \item \textbf{Hidden hits.} The \code{AtTabMain} multi-hit limit defaults to 10; pads with more
+        hits are not drawn in 3D or on the pad plane.
+  \item \textbf{Geometry volume name.} \code{AtTabMain::MakeTab} looks up the volume
+        \code{drift\_volume} with \code{gGeoManager->GetVolume} and sets its transparency
+        without checking the result; a geometry file without a volume of that name dereferences a null pointer.
+  \item \textbf{Trace length.} \code{AtTabMain::DrawWave} copies 512 ADC samples.
+  \item \textbf{Branch type detection.} A branch that is empty in the first five entries is not
+        offered in any menu (``Failed to find type of branch'' in the log).
+  \item \textbf{Parameter changes need a rerun.} Sidebar PSA controls change the PSA object only;
+        press ``Rerun Event''.
+  \item \textbf{Friend files.} With \code{AddFriend}, the friend must be entry-aligned with the
+        main file, or the fit drawn belongs to another event.
+  \item \textbf{\code{AtUKFDisplay}.} \code{SetOptions()} stores a flag string that the drawing
+        code does not read. The display shows the track with most hits but takes the stored fit
+        from the first fitted track of the event, which need not be the same track. The CATIMA
+        model in \code{CreateFitter()} is built with projectile $Z=1$ and a pure hydrogen
+        material for every particle choice, including the alpha.
+  \item \textbf{Exiting GUIs.} The a1975 GUIs (\code{gui\_fit\_dp.C}, the gate drawers) exit with
+        \code{gSystem->Exit(0)} and their launchers do not call \code{gApplication->Run()}; the
+        header of \code{run\_gate\_dp.C} explains that the earlier combination of a nested
+        \code{Run()} and \code{Terminate()} re-executed the macro and reopened the window about
+        twice per second.
+  \item \textbf{Stale comments.} Some drawer comments were copied from the macro they were ported
+        from: the \code{@param} block of \code{gate\_draw\_dp.C} still describes a 14C beam and
+        \code{pid\_plane\_pt\_C14.C}. Trust the function signature for defaults.
+\end{itemize}

@@ -1,0 +1,733 @@
+\chapter{Data model}
+\label{ch:datamodel}
+\begingroup
+\sloppy
+
+This chapter describes the classes that carry data between the tasks of ATTPCROOTv2: what each class
+stores, which task fills it, under which branch name it is written, and how to read it back in a macro.
+The persistent classes live in \code{AtData/} (detector and reconstruction data) and
+\code{AtSimulationData/} (Monte Carlo truth); the PID container \code{AtPIDEvent} lives in
+\code{AtReconstruction/}. Short reference tables with the same information are kept in
+\url{docs/reference/data-model.md} and \url{docs/reference/branch-io-contracts.md}; where those files and
+the source disagree, this chapter follows the source and says so.
+
+\section{Overview: branches, containers and event objects}
+\label{sec:dm-overview}
+
+Every task registers its output with \code{FairRootManager::Register(name, folder, array, persistent)}.
+The registered object is always a \code{TClonesArray}; the branch name and the class of the objects
+inside the array are two different things. Two layouts occur:
+
+\begin{itemize}
+\item \textbf{Event branches.} The reconstruction branches (\code{AtRawEvent},
+  \code{AtEventH}, \code{AtPatternEvent}, \code{AtTrackingEvent}, \code{AtPIDEvent}, \ldots) hold \emph{one} event
+  object in slot 0. The tracks, hits and pads are members of that object, not separate
+  \code{TClonesArray} entries. A task fills the slot with \code{ConstructedAt(0)} or placement
+  \code{new (array[0])}.
+\item \textbf{Point branches.} The simulation branches \code{AtTpcPoint} (\code{AtMCPoint}),
+  \code{MCTrack} (\code{AtMCTrack}) and \code{AtSimulatedPoint} hold \emph{many} objects, one per
+  Geant step, per particle or per electron cluster. The statement in
+  \url{docs/reference/branch-io-contracts.md} that every branch holds one event object at slot 0 is
+  true only for the event branches.
+\end{itemize}
+
+FairRoot writes the persistent branches of one run into a \code{TTree} named \code{cbmsim}; every macro
+cited in this chapter opens that tree. The data flow of a full chain is
+
+\begin{verbatim}
+generators --(AtVertexPropagator)--> Geant (AtTpc)
+     --> AtTpcPoint [AtMCPoint], MCTrack [AtMCTrack]
+AtTpcPoint       --AtClusterizeTask--> AtSimulatedPoint
+AtSimulatedPoint --AtPulseTask-------> AtRawEvent
+  (experimental data: AtUnpackTask --> AtRawEvent)
+AtRawEvent     --AtFilterTask--> AtRawEventFiltered (optional)
+AtRawEvent     --AtPSAtask-----> AtEventH        [AtEvent: hits]
+AtEventH       --AtPRAtask-----> AtPatternEvent  [AtTrack candidates]
+AtPatternEvent --AtPIDTask-----> AtPIDEvent
+AtPatternEvent --AtFitterTask--> AtTrackingEvent [AtFittedTrack]
+                                 (+ AtFitMetadata)
+\end{verbatim}
+
+\section{Common base: AtBaseEvent}
+\label{sec:dm-baseevent}
+
+\code{AtBaseEvent} (\code{AtData/AtBaseEvent.h}, \code{ClassDefOverride(AtBaseEvent, 1)}) derives from
+\code{TNamed} and is the base of \code{AtRawEvent}, \code{AtEvent}, \code{AtPatternEvent} (and through it
+\code{AtFissionEvent}) and \code{AtTrackingEvent}. It holds the information that must follow an event
+through every stage:
+
+\begin{itemize}
+\item \code{fEventID} (\code{GetEventID()}, \code{SetEventID()}); initialised to \code{-1}.
+\item \code{fIsGood} (\code{IsGood()}, default \code{true}) and \code{fIsInGate}
+  (\code{GetIsExtGate()}, default \code{false}).
+\item \code{fTimestamp}, a \code{std::vector<ULong64\_t>} with one element by default; \code{GetTimestamp(i)}
+  returns 0 for an index outside the vector, \code{SetNumberOfTimestamps(n)} resizes it.
+\item \code{fAuxPadMap}, a \code{std::map<std::string, AtAuxPad>} of auxiliary channels (ion chamber,
+  mesh, triggers) addressed by name: \code{AddAuxPad(name)}, \code{GetAuxPad(name)}, \code{GetAuxPads()}.
+\item \code{fEventName}.
+\end{itemize}
+
+Every derived event has a constructor from \code{const AtBaseEvent\&}. \code{AtPSAtask} uses it to copy
+the event ID, flags, timestamps and auxiliary pads from the raw event into the hit event
+(\code{*event = *rawEvent} in \code{AtPSAtask::Exec}), which is how the ion-chamber trace and the event
+number reach the later stages. \code{AtFitterTask::Exec} copies the event ID from the pattern event into
+the tracking event explicitly; the comment there explains that without it a fit of a pre-gated file can
+not be joined back to other per-event data (ion chamber) except by tree index.
+
+\section{Pads and raw events}
+\label{sec:dm-pads}
+
+\subsection{AtPadBase and the pad augments}
+
+\code{AtPadBase} (\code{TObject}, version 1) is an abstract base with a single pure virtual
+\code{Clone()}. Two families derive from it: the pads themselves (\code{AtPad}, \code{AtAuxPad}) and
+\emph{augments}, objects attached to a pad under a string key to carry extra per-pad information. The
+augment classes present in \code{AtData/} are listed in Table~\ref{tab:dm-augments}.
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{p{3.4cm}p{5.4cm}p{5.6cm}}
+\toprule
+Class (version) & Content & Producer and key (from the source) \\
+\midrule
+\code{AtPadArray} (1) & \code{std::array<Double\_t,512>} trace & \code{AtPulse} key \code{"Q"} when
+  charge saving is on; \code{AtPSADeconv} key \code{"Qreco"}; \code{AtPSAIterDeconv} key from
+  \code{SetIterQName} (default \code{"Qreco"}) \\
+\code{AtPadFFT} (1) & real and imaginary parts, $512/2+1$ points each & \code{AtFilterFFT},
+  \code{AtPSADeconv}, \code{AtPSAIterDeconv}, key \code{"fft"}; \code{AtPSADeconv} also
+  \code{"filter"} and \code{"Qreco-fft"} \\
+\code{AtPadValue} (1) & one \code{Double\_t} & \code{AtGRAWUnpacker}, key \code{"lastCell"} \\
+\code{AtPulserInfo} (1) & rise/fall begin, end and magnitude & \code{AtRemovePulser}, key
+  \code{"pulserInfo"} \\
+\code{AtElectronic\-Reference} (1) & an \code{AtPadReference} (CoBo, AsAd, AGET, channel) & no producer
+  found by a search of the source \\
+\code{AtGenericTrace} (1) & variable-length trace from another DAQ & stored in
+  \code{AtRawEvent::fGTraceList}, not as an augment \\
+\bottomrule
+\end{tabular}
+\caption{Classes derived from \code{AtPadBase} other than the pads. Keys are the strings passed to
+\code{AtPad::AddAugment} in the files named.}
+\label{tab:dm-augments}
+\end{table}
+
+\subsection{AtPad and AtAuxPad}
+
+\code{AtPad} (version 3) holds one channel of the pad plane: the pad number \code{fPadNum} (the
+reference number in \code{AtMap}), \code{fSizeID}, the pad centre \code{fPadCoord}, the flags
+\code{fIsValid} and \code{fIsPedestalSubtracted}, the raw trace \code{fRawAdc}
+(\code{std::array<Int\_t,512>}) and the calibrated trace \code{fAdc} (\code{std::array<Double\_t,512>}).
+The trace length of 512 time buckets is fixed by the type. \code{GetADC()} returns \code{fAdc} even when
+the pedestal has not been subtracted; it only writes a debug-level log message in that case.
+
+Augments are kept in the member \code{fPadAugments}, a
+\code{std::map<std::string, std::unique\_ptr<AtPadBase>>}, and are streamed with the pad. \code{AddAugment(name, ptr)} logs an error if the key is already used and then
+replaces it; \code{ReplaceAugment} replaces silently. The templated
+\code{GetAugment<T>(name)} performs the \code{dynamic\_cast} and returns \code{nullptr} if the key is
+absent or the type differs:
+
+\begin{verbatim}
+const auto *q = pad->GetAugment<AtPadArray>("Q");   // nullptr if not saved
+if (q) double v = q->GetArray(100);
+\end{verbatim}
+
+\code{AtAuxPad} derives from \code{AtPad}, adds \code{fAuxName}, and deletes \code{GetPadNum()},
+\code{GetSizeID()} and \code{GetPadCoord()}. The header notes that these deletions are bypassed when the
+object is used through an \code{AtPad} pointer or reference, because the functions are not virtual.
+
+\subsection{AtRawEvent}
+
+\code{AtRawEvent} (version 7) is the output of unpacking and of digitisation. Its members are
+\begin{itemize}
+\item \code{fPadList}, a \code{std::vector<std::unique\_ptr<AtPad>>}; add pads with \code{AddPad(...)}
+  (perfect forwarding to an \code{AtPad} constructor, or a moved \code{unique\_ptr} of a derived type),
+  read them with \code{GetPads()} or \code{GetPad(padNum)}. \code{GetPad} is a linear search over the
+  list and returns \code{nullptr} for a pad that is absent;
+\item \code{fFpnMap}, the fixed-pattern-noise channels keyed by \code{AtPadReference}
+  (\code{AddFPN}, \code{GetFpn}, \code{GetFpnPads});
+\item \code{fGTraceList}, a vector of \code{AtGenericTrace} for other acquisition systems;
+\item \code{fSimMCPointMap}, a \code{std::multimap<Int\_t, std::size\_t>} from pad number to index in
+  the \code{AtTpcPoint} array. This member is marked \code{//!} and is \emph{not} written to disk
+  (Section~\ref{sec:dm-mctruth}).
+\end{itemize}
+
+\section{Hits and hit events}
+\label{sec:dm-hits}
+
+\subsection{AtHit}
+
+\code{AtHit} (\code{TObject}, version 5) is a point in space with charge, produced by a PSA method from
+one pad trace. Its members and accessors are:
+
+\begin{itemize}
+\item position \code{fPosition} (\code{ROOT::Math::XYZPoint}, \code{GetPosition()}) and its variance
+  \code{fPositionVariance} (\code{GetPositionVariance()}, \code{GetPositionSigma()});
+\item charge \code{fCharge} (\code{GetCharge()}) and \code{fChargeVariance};
+  \code{fTraceIntegral} (default \code{-1}), the integral of the whole trace;
+\item \code{fHitID} (\code{GetHitID()}), \code{fPadNum} (\code{GetPadNum()}) and \code{fHitMult}, the
+  number of hits found in the same pad;
+\item time: \code{fTimeStamp} (time bucket, \code{Int\_t}), \code{fTimeStampCorr} (centre of gravity)
+  and \code{fTimeStampCorrInter} (interpolated);
+\item Monte Carlo information: the member \code{fMCSimPointArray}, a vector of the nested
+  struct \code{AtHit::MCSimPoint}, with \code{pointID}, \code{trackID}, \code{energy}, \code{eloss},
+  \code{angle}, \code{A}, \code{Z}.
+\end{itemize}
+
+The hit itself has no cluster or track label; membership of a track is expressed by the
+\code{AtTrack} that contains a copy of the hit.
+
+\paragraph{Coordinate frame.} PSA writes the hit $z$ in the drift frame, measured from the pad plane.
+The comment in \code{AtPSA::CalibrateZ} (\code{AtPSA.cxx}) states that the fitters convert with
+$z_\mathrm{lab} = z_\mathrm{PadPlane} - z_\mathrm{digi}$, and that the optional Spyral-style calibration
+(\code{fWindowTB > 0}) returns the opposite convention. Fitter outputs (vertex, smoothed positions) are
+in the lab frame; compare them with hit positions only after this conversion.
+
+\subsection{AtHitCluster and AtHitClusterFull}
+
+\code{AtHitCluster} (version 4) derives from \code{AtHit} and represents a group of hits assumed to come
+from the same charge deposit. It adds \code{fClusterID}, a $3\times3$ covariance matrix
+\code{fCovMatrix} (\code{GetCovMatrix()}), the running weights used by \code{AddHit}, the charge-weighted
+position \code{fPositionCharge} (\code{GetPositionCharge()}), \code{fLength} (default \code{-999}) and
+\code{fClusterSize}. When a cluster is built with \code{AddHit(const AtHit\&)}, \code{fPosition} is
+updated with weights charge $\times$ 1/variance per coordinate (\code{AtHitCluster::updatePosition}); the
+header comment of \code{AtHitCluster.h} describes \code{fPosition} as unweighted, which does not match
+the code.
+
+The cluster builders in \code{AtTools/AtTrackTransformer.cxx}, which produce the clusters stored on
+pattern-recognition tracks, do not call \code{AddHit}: they compute the position, charge and covariance
+themselves and set them with \code{SetPosition}, \code{SetCharge} and \code{SetCovMatrix}. On those
+clusters \code{GetClusterSize()} stays 0 and \code{GetPositionCharge()} stays at the origin.
+
+\code{AtHitClusterFull} keeps a copy of every added hit and offers further covariance estimates. It has
+a \code{ClassDefOverride(AtHitClusterFull, 1)} but no entry in \code{AtDataLinkDef.h}, so no dictionary
+or streamer is generated for it and it can not be persisted.
+
+\subsection{AtEvent}
+
+\code{AtEvent} (version 6) is the hit-level event written by \code{AtPSAtask}. It holds
+\code{fHitArray} (\code{std::vector<std::unique\_ptr<AtHit>>}), the total charge \code{fEventCharge}
+(default \code{-100}), \code{fRhoVariance}, a pad multiplicity map, and the summed mesh signal \code{fMeshSig}, an
+array of 512 \code{Float\_t} returned by \code{GetMesh()}.
+
+\code{AddHit(...)} creates or moves a hit and, if its ID is still \code{-1}, sets the ID to the position
+at which it was inserted. \code{AtPSA::Analyze} sorts the hits by time stamp after adding them
+(\code{SortHitArrayTime()}), so in the output of PSA the hit ID is generally \emph{not} the position in
+the vector. \code{GetHit(i)} takes a position; \code{GetHits()} returns the vector by const reference.
+\code{GetHitArray()}, which returns a copy, is marked deprecated.
+
+\section{Pattern recognition output}
+\label{sec:dm-pattern}
+
+\subsection{AtTrack}
+
+\code{AtTrack} (\code{TObject}, version 5) is one candidate track. It contains
+\begin{itemize}
+\item \code{fTrackID} (default \code{-1}, see below);
+\item \code{fHitArray}, owned copies of the hits (\code{std::vector<std::unique\_ptr<AtHit>>});
+\item \code{fHitClusterArray}, a \code{std::vector<AtHitCluster>} of clusters built from those hits,
+  which is what the fitters and the PID estimators consume;
+\item \code{fPattern}, a \code{std::unique\_ptr<AtPatterns::AtPattern>} (line, ray, 2D circle, Y or
+  fission pattern, all linked with \code{+} in \code{AtDataLinkDef.h});
+\item geometric estimates from pattern recognition: \code{fGeoThetaAngle}, \code{fGeoPhiAngle},
+  \code{fGeoRadius}, \code{fGeoCenter}, and \code{fChargeSign} ($+1/-1$ from the curvature, 0 unknown);
+\item \code{fIsMerged}, \code{fVertexToZDist}, and the Bragg curve (\code{fBraggCurveValues} and the
+  binned \code{BraggCurve} struct) filled by \code{AtPatternModification}.
+\end{itemize}
+
+Copying an \code{AtTrack} deep-copies the hit array. \code{SortClusterHitArrayZ()} sorts the clusters by
+$z$; \code{AddClusterHit(std::shared\_ptr<AtHitCluster>)} moves the pointee into the vector.
+
+\paragraph{Track ID semantics.} The meaning of \code{GetTrackID()} depends on the pattern-recognition
+algorithm. \code{AtTrackFinderTC} and \code{AtTrackFinderHC} set it to the index of the cluster in the
+clustering output (\code{track.SetTrackID(cluster\_index)}), skip empty clusters, and
+\code{AtTrackFinderTC} can afterwards remove tracks in \code{SelectAndMergeTracks}. The ID is therefore a
+cluster label and can differ from the position of the track in \code{GetTrackCand()}: an event with a
+single track can have track ID 2. \code{AtTrackFinderHDBSCAN} uses a running counter,
+\code{AtSampleConsensus} and \code{AtTrackFinderRiemann} the current number of tracks. Code that
+connects fitted tracks or PID results to pattern tracks must match on the track ID, never on the array
+index. The comments in \code{AtPIDTask.cxx} and in \code{AtTools/AtPID/AtSpyralPID.h} say the same.
+
+\paragraph{No const access to the clusters.} The only accessor for the clusters is
+\begin{verbatim}
+// non-const member, returns a pointer
+std::vector<AtHitCluster> *GetHitClusterArray();
+\end{verbatim}
+There is no const overload. Through a \code{const AtTrack\&}, for example in a loop
+\code{for (const auto \&tr : patternEvent->GetTrackCand())}, the call does not compile; loop with a
+non-const reference instead, as the macros in \code{macro/} do. The same holds for \code{GetMeanTime()},
+\code{GetLinearRange()}, \code{GetFirstPoint()} and \code{GetLastPoint()}, which are also non-const.
+\code{GetHitArray()} has both a const and a non-const overload.
+
+\subsection{AtPatternEvent and AtFissionEvent}
+
+\code{AtPatternEvent} (version 3) holds \code{std::vector<AtTrack> fTrackCand} (\code{GetTrackCand()},
+const and non-const) and the hits not assigned to any track, \code{fNoise}. \code{GetNoiseHits()} is a
+non-const member. \code{AtFissionEvent} (version 1) derives from \code{AtPatternEvent} and adds the beam
+and fragment hits before space-charge correction and the correction strength \code{fLambda}; it is filled
+by \code{AtFissionAnalysis} according to its header.
+
+\section{Fit output}
+\label{sec:dm-fit}
+
+\subsection{AtTrackingEvent}
+
+\code{AtTrackingEvent} (\code{ClassDef} version 1) is written by \code{AtFitterTask}. It stores
+\begin{itemize}
+\item \code{fFittedTrackArray}, a vector of \code{std::unique\_ptr<AtFittedTrack>}
+  (\code{GetFittedTracks()});
+\item \code{fTrackArray}, a copy of the \code{AtTrack} objects that were given to the fitter;
+  \code{EventFit::AtFitter::FitEvent} sets it from the pattern event, and \code{AtGenfitter} with
+  continuity merging sets it to the merged tracks. \code{GetTrackArray()} returns the vector
+  \emph{by value}, so every call copies all tracks and their hits; keep the result in a local variable;
+\item \code{fVertex}, \code{fVertexEnergy} (default \code{-10.0}) and \code{fGeoVertex}.
+\end{itemize}
+\code{AddFittedTrack} assigns the insertion index as track ID only if the fitted track still carries
+\code{-1}. The fitters in the tree (\code{AtGenfitter}, \code{AtFitterUKF}) copy the ID of the source
+\code{AtTrack}. A fitter can also refuse a track (\code{AtGenfitter} returns \code{nullptr} for a fitted
+polar angle outside its window), so \code{GetFittedTracks()} is not parallel to the pattern tracks.
+
+\subsection{AtFittedTrack}
+
+\code{AtFittedTrack} (\code{ClassDef} version 3) is the result for one track. The per-particle members are
+vectors indexed by a particle index (default 0), read with \code{.at()}, so asking for an index that
+was never set throws \code{std::out\_of\_range}:
+
+\begin{itemize}
+\item \code{GetKinematics(i)} and \code{GetKinematicsXtr(i)}: struct \code{Kinematics} with
+  \code{kineticEnergy}, \code{theta}, \code{phi} (all default \code{-1});
+\item \code{GetParticleInfo(i)}: struct \code{ParticleInfo} with \code{idPDG} (\code{TString}),
+  \code{charge}, \code{mass} (amu);
+\item \code{GetVertex(i)}: \code{XYZVector}.
+\end{itemize}
+
+The two kinematics slots do \emph{not} mean the same thing for the two fitters in the tree:
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{p{2.4cm}p{6.0cm}p{6.0cm}}
+\toprule
+Fitter & \code{GetKinematics()} & \code{GetKinematicsXtr()} \\
+\midrule
+\code{AtGenfitter} & raw fit result at the first measurement point & back-extrapolated to the beam axis,
+  including any manual energy-loss correction (the corrected value) \\
+\code{AtFitterUKF} & at the vertex, after back-extrapolation (the corrected value) & at the first
+  cluster, before back-extrapolation \\
+\bottomrule
+\end{tabular}
+\caption{Meaning of the two kinematics slots, from \code{AtGenfitter.cxx} (the \code{ft->SetKinematics}
+block) and \code{AtFitterUKF.cxx} (step 7, ``Build AtFittedTrack'').}
+\label{tab:dm-kinslots}
+\end{table}
+
+The comment in \code{AtGenfitter.cxx} states that every consumer that wants the corrected energy must
+read \code{GetKinematicsXtr()}. A macro that switches between the two fitters must switch slots as well.
+For \code{AtGenfitter} the vertex and the smoothed positions are in the lab frame, in mm (converted from
+genfit's cm in the code).
+
+\code{GetTrackPropertiesStruct()} returns the \code{TrackProperties} struct: \code{initialPosition},
+\code{initialPositionXtr}, \code{extrapolatedDistance}, \code{distancePOCA}, \code{trackLength},
+\code{trackLengthXtr}, \code{estimateTotalCharge}, \code{estimateDeDx} (total charge divided by
+\code{trackLengthXtr} when set through \code{SetTrackPropertiesStruct}), \code{trackPoints} and
+\code{fSmoothedPositions} (\code{GetSmoothedPositions()}). \code{AtGenfitter} and \code{AtFitterUKF}
+fill the smoothed positions; neither calls \code{SetTrackPropertiesStruct} in the code inspected, so the
+remaining fields keep their defaults of \code{-1} for those fitters.
+
+\code{GetTrackMetadata()} returns a reference to the \code{std::unique\_ptr<AtFitTrackMetadata>}, which
+can be null. The class also keeps a set of members and methods marked \code{[[deprecated]]}
+(\code{GetEnergyAngles}, \code{GetStats}, \code{GetTrackProperties}, \ldots) for the layout of earlier
+versions; new code should use the accessors above.
+
+\subsection{AtFitTrackMetadata and AtFitMetadata}
+
+\code{AtFitTrackMetadata} (version 3) holds the statistics of one fit: \code{GetChi2()}, \code{GetNdf()},
+\code{GetPValue()}, \code{GetFitConverged()}, \code{GetTrackID()}, and three flags:
+\begin{itemize}
+\item \code{GetGoodFit()}: the fit passed the fitter's quality cut. Tracks that fail are kept, not
+  dropped; filter on this flag downstream. \code{AtGenfitter} sets it from convergence, $\chi^2/\mathrm{ndf}$
+  and the kinetic-energy window, and always stores \code{PValue} as 0;
+\item \code{GetMatEffects()}: material effects were active in the fit that produced the result;
+\item \code{GetMatEffectsFallback()}: material effects were requested, that fit threw, and the result
+  comes from the retry without material. The header comment recommends excluding these tracks before
+  quoting a resolution.
+\end{itemize}
+\code{AtFitMetadata} (version 1) groups, per event, all metadata of all fits (a
+\code{std::map<Int\_t, vector<unique\_ptr<AtFitTrackMetadata>>>} keyed by track ID). It is written only
+if \code{AtFitterTask::SetFitMetadataBranch(name)} was called. \code{MCFitter::AtMCResult} (version 2)
+derives from \code{AtFitTrackMetadata} and adds the sampled parameter map and the iteration number for
+\code{AtMCFitterTask}. Unlike the other reconstruction branches, the \code{AtMCResult}, \code{SimEvent} and
+\code{SimRawEvent} arrays hold one entry per stored Monte Carlo iteration
+(\code{AtMCFitter::FillResultArrays}), not one event in slot 0.
+
+\section{PID output: AtPIDEvent}
+\label{sec:dm-pidevent}
+
+\code{AtPIDEvent} (\code{TNamed}, \code{ClassDefOverride(AtPIDEvent, 3)}) is written by \code{AtPIDTask}
+and holds four per-track vectors: \code{GetClassic()} (\code{AtTools::AtPIDResult}), \code{GetSpyral()}
+(\code{AtTools::AtSpyralResult}), \code{GetHelix3D()} (\code{AtTools::AtHelix3DResult}) and
+\code{GetCombined()} (\code{AtTools::AtPIDCombinedResult}). \code{GetDefault()} returns the Spyral
+vector. The header documents the version history: version 2 added \code{fHelix3D} and version 3 added
+\code{fCombined}; files written with an older version read back with the new vectors empty.
+\code{fCombined} is filled only when \code{AtPIDTask::SetCombine(true)} is used, \code{fHelix3D} only
+when the 3D estimator runs (default on). Each result struct carries the \code{trackID} of its source
+track. In \code{AtSpyralResult} the member \code{failCode} is marked \code{//!} and is not on disk; the
+comment explains that a streamed member would have changed the file layout. The PID chapter describes
+the content of these structs.
+
+\section{Simulation data}
+\label{sec:dm-sim}
+
+\subsection{AtMCPoint}
+
+\code{AtMCPoint} (version 2) derives from \code{FairMCPoint}, which provides the track ID, position at
+entrance (cm), momentum (GeV), time of flight (ns), length (cm) and energy loss (GeV), as documented in
+the constructor comment. \code{AtMCPoint} adds the volume name (\code{GetVolName()}), copy number,
+\code{GetEIni()} and \code{GetAIni()} (initial energy and angle of the particle, looked up in
+\code{AtVertexPropagator} by \code{AtTpc::addHit}; zero for track ID 0), and \code{GetMassNum()},
+\code{GetAtomicNum()}. Copy construction and assignment are deleted. The detector \code{AtTpc} registers
+the collection as branch \code{AtTpcPoint}, persistent.
+
+\code{AtStack::UpdateTrackIndex} rewrites the track ID of every point after the event so that it
+indexes the stored \code{MCTrack} array. The comment in \code{AtTpc::reactionOccursHere} warns that track
+ID 0 does not always mean the beam: in a reaction event no beam track is added and the first primary,
+the heavy residual, has ID 0.
+
+\subsection{AtMCTrack and AtStack}
+
+\code{AtStack} (registered branch \code{MCTrack}, persistent) stores one \code{AtMCTrack} per kept
+particle with PDG code, mother ID, start momentum, start position and time, and number of points.
+Primaries are always kept; secondaries are filtered by \code{StoreSecondaries} (default \code{kTRUE}),
+\code{SetMinPoints} (default 1), \code{SetEnergyCut} (default 0) and \code{StoreMothers} (default
+\code{kTRUE}, keeps the ancestors of every kept track), as set in the \code{AtStack} constructor.
+
+\subsection{AtSimulatedPoint}
+
+\code{AtSimulatedPoint} (\code{AtDigitization/}, version 3) is the intermediate object between Geant
+points and pad traces: one electron cluster with the index of its \code{AtMCPoint}, an event ID, a
+cluster ID, a charge and a position in (mm, mm, \textmu s) according to the member comment.
+\code{AtClusterizeTask} creates the array with the class name returned by the clusterizer
+(\code{AtSimulatedPoint}, or \code{AtSimulatedLine} for \code{AtClusterizeLine}).
+
+\subsection{AtVertexPropagator}
+
+\code{AtVertexPropagator} is a singleton (\code{AtVertexPropagator::Instance()}) that carries state
+between the generators of one event and between generation and transport. It is never written to a
+branch, although it is linked with \code{+} and has \code{ClassDef} version 2. It holds
+\begin{itemize}
+\item the reaction vertex (\code{GetVx/Vy/Vz}), the beam entrance point (\code{GetInVx/...}), the beam
+  momentum and energy at the vertex (\code{GetPx/Py/Pz}, \code{GetEnergy}), set by
+  \code{AtTpc::startReactionEvent} when the beam has lost the randomly drawn energy
+  \code{GetRndELoss()};
+\item the beam mass, nominal beam energy, $A$ and $Z$;
+\item per-track energy and angle maps (\code{SetTrackEnergy(trackID, E)}, \code{GetTrackEnergy}),
+  filled by the reaction generators (\code{AtTPC2Body}, \code{AtTPCXSReader}, \code{AtTPC\_d2He},
+  \ldots) and read by \code{AtTpc::addHit} and by decay generators;
+\item the momenta and excitation energies of scattered and recoil particles, validity flags and the
+  $d$--$^2$He vertex.
+\end{itemize}
+The flag \code{IsBeamEvent()} alternates: \code{AtReactionGenerator::ReadEvent} calls \code{EndEvent()},
+which inverts it, when the generator is flagged as the final one. The comment in \code{AtTpc.cxx} warns
+that, because the flag is flipped during generation, its sense is inverted by the time Geant steps.
+
+\section{Monte Carlo truth on hits}
+\label{sec:dm-mctruth}
+
+The \code{AtHit::MCSimPoint} entries are filled only when all of the following hold:
+\begin{enumerate}
+\item \code{AtPulseTask::SetSaveMCInfo()} was called (default off), so that the task fills the pad to
+  point map and stores it with \code{AtRawEvent::SetSimMCPointMap};
+\item \code{AtPSAtask} runs in the \emph{same} \code{FairRunAna} as \code{AtPulseTask}, because
+  \code{fSimMCPointMap} is transient (\code{//!}) and is lost when the raw event is written;
+\item the \code{AtTpcPoint} array is available to \code{AtPSAtask} under the branch name set by
+  \code{SetSimlulatedPointBranch} (default \code{"AtTpcPoint"}; note the spelling of the setter).
+\end{enumerate}
+\code{AtPSA::TrackMCPoints} then adds one \code{MCSimPoint} per \code{AtMCPoint} that deposited charge
+in the pad of the hit, without checking the time bucket.
+
+\section{Branch input/output of the standard tasks}
+\label{sec:dm-branches}
+
+Table~\ref{tab:dm-branches} lists the default branch names and persistence of the standard tasks,
+taken from the constructors, member initialisers and \code{Init()} methods. All defaults can be changed
+with the setters named in the last column, except where the column says ``fixed''.
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\begin{tabular}{p{3.3cm}p{3.0cm}p{4.0cm}p{4.0cm}}
+\toprule
+Task & Input branch & Output branch [class] & Persist default; setters \\
+\midrule
+\code{AtTpc} (detector) & -- & \code{AtTpcPoint} [\code{AtMCPoint}, many] & true; fixed \\
+\code{AtStack} & -- & \code{MCTrack} [\code{AtMCTrack}, many] & true; fixed \\
+\code{AtClusterizeTask} & \code{AtTpcPoint} & \code{AtSimulatedPoint} [\code{AtSimulatedPoint},
+  many] & false; names fixed, \code{SetPersistence} \\
+\code{AtPulseTask} & \code{AtSimulated\-Point}, \code{AtTpcPoint} & \code{AtRawEvent}
+  [\code{AtRawEvent}]; re-registers \code{AtTpcPoint} & true (\code{AtTpcPoint}: false);
+  \code{SetOutputBranch}, \code{SetPersistence}, \code{SetPersistence\-AtTpcPoint} \\
+\code{AtUnpackTask} & external file & \code{AtRawEvent} [\code{AtRawEvent}] & true;
+  \code{SetOuputBranchName}, \code{SetPersistence} \\
+\code{AtFilterTask} & \code{AtRawEvent} & \code{AtRawEventFiltered} [\code{AtRawEvent}] & false;
+  \code{SetInputBranch}, \code{SetOutputBranch} \\
+\code{AtPSAtask} & \code{AtRawEvent} (+ \code{AtTpcPoint} if present) & \code{AtEventH}
+  [\code{AtEvent}] & false; \code{SetInputBranch}, \code{SetOutputBranch} \\
+\code{AtDataCleaning\-Task} & \code{AtEventH} & \code{AtEventCleaned} [\code{AtEvent}] & true;
+  \code{SetInputBranch}, \code{SetOutputBranch} \\
+\code{AtSpaceCharge\-CorrectionTask} & \code{AtEventH} & \code{AtEventCorrected} [\code{AtEvent}] &
+  true; \code{SetInputBranch}, \code{SetOutputBranch} \\
+\code{AtPRAtask} & \code{AtEventH} & \code{AtPatternEvent} [\code{AtPatternEvent}] & false;
+  \code{SetInputBranch}, \code{SetOutputBranch} \\
+\code{AtSampleConsensus\-Task} & \code{AtEventH} & \code{AtPatternEvent} [\code{AtPatternEvent}] &
+  false; \code{SetInputBranch}, \code{SetOutputBranch} \\
+\code{AtRansacTask} & \code{AtEventH} & \code{AtPatternEvent} [\code{AtPatternEvent}] & false;
+  \code{SetInputBranchName}, \code{SetOutputBranchName} \\
+\code{AtPattern\-ModificationTask} & \code{AtPatternEvent} (+ \code{AtRawEvent}, \code{AtEvent}) &
+  \code{AtPatternEventModified} [\code{AtPatternEvent}] & false; \code{SetPersistence} \\
+\code{AtPIDTask} & \code{AtPatternEvent} & \code{AtPIDEvent} [\code{AtPIDEvent}] & true;
+  \code{SetInputBranch}, \code{SetOutputBranch} \\
+\code{AtFitterTask} & \code{AtPatternEvent} (+ optional raw/hit event) & \code{AtTrackingEvent}
+  [\code{AtTrackingEvent}]; optional metadata [\code{AtFitMetadata}] & false; \code{SetInputBranch},
+  \code{SetOutputBranch}, \code{SetRawEventBranch}, \code{SetEventBranch},
+  \code{SetFitMetadataBranch} \\
+\code{AtMCFitterTask} & \code{AtPatternEvent} & \code{AtMCResult} [\code{AtMCResult}, many],
+  \code{SimEvent} [\code{AtEvent}, many], \code{SimRawEvent} [\code{AtRawEvent}, many] & true, false, false;
+  \code{SetPatternBranchName}, \code{SetSave*} \\
+\bottomrule
+\end{tabular}
+\caption{Default branches of the standard tasks. ``many'' marks point branches with one object per
+entry of the \code{TClonesArray}; all other branches hold one event in slot 0.}
+\label{tab:dm-branches}
+\end{table}
+
+Three consequences of the defaults are worth stating:
+\begin{itemize}
+\item \code{AtPSAtask}, \code{AtPRAtask} and \code{AtFitterTask} are \emph{not} persistent by default.
+  A reconstruction macro must call \code{SetPersistence(kTRUE)} on every task whose output it wants on
+  disk.
+\item \code{AtPRAtask}, \code{AtSampleConsensusTask} and \code{AtRansacTask} write the same default
+  branch; only one can run per chain unless the names are changed.
+\item The fitter task reads \code{AtPatternEvent} by default. To fit the output of
+  \code{AtPatternModificationTask}, set \code{SetInputBranch("AtPatternEventModified")}.
+\end{itemize}
+
+\section{Empty events and repeated entries}
+\label{sec:dm-repeat}
+
+A task that returns from \code{Exec} before clearing its output array leaves the object of the previous
+event in the array, and FairRoot writes that object again. Whether this happens depends on the task:
+
+\begin{itemize}
+\item \code{AtPRAtask::Exec} calls \code{fPatternEventArray.Delete()} first and creates an
+  \code{AtPatternEvent} only if the number of hits $n$ satisfies $10 < n < 5000$ (\code{fMinNumHits},
+  \code{fMaxNumHits}) and the algorithm returned an event. Otherwise the pattern array is empty for that
+  event.
+\item \code{AtPIDTask::Exec} also calls \code{Delete()} first, so for such an event the \code{AtPIDEvent}
+  array is empty.
+\item \code{AtFitterTask::Exec} returns immediately when the pattern array is empty, \emph{before}
+  \code{fTrackingEventArray.Delete()}. The \code{AtTrackingEvent} of the previous event therefore stays
+  in slot 0 and is written again in the current entry, including its event ID.
+\item \code{AtPSAtask::Exec} returns before touching its output when the raw-event array is empty, with
+  the same effect on \code{AtEventH}.
+\end{itemize}
+
+In fit output trees this shows up as an \code{AtTrackingEvent} repeated in consecutive entries, the
+repeated copy sitting next to an empty \code{AtPIDEvent} array. A macro that loops over
+\code{GetFittedTracks()} of every entry counts those tracks twice. Two protections work: skip entries
+whose \code{AtPIDEvent} array is empty, or compare the event ID of the tracking event with the one of the
+previous entry. The macro in Section~\ref{sec:dm-reading} uses the first.
+
+\section{Reading the output in a macro}
+\label{sec:dm-reading}
+
+Open the file, take the \code{cbmsim} tree, give each branch a \code{TClonesArray} pointer, and cast slot
+0 to the event class. The libraries must be loaded first (\code{gSystem->Load("libAtReconstruction.so")}
+loads its dependencies, among them the \code{AtData} dictionary). A minimal hit loop, from
+\url{macro/Unpack_HDF5/a1975/D2_UKF/_archive/ckhits.C} (reformatted):
+
+\begin{verbatim}
+auto f = TFile::Open("/mnt/f/a1975/reco_d2/run_0300_psa_" + tag + ".root");
+auto t = (TTree *)f->Get("cbmsim");
+TClonesArray *ar = nullptr;
+t->SetBranchAddress("AtEventH", &ar);
+for (long i = 0; i < n; i++) {
+   t->GetEntry(i);
+   auto e = (AtEvent *)ar->At(0);
+   if (e) hpe.push_back(e->GetHits().size());
+}
+\end{verbatim}
+
+A track and cluster loop over \code{AtPatternEvent}, from
+\url{macro/Unpack_HDF5/a1975/UKF/pipeline/praDump_a1975.C}. Note the non-const loop variable required by
+\code{GetHitClusterArray()}:
+
+\begin{verbatim}
+auto *arr = new TClonesArray("AtPatternEvent");
+t->SetBranchAddress("AtPatternEvent", &arr);
+for (Long64_t i = 0; i < t->GetEntries(); ++i) {
+   t->GetEntry(i);
+   auto *pe = (AtPatternEvent *)arr->At(0);
+   if (pe)
+      for (auto &tr : pe->GetTrackCand()) {
+         auto *cl = tr.GetHitClusterArray();
+         nClus += cl->size();
+         for (auto &c : *cl) {
+            auto p = c.GetPosition();
+            cks += p.X() + p.Y() + p.Z();
+         }
+         rsum += tr.GetGeoRadius();
+      }
+}
+\end{verbatim}
+
+Fitted tracks joined to PID results by track ID, from
+\url{macro/Unpack_HDF5/a1975/D2_UKF/ex_dt_a1975.C} (lines 126--201, shortened). The test on the
+entry counts of both arrays skips the repeated entries of Section~\ref{sec:dm-repeat}, and the map
+implements the match on track ID:
+
+\begin{verbatim}
+TTree *tu = (TTree *)fu->Get("cbmsim");
+TClonesArray *te = nullptr, *pe = nullptr;
+tu->SetBranchAddress("AtTrackingEvent", &te);
+tu->SetBranchAddress("AtPIDEvent", &pe);
+for (Long64_t i = 0; i < N; ++i) {
+   tu->GetEntry(i);
+   if (pe->GetEntries() == 0 || te->GetEntries() == 0)
+      continue;
+   auto *pidev = (AtPIDEvent *)pe->At(0);
+   auto *ev = (AtTrackingEvent *)te->At(0);
+   std::map<int, AtFittedTrack *> fmap;
+   for (auto &ft : ev->GetFittedTracks())
+      if (ft) fmap[ft->GetTrackID()] = ft.get();
+   for (auto &sr : pidev->GetSpyral()) {
+      if (!sr.valid) continue;
+      auto it = fmap.find(sr.trackID);
+      if (it == fmap.end()) continue;
+      auto *ft = it->second;
+      auto &k = ft->GetKinematicsXtr(); // genfit: back-extrapolated
+      double ndf = ft->GetTrackMetadata()->GetNdf();
+      double chi2 = ft->GetTrackMetadata()->GetChi2();
+      ...
+\end{verbatim}
+
+When reading the fitter output, decide which kinematics slot to use from
+Table~\ref{tab:dm-kinslots}, and check \code{GetTrackMetadata()} for \code{nullptr} if the file may come
+from a fitter that does not set it.
+
+\section{LinkDef conventions and persistence}
+\label{sec:dm-linkdef}
+
+Each library has a \code{*LinkDef.h} from which rootcling generates the dictionary. The suffix of each
+entry decides what is generated:
+\begin{itemize}
+\item \code{\#pragma link C++ class X + ;} generates the dictionary with a full I/O streamer. This is
+  needed for any class written to a file, directly or as a member of a written class.
+\item \code{\#pragma link C++ class X - ! ;} generates reflection only: \code{-} suppresses the streamer
+  and \code{!} the \code{operator>>}.
+\end{itemize}
+The project rule in \url{.claude/CLAUDE.md} and \url{docs/contributing/code-style.md} is to use
+\code{+} only for classes written to disk and \code{-!} for tasks, algorithms and models, and to use the
+ROOT typedefs (\code{Int\_t}, \code{Double\_t}) only in persisted classes. The existing code does not
+follow the rule everywhere: many tasks are linked with \code{+}, for example \code{AtPSAtask},
+\code{AtPRAtask}, \code{AtFitterTask} and \code{AtPIDTask} in \code{AtReconstructionLinkDef.h} and
+\code{AtPulseTask}, \code{AtClusterizeTask} and \code{AtUnpackTask} in their libraries. \code{CLAUDE.md}
+cites \code{AtFitterTask} as an example of \code{-!}, which does not match the LinkDef. Apply the rule
+to new classes.
+
+Inside a persisted class, a member marked with \code{//!} in its comment is transient: it is not
+streamed and has its default value after reading. The transient members relevant to analysis are
+\code{AtRawEvent::fSimMCPointMap} and \code{AtSpyralResult::failCode}. Every class that is to be
+persisted must also appear in the LinkDef; \code{AtHitClusterFull} has a \code{ClassDef} but no LinkDef
+entry and therefore cannot be written.
+
+The result structs stored in \code{AtPIDEvent} are linked as structs with \code{+} in
+\code{AtTools/AtToolsLinkDef.h}, and the vectors of three of them in
+\code{AtReconstructionLinkDef.h}. \code{AtData} links \code{std::vector<ROOT::Math::XYZPoint>} for the
+smoothed positions.
+
+\subsection{Schema evolution}
+
+No \code{\#pragma read} rules exist in the LinkDef files; the classes rely on ROOT's automatic schema
+evolution, in which a member missing from an older file keeps the value set by the default
+constructor. The project rule (\code{docs/contributing/code-style.md}) is to increment the
+\code{ClassDef} version whenever the member layout of a streamed class changes. The current versions of
+the main classes are given in Table~\ref{tab:dm-versions}, with the changes that the code comments or
+the git history document.
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{p{3.4cm}p{1.2cm}p{9.8cm}}
+\toprule
+Class & Version & Documented changes \\
+\midrule
+\code{AtRawEvent} & 7 & -- \\
+\code{AtEvent} & 6 & -- \\
+\code{AtHit} & 5 & -- \\
+\code{AtHitCluster} & 4 & -- \\
+\code{AtPad} & 3 & -- \\
+\code{AtPatternEvent} & 3 & -- \\
+\code{AtTrack} & 5 & 4 $\to$ 5 added \code{fChargeSign} (commit 1fa0f5ae) \\
+\code{AtTrackingEvent} & 1 & -- \\
+\code{AtFittedTrack} & 3 & 2 $\to$ 3 added \code{fSmoothedPositions} to \code{TrackProperties} (commit
+  8927b00a) \\
+\code{AtFitTrackMetadata} & 3 & 1 $\to$ 2 added \code{fGoodFit} (273b9b1e); 2 $\to$ 3 added the
+  material-effects flags (a2b14d8b) \\
+\code{AtPIDEvent} & 3 & 2 added \code{fHelix3D}; 3 added \code{fCombined} (header comment) \\
+\code{AtMCPoint} & 2 & -- \\
+\code{AtMCResult} & 2 & -- \\
+\bottomrule
+\end{tabular}
+\caption{\code{ClassDef} versions in the current source. A dash means that no change is documented in
+the code comments; earlier history was not traced.}
+\label{tab:dm-versions}
+\end{table}
+
+The classes \code{AtTrackingEventOld}, \code{AtFittedTrackOld} (declared \code{[[deprecated]]}) and
+\code{MCFitter::AtMCResultOld} are still linked with \code{+}. They are the layouts used before the
+fitter refactoring (commit 3d7023d3, according to the git log of \code{AtFittedTrackOld.h}), and are
+used by \code{AtFitterTaskOld} and \code{AtMCFitterTaskOld}; keep them to read files written with that
+code.
+
+\section{Helpers: AtContainerManip and the data observer}
+\label{sec:dm-helpers}
+
+\code{AtData/AtContainerManip.h} (namespace \code{ContainerManip}) contains templates used throughout the
+code to move between containers of objects and of \code{unique\_ptr}: \code{GetObjectVector} (copies,
+used by \code{AtTrack::GetHitArrayObject()}), \code{GetPointerVector}, \code{GetConstPointerVector},
+\code{MoveFromVector}, \code{GetMedian}, and \code{SetHistFromData}/\code{CreateHistFromData} to put an
+array into a histogram. In the current source \code{CreateHistFromData} ignores its \code{xMin} and
+\code{xMax} arguments and always uses the range $[0, n]$.
+
+\code{AtDataSubject.h} and \code{AtDataObserver.h} define the observer pattern in namespace
+\code{DataHandling}: an \code{AtSubject} keeps a set of \code{AtObserver} pointers and calls
+\code{Notify()} on change; \code{AtSimpleType<T>} wraps a value and notifies only when it changes. These
+classes are not persisted; their users are the event-display classes in \code{AtEventDisplay/}
+(\code{AtViewerManager}, the tabs).
+
+\section{Pitfalls}
+\label{sec:dm-pitfalls}
+
+\begin{itemize}
+\item \textbf{Track ID is not an index.} With \code{AtTrackFinderTC} and \code{AtTrackFinderHC} the
+  track ID is a cluster label. Join fitted tracks, PID results and pattern tracks on
+  \code{GetTrackID()} / \code{trackID}.
+\item \textbf{Repeated tracking events.} \code{AtFitterTask} rewrites the previous
+  \code{AtTrackingEvent} for an event without pattern output. Skip entries with an empty
+  \code{AtPIDEvent} array, or check the event ID.
+\item \textbf{Kinematics slots.} \code{GetKinematics()} is raw for \code{AtGenfitter} and corrected for
+  \code{AtFitterUKF}; \code{GetKinematicsXtr()} is the opposite.
+\item \textbf{No const cluster accessor.} \code{AtTrack::GetHitClusterArray()} is non-const; loop over
+  tracks with a non-const reference.
+\item \textbf{By-value getters.} \code{AtTrackingEvent::GetTrackArray()} and \code{AtEvent::GetHitArray()}
+  return copies.
+\item \textbf{Hit ID after PSA.} Hits are sorted by time after insertion; the hit ID is not the position
+  in \code{GetHits()}.
+\item \textbf{Cluster bookkeeping.} Clusters made by \code{AtTrackTransformer} report
+  \code{GetClusterSize() == 0}.
+\item \textbf{Persistence defaults.} PSA, pattern recognition and fit tasks do not write their output
+  unless \code{SetPersistence(kTRUE)} is called.
+\item \textbf{MC truth on hits} needs \code{SetSaveMCInfo()} and PSA in the same run as digitisation.
+\item \textbf{Frames.} Hit $z$ is in the drift frame; fitter vertices and smoothed positions are in the
+  lab frame.
+\end{itemize}
+\endgroup

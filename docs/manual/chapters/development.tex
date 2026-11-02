@@ -1,0 +1,82 @@
+\chapter{Extending the framework}
+\label{ch:development}
+
+This chapter summarises the rules for adding code to ATTPCROOT. The reference pages in \code{docs/contributing/}
+and \code{docs/tooling/} hold the same rules in more detail.
+
+\section{Libraries and dictionaries}
+
+Each module is a CMake shared library with a ROOT dictionary. Its \code{CMakeLists.txt} lists the sources, the
+dependencies and the LinkDef file, and registers the library and its tests:
+\begin{verbatim}
+set(LIBRARY_NAME MyModule)
+set(SRCS MyClass.cxx MyTask.cxx)
+set(DEPENDENCIES ATTPCROOT::AtData ROOT::Core FairRoot::Base)
+set(TEST_SRCS MyClassTest.cxx)
+attpcroot_generate_tests(${LIBRARY_NAME}Tests
+   SRCS ${TEST_SRCS} DEPS ${LIBRARY_NAME})
+generate_target_and_root_library(${LIBRARY_NAME}
+   LINKDEF ${LIBRARY_NAME}LinkDef.h SRCS ${SRCS} DEPS_PUBLIC ${DEPENDENCIES})
+\end{verbatim}
+A new module directory is added to the top-level \code{CMakeLists.txt} with \code{add\_subdirectory}, and
+\code{ATTPCROOT::MyModule} to the dependencies of every module that uses it.
+
+\paragraph{LinkDef suffixes.} Every class in a \code{*LinkDef.h} must carry the right suffix:
+\begin{itemize}
+\item \code{ClassName +;} generates a full I/O streamer. Use it only for classes written to a ROOT file (stored in a
+  branch): \code{AtHit}, \code{AtEvent}, \code{AtRawEvent}, \code{AtMCPoint}, the PID result structures.
+\item \code{ClassName -!;} gives reflection only, with no streamer. Use it for everything else: tasks, algorithms,
+  models, samplers. Default to \code{-!} unless the class is persisted.
+\end{itemize}
+A persisted class that changes its layout must increment its \code{ClassDef} version, so that older files are read
+with schema evolution (for example \code{AtPIDEvent} went from version 2 to 3 when the combined PID was added; older
+files read back with the new vector empty).
+
+\paragraph{Types.} Non-persisted classes use \code{bool}, \code{int}, \code{double}, \code{std::string}; persisted
+data classes use the ROOT typedefs (\code{Bool\_t}, \code{Int\_t}, \code{Double\_t}). Persisted classes in this tree
+already use STL containers and \code{std::unique\_ptr} where dictionaries support them (\code{AtEvent} stores its hits
+in \code{std::vector<std::unique\_ptr<AtHit>>}); follow the pattern of the owning module.
+
+\section{Tasks}
+
+Most processing steps are \code{FairTask}s with the same structure: \code{Init()} retrieves the input branch from the
+\code{FairRootManager} and registers the output branch; \code{SetParContainers()} requests run-time parameter
+containers when needed; \code{Exec()} clears the output, reads the current input and fills the output. Objects read
+from the \code{FairRootManager} are owned by the framework: never delete them or wrap them in smart pointers. Macros
+create tasks with \code{new} because \code{AddTask} takes ownership; inside a task, owned algorithms are usually held
+in a \code{std::unique\_ptr}. A task that reads or writes documented branches must update
+\code{docs/reference/branch-io-contracts.md}.
+
+A new option on an existing task should default to the old behaviour, so that every existing production is
+unchanged until someone switches it on. The PID options of Chapter~\ref{ch:pid} follow this rule.
+
+\section{Tests}
+
+Unit tests use GoogleTest and live next to the code they test: the tests of \code{AtHelix3D} are in
+\code{AtTools/AtPID/AtHelix3DTest.cxx}. They are registered with \code{attpcroot\_generate\_tests} and run by \code{ctest}. They must not
+read external files or use the network: put small inputs inline (the pad-gain parser test reads its input from an
+\code{std::istringstream}). Keep algorithms free of FairRoot where possible so they can be tested directly; the PID
+combination rule is a plain function, \code{AtTools::CombinePID}, for this reason. Integration tests that need data or
+geometry are ROOT macros in \code{macro/tests/}, run by \code{macro/tests/runAllTest.sh}.
+
+\section{Style}
+
+Libraries are named after their directory (\code{AtFoo} builds \code{libAtFoo}); classes outside a namespace carry the
+\code{At} prefix; data members carry an \code{f} prefix. Code is formatted with \code{clang-format-17} and the
+repository \code{.clang-format} (LLVM based, 3-space indent, 120 columns); \code{scripts/formatAll.sh} formats the
+changed files. \code{.clang-tidy} configures the static analysis. Pull requests target \code{develop}, are merged
+fast-forward only, and must pass \code{clang-format}, \code{clang-tidy} and the unit tests. Commit messages are in the
+imperative mood and at most 72 characters in the subject line.
+
+\section{Documentation}
+
+Two forms of documentation live in \code{docs/}: short reference pages in Markdown (\code{docs/index.md} is the entry
+point) and this manual (\code{docs/manual/}). The manual is built with
+\begin{verbatim}
+cd docs/manual
+pdflatex attpcroot_manual.tex && pdflatex attpcroot_manual.tex
+\end{verbatim}
+Each chapter is a separate file in \code{docs/manual/chapters/}; \code{test\_chapter.sh <name>} compiles one chapter
+alone and reports errors and overfull lines. The style rules are in \code{docs/manual/STYLE.md}: plain LaTeX, every
+statement backed by the code, defaults quoted from the source. When a change alters the behaviour of a component,
+update its chapter in the same commit.

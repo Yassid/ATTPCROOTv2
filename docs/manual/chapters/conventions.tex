@@ -1,0 +1,117 @@
+\chapter{Conventions}
+\label{ch:conventions}
+
+Most silent errors in an AT-TPC analysis come from mixing coordinate frames, field signs or units. This chapter
+collects the conventions used in the framework. Where a convention was measured on a particular data set rather
+than fixed by the code, it says so; such values must be re-measured for a new set-up.
+
+\section{Coordinate frames}
+
+\paragraph{Pad plane and beam axis.} $x$ and $y$ lie in the pad plane; the beam travels along $z$, on or near the
+axis $x = y = 0$. Pad positions come from the pad map (\code{AtMap::CalcPadCenter}).
+
+\paragraph{Digitisation frame ($z_\mathrm{digi}$).} The pulse-shape analysis converts the time bucket of a pulse into
+the \emph{drift length}: \code{AtPSA::CalculateZGeo} returns
+\begin{equation}
+  z_\mathrm{digi} = Z_\mathrm{pad\,plane} - (\mathrm{TB}_\mathrm{entrance} - t_\mathrm{peak})\,
+  \Delta t_\mathrm{TB}\, v_\mathrm{drift},
+\end{equation}
+with \code{ZPadPlane}, \code{TBEntrance} and the drift velocity from \code{AtDigiPar}. $z_\mathrm{digi} = 0$ at the pad
+plane and $z_\mathrm{digi} = Z_\mathrm{pad\,plane}$ at the far end of the drift volume. Hits (\code{AtHit}) and track
+points are stored in this frame.
+
+\paragraph{Lab frame ($z_\mathrm{lab}$).} Physics quantities -- vertex position, polar angle -- are expressed along
+the beam: $z_\mathrm{lab} = Z_\mathrm{pad\,plane} - z_\mathrm{digi}$. The fitters apply this transform
+(\code{SetZPadPlane} on \code{AtGenfitter}; \code{SetZTransform(-1, ZPadPlane)} on \code{AtHelix3D}, through
+\code{AtPIDTask::SetZPadPlane}). This value is set separately from the parameter file and the two need not agree:
+\code{ATTPC.a1975\_deuterium\_dv1104.par} has \code{ZPadPlane} = 971.7312~mm, which follows from its drift velocity
+and two time-bucket anchors, while \code{fitGenfitter\_a1975\_deuterium.C} calls \code{SetZPadPlane(1000.0)} and the
+default transform of \code{AtHelix3D} also uses 1000. A difference is a constant offset of $z_\mathrm{lab}$: it does not
+change angles or momenta, but it does shift the vertex position. Check which value applies when comparing vertices
+between chains or with a beam energy-loss calculation. Internally, AtHelix3D's centroids are in the transformed frame.
+
+\paragraph{Spyral's $z$ branch.} \code{AtPSA} can instead use a two-point $z$ calibration copied from Spyral
+(\code{SetSpyralZ}). That branch returns 0 at the beam \emph{window} and the detector length at the Micromegas -- the
+opposite of \code{CalculateZGeo}. A chain that enables it and then applies $z_\mathrm{lab} = Z_\mathrm{pad\,plane} -
+z_\mathrm{digi}$ gets a mirrored $z_\mathrm{lab}$. No production macro enables it.
+
+\paragraph{Reversed detector.} When the beam enters through the pad plane (\code{ReverseDrift}), the digitisation
+keeps $z_\mathrm{digi} = Z_\mathrm{pad\,plane} - z_\mathrm{beam}$, so the hit cloud and every downstream convention
+are unchanged; only the drift length of a given point differs. See Chapter~\ref{ch:parameters}.
+
+\section{Directions and angles}
+
+\paragraph{Polar angle.} $\theta$ is measured from the beam direction ($+z_\mathrm{lab}$). A track is
+\emph{backward} when its vertex end has the higher $z_\mathrm{lab}$.
+
+\paragraph{Spyral direction.} \code{AtSpyralResult::direction} is 0 (forward) when the vertex is at the
+\emph{lowest} $z_\mathrm{digi}$, 1 (backward) otherwise, $-1$ when undecided.
+
+\paragraph{Pattern-recognition direction.} The forward/backward call of \code{AtPRA} (\code{GeoTheta}) comes from the
+sign of one fitted line; see Chapter~\ref{ch:patternrecognition}. AtHelix3D decides the vertex end by a two-of-three
+vote instead (Chapter~\ref{ch:pid}).
+
+\paragraph{Rotation sense.} AtHelix3D's rotation-sense vote expects the track, travelling inward from the vertex end,
+to turn with a given sense in the digitisation $x$--$y$ plane (\code{SetExpectedSense}, default $+1$). On a1975 this
+was measured as $+1$ for both data and simulation at 2.85~T. It must be re-measured for another field, charge sign or
+geometry.
+
+\section{Magnetic-field sign}
+
+\code{AtDigiPar} carries only the magnitude of the field. The sign is set where it is needed:
+\begin{itemize}
+\item in the simulation, through the field object of the transport macro (for example
+  \code{AtConstField::SetField(0, 0, bFieldkG)} with $-28.5$~kG in \code{C16\_dt\_sim.C}, generated in the data
+  convention so that tracks turn the same way as in the data);
+\item in the fitters, through the field argument (\code{AtGenfitter}, $-2.85$ for the a1975 data) or
+  \code{SetBFieldSign} (\code{AtMCQMinimization} and the UKF chain).
+\end{itemize}
+The wrong sign does not always fail loudly: a fit can converge to a wrong momentum, and in \code{AtMCQMinimization} a
+simulated track curls away from the data and no set of parameters brings it back. Check the sign first when fits look
+wrong. The cases measured so far are tabulated in Section~\ref{sec:fit-frames}.
+
+On the a1975 simulation, the reconstructed polar angle of Spyral came out as $180^\circ - \theta_\mathrm{true}$ and
+the field sign of the fitters had to be $+1$ for that simulation and $-1$ for the data; the sign belongs to the pair of
+simulation field and fitter, not to ``simulation'' as such. Matching reconstructed angles
+directly against truth without accounting for this gives zero acceptance, which is how the effect shows up. Measure
+the relation between reconstructed and true angles on the simulation of each new set-up before using it.
+
+\section{Units}
+
+\begin{center}
+\small
+\begin{tabular}{p{0.32\textwidth}p{0.6\textwidth}}
+\toprule
+Quantity & Unit \\
+\midrule
+lengths, positions & mm (hits, tracks, fitters); cm in \code{AtDigiPar} drift velocity (cm/$\mu$s) and in Geant4
+  geometry \\
+energies & MeV (MeV per nucleon where a generator says so) \\
+magnetic field & tesla in the reconstruction; kG in \code{AtConstField} \\
+rigidity & T\,m \\
+gas density & kg/m$^3$ in \code{AtDigiPar} (numerically equal to mg/cm$^3$); g/cm$^3$ in \code{AtELossCATIMA} --
+  a factor 1000 between the two \\
+time & time buckets in traces; $\mu$s for peaking time and \code{TBTime} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Masses}
+
+\paragraph{Generator masses.} The AT-TPC simulation macros pass ion masses to \code{AtTPCIonGenerator} in atomic
+mass units although the underlying \code{FairIon} parameter is documented in GeV. The convention is consistent across
+the macros; verify the beam energy from the Monte Carlo truth when setting up a new simulation.
+
+\paragraph{Atomic and nuclear masses.} In a two-body Q value the electron masses cancel only if the convention is
+consistent: with \emph{atomic} masses for the heavy particles, the light particles must also be atomic, or all four
+must be nuclear. Mixing them shifts the Q value by 0.511~MeV per unbalanced electron, which reads as a calibration
+offset. The test costs nothing: compute Q for elastic scattering from the masses in the code; it must be exactly zero.
+
+\section{Track identifiers and order}
+
+\begin{itemize}
+\item Match PID results, fits and pattern tracks on \code{trackID}, never on array positions.
+\item Hits in a pattern track come in drift-time order. Within one time bucket the order is arbitrary, which
+  matters for nearly flat tracks and for fitters that rely on the hit order
+  (Chapters~\ref{ch:patternrecognition} and \ref{ch:fitting}).
+\end{itemize}

@@ -1,0 +1,852 @@
+\chapter{Simulation}
+\label{ch:simulation}
+
+This chapter describes the simulation chain of ATTPCROOTv2, from the generation of a beam
+particle to the digitized pad traces that the reconstruction reads. The chain has two stages that
+run as separate jobs:
+
+\begin{enumerate}
+  \item \emph{Transport.} A \code{FairRunSim} job generates primaries with one or more generators,
+    transports them through the detector geometry with a Virtual Monte Carlo (VMC) engine
+    (normally Geant4) and writes the energy deposits in the gas as \code{AtMCPoint} objects in the
+    branch \code{AtTpcPoint}. MC tracks go to the branch \code{MCTrack}.
+  \item \emph{Digitization.} A \code{FairRunAna} job reads that file and runs
+    \code{AtClusterizeTask} (ionization electrons, drift, diffusion) and \code{AtPulseTask}
+    (avalanche gain, electronics response, noise) to produce an \code{AtRawEvent} in the same
+    format as unpacked experimental data. From that point the reconstruction tasks (PSA, pattern
+    recognition, fitting) are the same as for data.
+\end{enumerate}
+
+A lighter path, \code{AtSimpleSimulation}, replaces the VMC transport with straight-line stepping
+through an energy-loss model and writes \code{AtMCPoint} objects directly
+(Section~\ref{sec:sim:simple}). Everything downstream of \code{AtMCPoint} is shared.
+
+The source directories involved are \code{AtGenerators/} (event generators),
+\code{AtSimulationData/} (\code{AtMCPoint}, \code{AtMCTrack}, \code{AtStack},
+\code{AtVertexPropagator}), \code{AtDetectors/AtTpc/} (the sensitive detector),
+\code{AtDigitization/} (clusterization, pulse generation, trigger) and \code{AtTools/} (electronic
+response functions and space-charge models). The worked example in
+Section~\ref{sec:sim:example} is the 16C(d,t)15C simulation in
+\url{macro/Simulation/ATTPC/16C_dt/}.
+
+%=====================================================================================
+\section{Transport set-up in a simulation macro}
+\label{sec:sim:transport}
+
+\subsection{The FairRunSim skeleton}
+
+Every transport macro in \url{macro/Simulation/ATTPC/} follows the same pattern. The excerpt
+below is from \url{macro/Simulation/ATTPC/16C_dt/C16_dt_sim.C}:
+
+\begin{verbatim}
+FairRunSim *run = new FairRunSim();
+run->SetName(mcEngine);                 // "TGeant4"
+run->SetOutputFile(outFile);
+FairRuntimeDb *rtdb = run->GetRuntimeDb();
+
+run->SetMaterials("media.geo");
+
+FairModule *cave = new AtCave("CAVE");
+cave->SetGeometryFileName("cave.geo");
+run->AddModule(cave);
+
+FairDetector *ATTPC = new AtTpc("ATTPC", kTRUE);
+ATTPC->SetGeometryFileName("ATTPC_D300torr_v2.root");
+run->AddModule(ATTPC);
+
+AtConstField *fMagField = new AtConstField();
+fMagField->SetField(0., 0., bFieldkG);                 // kG
+fMagField->SetFieldRegion(-50, 50, -50, 50, -10, 230); // cm
+run->SetField(fMagField);
+\end{verbatim}
+
+The pieces are:
+
+\begin{itemize}
+  \item \textbf{Engine.} \code{SetName("TGeant4")} selects Geant4. The engine is configured by
+    \url{gconfig/g4Config.C}, which builds a \code{TG4RunConfiguration} with the physics list
+    \code{QGSP\_FTFP\_BERT} and the special processes
+    \code{stepLimiter+specialCuts+specialControls+stackPopper}, creates the stack
+    (\code{new AtStack(1000)}), and calls \code{SetMaxNStep(5E3)}. It then executes
+    \url{gconfig/g4config.in}, which sets, among others, \code{/mcPhysics/rangeCuts 0.01 mm},
+    \code{/mcPhysics/rangeCutForElectron 100 km} (no delta electrons are produced as separate
+    tracks) and \code{/mcDet/setMaxStepInLowDensityMaterials 1}.
+  \item \textbf{Media.} \code{SetMaterials("media.geo")} loads \url{geometry/media.geo}. The gas
+    medium is referenced by name inside the geometry macro (for example
+    \code{TargetD2\_300}, D$_2$ at 300~torr, density $6.5643\times10^{-5}$~g/cm$^3$).
+  \item \textbf{Cave.} \code{AtCave} with \code{cave.geo} is the world volume.
+  \item \textbf{Detector.} \code{AtTpc} is the sensitive detector. Its geometry is a ROOT file
+    produced by a macro in \url{geometry/} (here \url{geometry/ATTPC_D300torr_v2.C}). In that
+    macro the volume \code{drift\_volume} is a tube of diameter 50~cm and length 100~cm placed
+    from $z=0$ to $z=100$~cm, with the entrance window at $z=0$.
+  \item \textbf{Field.} \code{AtConstField} takes the field components in kG and the region in
+    cm. A value of $-28.5$~kG is 2.85~T along $-z$.
+\end{itemize}
+
+After the generators are attached, the macro calls \code{run->Init()}, writes the parameter
+file with a \code{FairParRootFileIo}, and runs \code{run->Run(nEvents)}.
+
+\subsection{The sensitive detector: AtTpc}
+
+A volume is sensitive when \code{AtTpc::CheckIfSensitive} finds \code{drift\_volume},
+\code{window} or \code{cell} in its name. For every Geant4 step in such a volume,
+\code{AtTpc::ProcessHits} records the step and adds one \code{AtMCPoint} to the
+\code{TClonesArray} registered as \code{AtTpcPoint}. Each point stores:
+
+\begin{itemize}
+  \item the track ID (\code{GetTrackID}), the volume name (\code{GetVolName}) and copy number;
+  \item position (cm) and momentum (GeV/c) at the step, time (ns), track length (cm);
+  \item the energy deposited in the step (\code{GetEnergyLoss}, GeV);
+  \item the mass and atomic numbers decoded from the PDG code (\code{GetMassNum},
+    \code{GetAtomicNum});
+  \item the initial energy and lab angle of the track as set by the reaction generator
+    (\code{GetEIni} in MeV, \code{GetAIni} in degrees). For \code{fTrackID == 0} both are written as
+    zero; for other tracks they are read from \code{AtVertexPropagator::GetTrackEnergy(trackID)} and
+    \code{GetTrackAngle(trackID)}.
+\end{itemize}
+
+\code{AtTpc::SetDriftMaxStep(cm)} optionally limits the Geant4 step length in the gas medium. The
+comments in \code{AtTpc::Initialize} state that with TGeant4 the \code{Gstpar} route is ignored and
+the UI command route is rejected when issued from \code{Initialize}; the setter is best-effort and
+does nothing unless called.
+
+\subsection{AtStack}
+
+\code{AtStack} (\url{AtSimulationData/AtStack.h}) is the VMC stack created in
+\code{g4Config.C}. It counts MC points per track and detector (\code{AddPoint}, called by
+\code{AtTpc::ProcessHits}) and, at the end of the event, selects which particles are written to the
+\code{MCTrack} branch. Primaries are always kept. Secondaries are dropped if
+\code{StoreSecondaries(kFALSE)} was called (default \code{kTRUE}), if they have fewer points than
+\code{SetMinPoints} (default 1), or if their kinetic energy is below \code{SetEnergyCut} (GeV,
+default 0). \code{StoreMothers} (default \code{kTRUE}) keeps the mothers of every selected track.
+In the code these cuts act in \code{AtStack::SelectTracks}, i.e.\ on what is stored, not on what
+Geant4 transports.
+
+\subsection{Beam events, reaction events and AtVertexPropagator}
+\label{sec:sim:vertex}
+
+The AT-TPC simulation represents one beam-induced reaction as \emph{two consecutive FairRoot
+events}:
+
+\begin{itemize}
+  \item a \textbf{beam event} (even entries 0, 2, 4, \ldots), in which only the beam ion is
+    transported and is stopped at the reaction point;
+  \item a \textbf{reaction event} (odd entries 1, 3, 5, \ldots), in which only the reaction products
+    are transported, starting from that point.
+\end{itemize}
+
+\code{run->Run(2000)} therefore produces 1000 reactions at most. Note that the reaction event does
+not contain the beam track and the beam event does not contain the products.
+
+The state is carried between the two events by the singleton \code{AtVertexPropagator}
+(\url{AtSimulationData/AtVertexPropagator.h}). It holds the beam/reaction flag
+(\code{IsBeamEvent}, \code{IsReactionEvent}, toggled by \code{EndEvent()}), the vertex position and
+the beam momentum and kinetic energy at the vertex (\code{SetVertex}, \code{GetVx/Vy/Vz},
+\code{GetPx/Py/Pz}, \code{GetEnergy}), the random energy-loss threshold (\code{SetRndELoss},
+\code{GetRndELoss}), the beam mass (\code{SetBeamMass}), the per-track generated energies and angles
+(\code{SetTrackEnergy}, \code{SetTrackAngle}), and the momenta and excitation energies of the
+reaction products for chained decay generators (\code{SetScatterP}, \code{SetRecoilP},
+\code{SetScatterEx}, \code{SetRecoilEx}).
+
+\paragraph{Where the reaction happens.} The mechanism involves three classes:
+
+\begin{enumerate}
+  \item On a beam event, \code{AtTPCIonGenerator::ReadEvent} samples a threshold
+    $E_r$ uniformly in $[0,\ \mathrm{maxELoss}]$ (MeV) and stores it with
+    \code{SetRndELoss(Er)}. It then adds the beam track.
+  \item During stepping, \code{AtTpc} accumulates the energy deposited by the current track
+    (\code{fELossAcc}, reset when the track enters a volume). \code{AtTpc::reactionOccursHere()}
+    returns true when
+\begin{verbatim}
+bool atEnergyLoss =
+   fELossAcc * 1000 > AtVertexPropagator::Instance()->GetRndELoss();
+bool isPrimaryBeam = fTrackID == 0;
+bool isInRightVolume =
+   fVolName.Contains("drift_volume") || fVolName.Contains("cell");
+\end{verbatim}
+  \item \code{AtTpc::startReactionEvent()} then calls \code{gMC->StopTrack()}, resets the
+    propagator, and stores the stop position, the beam momentum and the kinetic energy
+    $E = (E_\mathrm{tot} - m_\mathrm{beam}\times 0.93149401)\times1000$~MeV with
+    \code{SetVertex}. In the following reaction event the reaction generator reads these values.
+\end{enumerate}
+
+If the beam (track 0) leaves the drift volume without reacting, \code{AtTpc} calls
+\code{ResetVertex()}, which sets the vertex energy to zero, and \code{AtTPC2Body} generates no
+products in the reaction event (it requires \code{fBeamEnergy > 0}).
+
+Because the accumulated loss in \code{fELossAcc} counts only the deposit inside the sensitive
+volume, the vertex position follows from the stopping power of the gas: the threshold is uniform in
+energy loss, which corresponds to a vertex distribution close to uniform in depth only while the
+stopping power is close to constant over the chamber. Too large a \code{maxELoss} lets most beams
+punch through without reacting; too small a value concentrates all vertices near the window. The
+comment in \code{C16\_dt\_sim.C} states this, and recommends checking on the output that the vertex
+distribution is flat along the drift length.
+
+\paragraph{The residual and track ID 0.} In the reaction event no beam track is added, so the first
+product pushed to the stack is also \code{fTrackID == 0}. \code{AtTpc} cannot distinguish it from the
+beam. The guard is in \code{AtTPCIonGenerator::ReadEvent}: on reaction events it sets the threshold
+to \code{std::numeric\_limits<double>::max()}, so \code{reactionOccursHere()} never fires on the
+residual. The comment in \url{AtGenerators/AtTPCIonGenerator.cxx} documents the earlier behaviour
+(commit \code{ac1b8fb1}, ``Disarm the reaction threshold on reaction events''): the threshold kept
+its beam-event value, the heavy residual was stopped once it had deposited that same energy, and
+on a 46Ar(3He,d) test only 46.8\% of the 47K residuals reached the end of the drift volume. The
+light ejectile (track 1) was not affected. Simulations produced before that commit carry truncated
+heavy residuals. The comment in \code{AtTpc::reactionOccursHere} also warns not to guard the test
+with \code{AtVertexPropagator::IsBeamEvent()}: the flag is toggled during generation, so at stepping
+time its sense is inverted.
+
+%=====================================================================================
+\section{Event generators}
+\label{sec:sim:generators}
+
+Generators are added to a \code{FairPrimaryGenerator} in the order they should run:
+
+\begin{verbatim}
+FairPrimaryGenerator *primGen = new FairPrimaryGenerator();
+primGen->AddGenerator(ionGen);   // beam: AtTPCIonGenerator
+primGen->AddGenerator(TwoBody);  // reaction: AtTPC2Body
+run->SetGenerator(primGen);
+\end{verbatim}
+
+\subsection{AtReactionGenerator: the base class}
+
+\code{AtReactionGenerator} (\url{AtGenerators/AtReactionGenerator.h}) derives from
+\code{FairGenerator}. Subclasses implement \code{GenerateReaction(FairPrimaryGenerator*)}.
+\code{ReadEvent} is declared \code{final}:
+
+\begin{verbatim}
+Bool_t AtReactionGenerator::ReadEvent(FairPrimaryGenerator *primGen)
+{
+   bool isBeamEvent = AtVertexPropagator::Instance()->IsBeamEvent();
+   if (kIsFinalGen)
+      // End the event if this is the final generator
+      AtVertexPropagator::Instance()->EndEvent();
+
+   if (!isBeamEvent || kAlwaysRun)
+      return GenerateReaction(primGen);
+   return true;
+}
+\end{verbatim}
+
+A reaction generator therefore does nothing on beam events (unless \code{SetAlwaysRun(true)}), and
+the last generator of the chain toggles the beam/reaction flag. \code{SetSequentialDecay(true)}
+marks a generator as \emph{not} the last one (\code{kIsFinalGen = false}), so that a following
+decay generator (for example \code{AtTPCIonDecay}) can read the products from
+\code{AtVertexPropagator} and end the event. Exactly one generator in the chain must have
+\code{kIsFinalGen} set, otherwise the alternation breaks; the header comment of
+\code{AtVertexPropagator::EndEvent} states that it must be called once per event and that the user
+is responsible for setting up the chain correctly.
+
+\subsection{AtTPCIonGenerator: the beam}
+
+\code{AtTPCIonGenerator} is a \code{FairGenerator} (not an \code{AtReactionGenerator}). The
+constructor used by the AT-TPC macros is
+
+\begin{verbatim}
+AtTPCIonGenerator(const char *name, Int_t z, Int_t a, Int_t q, Int_t mult,
+                  Double_t px, Double_t py, Double_t pz,
+                  Double_t Ex, Double_t m, Double_t ener, Double_t eLoss = -1);
+\end{verbatim}
+
+\begin{itemize}
+  \item \code{px, py, pz} are \emph{per nucleon} in GeV/c; the constructor multiplies them by
+    \code{a}. A macro that knows the total momentum passes \code{pTot / a}.
+  \item \code{m} is passed to \code{FairIon} as the ion mass. \code{FairIon} documents this
+    argument in GeV; all AT-TPC macros pass it in atomic mass units, and the AT-TPC code that uses
+    the stored value (\code{AtTpc::startReactionEvent}, \code{AtTPC2Body}) multiplies it by
+    0.93149401, i.e.\ treats it as amu. See the pitfall list in Section~\ref{sec:sim:pitfalls}.
+  \item \code{ener} is stored with \code{AtVertexPropagator::SetBeamNomE}. It does not set the
+    beam energy; only the momentum does. The macro \url{macro/Simulation/ATTPC/17C_dp/C17_dp_sim.C}
+    notes that \code{GetBeamNomE()} has no consumer in the tree.
+  \item \code{eLoss} is \code{maxELoss}, the upper edge of the uniform threshold described in
+    Section~\ref{sec:sim:vertex}. If it is negative (the default) the constructor uses \code{ener}
+    instead, so omitting it makes the nominal beam energy the reaction threshold.
+\end{itemize}
+
+Setters: \code{SetSpotRadius(r, z, offx, offy)} gives the beam start: $x,y$ uniform in radius
+$[0,r]$ and in azimuth around \code{(offx, offy)}, at fixed $z$ (all cm).
+\code{SetDoReaction(false)} sets the threshold to the largest double so the beam never reacts and
+adds the beam track on both beam and reaction events. \code{SetExcitationEnergy}, \code{SetMass} and
+\code{SetCharge} modify the ion.
+
+Two variants override \code{SetVertexCoordinates()}:
+\begin{itemize}
+  \item \code{AtTPCIonGeneratorGaussian}: \code{SetBeamLimits(r, z, theta)} and
+    \code{SetBeamOrigin(x, y)}; the radius is a Gaussian of width $r/3$ clamped to $[0,r]$ and the
+    direction is tilted by a uniform angle in $[0,\theta]$. As written, its constructor forwards
+    \code{eLoss} into the \code{ener} slot of the base constructor, and \code{SetVertexCoordinates}
+    multiplies the member \code{fPz} by $\cos\theta$ on every call, so with a non-zero
+    \code{theta} the beam momentum decreases from event to event. Check the beam energy in the MC
+    truth before using it with \code{theta > 0}.
+  \item \code{AtTPCIonGeneratorS800}: beam emittance and momentum acceptance from S800 angular
+    distributions (\code{SetBeamEmittance}, two histogram file names in the constructor).
+\end{itemize}
+
+\subsection{AtTPC2Body: two-body reactions}
+
+\code{AtTPC2Body} (\url{AtGenerators/AtTPC2Body.h}) generates a binary reaction at the vertex left
+by the beam. Constructor:
+
+\begin{verbatim}
+AtTPC2Body(const char *name, std::vector<Int_t> *z, std::vector<Int_t> *a,
+           std::vector<Int_t> *q, Int_t mult, std::vector<Double_t> *px,
+           std::vector<Double_t> *py, std::vector<Double_t> *pz,
+           std::vector<Double_t> *mass, std::vector<Double_t> *Ex,
+           Double_t ResEner, Double_t MinCMSAng, Double_t MaxCMSAng);
+\end{verbatim}
+
+\paragraph{The multiplicity-4 vector convention.} All vectors have four entries and \code{mult}
+must be 4; \code{GenerateReaction} indexes entries 0--3 unconditionally.
+
+\begin{center}
+\begin{tabular}{p{1.3cm}p{3.6cm}p{8.5cm}}
+\toprule
+Index & Role (16C(d,t) macro) & Use in the code \\
+\midrule
+0 & beam (16C) & mass $m_1$ in the kinematics; momentum taken from \code{AtVertexPropagator} \\
+1 & target (d) & mass $m_2$ \\
+2 & heavy residual (15C) & mass $m_3$; gets $\theta_\mathrm{cm}$ sampled in the requested range;
+  first track added to the stack (track ID 0 in the reaction event) \\
+3 & light ejectile (t) & mass $m_4$; gets $\pi-\theta_\mathrm{cm}$; second track (track ID 1) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Masses are in amu (the code computes $m\times 1000\times 0.93149401 + E_x$ in MeV) and
+\code{Ex} in MeV. Only entries 2 and 3 are pushed to the stack. Entries with $A\neq1$ are created as
+\code{FairIon}; $A=1,Z=1$ is a proton (PDG 2212) and $A=1,Z=0$ a neutron (PDG 2112).
+
+\paragraph{Which particle the angular range refers to.} $\theta_\mathrm{cm}$ is sampled uniformly in
+$\cos\theta$ between \code{MinCMSAng} and \code{MaxCMSAng} (degrees), i.e.\ isotropically in the
+centre of mass, and is assigned to entry 2. The particle in entry 3 is emitted at
+$\theta_\mathrm{cm,4} = 180^\circ - \theta_\mathrm{cm}$. In a macro that lists the heavy residual in
+entry 2 and the light ejectile in entry 3 (all AT-TPC macros quoted here), the angular range is the
+\emph{residual's} centre-of-mass angle. The header of
+\url{macro/Simulation/ATTPC/16C_dt/run_states_dt.sh} uses this explicitly: it generates 2--70$^\circ$,
+which covers ejectile centre-of-mass angles of 110--178$^\circ$.
+
+The azimuth is uniform; entry 3 is emitted at $\phi+\pi$. Both directions are rotated from the beam
+frame into the lab frame with \code{AtEulerTransformation} using the beam direction at the vertex.
+If the centre-of-mass energy is below threshold, \code{SetValidKine(kFALSE)} is set and the products
+get zero momentum. For each event the generator stores the lab energies and angles with
+\code{SetTrackEnergy/SetTrackAngle}, key 0 for entry 2 and key 1 for entry 3; these become
+\code{EIni}/\code{AIni} in the \code{AtMCPoint}s, matched by track ID. It also stores
+\code{SetScatterP} (entry 2) and \code{SetRecoilP} (entry 3) for decay generators.
+
+\paragraph{Options.} \code{SetFixedTargetPosition(vx, vy, vz)} switches to a fixed-target mode
+(e.g.\ HELIOS-like set-ups): the vertex is fixed, \code{kAlwaysRun} is set, and the beam kinetic
+energy is \code{ResEner}. In the active-target mode \code{ResEner} is unused.
+\code{SetFixedBeamMomentum(px,py,pz)} replaces the propagated beam momentum.
+\code{SetSequentialDecay(true)} removes entry 2 from the stack (it is expected to decay through the
+next generator).
+
+\subsection{Other generators}
+
+\begin{center}
+\begin{tabular}{p{4.3cm}p{10.4cm}}
+\toprule
+Class & What it does (from the header and source) \\
+\midrule
+\code{AtTPCIonDecay} & \code{AtReactionGenerator}; phase-space decay (\code{TGenPhaseSpace})
+  of an excited product into one of several channels with given separation energies; reads the
+  product momentum and excitation from \code{AtVertexPropagator} when used after a reaction
+  generator with \code{SetSequentialDecay(true)}. \\
+\code{AtTPCReactionDecay} & \code{AtReactionGenerator}; scatter and recoil described by a
+  \code{DecayIon} struct (Z, A, q, masses, multiplicity, $E_x$, separation energy), each
+  decayed by phase space. \\
+\code{AtTPCIonPhaseSpace} & \code{FairGenerator}; N-body phase space of the beam--target system. \\
+\code{AtTPC\_d2He} & \code{AtReactionGenerator}; the (d,$^2$He) reaction with a cross-section table
+  passed as three vectors plus the table length \code{N\_data}. \\
+\code{AtTPC\_Background} & \code{AtReactionGenerator}; background from deuteron elastic breakup
+  (written by J.~C.~Zamora); the source treats the deuteron as unbound by up to 1~MeV and uses an
+  internal two-body helper (\code{TwoB}). \\
+\code{AtTPCXSReader} & \code{AtReactionGenerator}; energy and angle drawn with \code{GetRandom2}
+  from a \code{TH2F} filled from a fixed-format text file ($31\times18$ values, PACE cross sections)
+  in \url{AtGenerators/}, for example \url{xs_22Mgp_fusionEvaporation.txt}. \\
+\code{AtTPCXSManager} & singleton holding a \code{TH2F} excitation function
+  (\code{SetExcitationFunction(file)}). \code{AtTPCXSReader} does not use it; the only user in the
+  tree is \url{resources/cross_sections/test_XSManager.C}. \\
+\code{AtTPCFission\-Generator}, \code{AtTPCFission\-GeneratorV2}, \code{AtTPCFission\-GeneratorV3} &
+  fission fragments read from a ROOT tree of pre-computed events (branches \code{Evnt},
+  \code{Ntrack}, \code{Aout}, \code{Zout}, \code{fOutPx}, \ldots\ in V1 and V2). V3 takes an ion
+  list and a fragment file, and boosts the fragments with the beam at the vertex to the lab. \\
+\code{AtTPC20MgDecay}, \code{AtTPC20MgDecay\_pag} & $^{20}$Mg decay: isotropic protons, alphas,
+  gammas and betas at hard-coded energies; point vertex (\code{SetXYZ}) or box vertex
+  (\code{SetBoxXYZ}), \code{ShowOnlyAlphaProtonBranch}, decay chain set with
+  \code{SetDecayChainPoint(E, BR)}. \\
+\code{AtTPCGamma\-Dummy\-Generator} & \code{FairGenerator} based on an R3B test generator; particles
+  of a given PDG with momentum, angle and vertex ranges (\code{SetPRange}, \code{SetThetaRange},
+  \code{SetXYZ}, \ldots). \\
+\code{AtPUMAGenerator} & \code{FairGenerator}; $\bar p$ + $^3$He at rest decayed by phase space to
+  K$^+$K$^+\pi^-$ + hexaquark (PDG set with \code{SetHexaquarkPdg}, default 1600000); vertex
+  Gaussian in $x,y$ (default $\sigma=4$~mm) clipped to \code{SetTrapRadius} (default 10~mm),
+  uniform in $z$ over $\pm$\code{SetVertexZHalfRange} (default 22.5~mm). Vertex setters are in mm. \\
+\code{AtPiGunGenerator} & \code{FairGenerator}; 1--3 pions (\code{SetMultiplicityRange}) with
+  isotropic direction, momentum uniform in \code{SetMomentumRange} (default 0.10--0.30~GeV/c),
+  random sign unless \code{SetCharge}; same vertex model as \code{AtPUMAGenerator}. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\code{AtPUMAGenerator} and \code{AtPiGunGenerator} derive directly from \code{FairGenerator} and do
+not take part in the beam/reaction alternation; every FairRoot event is a physics event. The
+macro \url{macro/Simulation/ATTPC/PUMA/PiGun_sim.C} calls
+\begin{verbatim}
+AtVertexPropagator::Instance()->SetRndELoss(1e30);
+\end{verbatim}
+so that \code{AtTpc} never triggers a reaction on track 0.
+
+%=====================================================================================
+\section{Digitization}
+\label{sec:sim:digi}
+
+The digitization macro is a \code{FairRunAna} job with the transport output as
+\code{FairFileSource} and an ASCII parameter file read into the runtime database. All digitization
+tasks read the container \code{AtDigiPar}. The minimal chain is
+
+\begin{verbatim}
+auto mapping = std::make_shared<AtTpcMap>();
+mapping->ParseXMLMap(mapParFile.Data());
+mapping->GeneratePadPlane();
+
+AtClusterizeTask *clusterizer = new AtClusterizeTask();
+clusterizer->SetPersistence(kFALSE);
+
+auto pulseModel = std::make_shared<AtPulse>(mapping);
+AtPulseTask *pulse = new AtPulseTask(pulseModel);
+pulse->SetPersistence(kTRUE);
+pulse->SetSaveMCInfo();
+\end{verbatim}
+
+\subsection{AtDigiPar fields used by the simulation}
+
+Table~\ref{tab:sim:digipar} lists the fields of \code{AtDigiPar} read by the digitization code.
+All are mandatory in the parameter file (\code{AtDigiPar::getParams} aborts if one is missing)
+except \code{ReverseDrift}, which is optional and defaults to 0.
+
+\begin{table}[htbp]
+\centering
+\begin{tabular}{p{3.0cm}p{2.3cm}p{9.4cm}}
+\toprule
+Field & Unit & Used by \\
+\midrule
+\code{EIonize} & eV & \code{AtClusterize}: mean energy per ionization electron \\
+\code{Fano} & -- & \code{AtClusterize}: width of the electron-number distribution \\
+\code{DriftVelocity} & cm/$\mu$s & \code{AtClusterize} (drift time), \code{AtPulse}
+  (pad-plane time bucket), space-charge models \\
+\code{CoefT}, \code{CoefL} & cm$^2$/$\mu$s & \code{AtClusterize}: transverse and longitudinal
+  diffusion \\
+\code{ZPadPlane} & mm & \code{AtClusterize} (drift length), \code{AtPulse} (pad-plane time
+  bucket), \code{AtLineChargeModel} \\
+\code{ReverseDrift} & 0/1 & \code{AtClusterize}: beam enters through the pad plane \\
+\code{Gain} & -- & \code{AtPulse}: mean micromegas gain (Polya) \\
+\code{GETGain} & fC & \code{AtPulse}: full-scale range of the GET electronics \\
+\code{PeakingTime} & ns & \code{AtPulse}: shaping time of the response function \\
+\code{SamplingRate} & MHz code & \code{GetTBTime()}: 3, 6, 12, 25, 50, 100 map to 320, 160, 80,
+  40, 20, 10~ns per time bucket; any other value returns $-1$ \\
+\code{TBEntrance} & TB & \code{AtPulse}: time bucket of the detector entrance \\
+\code{EField} & V/m & space-charge models \\
+\bottomrule
+\end{tabular}
+\caption{AtDigiPar fields read by the simulation tasks.}
+\label{tab:sim:digipar}
+\end{table}
+
+The number of time buckets is not read from the parameter file: \code{AtPulse::fNumTbs} is fixed
+at 512 in the header.
+
+\subsection{AtClusterizeTask and AtClusterize}
+
+\code{AtClusterizeTask} reads the branch \code{AtTpcPoint} and writes \code{AtSimulatedPoint} (not
+persistent by default; \code{SetPersistence(kTRUE)} keeps it). The physics is in the model class
+passed to the constructor, \code{AtClusterize} by default; \code{SetClusterizeMethod} replaces it.
+
+For each \code{AtMCPoint} in the volume named exactly \code{drift\_volume}, \code{AtClusterize}:
+
+\begin{enumerate}
+  \item converts the position to $(x,\,y)$ in mm and a drift time
+    $t = |z_d|/v_d$ in $\mu$s, with $z_d = \mathrm{ZPadPlane}/10 - z$ (cm) for the normal
+    detector and $z_d = z$ for \code{ReverseDrift = 1};
+  \item if the point starts a new track or has zero energy loss, records its position and returns
+    nothing. The energy deposited in the first point of each track is therefore not converted;
+  \item draws the number of electrons $n$ from a Gaussian of mean $\Delta E/W$ and width
+    $\sqrt{F\,\Delta E/W}$, clamped at zero (the source comment explains that an unclamped negative
+    value wrapped to $\sim10^{19}$ and exhausted memory);
+  \item places the $n$ electrons at equal intervals on the segment from the previous point to the
+    current point, and displaces each by diffusion: a radial offset drawn from a Gaussian of width
+    $\sigma_T = 10\sqrt{2 D_T t}$~mm at a uniform azimuth, and a time offset with
+    $\sigma_L = \sqrt{2 D_L t}/v_d$~$\mu$s. Both widths are evaluated at the drift time of the
+    current point.
+\end{enumerate}
+
+Each output \code{AtSimulatedPoint} is one electron (charge 1) with position $(x, y, t)$ and the
+index of its parent \code{AtMCPoint}.
+
+If \code{ZPadPlane} is shorter than the geometry drift volume (for example 971.7312~mm in the
+a1975 deuterium parameter file against the 100~cm tube of \code{ATTPC\_D300torr\_v2}), points beyond
+the pad plane get a drift time from the absolute value of a negative distance, i.e.\ they are folded
+back into the chamber. The code does not warn about this.
+
+\paragraph{AtClusterizeLine.} \code{AtClusterizeLine} is passed to the constructor of
+\code{AtClusterizeTask} as a \code{std::make\_shared} object (the class
+\code{AtClusterizeLineTask} is deprecated). It does not generate individual electrons. It writes one
+\code{AtSimulatedLine} per MC step with the start and end points, the total number of electrons and
+the transverse and longitudinal diffusion widths, to be consumed by \code{AtPulseLine}.
+
+\subsection{AtPulseTask and AtPulse}
+
+\code{AtPulseTask} reads \code{AtSimulatedPoint}, runs the pulse model, and writes an
+\code{AtRawEvent} to the branch \code{AtRawEvent} (persistent by default;
+\code{SetOutputBranch} renames it). The model is the \code{AtPulse} object passed to the
+constructor; \code{AtPulse} needs the pad map, which must already have its inhibited pads set.
+
+\paragraph{Charge collection.} For every simulated electron \code{AtPulse::AssignElectronsToPad}
+finds the pad under $(x,y)$ (\code{AtMap::GetPadNum}); electrons outside the pad plane are
+skipped. The arrival time is $t + \mathrm{TB}_\mathrm{pad}\cdot\Delta t_\mathrm{TB}$ with
+\[
+\mathrm{TB}_\mathrm{pad} = \mathrm{TBEntrance} -
+\frac{\mathrm{ZPadPlane}/10}{\Delta t_\mathrm{TB}\, v_d}.
+\]
+The electron is multiplied by a gain drawn from a Polya distribution of mean \code{Gain} and shape
+parameter 1. With \code{UseFastGain(true)} (default) and more than 10 electrons in one simulated
+point, the gain is instead a Gaussian of mean \code{Gain} and width $\sigma_G/\sqrt{n}$; with
+\code{AtClusterize} each point carries one electron, so the Polya sampling is used per electron.
+Pads inhibited as \code{AtMap::InhibitType::kTotal} receive no charge; pads inhibited as
+\code{kLowGain} have the gain multiplied by the factor set with \code{SetLowGain(val)} (default 0,
+i.e.\ such pads also receive nothing unless the factor is set).
+
+\paragraph{Trace formation.} The collected charge is histogrammed per pad in 512 time buckets.
+\code{AtPulse::FillPad} convolves each bucket with the response function
+(the setter \code{SetDoConvolution(false)} skips this and writes zero traces) and \code{ApplyNoise} converts to ADC by multiplying
+by
+\[
+g_\mathrm{GET} = \frac{1.602\times10^{-19}\times 4096}{\mathrm{GETGain}\times10^{-15}}
+\quad\text{ADC per electron.}
+\]
+The default response function is \code{ElectronicResponse::AtNominalResponse} with the peaking time
+from \code{AtDigiPar}:
+$R(t) = e^{-3t/\tau}\,\sin(t/\tau)\,(t/\tau)^3$ (the code uses $2.718$ for $e$). Other response
+functions are in \url{AtTools/ElectronicResponse/AtElectronicResponse.h}:
+\code{AtReducedTimeResponse} (a user function of $t/\tau$), \code{AtVectorResponse} (a sampled trace)
+and \code{AtFileResponse} (a trace read from a text file); any of them can be passed as the second
+constructor argument of \code{AtPulse}. The response functions are not normalized; the comment in
+the header notes that changing the response therefore changes the effective gain.
+The class \code{AtVectorResponse} in \url{AtDigitization/} is deprecated in favour of
+\code{AtFileResponse}.
+
+With \code{SetSaveCharge(true)} (default) each pad also gets an augment named \code{"Q"} holding the
+collected charge per time bucket. Pads are marked valid, pedestal-subtracted, and carry their pad
+centre.
+
+\paragraph{Setters of AtPulse.}
+
+\begin{center}
+\begin{tabular}{p{5.9cm}p{1.5cm}p{7.2cm}}
+\toprule
+Setter & Default & Effect \\
+\midrule
+\code{SetNoiseSigma(double)} & 0 & Gaussian baseline noise (ADC) added to every time bucket of
+  every pad that has signal. \\
+\code{SetNoiseAllPads(bool)} & false & If true and the noise sigma is non-zero, also writes
+  pure-noise traces on every non-inhibited pad without signal. \\
+\code{SetNoiseKeepThreshold(double)} & 0 & With \code{SetNoiseAllPads}, drop noise-only pads whose
+  maximum is below this value (saves disk; no effect on hits if below the PSA threshold). \\
+\code{SetADCCeiling(double)} & 0 (off) & Clip every sample, after noise, at this ADC value
+  (GET saturation). \\
+\code{SetLowGain(double)} & 0 & Gain factor for \code{kLowGain} pads. \\
+\code{UseFastGain(bool)} & true & Gaussian approximation of the summed Polya gain for points with
+  more than 10 electrons. \\
+\code{SetSaveCharge(bool)} & true & Store the \code{"Q"} augment. \\
+\code{SetDoConvolution(bool)} & true & Convolve with the response function. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{Setters of AtPulseTask.} \code{SetPersistence} (default true),
+\code{SetOutputBranch} (default \code{"AtRawEvent"}), \code{SetPersistenceAtTpcPoint} (default
+false: the \code{AtTpcPoint} branch is re-registered and, unless this is set, not copied to the
+digitization output), and \code{SetSaveMCInfo()}. The last one fills a map
+pad number $\to$ \code{AtMCPoint} index in the \code{AtRawEvent} (\code{SetSimMCPointMap}).
+\code{AtPSAtask} finds the \code{AtTpcPoint} branch in the input and attaches to every hit an
+\code{AtHit::MCSimPoint} with the point index, track ID, \code{EIni}, energy loss, \code{AIni}, $A$
+and $Z$. This is how a simulation analysis matches hits to the generated particle.
+As written, \code{AtPulseTask::saveMCInfo} compares the new point with itself when checking for
+duplicates, so in practice each pad keeps only the first \code{AtMCPoint} that reached it; when two
+tracks share a pad, only the first one is recorded.
+
+\subsection{AtPulseLine and AtPulseGADGET}
+
+\code{AtPulseLine} (an \code{AtPulse} subclass, used with \code{AtClusterizeLine}) integrates each
+\code{AtSimulatedLine} instead of handling single electrons: the transverse distribution over pads is
+sampled with \code{SetNumIntegrationPoints} random throws (default 1000), and the longitudinal
+Gaussian is integrated analytically over time buckets within \code{SetNumSigmaToIntegrateZ} sigmas
+(default 3). It uses the fast Gaussian gain. The old \code{AtPulseLineTask} is not compiled
+(commented out in \url{AtDigitization/CMakeLists.txt}).
+
+\code{AtPulseGADGET} is a pulse model for the GADGET detector. Each electron's charge is dispersed
+over a grid of neighbouring pads with an RC charge-dispersion model; the grid spacing (2.2~mm) and
+the RC constants are hard-coded members. \code{SetAdjecentPads} changes the pad offsets, but the
+grid size \code{Items} is computed once from the default of one adjacent pad, so the grid stays
+$3\times3$.
+
+\subsection{Space charge and field distortion}
+
+\code{AtSpaceChargeTask} exists in \url{AtDigitization/} but is not in the library
+(\code{CMakeLists.txt} does not list it) and its \code{processPoint} is empty. Space-charge
+distortion in the simulation is available only in \code{AtSimpleSimulation} through
+\code{SetSpaceChargeModel}. The models derive from \code{AtSpaceChargeModel}
+(\url{AtTools/}) with \code{ApplySpaceCharge} (simulation) and \code{CorrectSpaceCharge} (data):
+
+\begin{itemize}
+  \item \code{AtLineChargeModel}: line charge \code{SetLambda} (default $1.54\times10^{-8}$~C/m)
+    along the beam, drift field \code{SetDriftField} (default 70000~V/m), beam radius
+    \code{SetBeamRadius} (default 0.02~m, no correction inside); \code{LoadParameters} takes the
+    field from \code{EField} and the length from \code{ZPadPlane}.
+  \item \code{AtRadialChargeModel}: arbitrary radial field (a callable of $\rho$, $z$ in cm returning
+    V/cm, e.g.\ \code{AtLineChargeZDep}); the electron path is integrated with step
+    \code{SetStepSize} (default $10^{-4}$~$\mu$s); \code{LoadParameters} reads \code{EField} and
+    \code{DriftVelocity}.
+  \item \code{AtEDistortionModel}: look-up tables of $z$, radial and transverse corrections
+    set with \code{SetCorrectionMaps}; its \code{ApplySpaceCharge} returns an empty point, so it can only
+    be used for correction.
+\end{itemize}
+
+\subsection{AtTriggerTask}
+
+\code{AtTriggerTask} emulates the GET multiplicity trigger on already digitized and
+pulse-analysed events. It reads \code{AtEventH} and \code{AtRawEvent} (so it must run after the PSA)
+and copies events that fire the trigger into the branches \code{Accepted\_AtEventH} and
+\code{Accepted\_AtRawEvent}. Its parameters come from the container \code{AtTriggerPar}
+(\url{parameters/AT.trigger.par}): \code{Write\_clock}, \code{Read\_clock}, \code{Master\_clock},
+\code{Pad\_thresh\_MSB}, \code{Pad\_thresh\_LSB}, \code{Trigger\_signal\_width},
+\code{Trigger\_discriminator\_fraction}, \code{Multiplicity\_threshold},
+\code{Multiplicity\_window}, \code{Trigger\_height}. The pad map is given with
+\code{SetAtMap(path)}. Two points visible in the code: \code{Init} passes the write and read clocks
+to \code{AtTrigger::SetTriggerParameters} in the order \code{(write, read, ...)} while that function
+declares \code{(read, write, ...)}; and the accepted arrays are not cleared between events (the
+\code{Delete()} calls are commented out). No macro in the repository uses this task.
+
+\subsection{AtSimpleSimulation}
+\label{sec:sim:simple}
+
+\code{AtSimpleSimulation} (units MeV, mm, MeV/c) steps a particle in straight lines of
+\code{SetDistanceStep} (default 1~mm), takes the energy loss from an \code{AtTools::AtELossModel}
+registered per $(Z,A)$ with \code{AddModel(Z, A, model)}, and writes one \code{AtMCPoint} per step
+to the branch registered by \code{RegisterBranch} (default \code{"AtTpcPoint"}). Direction is not
+changed by the energy loss and no magnetic field is applied. With a space-charge model set, each
+point is displaced by \code{ApplySpaceCharge} after converting $z$ to the analysis frame
+($1000-z$, hard-coded). The FairTask wrapper is \code{AtTestSimulation}. The output feeds the same
+\code{AtClusterizeTask}/\code{AtPulseTask} chain.
+
+%=====================================================================================
+\section{Worked example: 16C(d,t)15C}
+\label{sec:sim:example}
+
+The a1975 deuterium-target simulation in \url{macro/Simulation/ATTPC/16C_dt/} measures the
+acceptance of the triton channel for five states of 15C. It is split into generation
+(\code{C16\_dt\_sim.C}, driven by \code{run\_states\_dt.sh}) and digitization plus reconstruction
+(\code{run\_reco\_C16dt.C}, driven by \code{run\_reco\_batch\_dt.sh}).
+
+\subsection{Generation: C16\_dt\_sim.C}
+
+Signature and conditions, as stated in the macro header:
+
+\begin{verbatim}
+void C16_dt_sim(Int_t nEvents = 2000, Double_t thetaMinCM = 2.0,
+                Double_t thetaMaxCM = 178.0, TString mcEngine = "TGeant4",
+                Double_t bFieldkG = -28.5,
+                TString outFile = "./data/attpcsim_dt.root",
+                Double_t resEx = 0.0, UInt_t seed = 0, Double_t Ebeam = 184.17)
+//  B = 2.85 T, D2 at 300 torr, beam 16C at 184.17 MeV = 11.5 MeV/u
+\end{verbatim}
+
+The seed is applied first:
+
+\begin{verbatim}
+if (seed != 0)
+   gRandom->SetSeed(seed);
+std::cout << "RNG seed requested: " << seed << std::endl;
+\end{verbatim}
+
+The beam momentum is computed from the kinetic energy and passed per nucleon:
+
+\begin{verbatim}
+const Double_t u = 931.49401, mBeamMeV = 16.0147 * u;
+// GeV/c
+Double_t pTot = std::sqrt(Ebeam * Ebeam + 2 * Ebeam * mBeamMeV) / 1000.0;
+Double_t pz = pTot / a; // GeV/c per nucleon
+Double_t Bmass = 16.0147;   // amu (repo convention)
+Double_t maxELoss = 10.0;   // MeV
+AtTPCIonGenerator *ionGen =
+   new AtTPCIonGenerator("Ion", z, a, q, m, px, py, pz, BExcEner, Bmass,
+                         NomEnergy, maxELoss);
+ionGen->SetSpotRadius(0, -100, 0);
+\end{verbatim}
+
+The beam starts on axis at $z=-100$~cm. The two-body generator gets the four entries
+beam (16C), target (d, 2.0141017781~u), heavy residual (15C, 15.0105993~u, excitation
+\code{resEx}) and light ejectile (t, 3.0160492779~u):
+
+\begin{verbatim}
+AtTPC2Body *TwoBody =
+   new AtTPC2Body("TwoBody", &Zp, &Ap, &Qp, mult, &Pxp, &Pyp, &Pzp, &Mass,
+                  &ExE, ResEner, ThetaMinCMS, ThetaMaxCMS);
+primGen->AddGenerator(TwoBody);
+run->SetGenerator(primGen);
+run->SetStoreTraj(kTRUE);
+\end{verbatim}
+
+The macro notes that states of 15C above the neutron separation energy (1.218~MeV) are transported
+as stable ions; the simulation describes the triton but must not be used for the recoil.
+
+\paragraph{run\_states\_dt.sh.} The driver generates the five states (g.s., 0.740, 3.103, 4.657,
+6.358~MeV) with one seed, the residual centre-of-mass range 2--70$^\circ$, and the data field sign:
+
+\begin{verbatim}
+root -b -q -l "C16_dt_sim.C($NEV,2.,70.,\"TGeant4\",-28.5,\
+\"$OUT/${J}_sim.root\",$EX,$SEED)" > "$OUT/${J}_gen.log" 2>&1
+\end{verbatim}
+
+A job is marked complete only if the output is non-empty, the log contains
+\code{"RNG seed requested: \$SEED"} and \code{"Macro finished successfully"}; otherwise no
+\code{.marker} file is written and the digitization driver skips that state.
+
+\subsection{Digitization and reconstruction: run\_reco\_C16dt.C}
+
+The macro reads the data's own parameter file (or a gain variant of it), sets the beam hole,
+digitizes, and runs the same PSA, cleaning and pattern-recognition settings as the data
+production:
+
+\begin{verbatim}
+#include "../AtBeamHole.h"
+...
+auto mapping = std::make_shared<AtTpcMap>();
+mapping->ParseXMLMap(mapParFile.Data());
+mapping->GeneratePadPlane();
+AtSim::InhibitBeamHole(mapping, holeR);          // holeR = 20 mm for a1975
+
+AtClusterizeTask *clusterizer = new AtClusterizeTask();
+clusterizer->SetPersistence(kFALSE);
+
+auto pulseModel = std::make_shared<AtPulse>(mapping);
+if (adcCeiling > 0)
+   pulseModel->SetADCCeiling(adcCeiling);
+AtPulseTask *pulse = new AtPulseTask(pulseModel);
+pulse->SetPersistence(kTRUE);
+pulse->SetSaveMCInfo();
+
+auto p = new AtPSAMultiFit();
+p->SetThreshold(thr);
+p->SetPeakingTime(0.720);
+...
+fRun->AddTask(clusterizer);
+fRun->AddTask(pulse);
+fRun->AddTask(psaTask);
+fRun->AddTask(cleanTask);
+fRun->AddTask(praTask);
+\end{verbatim}
+
+The parameter file defaults to \url{parameters/ATTPC.a1975_deuterium_dv1104.par}: drift velocity
+1.10424~cm/$\mu$s, \code{TBEntrance} 560, \code{ZPadPlane} 971.7312~mm, \code{SamplingRate} 6
+(160~ns), \code{EIonize} 15.603~eV, \code{Fano} 0.24, \code{CoefL} = \code{CoefT} =
+0.0009~cm$^2$/$\mu$s, \code{GETGain} 1000~fC, \code{PeakingTime} 720~ns. The macro header explains
+that drift velocity, \code{TBEntrance} and \code{ZPadPlane} must equal the data values, otherwise the
+$z$ scale of the simulation is not that of the data.
+
+\paragraph{run\_reco\_batch\_dt.sh and the gain.} \code{AtDigiPar} has no gain setter, so the gain is
+scanned through parameter files: \code{make\_gain\_pars.sh} writes
+\url{ATTPC.a1975_deuterium_dv1104_g<N>.par} files that differ from the production file only in the
+\code{Gain} line. The batch driver uses \code{Gain = 35000} by default and runs the five states in
+parallel:
+
+\begin{verbatim}
+./run_reco_batch_dt.sh [nparallel] [gain] [simDir]
+root -b -l -q "run_reco_C16dt.C(\"$in\",\"$out\",\"$PAR\")"
+\end{verbatim}
+
+Its header gives the reason for 35000, a scan of the median number of hits per non-beam track on 200
+events of the ground-state sample compared with data run 0016 (median 76):
+
+\begin{center}
+\begin{tabular}{p{2.0cm}p{3.6cm}p{2.0cm}}
+\toprule
+Gain & median hits/track & sim/data \\
+\midrule
+10000 & 39 & 0.51 \\
+25000 & 62 & 0.82 \\
+35000 & 75 & 0.99 \\
+50000 & 90 & 1.18 \\
+150000 & 118 & 1.55 \\
+400000 & 135 & 1.78 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The header also records that the event efficiency saturates above about 25000, so the gain chooses
+how much of each track survives rather than how many events do, and that the scan is not
+PID-selected; it rejects 10000 and 150000 but does not fix 35000 to two digits.
+
+%=====================================================================================
+\section{Known pitfalls}
+\label{sec:sim:pitfalls}
+
+\begin{enumerate}
+  \item \textbf{maxELoss sets the reaction rate and the vertex distribution.} The threshold is
+    uniform in accumulated energy loss of the beam in the gas, in $[0,\mathrm{maxELoss}]$. A value
+    larger than the beam loses over the chamber leaves many beam events without a reaction (empty
+    reaction events); a value much smaller piles all vertices near the window. If the constructor
+    argument is omitted, the nominal beam energy is used. Check the vertex-$z$ distribution in the
+    MC truth (\url{macro/Simulation/ATTPC/16C_dt/dt_truth_check.C} does this for the (d,t)
+    sample).
+  \item \textbf{Two FairRoot events per reaction.} Even entries are beam events and odd entries are
+    reaction events; \code{nEvents} counts both. Beam and products are never in the same event.
+  \item \textbf{Mass units.} The macros pass the ion mass in amu to \code{AtTPCIonGenerator} and
+    \code{AtTPC2Body}, while \code{FairIon} documents the mass argument in GeV. The AT-TPC code
+    that reads the stored mass treats it as amu. Whatever the transport engine does with it, the
+    beam energy must be verified from the MC truth (the \code{MCTrack} four-momentum of the
+    primary) rather than assumed; \url{macro/Simulation/ATTPC/14C_pp/check_beam_C14.C} reads it
+    back. \url{macro/Simulation/ATTPC/17C_dp/RESULTS.md} reports the 17C beam momentum and kinetic
+    energy recovered exactly with this convention.
+  \item \textbf{Seeds for parallel jobs.} Without \code{gRandom->SetSeed(seed)} parallel jobs
+    produce identical events. \code{C16\_dt\_sim.C} prints the requested seed because, as its
+    comment states, \code{gRandom->GetSeed()} on \code{TRandom3} does not return the seed.
+    Give every job a distinct seed.
+  \item \textbf{Field sign.} Generate with the field sign of the data
+    (\code{bFieldkG = -28.5} for a1975), so that the sense of rotation in the simulation matches
+    the data. The comment in \code{C16\_dt\_sim.C} warns that otherwise any step that infers the
+    direction from the curvature rejects most simulated tracks.
+  \item \textbf{z frame.} The PSA writes hit $z$ measured from the pad plane; the fitters convert
+    with $z_\mathrm{lab} = \mathrm{ZPadPlane} - z_\mathrm{digi}$ (the comments in
+    \url{AtReconstruction/AtPulseAnalyzer/AtPSA.cxx} and \url{AtParameter/AtDigiPar.h}). With
+    \code{ZPadPlane} = 1000~mm this is $z_\mathrm{lab} = 1000 - z_\mathrm{digi}$. The header of
+    \code{run\_reco\_C16dt.C} states that a fit of the simulation output needs \code{bFieldSign = +1}
+    where the data uses $-1$, and that the reconstructed polar angle is $180^\circ - \theta_\mathrm{true}$;
+    account for this when matching to truth.
+  \item \textbf{Gain must be matched to the data.} The digitized gain sets how many pads cross the
+    PSA threshold and so the number of hits per track that pattern recognition and PID see. Match
+    hits per track to the data before trusting an acceptance (see the scan above); do not inherit a
+    gain from another channel's simulation parameter file.
+  \item \textbf{Truncated heavy residual in old productions.} Before commit \code{ac1b8fb1}
+    the reaction threshold fired a second time on the heavy residual (track ID 0 in the reaction
+    event), stopping it after roughly the vertex depth. The light ejectile was not affected. Files
+    produced before the fix carry half-length residuals.
+  \item \textbf{No saturation by default.} \code{AtPulse} does not saturate unless
+    \code{SetADCCeiling} is set; simulated high-\dedx{} tracks then keep charge that the GET
+    electronics would clip. The commit that added the ceiling (\code{f5d5031f}) states that
+    \code{AtPSAMultiFit} maps a clipped pulse to about 1.34 times the clip value, and that the data's
+    saturation shape still has to be measured; \code{run\_reco\_C16dt.C} leaves it off by default.
+  \item \textbf{Beam hole.} The real pad plane does not read out the beam region, but the
+    simulation digitizes the beam in full. \url{macro/Simulation/ATTPC/AtBeamHole.h} provides
+    \code{AtSim::InhibitBeamHole(map, holeR)}, which inhibits as \code{kTotal} every pad whose centre
+    is within \code{holeR} (mm) of the axis; call it after \code{GeneratePadPlane()} and before
+    building \code{AtPulse}. Its header reports that on a1954 14C(p,p') without the hole 67\% of the
+    recoil protons were merged into the beam cluster, and that the radius should be measured per
+    experiment from the hit-radius distribution (30~mm for a1954, 20~mm for a1975 in
+    \code{run\_reco\_C16dt.C}).
+  \item \textbf{ZPadPlane versus geometry length.} Points beyond \code{ZPadPlane} are folded back by
+    the absolute value in \code{AtClusterize}; keep the parameter and the geometry consistent or
+    expect a small amount of charge at mirrored drift times.
+  \item \textbf{One MC point per pad.} With \code{SetSaveMCInfo()} only the first \code{AtMCPoint}
+    reaching a pad is recorded (see the description of \code{saveMCInfo}). Hit-to-track truth
+    matching is unreliable where tracks overlap.
+\end{enumerate}

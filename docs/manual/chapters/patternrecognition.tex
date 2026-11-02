@@ -1,0 +1,663 @@
+\chapter{Pattern recognition}
+\label{ch:patternrecognition}
+
+Pattern recognition turns the hit cloud of one event (an \code{AtEvent}, produced by the pulse-shape
+analysis) into track candidates (\code{AtTrack} objects collected in an \code{AtPatternEvent}). It is the
+step between the PSA and the track fit. Besides grouping hits into tracks, the pattern-recognition stage
+in ATTPCROOTv2 also prepares everything the fitters consume: it groups the hits of each track into
+\code{AtHitCluster} objects with a covariance matrix, orders those clusters, and estimates the initial
+geometric parameters of each track (circle centre and radius in the pad plane, the polar angle
+\code{GeoTheta}, the azimuth \code{GeoPhi} and a charge sign). Several of the decisions taken here, in
+particular the forward/backward direction of a track, are used unchanged by the fitters.
+
+The code lives in \url{AtReconstruction/AtPatternRecognition/} (algorithms) and
+\url{AtReconstruction/} (FairRoot tasks). The cluster builder is in \url{AtTools/AtTrackTransformer.cxx}.
+Table~\ref{tab:pr:overview} lists the components that are compiled into the framework
+(\url{AtReconstruction/CMakeLists.txt}).
+
+\begin{table}[htbp]
+\centering
+\begin{tabular}{p{0.45\textwidth}p{0.48\textwidth}}
+\toprule
+Class & Role \\
+\midrule
+\code{AtPRAtask} & FairTask that runs an \code{AtPRA} algorithm on every event. \\
+\code{AtPATTERN::AtPRA} & Abstract base: clustering, cluster ordering, initial parameters,
+  primary/fragment selection, kNN pruning. \\
+\code{AtPATTERN::AtTrackFinderTC} & TriplClust: triplet building plus hierarchical clustering. \\
+\code{AtPATTERN::AtTrackFinderHDBSCAN} & HDBSCAN* density clustering plus cluster joining
+  (Spyral style). \\
+\code{AtPATTERN::AtTrackFinderRiemann} & Seeded circle RANSAC with a 3D inlier test. \\
+\code{SampleConsensus::AtSampleConsensus} & Generic sample consensus (RANSAC, LMedS, MLESAC, \ldots)
+  on an \code{AtPattern}. \\
+\code{AtSampleConsensusTask}, \code{AtRansacTask} & FairTasks around \code{AtSampleConsensus}. \\
+\code{AtPatternBridgeTask} & Fills clusters and \code{Geo*} fields on sample-consensus output. \\
+\code{AtTools::AtTrackTransformer} & Builds \code{AtHitCluster}s and their covariance. \\
+\code{AtFindVertex} & Vertex finding from straight-line tracks (in \url{AtTools/}). \\
+\bottomrule
+\end{tabular}
+\caption{Pattern-recognition components.}
+\label{tab:pr:overview}
+\end{table}
+
+The source tree also contains \code{AtTrackFinderHC} (an older PCL-based triplet clustering) and the
+directory \url{AtPatternRecognition/trackfinder/}; neither is listed in \url{AtReconstruction/CMakeLists.txt},
+so they are not built. There is no Hough-transform track finder: \code{AtPRAtask::SetPRAlgorithm(2)}
+only prints ``Using Hough transform algorithm'' (see Section~\ref{sec:pr:task}).
+
+\section{Data flow and the output: \code{AtPatternEvent}}
+\label{sec:pr:output}
+
+The input is an \code{AtEvent} branch. In the AT-TPC chains it is \code{AtEventH} (PSA output), a
+space-charge corrected copy (\code{AtEventCorrected}) or a cleaned copy (\code{AtEventClean}). The output
+is one \code{AtPatternEvent} per event, stored in a \code{TClonesArray} branch (default name
+\code{AtPatternEvent}). An \code{AtPatternEvent} holds
+\begin{itemize}
+\item \code{GetTrackCand()}: a \code{std::vector<AtTrack>} of track candidates;
+\item \code{GetNoiseHits()}: the hits that the algorithm did not assign to any track.
+\end{itemize}
+
+Each \code{AtTrack} filled by the pattern recognition carries
+\begin{itemize}
+\item the raw hits (\code{GetHitArray()}, a vector of \code{std::unique\_ptr<AtHit>});
+\item the hit clusters (\code{GetHitClusterArray()}, a pointer to a \code{std::vector<AtHitCluster>});
+  the fitters (\code{AtGenfitter}, the UKF) read this array, not the raw hits;
+\item \code{GetTrackID()}: an integer identifier (see the pitfall in Section~\ref{sec:pr:pitfalls});
+\item \code{GetGeoRadius()}, \code{GetGeoCenter()}: circle fitted to the pad-plane projection, in mm;
+\item \code{GetGeoTheta()}, \code{GetGeoPhi()}: initial polar and azimuthal angles, in radians;
+\item \code{GetChargeSign()}: $+1$ or $-1$ from the rotation sense of the projection, $0$ if unknown;
+\item \code{GetPattern()}: the \code{AtPattern} (here an \code{AtPatternCircle2D}) used for the estimate.
+\end{itemize}
+All positions are in the digitisation (``digi'') frame of the hits: $z$ is the drift coordinate
+computed from the time bucket, and the beam travels from high to low $z_\mathrm{digi}$ (comment in
+\code{AtPRA::SelectAndMergeTracks}).
+
+\section{The task: \code{AtPRAtask}}
+\label{sec:pr:task}
+
+\code{AtPRAtask} (\url{AtReconstruction/AtPRAtask.h}) reads the input \code{AtEvent}, passes it to the
+\code{FindTracks} method of an \code{AtPRA} algorithm and writes the returned \code{AtPatternEvent}. It has two
+construction modes.
+
+\paragraph{Dependency injection (recommended).} One constructor of \code{AtPRAtask} takes a
+\code{std::unique\_ptr<AtPATTERN::AtPRA>}, a fully configured algorithm. All algorithm
+settings must then be made on the algorithm object before it is moved into the task; the task does not
+forward its own cluster radius, cluster distance or triplet parameters to an injected algorithm. It still
+forwards in \code{Init()}: the diffusion parameters from \code{AtDigiPar} and \code{SetPadResXY} (see
+Section~\ref{sec:pr:clusters}), and, when enabled on the task, the arc-walk options, the kNN pruning
+options, the drift-aware weights and the pre-clustering of the circle fit.
+
+\paragraph{Legacy algorithm number.} With the default constructor, \code{SetPRAlgorithm(int)} selects the
+algorithm in \code{Init()}: 0 builds \code{AtTrackFinderTC} (default), 3 builds
+\code{AtTrackFinderRiemann}. Values 1 (``RANSAC'') and 2 (``Hough transform'') print a message but
+construct no algorithm; \code{Exec()} then calls \code{FindTracks} on an empty pointer. Use
+\code{AtSampleConsensusTask} for RANSAC instead (Section~\ref{sec:pr:sac}). HDBSCAN has no algorithm
+number and is only available through injection.
+
+\begin{table}[htbp]
+\centering
+\begin{tabular}{p{0.36\textwidth}p{0.2\textwidth}p{0.36\textwidth}}
+\toprule
+Setter & Default & Meaning \\
+\midrule
+\code{SetInputBranch} & \code{AtEventH} & input \code{AtEvent} branch \\
+\code{SetOutputBranch} & \code{AtPatternEvent} & output branch \\
+\code{SetPersistence} & \code{kFALSE} & write the output branch to file \\
+\code{SetMinNumHits}, \code{SetMaxNumHits} & 10, 5000 & event processed only if
+  $10 < N_\mathrm{hits} < 5000$ (strict) \\
+\code{SetPRAlgorithm} & 0 & legacy selector (0 TC, 3 Riemann) \\
+\code{SetScluster}, \code{SetKtriplet}, \ldots & see Sec.~\ref{sec:pr:tc} & TC parameters, legacy path
+  only \\
+\code{SetClusterRadius}, \code{SetClusterDistance} & 20, 15 mm & cluster builder, legacy path only \\
+\code{SetUseArcWalk}, \code{SetTargetClusters}, \code{SetMinHitsPerCluster}, \code{SetArcWalkKNN} &
+  false, 25, 3, 10 & arc-walk clustering, forwarded in both modes \\
+\code{SetPrunning}, \code{SetkNN}, \code{SetStdDevMulkNN}, \code{SetkNNDist} & off, 5, 0, 10 mm &
+  kNN outlier pruning \\
+\code{SetPadResXY} & $-1$ (keep 2.3 mm) & transverse pad resolution for the covariance \\
+\code{SetUseDriftAwareWeights} & false & weight the circle fit by $1/\sigma^2_{xy}(z)$ \\
+\code{SetPreclusterRadiusFit}, \code{SetPreclusterBin} & false, 3 mm & arc-binned refit of the circle \\
+\code{SetTCUseSelectAndMerge} & true & TC primary/fragment heuristic (legacy path) \\
+\code{SetRiemann*} & see Sec.~\ref{sec:pr:riemann} & Riemann parameters (legacy path) \\
+\bottomrule
+\end{tabular}
+\caption{\code{AtPRAtask} configuration. Defaults from \code{AtPRAtask.h} and the default constructor.}
+\label{tab:pr:task}
+\end{table}
+
+If \code{FindTracks} returns a null pointer (TC does this for an empty cloud or when the nearest-neighbour
+scale \code{dnn} is zero), the task logs a warning and writes no entry for that event: the output
+\code{TClonesArray} is empty. Events outside the hit-number window also produce an empty array. Readers
+must test \code{GetEntriesFast()} before \code{At(0)}.
+
+\section{The common base: \code{AtPRA}}
+\label{sec:pr:base}
+
+\code{AtPATTERN::AtPRA} (\url{AtPatternRecognition/AtPRA.h}) defines the interface
+\code{virtual std::unique\_ptr<AtPatternEvent> FindTracks(AtEvent \&event) = 0} and the post-processing
+shared by the finders. Which finder calls which step is summarised in Table~\ref{tab:pr:steps}.
+
+\subsection{Initial parameters and the GeoTheta direction}
+\label{sec:pr:geotheta}
+
+\code{SetTrackInitialParameters(AtTrack\&)} (protected) computes the \code{Geo*} fields:
+\begin{enumerate}
+\item A subset of the track's raw hits is taken from the end of the hit array, which the code comment
+  calls the vertex end (``highest Z\_digi = last in array''). Its size is
+  $\max(\min(n_\mathrm{min},N), \min(\max(3, fN), n_\mathrm{max}, N))$ with $f$ =
+  \code{SetRadiusFitFraction} (default 1.0, i.e.\ all hits), $n_\mathrm{min}$ = \code{SetMinHitsRadius}
+  (3) and $n_\mathrm{max}$ = \code{SetMaxHitsRadius} (1000).
+\item A circle RANSAC (\code{AtSampleConsensus}, pattern \code{kCircle2D}, distance threshold 6~mm,
+  1000 iterations, minimum $0.1\times$ the subset size; all hard-coded) selects the inliers.
+\item An \code{AtPatternCircle2D} is fitted to the whole subset; optionally re-fitted with drift-aware
+  weights (\code{SetUseDriftAwareWeights}) or on charge-weighted centroids of arc bins of width
+  \code{SetPreclusterBin} (\code{SetPreclusterRadiusFit}). Centre and radius become \code{GeoCenter} and
+  \code{GeoRadius}.
+\item The charge sign is taken from the sign of the cross product of the hits ordered by distance from the
+  beam axis: \code{crossZ > 0} gives $-1$, otherwise $+1$. The code comment states that this was
+  calibrated on PUMA simulation.
+\item For the circle inliers, in hit-array order, the azimuth around the centre is unwrapped by counting
+  crossings of the $-y$ axis, and each hit is mapped to the plane (arc length $s$, $z$), with $s$ measured
+  from the first inlier.
+\item A line RANSAC (pattern \code{kLine}, threshold 6~mm, minimum $0.1\times$ the number of points, line
+  refit on) is run in the $(s,z)$ plane. Only the first line is used, i.e.\ the one with most inliers
+  (the RANSAC estimator stores $\chi^2 = 1/N_\mathrm{inliers}$ and patterns are sorted by it). With
+  $\hat d=(d_s,d_z)$ the unit direction of that line, the code sets
+  \[
+  \theta_\mathrm{geo} = \arccos\bigl(\mathrm{sign}\cdot|d_z|\bigr),\qquad
+  \mathrm{sign} = -1 \text{ if } d_s d_z < 0,\ +1 \text{ otherwise.}
+  \]
+  \code{GeoPhi} is the azimuth of the first inlier around the circle centre.
+\end{enumerate}
+
+The forward/backward decision is therefore the sign of the slope $\mathrm{d}z/\mathrm{d}s$ of a single
+RANSAC line: $\theta_\mathrm{geo} > 90^\circ$ when the slope is negative. Downstream code relies on it:
+\code{AtGenfitter} treats a track as backward when \code{GetGeoTheta() > M\_PI/2}
+(\url{AtFitter/AtGenfitter.cxx}), and \code{AtGenfit} chooses its forward or backward branch from the same angle (with $180^\circ -
+\theta_\mathrm{geo}$ under its simulation convention). Because the arc length is built by unwrapping in
+hit-array order, the result depends on that order (Section~\ref{sec:pr:pitfalls}). The RANSAC samples with
+\code{gRandom} (\url{AtTools/AtHitSampling/AtUniform.cxx}), so the result also depends on the state of the
+random generator. If no line is found the angle stays at its initial value 0, and the track is treated as
+forward. The macro \url{macro/Unpack_HDF5/a1975/D2_UKF/pra_theta.C} replays this calculation for one track
+and draws the $(s,z)$ plane. \code{AtGenfitter} offers alternative sources for the direction
+(\code{SetDirectionFromSpyral}, \code{SetDirectionFrom3D}); these are described in the fitting chapter.
+
+\subsection{Cluster ordering}
+
+\code{OrderClustersAlongTrack(AtTrack\&)} reorders the cluster array by a greedy nearest-neighbour walk
+starting from the cluster with the highest $z$ (the vertex end for forward tracks). The walk must consume
+every cluster; clusters it skips are visited at the end, so the tail of the array can jump back to the
+middle of the track. \url{macro/Unpack_HDF5/a1975/D2_UKF/zuturn_dp.C} measures this ``U-turn'' (total
+variation of $z$ along the array divided by the $z$ span) and quotes run\_0016 event 31316 as an example.
+The function reorders clusters only; the raw hit array is untouched.
+
+\subsection{Primary selection and fragment merging}
+\label{sec:pr:selectmerge}
+
+\code{SelectAndMergeTracks(tracks, vertexRadiusXY = 80, mergeDist = 30, minLabTheta = 10)} is an AT-TPC
+heuristic used by TC and Riemann (switchable, on by default). The finders call it with the defaults, so
+the three arguments cannot be changed from a macro. On the cluster arrays it
+\begin{enumerate}
+\item defines a vertex end (cluster closest to the beam axis in $xy$) and a far end (farthest from the
+  axis) for each track, independent of $z$;
+\item rejects tracks whose vertex-to-far-end direction is within 10$^\circ$ of the beam axis
+  ($\theta_\mathrm{lab}<10^\circ$ or $>170^\circ$) and degenerate tracks with no extent;
+\item marks as primary the tracks whose vertex end is within 80~mm of the beam axis and within 50~mm
+  (hard-coded) in $z$ of the highest vertex-end $z$ of the event;
+\item appends to a primary the hits of any non-primary track with an end within 30~mm of the primary's far
+  end, re-clusters the merged track and reorders its clusters; this repeats until nothing merges;
+\item deletes every remaining non-primary track.
+\end{enumerate}
+Two consequences follow from the code. Hits of rejected tracks are not added to the noise of the
+\code{AtPatternEvent}; they disappear from the output. A track whose clusters are empty (for example
+because the cluster radius is 0, Section~\ref{sec:pr:clusters}) has a degenerate direction and is rejected
+in step 2. Disable the heuristic with \code{SetUseSelectAndMerge(false)} on TC or Riemann for annular geometries
+such as PUMA, as the header comments advise. The 50~mm window assumes that the primaries of an event
+share one vertex.
+
+\subsection{kNN pruning}
+
+With \code{SetPrunning()} each track is passed to \code{PruneTrack}: for every hit the mean $\mu$ and
+standard deviation $\sigma$ of the distances to its \code{SetkNN} (5) nearest hits (the hit itself counts, at distance 0) are computed, and the
+hit is erased if $\mu + \sigma\cdot$\code{SetStdDevMulkNN} (0) $\geq$ \code{SetkNNDist} (10~mm). In TC
+and Riemann pruning runs after the clusters are built, so pruned hits still contribute to the clusters.
+HDBSCAN does not call it.
+
+\subsection{Unused members}
+
+\code{SetMaxHits}, \code{SetMinHits}, \code{SetMeanDistance} and \code{SetUseHitsForRadius} store values
+that no finder reads in the current code; \code{AtTrackFinderTC::SetPadding} likewise stores a value that
+is not passed to the triplet clustering.
+
+\begin{table}[htbp]
+\centering
+\begin{tabular}{p{0.33\textwidth}p{0.17\textwidth}p{0.17\textwidth}p{0.2\textwidth}}
+\toprule
+Step & TC & HDBSCAN & Riemann \\
+\midrule
+cluster builder & Smooth3D or arc walk & Smooth3D only & Smooth3D or arc walk \\
+default radius / distance & 0 / 0 (must be set) & 15 / 7.5 mm if unset & 0 / 0 (must be set) \\
+\code{OrderClustersAlongTrack} & yes & yes & yes \\
+\code{SelectAndMergeTracks} & yes (switch) & no & yes (switch) \\
+\code{SetTrackInitialParameters} & after selection & before clustering & after selection \\
+drops NaN/$\le$0 \code{GeoRadius} & yes & no & no \\
+kNN pruning & optional & no & optional \\
+track ID & cluster label & 0, 1, 2, \ldots & order found \\
+\bottomrule
+\end{tabular}
+\caption{Post-processing performed by each finder (from the \code{FindTracks} implementations).}
+\label{tab:pr:steps}
+\end{table}
+
+\section{TriplClust: \code{AtTrackFinderTC}}
+\label{sec:pr:tc}
+
+\paragraph{Idea.} \code{AtTrackFinderTC} wraps the TriplClust algorithm of Dalitz, Wilberg and Aymans
+(``TriplClust: An Algorithm for Curve Detection in 3D Point Clouds'', IPOL; source in
+\url{AtPatternRecognition/triplclust/}). A track is a curve, locally a straight line. The algorithm
+\begin{enumerate}
+\item computes $d_\mathrm{NN}$, the square root of the first quartile of the squared nearest-neighbour
+  distances of the cloud;
+\item smooths the cloud by replacing each point with the mean of its neighbours within radius $r$;
+\item for each smoothed point, forms triplets with pairs of its $k$ nearest neighbours whose two branches
+  are nearly collinear ($1-\cos\angle \le a$) and keeps the $n$ best;
+\item clusters the triplets by single-linkage hierarchical clustering with a triplet distance scaled by $s$,
+  and cuts the dendrogram at distance $t$;
+\item discards clusters with fewer than $m$ triplets and converts triplet clusters into point clusters.
+\end{enumerate}
+Each surviving cluster becomes one \code{AtTrack}; points in no cluster become noise. A point that belongs
+to triplets of two clusters is added to both tracks.
+
+\paragraph{Configuration.} The setters act on \code{inputParams} (defaults in
+\code{AtTrackFinderTC.h}, identical to the legacy defaults in the \code{AtPRAtask} constructor). In the
+wrapper $r$ and $s$ are multiples of $d_\mathrm{NN}$ (\code{rdnn} and \code{sdnn} are true in
+\code{Opt::Opt()}), and the automatic cut on $t$ is off.
+
+\begin{table}[htbp]
+\centering
+\begin{tabular}{p{0.32\textwidth}p{0.1\textwidth}p{0.5\textwidth}}
+\toprule
+Setter & Default & Meaning \\
+\midrule
+\code{SetRsmooth} & 2 & smoothing radius, in units of $d_\mathrm{NN}$ \\
+\code{SetKtriplet} & 19 & neighbours considered when building triplets \\
+\code{SetNtriplet} & 2 & best triplets kept per point \\
+\code{SetAtriplet} & 0.03 & maximum $1-\cos$ of the angle between the triplet branches \\
+\code{SetScluster} & 0.3 & distance scale of the triplet metric, in units of $d_\mathrm{NN}$ \\
+\code{SetTcluster} & 4.0 & dendrogram cut distance \\
+\code{SetMcluster} & 15 & minimum number of triplets per cluster \\
+\code{SetUseSelectAndMerge} & true & apply Section~\ref{sec:pr:selectmerge} \\
+\code{SetClusterRadius}, \code{SetClusterDistance} & 0, 0 & cluster builder (base-class defaults; must
+  be set when injecting) \\
+\bottomrule
+\end{tabular}
+\caption{\code{AtTrackFinderTC} parameters.}
+\end{table}
+
+After clustering, each track is clustered (\code{ClusterizeSmooth3D} with the base-class radius and
+distance, or \code{ClusterizeArcWalk}), its clusters are ordered, optionally pruned, then
+\code{SelectAndMergeTracks} runs, then \code{SetTrackInitialParameters}. Tracks whose \code{GeoRadius} is
+NaN or $\le 0$ are dropped with a message ``AtPRA filter: \ldots dropped''; their hits are not put into
+the noise.
+
+\paragraph{Example.} The a1975 macro \url{macro/Unpack_HDF5/a1975/UKF/pipeline/unpackReco_a1975_UKF.C}
+(16C on H$_2$) uses TC with the default triplet parameters and sets only the cluster builder:
+\begin{verbatim}
+   Double_t clusterRadius = 15.0;
+   Double_t clusterDistance = 7.5;
+   auto praAlgo = std::make_unique<AtPATTERN::AtTrackFinderTC>();
+   praAlgo->SetClusterRadius(clusterRadius);
+   praAlgo->SetClusterDistance(clusterDistance);
+   AtPRAtask *praTask = new AtPRAtask(std::move(praAlgo));
+   praTask->SetInputBranch(useSC ? "AtEventCorrected" : "AtEventH");
+   praTask->SetOutputBranch("AtPatternEvent");
+   praTask->SetPersistence(true);
+\end{verbatim}
+The same pattern appears in \url{macro/Unpack_HDF5/a1975/unpackNFit_a1975.C} and
+\url{macro/Unpack_HDF5/a1975/D2_UKF/unpackReco_a1975_deuterium.C}. Other a1975 macros use HDBSCAN
+instead (\url{macro/Unpack_HDF5/a1975/D2_UKF/unpackReco_multifit.C},
+\url{macro/Unpack_HDF5/a1975/UKF/pd/prod_h2_hdb.sh}), so check the macro of the production in question.
+
+\section{HDBSCAN: \code{AtTrackFinderHDBSCAN}}
+\label{sec:pr:hdbscan}
+
+\paragraph{Idea.} \code{AtTrackFinderHDBSCAN} is a self-contained C++ implementation of HDBSCAN* followed by
+the cluster joining and outlier cleaning of the Spyral analysis package (header comment: ``Mirrors Spyral
+a1975 config''). The header states its purpose: to separate overlapping or crossing tracks that TC merges,
+and then to join over-segmented pieces of one track. The steps in \code{FindTracks} are:
+\begin{enumerate}
+\item \textbf{Core distances.} For each hit, the distance to its $k$-th nearest neighbour, $k$ =
+  \code{SetMinSamples}.
+\item \textbf{Mutual-reachability MST.} The edge weight between hits $i$ and $j$ is
+  $\max(\mathrm{core}_i, \mathrm{core}_j, d_{ij})$; the minimum spanning tree is built by Prim's algorithm over all pairs
+  ($O(N^2)$ in time).
+\item \textbf{Condensed tree and excess of mass.} Splits that leave fewer than the minimum cluster size
+  points are treated as points falling out; the most stable clusters are selected. With
+  \code{SetClusterSelectionEpsilon} $>0$, a selected cluster is replaced by its parent while the split
+  that created it happened at a distance below epsilon, so pieces closer than epsilon (mm) are not separated.
+\item \textbf{Joining} of the resulting clusters by the method chosen with \code{SetJoinMethod}.
+\item \textbf{Local Outlier Factor cleaning} inside each cluster: a hit is removed if its LOF exceeds
+  \code{SetOutlierThreshold}, with $k=\max(2, \mathrm{scale}\cdot n)$ neighbours.
+\item Each cluster becomes an \code{AtTrack} with IDs 0, 1, 2, \ldots; \code{SetTrackInitialParameters}
+  is called, then the hit clusters are built with \code{ClusterizeSmooth3D} and ordered. Unassigned hits
+  go to the noise.
+\end{enumerate}
+The minimum cluster size is \code{SetMinClusterSize} if positive, otherwise
+$\max(\mathrm{lowerCutoff}, \mathrm{scale}\cdot N_\mathrm{hits})$.
+
+\paragraph{Join methods.} All methods only consider clusters with at least \code{SetMinClusterSizeJoin}
+hits.
+\begin{itemize}
+\item \code{"overlap"} (default): each cluster gets a least-squares (Kasa) circle and a winding direction
+  (fraction of increasing azimuth steps along $z$ compared with \code{SetDirectionThreshold}); clusters with
+  the same direction merge if the overlap area of their circles exceeds \code{SetCircleOverlapRatio} times
+  the area of the smaller circle. Circles with radius below 10~mm are ignored. Iterates until stable.
+\item \code{"continuity"}: same-direction clusters merge if the downstream end of one and the upstream end
+  of the other are close in $z$ (fraction \code{SetJoinZFraction} of the total $z$ extent) and in radial
+  distance from the circle centre (fraction \code{SetJoinRadiusFraction} of the mean radius).
+\item \code{"both"}: \code{"continuity"} then \code{"overlap"}.
+\item \code{"motion"}: a vertex proxy is computed (centroid of the 10\,\% of clustered hits closest to the
+  beam axis); starting from the cluster nearest to it, clusters are chained end to end when the gap is below
+  \code{SetMotionGapTol} (mm) and the travel tangents (and the gap direction) agree within
+  \code{SetMotionAngleTol} (degrees). This allows the curvature to change along the track, unlike the
+  fixed-circle joins.
+\item \code{"mover"}: \code{"motion"} followed by \code{"overlap"} (the comment: end-to-end energy loss,
+  then spiral splits).
+\item \code{"none"}: no joining.
+\end{itemize}
+
+\begin{table}[htbp]
+\centering
+\begin{tabular}{p{0.34\textwidth}p{0.13\textwidth}p{0.45\textwidth}}
+\toprule
+Setter & Default & Meaning \\
+\midrule
+\code{SetMinClusterSize} & 0 & fixed minimum cluster size; $\le 0$ selects the adaptive value \\
+\code{SetMinSizeScaleFactor} & 0.05 & adaptive size $=\max(\mathrm{cutoff}, 0.05\,N_\mathrm{hits})$ \\
+\code{SetMinSizeLowerCutoff} & 10 & lower bound of the adaptive size \\
+\code{SetMinSamples} & 3 & $k$ of the core distance \\
+\code{SetClusterSelectionEpsilon} & 10.0 & do not split clusters closer than this (mm) \\
+\code{SetAllowSingleCluster} & true & allow the root to be the only cluster \\
+\code{SetJoinMethod} & \code{"overlap"} & see the list above \\
+\code{SetCircleOverlapRatio} & 0.25 & overlap join threshold \\
+\code{SetMinClusterSizeJoin} & 15 & minimum hits for a cluster to take part in a join \\
+\code{SetJoinZFraction} & 0.2 & continuity join, $z$ gap fraction \\
+\code{SetJoinRadiusFraction} & 0.3 & continuity join, radius fraction \\
+\code{SetDirectionThreshold} & 0.5 & winding-direction decision \\
+\code{SetMotionGapTol} & 40.0 & motion join, maximum gap (mm) \\
+\code{SetMotionAngleTol} & 35.0 & motion join, maximum tangent mismatch (deg) \\
+\code{SetOutlierScaleFactor} & 0.05 & LOF neighbours fraction; $\le 0$ disables LOF \\
+\code{SetOutlierThreshold} & 1.5 & LOF cut \\
+\code{SetClusterRadius}, \code{SetClusterDistance} & 15, 7.5 & used when the base-class value is 0 \\
+\bottomrule
+\end{tabular}
+\caption{\code{AtTrackFinderHDBSCAN} parameters (\code{AtTrackFinderHDBSCAN.h} and \code{.cxx}).}
+\end{table}
+
+HDBSCAN does not run \code{SelectAndMergeTracks}, does not drop tracks with an invalid radius, ignores
+\code{SetUseArcWalk} and does not prune. Beam-like clusters are therefore kept as track candidates and
+must be removed downstream.
+
+\paragraph{Example.} The a1975 16C(d,t) simulation reconstruction,
+\url{macro/Simulation/ATTPC/16C_dt/run_reco_C16dt.C}, with the macro defaults \code{hdMcs = 20},
+\code{hdMs = 8}, \code{joinMethod = "mover"}:
+\begin{verbatim}
+   auto hdb = std::make_unique<AtPATTERN::AtTrackFinderHDBSCAN>();
+   hdb->SetMinClusterSize(hdMcs);
+   hdb->SetMinSamples(hdMs);
+   hdb->SetClusterSelectionEpsilon(10.0);
+   hdb->SetJoinMethod(joinMethod.Data());
+   hdb->SetMinClusterSizeJoin(15);
+   hdb->SetCircleOverlapRatio(0.25);
+   hdb->SetMotionGapTol(40);
+   hdb->SetMotionAngleTol(35);
+   AtPRAtask *praTask = new AtPRAtask(std::move(hdb));
+   praTask->SetInputBranch("AtEventClean");
+   praTask->SetOutputBranch("AtPatternEvent");
+   praTask->SetPersistence(kTRUE);
+\end{verbatim}
+No cluster radius is set, so the 15/7.5~mm fallback applies. The header comment of this macro records
+that the (p,d) simulation was reconstructed with \code{AtPSAMultiFit} + HDBSCAN while the (p,d) data ran
+\code{AtPSAMax} + TC; when an acceptance is computed from simulation, the finder (and the PSA) should match
+the one used on the data.
+
+\section{Seeded circle RANSAC: \code{AtTrackFinderRiemann}}
+\label{sec:pr:riemann}
+
+Despite its name (kept for the legacy algorithm number 3), the current \code{AtTrackFinderRiemann} is a
+circle RANSAC with local seeds, as its header explains. In each of at most \code{SetMaxTracks} passes over
+the unassigned hits it draws a random seed hit and two more from its \code{SetKNN} nearest neighbours in 3D,
+builds the circle through the three and a line $z = a + b\phi$ through two of them, and counts hits that are
+within \code{SetInlierDist} of the circle in $xy$ and within \code{SetZInlierDist} of the line in $z$. The
+best candidate is refitted, cut to its largest contiguous arc (gap below \code{SetMaxPhiGap}), optionally
+extended by a sliding-window arc walk (\code{SetUseArcWalkExtend}), and accepted with at least
+\code{SetMinHitsPerTrack} hits. The random generator is a \code{std::mt19937} seeded with
+\code{SetSeed} (12345), so results are reproducible.
+
+\begin{table}[htbp]
+\centering
+\begin{tabular}{p{0.3\textwidth}p{0.12\textwidth}p{0.5\textwidth}}
+\toprule
+Setter (task setter) & Default & Meaning \\
+\midrule
+\code{SetInlierDist} (\code{SetRiemannInlierDist}) & 5.0 (15.0) & $xy$ residual cut, mm \\
+\code{SetZInlierDist} & 15.0 & $z$ residual cut, mm \\
+\code{SetMinHitsPerTrack} (\code{SetRiemannMinHits}) & 10 & minimum hits per track \\
+\code{SetMaxTracks} (\code{SetRiemannMaxTracks}) & 6 & maximum tracks extracted \\
+\code{SetMaxIterations} (\code{SetRiemannMaxIter}) & 400 & RANSAC iterations per pass \\
+\code{SetKNN}, \code{SetSeed}, \code{SetMaxPhiGap} & 10, 12345, 60$^\circ$ & seeding and arc split \\
+\code{SetUseSelectAndMerge} & true & Section~\ref{sec:pr:selectmerge} \\
+\code{SetUseArcWalkExtend}, \code{SetArcWalkWindow}, \code{SetArcWalkMaxMiss} & false, 10, 5 & tail
+  recovery \\
+\bottomrule
+\end{tabular}
+\caption{\code{AtTrackFinderRiemann} parameters. Values in parentheses are the \code{AtPRAtask}
+defaults used on the legacy path, which differ for the inlier distance.}
+\end{table}
+
+\section{Sample consensus: \code{AtSampleConsensus} and its tasks}
+\label{sec:pr:sac}
+
+\code{SampleConsensus::AtSampleConsensus} (\url{AtPatternRecognition/AtSampleConsensus.h}) fits a
+parametric \code{AtPattern} to a hit cloud. It is used in two ways: as a track finder for straight or
+simple topologies (fission, beam plus products), and internally by \code{AtPRA} for the circle and the
+$(s,z)$ line of Section~\ref{sec:pr:geotheta}.
+
+\paragraph{Algorithm.} \code{Solve} generates \code{SetNumIterations} candidate patterns from random
+samples of the minimum number of points of the pattern, scores each with the chosen estimator and keeps
+those with more than \code{SetMinHitsPattern} inliers, sorted by the estimator's $\chi^2$ (for RANSAC
+$1/N_\mathrm{inliers}$). Then, best first, it moves the hits within \code{SetDistanceThreshold} of each
+pattern out of the cloud into a new track (optionally refitting the pattern, \code{SetFitPattern}, with a
+charge-weighted fit above \code{SetChargeThreshold}, $-1$ disabling the weighting). Remaining hits are
+noise. Track IDs are the positions in the output vector.
+
+\begin{itemize}
+\item Patterns (\code{AtPatterns::PatternType}): \code{kLine}, \code{kRay}, \code{kCircle2D}, \code{kY},
+  \code{kFission}.
+\item Estimators (\code{SampleConsensus::Estimators}): \code{kRANSAC} (inlier count), \code{kLMedS},
+  \code{kMLESAC}, \code{kWRANSAC} (charge weighted), \code{kChi2} (mean squared residual of inliers),
+  \code{kYRANSAC} (ignores the beam branch of a Y pattern).
+\item Samplers (\code{RandomSample::SampleMethod}): \code{kUniform}, \code{kChargeWeighted},
+  \code{kGaussian}, \code{kWeightedGaussian}, \code{kWeightedY}, \code{kWeightedGaussianTrunc}, \code{kY}.
+\end{itemize}
+Defaults of the class: estimator \code{kRANSAC}, pattern \code{kLine}, sampler \code{kUniform}, 500
+iterations, 30 minimum points, 15~mm threshold, pattern refit on, no charge weighting.
+
+\paragraph{Tasks.} \code{AtSampleConsensusTask} takes a configured \code{AtSampleConsensus} as a
+\code{unique\_ptr}; branches default to \code{AtEventH} in and \code{AtPatternEvent} out, persistence
+off. \code{AtRansacTask} builds a line fit itself: estimator \code{kChi2} by default, \code{kMLESAC},
+\code{kLMedS} or \code{kWRANSAC} for \code{SetAlgorithm(2)}, \code{(3)}, \code{(4)}; threshold
+\code{SetDistanceThreshold} (5~mm), \code{SetMinHitsLine} (5), \code{SetNumItera} (500), sampler
+\code{SetRanSamMode} (0, uniform). The \code{fRANSACModel} member set by \code{SetModelType} is not used in
+\code{Exec}.
+
+Sample-consensus tracks have no hit clusters and zero \code{Geo*} fields. \code{AtPatternBridgeTask}
+(\url{AtReconstruction/AtPatternBridgeTask.h}) fills them for tracks whose pattern is an
+\code{AtPatternCircle2D}: it copies centre and radius, runs \code{ClusterizeSmooth3D} with its own
+defaults (radius 8~mm, distance 5~mm) and estimates \code{GeoTheta} from the first and last cluster.
+
+\paragraph{Example.} A fission (two-line) fit in \url{macro/e12014/adam/unpack/unpack_linked.C}:
+\begin{verbatim}
+   auto method = std::make_unique<SampleConsensus::AtSampleConsensus>(
+      SampleConsensus::Estimators::kYRANSAC, AtPatterns::PatternType::kFission,
+      RandomSample::SampleMethod::kY);
+   method->SetDistanceThreshold(20);
+   method->SetNumIterations(500);
+   method->SetMinHitsPattern(150);
+   method->SetChargeThreshold(10); //-1 implies no charge-weighted fitting
+   method->SetFitPattern(true);
+   auto sacTask = new AtSampleConsensusTask(std::move(method));
+\end{verbatim}
+
+\section{Hit clusters for the fit}
+\label{sec:pr:clusters}
+
+The fitters do not fit raw hits. Each track's hits are condensed into \code{AtHitCluster}s
+(\url{AtData/AtHitCluster.h}, derived from \code{AtHit}) that carry a position, a charge, a mean time
+stamp and a $3\times3$ covariance matrix (\code{GetCovMatrix()}). Two builders exist in
+\code{AtTools::AtTrackTransformer}.
+
+\subsection{\code{ClusterizeSmooth3D(track, radius, distance)}}
+
+\begin{enumerate}
+\item Walk the hit array in its stored order, keeping a reference position (initially the first hit).
+  Each time a hit lies at least \code{distance} from the reference, collect all hits of the track within
+  \code{radius} of the reference and form a cluster, unless an existing cluster lies within
+  \code{distance}; then move the reference to the current hit.
+\item Smoothing pass: if there are more than two clusters, for each consecutive pair insert the midpoint,
+  and re-cluster around each original centre and each midpoint with radius/2; these clusters replace the
+  first-pass ones.
+\end{enumerate}
+The cluster $x$ and $y$ are charge-weighted means; $z$ and the time stamp are unweighted means. Both
+parameters are strict inequalities on 3D distances in mm: with \code{radius} = 0 no hit is ever collected
+and the track has no clusters. This is why \code{SetClusterRadius} must be called on an injected TC or
+Riemann finder, whose base-class default is 0. The \code{AtPRAtask} legacy defaults are radius 20~mm,
+distance 15~mm (comment: ``Gives 2.2\% RMS (was r10 d20 $\to$ 3.8\%)''); the a1975 TC macros use 15 and
+7.5~mm, which is also the HDBSCAN fallback.
+
+\subsection{\code{ClusterizeArcWalk(track, targetClusters, minHitsPerCluster, kNN)}}
+
+Enabled with \code{SetUseArcWalk(true)} (TC and Riemann only). It builds a kNN graph of the hits, extracts a
+spanning tree and an ordering along it by a double depth-first search, and groups consecutive hits into
+clusters of $\max(\mathrm{minHitsPerCluster}, N_\mathrm{hits}/\mathrm{targetClusters})$ hits (defaults 25
+target clusters, 3 hits minimum, $k=10$). The ordering does not sort on $z$, which is why the
+\code{AtGenfitter} header recommends it together with \code{SetUseClusterOrder}. Note that TC and Riemann
+still call \code{OrderClustersAlongTrack} after it, so the stored order is the nearest-neighbour walk from the
+highest-$z$ cluster rather than the arc-walk order.
+
+\subsection{Cluster covariance}
+
+Both builders compute a diagonal covariance. For a hit at drift distance $z$ (mm), with drift time
+$t = z/(10\,v_d)$ ($v_d$ in cm/\textmu s),
+\begin{align*}
+\sigma^2_{x} = \sigma^2_{y} &= \sigma^2_\mathrm{pad} + 200\,D_T\,t, \\
+\sigma^2_{z} &= (1.5\,\sigma_\mathrm{pad})^2 + \frac{(10\,v_d\,t_\mathrm{TB})^2}{12} + 200\,D_L\,t,
+\end{align*}
+in mm$^2$, with $D_T$, $D_L$ in cm$^2$/\textmu s and $t_\mathrm{TB}$ the time-bucket length in \textmu s.
+The cluster variance is that of a charge-weighted mean, $\sigma^2_\mathrm{cl} = \sum q_i^2\sigma_i^2 /
+(\sum q_i)^2$. The defaults in \code{AtTrackTransformer.h} are $D_T = 9\times10^{-5}$, $D_L =
+9\times10^{-7}$, $v_d = 1.0$, $t_\mathrm{TB} = 0.320$ and $\sigma_\mathrm{pad} = 2.3$~mm ($8/\sqrt{12}$).
+\code{AtPRAtask::Init()} overwrites the first four with \code{AtDigiPar} values
+(\code{GetCoefDiffusionTrans}, \code{GetCoefDiffusionLong}, \code{GetDriftVelocity},
+\code{GetTBTime}$\times10^{-3}$) and the pad resolution with \code{SetPadResXY} if positive.
+
+\url{docs/development/ClusterCovariance.md} describes the earlier state, in which these coefficients were
+hard-coded 10 to 1000 times too large, and the plan (pass \code{AtDigiPar}, use $8/\sqrt{12}$ for the
+pad resolution) that the code above now implements. Its Step 4 (validation of $\chi^2/\mathrm{ndf}$ with
+the UKF) is not documented as done. \url{docs/development/ClusteringOptimization.md} lists the open
+concerns about the cluster builder: midpoint insertion can move cluster centres off the track, the
+ordering depends on finding the vertex end, and \code{GeoRadius} is a projection-plane estimate.
+
+\section{Vertex finding: \code{AtFindVertex}}
+
+\code{AtFindVertex} (\url{AtTools/AtFindVertex.h}; a \code{TObject}-derived copy is in
+\url{AtAnalysis/}) finds vertices from straight-line tracks: it casts each track's pattern to
+\code{AtPatternLine}, so it needs sample-consensus line tracks, not the circle patterns of the helical
+finders. It is constructed with a line-distance
+threshold (default 15~mm), takes the beam line with \code{SetBeam(pos, dir)}, and
+\code{FindVertex(tracks, nbTracksPerVtx)} groups lines whose mutual distance is below the threshold and
+provides, through \code{GetTracksVertex()}, a list of vertex positions with their tracks. It is used by the
+d2He analysis macros (\url{macro/Simulation/ATTPC/d2He/ana_d2He.C}, with threshold 12~mm). It is not used
+by the helical finders above, which locate the vertex only through the heuristics of
+Section~\ref{sec:pr:selectmerge}.
+
+\section{Choosing an algorithm}
+
+\begin{itemize}
+\item \textbf{TC} is the default of \code{AtPRAtask}; the header of
+  \url{macro/Simulation/ATTPC/16C_dt/run_reco_C16dt.C} records it as the finder of the a1975 (p,d) data. With \code{SelectAndMergeTracks} it returns only tracks that start near the beam axis
+  at the event vertex, with beam tracks and isolated fragments removed. Its memory grows with the square
+  of the number of triplets (condensed distance matrix in \code{compute\_hc}).
+\item \textbf{HDBSCAN} is intended for events where tracks overlap or cross, which TC merges (header
+  comment), and reproduces the Spyral clustering. Its output keeps every cluster, including beam-like
+  ones, and its cost grows as $N_\mathrm{hits}^2$ (all-pairs core distances and MST). Use
+  \code{"mover"} or \code{"motion"} joining for stopping particles whose curvature changes.
+\item \textbf{Riemann} (seeded circle RANSAC) is deterministic for a fixed seed and finds a fixed maximum
+  number of helices; the header documents it as replacing earlier variants that lost too many hits.
+\item \textbf{Sample consensus} is the choice for straight tracks without a magnetic field or for
+  parametric topologies (\code{kY}, \code{kFission}); add \code{AtPatternBridgeTask} if a helix fitter
+  must consume circle patterns.
+\end{itemize}
+When an acceptance or efficiency is taken from simulation, the simulation must be reconstructed with the
+same finder and settings as the data (Section~\ref{sec:pr:hdbscan}).
+
+\section{Known pitfalls}
+\label{sec:pr:pitfalls}
+
+\paragraph{Track IDs are not array positions.} In \code{AtTrackFinderTC}, \code{SetTrackID(cluster\_index)}
+stores the index of the TriplClust cluster. \code{SelectAndMergeTracks} then erases tracks and the
+\code{GeoRadius} filter skips more, so the surviving IDs are in general non-contiguous and
+\code{GetTrackCand()[id]} is not the track with that ID. The same holds for Riemann (ID = number of tracks
+before it, then selection erases some). Only HDBSCAN and \code{AtSampleConsensus} number tracks by their
+position. Loop over \code{GetTrackCand()} and compare \code{GetTrackID()}, never index by it.
+
+\paragraph{Hit order is time order, and it is not an order along the track.} \code{AtPSA::Analyze} ends with
+\code{event->SortHitArrayTime()}, a \code{std::sort} on the integer time stamp. \code{std::sort} is not
+stable, so hits in the same time bucket have no defined order. Cleaning and space-charge tasks copy hits in input order. TC fills each track in increasing point
+index (sorted in \code{cluster\_triplets\_to\_points}), i.e.\ in this time order; HDBSCAN fills each label
+in increasing hit index, so a joined track is a concatenation of time-ordered pieces; \code{SelectAndMergeTracks} appends
+merged fragments at the end. Three consumers depend on that order:
+\begin{itemize}
+\item \code{SetTrackInitialParameters} takes the fit subset from the end of the array and unwraps the
+  azimuth in array order, so \code{GeoTheta} (and hence forward/backward) depends on it. The header of
+  \url{macro/Unpack_HDF5/a1975/D2_UKF/theta_order_test.C} reports that, measured on run\_0020, the stored hit
+  path of HDBSCAN tracks is up to 2.8 times the nearest-neighbour path. \code{OrderClustersAlongTrack} does
+  not help: it reorders clusters, not hits.
+\item \code{ClusterizeSmooth3D} walks the hit array in its stored order to place the cluster centres.
+\item The fitters. Unless \code{SetUseClusterOrder(true)} is set, \code{AtGenfitter} sorts the clusters
+  by $z$ before fitting. Its header explains why that fails for tracks nearly perpendicular
+  to the beam: the $z$ advance per cluster falls below the $z$ noise and one time bucket, so the sort orders
+  noise. The option keeps the pattern-recognition order instead; the header pairs it with
+  \code{AtPRA::SetUseArcWalk(true)}.
+\end{itemize}
+
+\paragraph{GeoTheta is one sign of one RANSAC line.} The direction rests on the sign of the slope of the
+best line in the $(s,z)$ plane (Section~\ref{sec:pr:geotheta}). It is random (\code{gRandom}), sensitive
+to hit order, defaults to $0$ (forward) when no line is found, and is used as is by \code{AtGenfitter}
+(backward if $>90^\circ$) and \code{AtGenfit}. The \code{AtGenfitter} header states that on a1975 H$_2$
+data GeoTheta disagrees with the Spyral estimate on 8\,\% of tracks and is the wrong one where the elastic
+locus can decide; see \code{SetDirectionFromSpyral} and \code{SetDirectionFrom3D} there.
+
+\paragraph{Merged candidates.} No finder verifies that a candidate contains one particle. TC merges
+crossing tracks (the reason HDBSCAN was added, per its header); \code{SelectAndMergeTracks} attaches any
+non-primary track with an end within 30~mm of a primary's far end; HDBSCAN's overlap join merges any two
+same-direction clusters whose circles overlap by 25\,\%. A candidate that contains two particles is not
+repaired by any ordering of its hits or clusters: z sorting, the nearest-neighbour walk and the arc walk
+all produce one sequence through both. The greedy walk instead produces the U-turns measured by
+\url{macro/Unpack_HDF5/a1975/D2_UKF/zuturn_dp.C}.
+
+\paragraph{Cluster radius 0 on injected finders.} \code{AtPRA} initialises the cluster radius and distance
+to 0. TC and Riemann pass them unchanged to \code{ClusterizeSmooth3D}, which then builds no clusters;
+\code{SelectAndMergeTracks} rejects such tracks as degenerate and the fitters have no measurements. Always
+call \code{SetClusterRadius} and \code{SetClusterDistance} on the algorithm before injecting it (the
+\code{AtPRAtask} setters only apply on the legacy path).
+
+\paragraph{Hits that vanish.} Hits of tracks removed by \code{SelectAndMergeTracks} or by the TC
+\code{GeoRadius} filter are neither in a track nor in \code{GetNoiseHits()}. Do not compute
+``assigned + noise = all hits'' efficiencies from TC output.
+
+\paragraph{Pattern event header.} TC, HDBSCAN and Riemann create a fresh \code{AtPatternEvent}; the event
+ID and the good/bad flag of the input \code{AtEvent} are not copied into it (\code{AtSampleConsensus}
+copies them). Match events by entry number, or read the ID from the input event branch.
+
+\paragraph{Legacy algorithm numbers 1 and 2.} They construct nothing; the first event inside the hit-number
+window then dereferences an empty algorithm pointer.

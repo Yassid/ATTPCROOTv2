@@ -1,0 +1,1132 @@
+\chapter{Track fitting}
+\label{ch:fitting}
+
+Track fitting turns the clustered track candidates of the pattern recognition into kinematics: a kinetic energy, a
+polar and an azimuthal angle, and a vertex for every fitted track. This chapter describes the FairRoot task that drives
+the fit (\code{AtFitterTask}), the fitter interface it owns (\code{EventFit::AtFitter}), the two maintained fitters
+(the GENFIT Kalman fitter \code{EventFit::AtGenfitter} and the Unscented Kalman Filter \code{EventFit::AtFitterUKF}),
+the remaining fitters in \url{AtReconstruction/AtFitter/}, and the output classes. It closes with the pitfalls that
+have been measured on a1975 data. It supersedes the stand-alone manual
+\url{docs/UKF_GENFIT_manual/ukf_genfit_manual.tex}.
+
+Installation of GENFIT and the environment needed to run the macros are covered in Chapter~\ref{ch:installation}; the
+classes \code{AtTrack}, \code{AtHitCluster} and \code{AtPatternEvent} in Chapter~\ref{ch:datamodel}; the PID
+estimators (\code{AtSpyralPID}, \code{AtHelix3D}) and the drawing of gates in Chapter~\ref{ch:pid}.
+
+\section{Overview}
+\label{sec:fit-overview}
+
+The fitter reads only the branch \code{AtPatternEvent}. Everything upstream (unpacking, PSA, space-charge correction,
+pattern recognition) is therefore run once and written to a ``reco'' file, and the fit is repeated on that file as
+often as needed with different settings. All a1975 production scripts work this way: the input of the fit is a file
+\code{<run>\_reco.root} (or \code{<run>\_multifit\_reco.root}), and the output is a new file holding
+\code{AtTrackingEvent} and, when an \code{AtPIDTask} runs in the same job, \code{AtPIDEvent}.
+
+Table~\ref{tab:fit-fitters} lists the fitting classes present on the branch.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}p{4.6cm}p{3.0cm}p{7.2cm}@{}}
+\toprule
+Class & Driven by & Status and use \\
+\midrule
+\code{EventFit::AtGenfitter} & \code{AtFitterTask} & GENFIT \code{KalmanFitterRefTrack} with \code{RKTrackRep}. The
+GENFIT fitter of the a1975 and a1954 productions. Compiled only when GENFIT2 is found. \\
+\code{EventFit::AtFitterUKF} & \code{AtFitterTask} & Unscented Kalman Filter on the vendored OpenKF library, CATIMA
+energy loss, RTS smoother. Compiled only when Eigen3 is found. \\
+\code{EventFit::\allowbreak AtFitterUKFMulti} & \code{AtFitterTask} & Runs several \code{AtFitterUKF} hypotheses per track and
+keeps one. \\
+\code{AtFITTER::AtGenfit} & \code{AtFitterTaskOld} & Original GENFIT fitter, marked \code{[[deprecated]]}; kept to
+reproduce older results. \\
+\code{MCFitter::AtMCFitter}, \code{AtMCFission} & \code{AtMCFitterTask} & Monte Carlo fitters that simulate and
+digitise trial events; \code{AtMCFission} is the fission implementation. \\
+\code{MCMinimization::\allowbreak AtMCQMinimization} & a macro & Monte Carlo minimisation on the pad charge, ported from the
+FairRootv18.00 branch. Not a task. \\
+\bottomrule
+\end{tabular}
+\caption{Fitting classes on the OpenKF-Claude branch.}
+\label{tab:fit-fitters}
+\end{table}
+
+\code{docs/development/fitting-status.md} states that fitting on this branch is not a settled architecture and that
+the code is the reference. Every default quoted below was read from the sources at the time of writing.
+
+\section{The fitter interface and AtFitterTask}
+\label{sec:fit-task}
+
+\subsection{EventFit::AtFitter}
+
+\code{EventFit::AtFitter} (\url{AtReconstruction/AtFitter/AtFitter.h}) is a \code{TObject} with two pure virtual
+methods, \code{Init()} and the protected \code{GetFittedTrack(AtTrack*, AtFitMetadata*, AtRawEvent*, AtEvent*)}, and a
+virtual \code{FitEvent()}. The default \code{FitEvent()} copies the track candidates out of the \code{AtPatternEvent},
+stores the copies in the \code{AtTrackingEvent} (\code{SetTrackArray}), calls \code{GetFittedTrack()} once per
+candidate, and adds every non-null result with \code{AddFittedTrack()}. A fitter that returns \code{nullptr} for a
+track drops it from the output; there is no record of the rejection apart from the missing track ID.
+
+A new fitter derives from \code{AtFitter}, implements \code{GetFittedTrack()} and returns a heap-allocated
+\code{AtFittedTrack} that the event takes ownership of. It may override \code{FitEvent()} when it needs to work on the
+whole event (\code{AtGenfitter} does so for continuity merging, Section~\ref{sec:gf-merge}).
+
+\subsection{AtFitterTask}
+
+\code{AtFitterTask} (\url{AtReconstruction/AtFitterTask.h}) is the FairRoot task. Its constructor takes ownership of
+the fitter:
+\begin{verbatim}
+AtFitterTask(std::unique_ptr<EventFit::AtFitter> fitter);
+\end{verbatim}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}p{5.6cm}p{2.8cm}p{6.4cm}@{}}
+\toprule
+Setter & Default & Effect \\
+\midrule
+\code{SetInputBranch(TString)} & \code{AtPatternEvent} & Branch holding the \code{AtPatternEvent}. \\
+\code{SetOutputBranch(TString)} & \code{AtTrackingEvent} & Branch the \code{AtTrackingEvent} is registered as. \\
+\code{SetPersistence(Bool\_t)} & \code{kFALSE} & Write the output branches to the file. \\
+\code{SetFitMetadataBranch(TString)} & unset & Register an \code{AtFitMetadata} branch (persistent only together
+with \code{SetPersistence}). \\
+\code{SetRawEventBranch(TString)} & unset & Pass the \code{AtRawEvent} to the fitter. \\
+\code{SetEventBranch(TString)} & unset & Pass the \code{AtEvent} to the fitter. \\
+\bottomrule
+\end{tabular}
+\caption{\code{AtFitterTask} configuration.}
+\end{table}
+
+Points about the task that matter in practice:
+\begin{itemize}
+\item \code{SetParContainers()} requests \code{AtDigiPar} and aborts with a fatal log message if it is missing, so
+  every fit macro opens a parameter file even when the fitter uses none of its values. The a1975 macros pass the par
+  file the reconstruction ran with (\code{parName} argument of \code{fitGenfitter\_a1975\_deuterium.C}); the macro
+  header records that a hard-coded par once made a drift-velocity study fit every variant against the baseline.
+\item The task never calls \code{fFitter->Init()}. \code{AtGenfitter} initialises itself on the first track (at which
+  point the geometry is loaded), and \code{AtFitterUKF} creates its filter lazily on the first track.
+\item \code{Exec()} copies the event ID of the \code{AtPatternEvent} into the \code{AtTrackingEvent}
+  (\code{SetEventID}). Use it, not the tree index, to join fit results with other data: a fit made on a pre-gated
+  file renumbers its entries from zero.
+\item If the input \code{TClonesArray} is empty, \code{Exec()} returns before clearing its output arrays. The tree
+  entry written for that event is the \emph{previous} event's \code{AtTrackingEvent}; see
+  Section~\ref{sec:fit-pitfalls}.
+\end{itemize}
+
+\section{Frames, vertex end and field sign}
+\label{sec:fit-frames}
+
+\paragraph{Digi and lab frames.} Hit and cluster positions in \code{AtPatternEvent} are in the digitisation frame, where
+$z_\mathrm{digi}$ comes from the drift time. Both maintained fitters convert to a lab frame with the pad plane at a
+configurable position:
+\[
+  z_\mathrm{lab} = z_\mathrm{pad} - z_\mathrm{digi},\qquad x_\mathrm{lab}=x_\mathrm{digi},\qquad
+  y_\mathrm{lab}=y_\mathrm{digi},
+\]
+with $z_\mathrm{pad}$ set by \code{SetZPadPlane()} (default 1000\,mm in \code{AtGenfitter}; in \code{AtFitterUKF} the
+default is $-1$, which disables the conversion, and all macros set 1000). The fitted angles, vertex and smoothed
+positions are returned in this lab frame. The vertex end of a beam-induced track is the end with the highest
+$z_\mathrm{digi}$, which is the lowest $z_\mathrm{lab}$.
+
+\paragraph{Simulation handedness.} The digitisation reverses the drift coordinate (\code{AtClusterize}), so a simulated
+track reconstructed by the same chain comes out mirrored in $z$ relative to Monte Carlo truth. The header of
+\url{macro/Simulation/ATTPC/16C_dt/run_reco_C16dt.C} records the consequence for analysis: the reconstructed polar angle
+of a simulated track is $180^\circ$ minus the true one.
+
+\paragraph{Field sign.} \code{AtDigiPar} carries only the magnitude of the field. Both fitters take a signed field, and
+the sign selects the helix handedness the fit can follow. With the wrong sign a fit does not fail loudly; it converges
+to a wrong momentum. The measured cases in the repository are:
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}p{3.6cm}p{3.2cm}p{8.0cm}@{}}
+\toprule
+Case & Field passed & Source of the statement \\
+\midrule
+a1975 data, UKF & $-2.85$\,T & \url{macro/Unpack_HDF5/a1975/UKF/README.md}: on run\_0116 the median $\chi^2/\mathrm{ndf}$
+is 0.04 and the median KE 7.9\,MeV at $-2.85$\,T, against 3.09 and 152\,MeV at $+2.85$\,T. \\
+a1975 data, \code{AtGenfitter} & $-2.85$\,T & Default of the constructor and of every a1975 fit macro and production
+script. \\
+16C(p,p) simulation, UKF & $+2.85$\,T & \url{macro/Simulation/ATTPC/16C_pp/run_ukf_only.C}; the Geant4 field of
+\code{C16\_pp\_sim.C} is $+28.5$\,kG. \\
+46Ar(3He,d) simulation, \code{AtGenfitter} & $-2.85$\,T & Header of
+\url{macro/Simulation/ATTPC/46Ar_3Hed/fitGenfitter_Ar46.C}: at $+2.85$\,T backward tracks at
+$\theta_\mathrm{lab}=110$--$125^\circ$ collapse to 1\,\% of the true energy and 94.1\,\% of truth tracks are fitted,
+against 98.2\,\% at $-2.85$\,T. That simulation is generated with a Geant4 field of $-28.5$\,kG. \\
+\code{AtMCQMinimization}, a1975 run\_0106 & \code{SetBFieldSign(-1)} &
+\url{macro/tests/AT-TPC/MCQMinimizationOnData.C}. \\
+\bottomrule
+\end{tabular}
+\caption{Field signs that have been measured.}
+\label{tab:fit-bsign}
+\end{table}
+
+The simulations of the a1975 (d,t) channel (\code{C16\_dt\_sim.C}) are generated with $-28.5$\,kG ``in the data
+convention'', according to the comment in that macro. The sign is therefore a property of the pair (simulation field,
+fitter), and must be checked on a new setup before anything else: fit a few hundred events with both signs and compare
+the elastic locus or, on simulation, the ratio to truth as a function of $\theta_\mathrm{lab}$. Forward tracks can look
+identical with both signs (the 46Ar table above is identical below $90^\circ$); the backward tracks decide.
+
+\section{AtGenfitter}
+\label{sec:gf}
+
+\code{EventFit::AtGenfitter} (\url{AtReconstruction/AtFitter/AtGenfitter.h}, \code{.cxx}) was written as a replacement
+for the legacy \code{AtFITTER::AtGenfit}. It keeps the GENFIT core (\code{genfit::KalmanFitterRefTrack},
+\code{genfit::RKTrackRep}, measurements built by \code{genfit::AtSpacepointMeasurement} from \code{AtHitCluster}) and
+drops the merging, reclustering and single-vertex logic of the old class. It derives from the modern
+\code{EventFit::AtFitter}, so it runs in \code{AtFitterTask}.
+
+\subsection{Construction and particle hypothesis}
+
+\begingroup\footnotesize
+\begin{verbatim}
+AtGenfitter(Double_t bFieldTesla = -2.85, Int_t pdg = 1000010020,
+            Double_t massAmu = 2.0135532, Int_t Z = 1,
+            std::string eLossFile = "",
+            Bool_t noMatEffects = kTRUE, Int_t minIter = 2, Int_t maxIter = 5);
+\end{verbatim}
+\endgroup
+
+\begin{itemize}
+\item \code{bFieldTesla} is the signed field along $z$ in tesla. \code{Init()} hands GENFIT a
+  \code{genfit::ConstField(0, 0, 10*bFieldTesla)} in kilogauss.
+\item \code{pdg}, \code{massAmu} and \code{Z} define the hypothesis. The PDG code goes to \code{RKTrackRep} and to the
+  measurement candidate; \code{Init()} adds deuteron (1000010020) and triton (1000010030) entries to
+  \code{TDatabasePDG} when they are missing. The mass (in u) is used to convert the fitted momentum into kinetic
+  energy and for the range constraint. \code{SetParticle(pdg, massAmu, Z)} overrides all three after construction.
+  The species is fixed per job: to fit a second hypothesis, run a second job.
+\item \code{eLossFile} is an ASCII \dedx{} table; empty means no table (Section~\ref{sec:gf-eloss}).
+\item \code{noMatEffects = kTRUE} (the default) switches GENFIT's material effects off: no energy loss, no multiple
+  scattering, no straggling. The a1975 macros take a \code{matEffects} argument and pass \code{!matEffects}.
+\item \code{minIter}, \code{maxIter} are the iteration limits of \code{KalmanFitterRefTrack}
+  (\code{SetIterations(mn, mx)} changes them).
+\end{itemize}
+
+GENFIT needs the geometry: \code{Init()} builds a \code{genfit::TGeoMaterialInterface}, which navigates
+\code{gGeoManager}. The fit macros load it explicitly before the run starts:
+\begin{verbatim}
+   // genfit material/propagation needs gGeoManager loaded before the fit
+   if (gROOT->FindObject("FAIRGeom") == nullptr) {
+      TFile *gf = TFile::Open(geoManFile);
+      gf->Get("FAIRGeom");
+   }
+\end{verbatim}
+With material effects on, the medium of that geometry \emph{is} the material model. The comment in
+\code{fitGenfitter\_a1975\_deuterium.C} records that the default geometry \code{ATTPC\_H1bar\_\allowbreak geomanager.root} contains
+ordinary hydrogen; for the D2 runs the productions pass \code{ATTPC\_D300torr\_v2\_\allowbreak geomanager.root} (medium
+\code{TargetD2\_300}, $A=2.0141$, $Z=1$, $6.564\times10^{-5}$\,g/cm$^3$).
+
+\code{MaterialEffects} and \code{FieldManager} are GENFIT singletons. \code{Init()} configures them for the instance
+being initialised, so two \code{AtGenfitter} instances with different field or material settings in one process
+share whatever the last initialised one set. Run different configurations in separate jobs.
+
+\subsection{What happens to one track}
+\label{sec:gf-steps}
+
+\code{GetFittedTrack()} performs the following steps, in this order.
+\begin{enumerate}
+\item Reject the candidate if it has fewer than \code{SetMinClusters(n)} clusters (default 4).
+\item If any option needs it (PID gate, Spyral seed, Spyral or 3D direction), compute the \code{AtSpyralPID} estimate
+  and, for the 3D options, the \code{AtHelix3D} estimate. If a PID gate is set and the track lies outside it, return
+  \code{nullptr} (Section~\ref{sec:gf-pid}).
+\item Convert cluster positions to the lab frame and, unless \code{SetUseClusterOrder(kTRUE)} is set
+  (Section~\ref{sec:gf-order}), sort them by $z_\mathrm{lab}$.
+\item Reject the track if no cluster lies within \code{SetVertexAxisMaxDist} (default 150\,mm) of the beam axis.
+\item Decide the vertex end. By default it is the lowest-$z_\mathrm{lab}$ cluster, with the seed direction taken from
+  that cluster to the next one. With \code{SetBackwardSeedFix(kTRUE)} a track judged backward is seeded from the
+  highest-$z_\mathrm{lab}$ end instead (Section~\ref{sec:gf-direction}).
+\item Seed the momentum: $B\rho = |B|\,r/|\sin\theta|$ with $r$ the PRA circle radius (\code{GetGeoRadius()}) and
+  $\theta$ the polar angle of the two-cluster direction, $p = 0.299792458\,B\rho$ GeV/$c$ for unit charge. Tracks
+  with a seed above 100\,GeV/$c$ or non-positive are rejected. \code{SetSeedFromSpyral(kTRUE)} replaces $B\rho$ and
+  $\theta$ by the \code{AtSpyralPID} values. The seed covariance is 1\,mm$^2$ in position and $(0.3p)^2$ in each
+  momentum component.
+\item Order the measurements along the direction of travel (reversed for a backward seed), apply truncation if set,
+  and fill the \code{genfit::TrackCand} with one \code{AtSpacepointMeasurement} per cluster.
+\item Optionally compute a range constraint (Section~\ref{sec:gf-range}).
+\item Re-seed the shared TGeo navigator (Section~\ref{sec:gf-navigator}) and fit with
+  \code{processTrackWithRep()}. Read the state at the first measurement point; if
+  \code{SetBackExtrapToAxis(kTRUE)}, extrapolate it to the beam axis.
+\item If FIND is on and the full-length fit fails its threshold, refit prefixes (Section~\ref{sec:gf-find}).
+\item If the fit threw, material effects were on and the fallback is enabled, refit without material effects.
+\item Add the manual vertex-gap energy loss if \code{SetManualELoss} was called.
+\item Drop the track if the fitted polar angle lies outside \code{SetThetaWindow(min, max)} (default 10--170$^\circ$).
+\item Fill the \code{AtFittedTrack} and its \code{AtFitTrackMetadata} (Section~\ref{sec:fit-output}).
+\end{enumerate}
+A track that throws inside GENFIT and is not rescued by the fallback is dropped. A fit that returns but with
+$\mathrm{ndf}\le 0$ is \emph{kept}; its kinematics are not meaningful (Section~\ref{sec:fit-pitfalls}).
+
+\subsection{Measurement model and the meaning of $\chi^2$}
+\label{sec:gf-meas}
+
+Each cluster becomes a 3D space point with a diagonal covariance, set by \code{AtGenfitter} in mm$^2$ and converted to
+cm$^2$ by \code{AtSpacepointMeasurement}:
+\[
+  \sigma_x^2=\sigma_y^2 = s\,(\sigma_0^2 + D_T^2 L),\qquad
+  \sigma_z^2 = s\,(f_z\sigma_0^2 + D_L^2 L),
+\]
+where $\sigma_0$ is \code{SetMeasSigma(mm)} (default 4.0\,mm), $L$ the drift distance in cm
+($(z_\mathrm{pad}-z_\mathrm{lab})/10$), $D_T, D_L$ the coefficients of \code{SetDiffusion(transv, long)} in
+mm$/\sqrt{\mathrm{cm}}$ (default 0, 0), $f_z$ \code{SetZLongFactor} (default 2.0) and $s$ the optional charge scale
+$\mathrm{clamp}(q_\mathrm{ref}/Q, 0.25, 4)$ enabled by \code{SetChargeCovRef(qRef)} with $q_\mathrm{ref}>0$ (default
+0, off). With the defaults this reduces to $(\sigma_0^2,\sigma_0^2,2\sigma_0^2)$.
+
+The 4\,mm default is far larger than the real residuals. The comments in \code{AtGenfitter.h} and in
+\code{fitGenfitter\_Ar46.C} quote the residuals implied by $\chi^2/\mathrm{ndf}$ as about 0.6\,mm, and the median
+$\chi^2/\mathrm{ndf}$ of an a1975 (d,p) production at 4\,mm as 0.09 (1.48 for backward tracks).
+\url{macro/Unpack_HDF5/a1975/UKF/pipeline/GENFIT_PROGRESS.md} records the trade on run\_0106 with material effects off:
+4\,mm gives a median $\chi^2/\mathrm{ndf}$ of 0.105 and 79\,\% good fits, 1.5\,mm gives 0.75 and 58\,\%, 1.0\,mm gives
+1.69 and 54\,\%; the yield is lost because the larger $\sigma_0$ absorbs multiple scattering that the model without
+material effects cannot follow. Consequences:
+\begin{itemize}
+\item $\chi^2/\mathrm{ndf}$ at 4\,mm is not a goodness-of-fit in the statistical sense. Its scale grows with the number
+  of turns and the length of the track, so a fixed cut selects on track length. The 46Ar macro header measured that the
+  production cut of 5 removed 29\,\% of the longest spirals there, and changed its own default to 0.6\,mm.
+\item Thresholds (the quality cut, FIND) have to be set from the measured distribution of the production at hand,
+  not carried over from another $\sigma_0$.
+\item The $p$-value is not computed: \code{AtGenfitter} stores 0.
+\end{itemize}
+
+\subsection{Iterations, quality flag and angular window}
+
+\code{KalmanFitterRefTrack} iterates between \code{minIter} and \code{maxIter}; \code{GetFitConverged()} in the metadata
+is GENFIT's \code{isFitConverged()}. Two post-fit criteria are applied:
+\begin{itemize}
+\item \code{SetThetaWindow(minDeg, maxDeg)}, default 10--170$^\circ$: the track is \emph{dropped} if the polar angle of
+  the final momentum (after any extrapolation) lies outside.
+\item \code{SetQualityCut(chi2NdfMax, keMin, keMax)}, default (5.0, 0.5, 60): a \emph{flag} only.
+  \code{GetGoodFit()} is true when the fit converged, $\mathrm{ndf}>0$, $\chi^2/\mathrm{ndf}<$ \code{chi2NdfMax} and
+  \code{keMin} $<$ KE $<$ \code{keMax} (KE after extrapolation). Failing tracks stay in the output.
+\end{itemize}
+
+\subsection{Material effects and energy loss}
+\label{sec:gf-eloss}
+
+With material effects off, GENFIT transports the state geometrically: the fitted momentum is that of a helix through
+the clusters, with no energy loss. This is fast and was the production setting of the early a1975 fits. With
+material effects on, the propagation applies energy loss, multiple scattering and straggling from the material of the
+geometry. \code{Init()} always switches bremsstrahlung off and calls
+\code{ignoreBoundariesBetweenEqualMaterials(false)}; the comment there records a factor 10 in CPU time on a1954
+run\_0055 with bit-identical output, because the AT-TPC active volume is one homogeneous gas volume.
+
+\paragraph{GENFIT's own energy loss and the $\beta\gamma<0.05$ hole.} GENFIT's \code{MaterialEffects::\allowbreak dEdx()} uses
+Bethe--Bloch only for $\beta\gamma\ge 0.05$. Below that it calls \code{dEdxParam()}, which evaluates a loaded \dedx{}
+curve and returns 0 when there is none (\url{GenFit/trackReps/src/MaterialEffects.cc}). Without a table, material
+effects therefore apply \emph{no} stopping power below $\beta\gamma = 0.05$: KE $<1.17$\,MeV for a proton and
+KE $<3.5$\,MeV for a triton. For (d,t) at a1975, where the triton low branch is 0.8--6\,MeV, this is most of the path
+of most tracks. Three ways to fill the hole exist; they are listed from oldest to adopted.
+
+\paragraph{Table in parameterisation-only mode.} Passing \code{eLossFile} to the constructor loads the table with
+\code{setEnergyLossFile()} and, unless the hybrid mode is set, calls \code{useEnergyLossParam()}, which makes the
+table the only source of \dedx{}. In that mode GENFIT throws a fatal exception for every step above the highest
+energy of the table. The comment in \code{Init()} explains that this, when called without a table, truncated the
+reference track of about 87\,\% of tracks and was the origin of the belief that material effects were unusable.
+
+\paragraph{Hybrid table.} \code{SetELossHybrid(on, rho)} loads the table without parameterisation-only mode:
+the table serves only $\beta\gamma<0.05$ and Bethe--Bloch the rest. \code{dEdxParam()} multiplies the curve
+(MeV/(mg/cm$^2$)) by one global density, which is why the setter takes the gas density in g/cm$^3$ (stored internally
+in mg/cm$^3$ and passed to \code{setGasMediumDensity()}); the GENFIT default is 0.15328\,mg/cm$^3$. Tables are generated
+per species, gas and pressure by \code{make\_eloss\_table.C}; the header of \code{prod\_dp\_clord.sh} gives the
+call used for the proton table,
+\begin{verbatim}
+make_eloss_table.C("proton_D2_300torr.txt", 1, 1, 1.00782503207,
+                  6.61e-5, 2.014)
+\end{verbatim}
+and \code{prod\_dt\_catima.sh} records that the triton table was regenerated with the deuterium mass 2.014 instead of
+2, a flat $+0.70$\,\% on every point.
+
+\paragraph{CATIMA in GENFIT.} The GENFIT installation used on this branch has an optional CATIMA backend, compiled
+with \code{-DGENFIT\_USE\_CATIMA=ON} (option in GENFIT's \code{CMakeLists.txt}). Without it the setters below compile
+and do nothing. \url{macro/Unpack_HDF5/C15d/README.md} gives the check
+\code{ldd \$GENFIT/lib/libgenfit2.so | grep catima}.
+\begin{itemize}
+\item \code{SetCatimaMaterial(msc, straggling)} replaces GENFIT's Highland multiple scattering and Bohr/Urban
+  straggling by CATIMA's angular and energy variances per unit thickness. Default (off, off).
+\item \code{SetCatimaELoss(on, fullRange = kFALSE)} takes \dedx{} from CATIMA with the material of the step. With
+  \code{fullRange = kFALSE} only the $\beta\gamma<0.05$ branch is replaced; \code{kTRUE} replaces Bethe--Bloch too.
+  If CATIMA cannot supply a value, the table (if loaded) is the per-step fallback, so the productions keep the table
+  loaded as well.
+\end{itemize}
+The production script \url{macro/Unpack_HDF5/a1975/D2_UKF/prod_dt_catima.sh} documents the measurements behind the
+adopted setting. GENFIT's own material models left 62\,\% of triton fits with $\mathrm{ndf}<0$; with CATIMA MSC,
+CATIMA straggling and the table, 3\,\%; removing any one of the three brings the collapse back to about 50\,\%.
+Replacing the table by CATIMA \dedx{} below $\beta\gamma=0.05$ reduced collapsed fits further from 2.53\,\% to
+0.94\,\% over 8 runs and did not move the 3.103\,MeV peak; the full-range variant changed nothing more.
+
+\paragraph{Fallback without material effects.} \code{SetMatEffectsFallback(on)}, default \code{kTRUE}: when a fit with
+material effects throws, the track is refitted with \code{setNoEffects(true)} and kept, flagged
+\code{GetMatEffects()==false}, \code{GetMatEffectsFallback()==true}. The two populations come from different models;
+mixed in one spectrum they widen it. The a1975 CATIMA productions run with the fallback off, so a failed fit drops out.
+
+\subsection{The shared TGeo navigator}
+\label{sec:gf-navigator}
+
+\code{TGeoMaterialInterface} navigates the single \code{gGeoManager} and does not restore its state. A track whose
+Runge--Kutta extrapolation wanders leaves the navigator in a state that every later track inherits; the failure is
+then contiguous in track order (a job fits its first $N$ tracks and fails almost all after). The comment in
+\code{GetFittedTrack()} quotes run\_0016, 5000 events, material effects on, $\sigma_0=4$\,mm: 76.8\,\% of fits
+collapsed ($\mathrm{ndf}\le0$) without a fix and 1.8\,\% with it. The fix, now unconditional, re-seeds the navigator
+before every track:
+\begin{verbatim}
+   if (gGeoManager != nullptr) {
+      gGeoManager->SetCurrentPoint(0., 0., 50.);
+      gGeoManager->SetCurrentDirection(0., 0., 1.);
+      gGeoManager->FindNode();
+   }
+\end{verbatim}
+Setting the environment variable \code{ATGENFIT\_TRACE=1} prints one line per track with the navigator node and
+material; the probe is read-only. Productions made before this fix show the collapse and should not be compared with
+later ones as if only the physics settings differed.
+
+\subsection{The fitted state, back-extrapolation and the vertex gap}
+\label{sec:gf-xtr}
+
+\code{genfit::Track::getFittedState()} without arguments returns the state at the \emph{first measurement point}, not
+at the reaction vertex. Between the two lies gas in which the ejectile has already lost energy. Two options address it.
+
+\paragraph{\code{SetBackExtrapToAxis(on)}}, default off. Extrapolates the first-point state to the beam axis with
+\code{RKTrackRep::extrapolateToLine()} (line through the origin along $z$). If the extrapolation throws, the
+first-point state is kept. With material effects on, the extrapolation integrates the energy loss over the gap; with
+them off it moves the vertex and leaves $|p|$ unchanged. The setter comment quotes, for a1975 16C(d,t) with the correct
+D2 density, the reconstructed g.s.-to-3.103 spacing opening from 2.919 to 3.192\,MeV and the width falling from 0.252
+to 0.155\,MeV.
+
+\paragraph{\code{SetManualELoss(density, matA)}.} Adds the energy lost over the vertex gap by hand, from an
+\code{AtELossCATIMA} model of the ejectile in hydrogen of mass number \code{matA} (2 for D2; 1 computes the loss in
+ordinary hydrogen, twice the stopping at the same mass density). The loss is evaluated at the first-cluster energy and
+once more at the corrected energy. It is meant for material effects \emph{off} together with
+\code{SetBackExtrapToAxis(kTRUE)}, which supplies the gap length.
+
+\emph{The code does not enforce that.} With material effects on, \code{extrapolateToLine} has already restored the
+gap loss and \code{SetManualELoss} adds it a second time. \code{prod\_dt\_catima.sh} measured the cost on the (d,t) low
+branch: $+5.25$\,\% on the corrected KE and a 14\,\% wider distribution. In \code{fitGenfitter\_a1975\_deuterium.C} the
+argument \code{manualElossDensity} must be 0 whenever \code{matEffects} is \code{kTRUE}; passing 0 disables only the
+manual loss (the hybrid table falls back to $6.61\times10^{-5}$\,g/cm$^3$ internally).
+
+\paragraph{The two kinematics slots.} \code{AtGenfitter} fills both:
+\begin{itemize}
+\item \code{GetKinematics()}: KE, $\theta$, $\phi$ of the fit at the first measurement point, before extrapolation and
+  before the manual loss (the ``raw'' fit).
+\item \code{GetKinematicsXtr()}: after back-extrapolation and manual loss. With neither option on, the two are equal.
+\end{itemize}
+The vertex (\code{GetVertex()}) is the position of the final state, i.e.\ the axis point if extrapolated, otherwise the
+first fitted point, in lab-frame millimetres. The a1975 D2 analysis macros (for example \code{ex\_dt\_a1975.C}) read \code{GetKinematicsXtr()}. The UKF uses
+the slots the other way round (Section~\ref{sec:fit-output}).
+
+\subsection{Track direction and the backward seed}
+\label{sec:gf-direction}
+
+The default seed always starts at the lowest-$z_\mathrm{lab}$ end and points the momentum towards $+z_\mathrm{lab}$.
+For backward tracks ($\theta_\mathrm{lab}>90^\circ$) that is the stopping end, and GENFIT reflects the track into the
+forward hemisphere with a wrong $\theta$ and KE. \code{SetBackwardSeedFix(kTRUE)} (default off) seeds tracks judged
+backward from the highest-$z_\mathrm{lab}$ end with the momentum pointing into the track, and reverses the measurement
+order so that measurement 0 is again the vertex end. Forward tracks are unchanged. The comment in the code quotes, for
+backward protons of 14C(d,p) simulation at 2.85\,T, the median KE ratio to truth going from 0.834 to 0.999 at
+92--110$^\circ$ and from 0.893 to 0.999 at 110--140$^\circ$. The (d,p) macro header records the backward yield on
+run\_0016 rising from 5.6\,\% to 17.5\,\% of candidates.
+
+Which tracks count as backward is chosen by:
+\begin{itemize}
+\item default: the PRA polar angle, \code{GetGeoTheta()} $>\pi/2$ (the sign of one RANSAC line in arc length versus
+  $z$);
+\item \code{SetDirectionFromSpyral(kTRUE)}: the \code{AtSpyralPID} estimate, $\theta_\mathrm{lab}=\pi-$ polar; falls
+  back to \code{GetGeoTheta()} when the estimate is invalid. The setter comment records that on a1975 H2 data the two
+  disagree on 8\,\% of tracks and the PRA call is the wrong one where the elastic locus can decide;
+\item \code{SetDirectionFrom3D(kTRUE)}: the \code{AtHelix3D} majority vote of three indicators (3D rotation sense,
+  Spyral direction, Bragg rise) on hits ordered in 3D; on an ambiguous vote the previous source is kept. It takes
+  precedence over the Spyral option. The comment quotes 96--97\,\% correct on 16C+d data against 93--95\,\% for
+  Spyral, and 100\,\% on simulation truth.
+\end{itemize}
+All three act only when \code{SetBackwardSeedFix(kTRUE)} is set. The estimators themselves are described in
+Chapter~\ref{ch:pid}.
+
+\paragraph{\code{SetSeedFromSpyral(kTRUE)}} (default off) replaces the seed $B\rho$ and polar angle by the
+\code{AtSpyralPID} values: a least-squares circle on the first arc and a regression of $\rho$ against $z$ over at
+least ten points, instead of the PRA radius and the direction between two adjacent clusters, which on a short tightly
+curved track are millimetres apart. The hemisphere fixed by the vertex-end decision is kept.
+
+\subsection{The PID gate}
+\label{sec:gf-pid}
+
+\code{SetPIDGate(jsonFile)} loads an \code{AtParticleID} gate (\code{AtParticleID::LoadJSON}) and skips every track
+whose PID observables fall outside it, before the fit. The fitter owns its own \code{AtSpyralPID} (built with
+$|B|$ of the fitter), so it needs no \code{AtPIDEvent} branch. If the file cannot be loaded, \code{Init()} logs an error
+and disables gating; the a1975 macros additionally check that the file exists and print a warning. Either way a mistyped
+path fits every track instead of failing.
+
+Options of the gate:
+\begin{itemize}
+\item \code{SetPIDGateFrom3D(kTRUE)}: test the gate on \code{AtHelix3D}'s $(\sqrt{\mathrm{d}E/\mathrm{d}x}, B\rho)$
+  instead of Spyral's. The gate must have been drawn on that plane; the two \dedx{} scales differ.
+\item \code{SetDedxGain(gSpyral, g3D)}: multiply the internal \sqdedx{} by per-run gain factors
+  (\code{AtTools::AtPIDGainTable}). The gate must have been drawn with the same correction.
+  \code{fitGenfitter\_a1975\_deuterium.C} takes a \code{gainTable} argument and aborts if the run is not in it.
+\end{itemize}
+
+A gated-out track is absent from \code{AtTrackingEvent}; a later, tighter gate can be applied from \code{AtPIDEvent}
+(the PID does not depend on the fit), but a looser one cannot. The (d,p) production header therefore fits with a loose
+gate and re-cuts at the analysis stage. The internal \code{AtSpyralPID} runs with the class default minimum number of
+points (30); there is no setter on \code{AtGenfitter} to change it, so a gate drawn on observables computed with a
+different \code{SetMinPoints} is applied to different numbers inside the fitter (header of
+\code{fitGenfitter\_Ar46.C}).
+
+\subsection{Cluster order}
+\label{sec:gf-order}
+
+By default the measurements are sorted by $z_\mathrm{lab}$. Drift $z$ is monotonic along a normal spiral, so curling
+tracks are sequenced correctly. The assumption fails for tracks close to $90^\circ$, where the advance in $z$ per
+cluster is smaller than the $z$ noise and than one time bucket; the code comment gives 0.22\,mm per cluster at
+88--92$^\circ$ and 7\,T, and the (d,p) macro 1.42\,mm per cluster against 1.84\,mm per time bucket on a1975 backward
+tracks. The sort then orders noise and the filter integrates energy loss along a path the particle never flew.
+
+\code{SetUseClusterOrder(kTRUE)} keeps the order of the cluster array as delivered by the pattern recognition (to be
+paired with an ordering clusteriser such as \code{AtPRA::SetUseArcWalk(true)}, Chapter~\ref{ch:patternrecognition}).
+It is \emph{not} adopted. The comments in \code{fitGenfitter\_a1975\_deuterium.C} and \code{prod\_dp\_clord.sh} record
+a five-track test in which one track lost its fit and one swung by $100^\circ$ in $\theta$, and state that the loss rate
+has to be measured on full runs before use.
+
+\subsection{Truncation and the FIND ladder}
+\label{sec:gf-find}
+
+\paragraph{Truncation.} \code{SetTruncatePercent(pct)} fits only the first \code{pct}\,\% of the measurement sequence,
+counted from the vertex end (0 or $\ge100$ disables it, the default). \code{SetTruncateMinClusters(n)} (default 8) is a
+floor. The motivation given in the header: a single circle through a decelerating spiral averages a radius that shrinks
+along the track (0.964 to 0.734 from vertex to stopping end on 14C(d,p) at 2.85\,T), biasing the momentum low by about
+20\,\% in KE. Only measurements are truncated; the range constraint still uses the full path. $\chi^2$ falls when points
+are removed, so a truncation is judged on the excitation-energy spectrum, not on $\chi^2$.
+
+\paragraph{FIND.} \code{SetFindLongest(on, c2Max, stepPct = 5, minPct = 25, maxPct = 95)} refits prefixes of a track
+whose full-length fit fails $\chi^2/\mathrm{ndf}<$ \code{c2Max} or throws. The ladder runs from
+$\min(100-\mathrm{step},\ \mathrm{maxPct})$ down to \code{minPct} in steps of \code{stepPct}, and stops when a prefix
+would have fewer than \code{SetTruncateMinClusters} clusters; for small \code{minPct} that floor is what actually
+binds. \code{SetFindMode(mode)} selects:
+\begin{itemize}
+\item mode 0 (default), longest passing: the first (longest) rung under \code{c2Max} is kept; if none passes, the
+  full-length fit is restored. Tracks that pass at full length cost nothing extra.
+\item mode 1: if the full-length fit passes it is kept; otherwise every rung is fitted and the longest passing one is
+  kept, or, if none passes, the one with the lowest $\chi^2/\mathrm{ndf}$. The winner is refitted at the end.
+\end{itemize}
+\code{GetLastFindPct()} returns the percentage kept for the last track; it is not written to the output.
+\code{c2Max} must come from the measured $\chi^2$ distribution: at $\sigma_0=4$\,mm the median is about 0.09, so a cut
+of 5 never fires. Note also that some comments in the header and macro still describe the ladder as ``90/75/50/25'';
+the code uses the step ladder above.
+
+\subsection{Range constraint}
+\label{sec:gf-range}
+
+\code{SetRangeConstraint(on, gasDensity, matA = 2)} (default off) injects, for tracks that stop, a
+\code{genfit::FullMeasurement} at the vertex end whose covariance is tight only along the momentum direction, so that
+it constrains $|p|$ from the path length and nothing else. It is a measurement rather than a tight seed because
+\code{KalmanFitterRefTrack} inflates the seed covariance between iterations. The range--energy relation comes from an
+\code{AtELossCATIMA} model of the ejectile; $\sigma_\mathrm{KE}$ is the range straggling propagated through
+$\mathrm{d}R/\mathrm{d}E$ with a fractional floor \code{SetRangeSigmaFloor} (default 0.03).
+
+A track qualifies only if its far end is contained (\code{SetRangeContainment(maxRadius = 240, zMargin = 40,
+minLength = 20)} mm) and it passes a Bragg test: the charge per unit path over the last \code{tailFrac} of the path
+divided by that over the middle half must exceed \code{minRatio}
+(\code{SetBraggTest(minRatio = 1.3, tailFrac = 0.25, minClusters = 10)}; \code{minRatio}~$\le0$ disables the test).
+The header explains why: on a1975 run\_0031 with containment alone, 173 of 316 ``contained'' tracks were above 20\,MeV
+and were handed about 2.9\,MeV. The counters \code{GetNRangeApplied()}, \code{GetNRangeContained()} and
+\code{GetNRangeBraggFail()} report how often each branch fired. \code{prod\_dt\_catima.sh} leaves the range constraint
+off.
+
+\subsection{Continuity merging}
+\label{sec:gf-merge}
+
+\code{SetMergeContinuity(on, centerDist = 15, radiusFrac = 0.3, gap = 30)} (default off) merges, before fitting, pattern
+tracks that are fragments of one trajectory. Two fragments merge when their PRA circle centres are within
+\code{centerDist} mm, their radii differ by less than \code{radiusFrac} of the larger, and their closest endpoints (vertex
+end = closest to the axis, far end = farthest) are within \code{gap} mm, provided the closest pair is not
+vertex-end to vertex-end (two tracks from one vertex). Chains merge transitively. Merging works on a copy of the track
+list, so the shared \code{AtPatternEvent} and any other fitter in the job see the original. The merged list is what is
+stored as the event's track array. \code{GENFIT\_PROGRESS.md} records the a1975 test: on 30094 (p,d)-gated events the
+merge fired 14 times, all neutral.
+
+\subsection{Setter reference}
+
+\begin{table}[p]
+\centering
+\small
+\begin{tabular}{@{}p{6.4cm}p{2.6cm}p{5.8cm}@{}}
+\toprule
+Setter & Default & Section \\
+\midrule
+\code{SetParticle(pdg, massAmu, Z)} & ctor & hypothesis \\
+\code{SetBField(tesla)} & $-2.85$ & \ref{sec:fit-frames} \\
+\code{SetZPadPlane(mm)} & 1000 & \ref{sec:fit-frames} \\
+\code{SetMinClusters(n)} & 4 & \ref{sec:gf-steps} \\
+\code{SetIterations(min, max)} & 2, 5 & iterations \\
+\code{SetVertexAxisMaxDist(mm)} & 150 & \ref{sec:gf-steps} \\
+\code{SetMeasSigma(mm)} & 4.0 & \ref{sec:gf-meas} \\
+\code{SetDiffusion(DT, DL)} & 0, 0 & \ref{sec:gf-meas} \\
+\code{SetZLongFactor(f)} & 2.0 & \ref{sec:gf-meas} \\
+\code{SetChargeCovRef(q)} & 0 (off) & \ref{sec:gf-meas} \\
+\code{SetThetaWindow(min, max)} & 10, 170 deg & drops tracks \\
+\code{SetQualityCut(c2, keMin, keMax)} & 5.0, 0.5, 60 & flag only \\
+\code{SetMatEffectsFallback(on)} & \code{kTRUE} & \ref{sec:gf-eloss} \\
+\code{SetELossHybrid(on, rho)} & off & \ref{sec:gf-eloss} \\
+\code{SetCatimaMaterial(msc, strag)} & off, off & \ref{sec:gf-eloss} \\
+\code{SetCatimaELoss(on, full)} & off, off & \ref{sec:gf-eloss} \\
+\code{SetBackExtrapToAxis(on)} & off & \ref{sec:gf-xtr} \\
+\code{SetManualELoss(rho, matA)} & not set & \ref{sec:gf-xtr} \\
+\code{SetBackwardSeedFix(on)} & off & \ref{sec:gf-direction} \\
+\code{SetDirectionFromSpyral(on)} & off & \ref{sec:gf-direction} \\
+\code{SetDirectionFrom3D(on)} & off & \ref{sec:gf-direction} \\
+\code{SetSeedFromSpyral(on)} & off & \ref{sec:gf-direction} \\
+\code{SetPIDGate(json)} & none & \ref{sec:gf-pid} \\
+\code{SetPIDGateFrom3D(on)} & off & \ref{sec:gf-pid} \\
+\code{SetDedxGain(gSpyral, g3D)} & 1, 1 & \ref{sec:gf-pid} \\
+\code{SetUseClusterOrder(on)} & off & \ref{sec:gf-order} \\
+\code{SetTruncatePercent(pct)} & 0 (off) & \ref{sec:gf-find} \\
+\code{SetTruncateMinClusters(n)} & 8 & \ref{sec:gf-find} \\
+\code{SetFindLongest(on, c2, step, min, max)} & off; 5, 25, 95 & \ref{sec:gf-find} \\
+\code{SetFindMode(mode)} & 0 & \ref{sec:gf-find} \\
+\code{SetRangeConstraint(on, rho, matA)} & off; matA 2 & \ref{sec:gf-range} \\
+\code{SetRangeContainment(r, zMargin, len)} & 240, 40, 20 & \ref{sec:gf-range} \\
+\code{SetRangeSigmaFloor(f)} & 0.03 & \ref{sec:gf-range} \\
+\code{SetBraggTest(ratio, tail, nMin)} & 1.3, 0.25, 10 & \ref{sec:gf-range} \\
+\code{SetMergeContinuity(on, c, r, gap)} & off; 15, 0.3, 30 & \ref{sec:gf-merge} \\
+\bottomrule
+\end{tabular}
+\caption{\code{AtGenfitter} setters with their defaults (lengths in mm, densities in g/cm$^3$).}
+\label{tab:gf-setters}
+\end{table}
+
+\section{Worked example: the a1975 16C(d,t) production}
+\label{sec:fit-example}
+
+The (d,t) channel of a1975 is fitted by \url{macro/Unpack_HDF5/a1975/D2_UKF/fitGenfitter_a1975_deuterium.C}, driven over
+47 runs by \url{macro/Unpack_HDF5/a1975/D2_UKF/prod_dt_catima.sh}. The macro serves every ejectile of the D2 target; its
+defaults are the proton of 16C(d,p), and the species is passed as arguments.
+
+\subsection{The macro}
+
+The macro reads \code{<ioDir><run><recoSuffix>.root} and writes \code{<outDir><run>\_genfitter\_\allowbreak <tag><suffix>.root}.
+After opening the par file and the geometry (see above), it builds the fitter from its arguments. Condensed, the
+statements that matter for the (d,t) production are:
+\begingroup\footnotesize
+\begin{verbatim}
+   TString elossPath = eLossTable.Length() ? (eLossTable.BeginsWith("/") ? eLossTable
+                        : dir + "/macro/Unpack_HDF5/a1975/D2_UKF/" + eLossTable) : TString("");
+   auto fitter = std::make_unique<EventFit::AtGenfitter>(bField, pdg, massAmu, Z,
+                        elossPath.Data(), !matEffects, minIter, maxIter);
+   if (catimaMSC || catimaStraggling)
+      fitter->SetCatimaMaterial(catimaMSC, catimaStraggling);
+   if (eLossTable.Length())
+      fitter->SetELossHybrid(kTRUE, manualElossDensity > 0 ? manualElossDensity : 6.61e-5);
+   fitter->SetZPadPlane(1000.0);
+   fitter->SetMeasSigma(measSigma);
+   ...
+   fitter->SetMatEffectsFallback(matFallback);
+   fitter->SetThetaWindow(thetaMinDeg, thetaMaxDeg);
+   fitter->SetBackwardSeedFix(backwardSeedFix);
+   fitter->SetBackExtrapToAxis(backExtrap);
+   fitter->SetCatimaELoss(catimaELoss, catimaELossFull);
+   if (manualElossDensity > 0)
+      fitter->SetManualELoss(manualElossDensity, matA);
+   ...
+   fitter->SetPIDGate(pidGate.Data());       // after checking that the file exists
+
+   AtFitterTask *fitterTask = new AtFitterTask(std::move(fitter));
+   fitterTask->SetInputBranch("AtPatternEvent");
+   fitterTask->SetOutputBranch("AtTrackingEvent");
+   fitterTask->SetFitMetadataBranch("AtFitMetadata");
+   fitterTask->SetPersistence(kTRUE);
+
+   AtPIDTask *pidTask = new AtPIDTask();
+   pidTask->SetInputBranch("AtPatternEvent");
+   pidTask->SetOutputBranch("AtPIDEvent");
+   pidTask->SetPersistence(kTRUE);
+
+   run->AddTask(pidTask);
+   run->AddTask(fitterTask);
+\end{verbatim}
+\endgroup
+Every option that changes the physics prints a banner to the log (``CATIMA material model: MSC ON, straggling ON'',
+``dE/dx from CATIMA \dots''), and the macro warns when \code{catimaELoss} is set without material effects, where it is
+inert. The \code{AtPIDTask} in the same job writes the PID of every pattern track, gated or not, so that the analysis
+can apply a different gate later.
+
+\subsection{The production script}
+
+\code{prod\_dt\_catima.sh} sources the environment, sets \code{GENFIT} and the library path, and runs one ROOT job per
+run through \code{xargs -P}. The call passes every argument positionally:
+\begingroup\footnotesize
+\begin{verbatim}
+  root -l -b -q "fitGenfitter_a1975_deuterium.C(\"${r}_multifit\",-1,\"$REC\",\"\",\"$GF\",\
+-2.85,2,5,\"$GATE\",4.0,10.0,170.0,kTRUE,kTRUE,1000010030,3.01550072,1,\"t\",\"_reco\",\
+\"ATTPC_D300torr_v2_geomanager.root\",kTRUE,0,2,\"$PAR\",kFALSE,kFALSE,kFALSE,\"$TAB\",\
+kTRUE,kTRUE,${CEL},${CFULL})"
+\end{verbatim}
+\endgroup
+Mapped onto the macro arguments, Table~\ref{tab:fit-dt-args} gives the adopted (d,t) configuration.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}p{3.8cm}p{5.0cm}p{6.0cm}@{}}
+\toprule
+Argument & Value & Why (from the script header) \\
+\midrule
+\code{bField} & $-2.85$ & data handedness \\
+\code{minIter}, \code{maxIter} & 2, 5 & unchanged from earlier productions \\
+\code{pidGate} & \code{pid/triton\_d2\_\allowbreak dv1104.json} & triton gate on the plane of this drift velocity \\
+\code{measSigma} & 4.0 & unchanged \\
+\code{theta window} & 10--170$^\circ$ & keep backward tracks \\
+\code{matEffects} & \code{kTRUE} & the point of the production \\
+\code{backwardSeedFix} & \code{kTRUE} & backward seed \\
+\code{pdg}, \code{massAmu}, \code{Z}, tag & 1000010030, 3.01550072, 1, \code{t} & triton \\
+\code{geoName} & \code{ATTPC\_D300torr\_v2\_\allowbreak geomanager.root} & D2 medium for the material model \\
+\code{backExtrap} & \code{kTRUE} & recover the vertex-gap loss \\
+\code{manualElossDensity} & 0 & would double count the gap under material effects \\
+\code{parName} & \code{ATTPC.a1975\_deuterium\_\allowbreak dv1104.par} & the par of the reconstruction \\
+\code{matFallback} & \code{kFALSE} & one physics model in the output \\
+\code{eLossTable} & \code{triton\_D2\_300torr.txt} & hybrid table below $\beta\gamma=0.05$ \\
+\code{catimaMSC}, \code{catimaStraggling} & \code{kTRUE}, \code{kTRUE} & collapse 62\,\% $\to$ 3\,\% \\
+\code{catimaELoss}, \code{catimaELossFull} & \code{kTRUE}, \code{kFALSE} (env.\ \code{CEL}, \code{CFULL}) &
+collapse 2.53\,\% $\to$ 0.94\,\%; full range adds nothing \\
+\bottomrule
+\end{tabular}
+\caption{Adopted (d,t) arguments of \code{fitGenfitter\_a1975\_deuterium.C}.}
+\label{tab:fit-dt-args}
+\end{table}
+
+Three habits of the script are worth copying. It writes to a new output directory and never overwrites a previous
+production, so two productions that differ in one flag can be differenced. It checks the log of every run for the
+banners of the options it set and warns if one is missing (a GENFIT without the CATIMA backend runs silently with its
+own models). And it passes every argument: the header of \code{prod\_dp\_clord.sh} records that an earlier (d,p)
+production passed only six arguments and silently took the macro defaults for the rest (material effects off, the H2
+geometry, the baseline par, fallback on).
+
+\section{The Unscented Kalman Filter: AtFitterUKF}
+\label{sec:ukf}
+
+\subsection{Architecture}
+
+The UKF is built in three layers (\url{docs/development/UKF.md}):
+\begin{enumerate}
+\item \code{kf::UnscentedKalmanFilter} and related header-only templates in \url{AtReconstruction/AtFitter/OpenKF/}
+  (vendored OpenKF, depends on Eigen3);
+\item \code{kf::TrackFitterUKF} (\url{OpenKF/kalman_filter/TrackFitterUKF.h}): the physics models. The state is
+  $(x, y, z, |p|, \theta, \phi)$, the measurement a 3D position, the process noise energy straggling. The process model
+  propagates the state with \code{AtTools::AtPropagator} and an \code{AtRK4Stepper} through the field, with energy loss
+  from an \code{AtTools::AtELossModel}; after the forward pass a Rauch--Tung--Striebel smoother runs backwards;
+\item \code{EventFit::AtFitterUKF}: the \code{AtFitter} implementation.
+\end{enumerate}
+Unit tests are listed in \code{UKF.md}; demonstration macros are in \url{macro/tests/UKF/}.
+
+\subsection{Construction}
+
+\begin{verbatim}
+AtFitterUKF(double charge, double mass_MeV,
+            std::unique_ptr<AtTools::AtELossModel> elossModel);
+\end{verbatim}
+\code{charge} is in coulomb ($Z \times 1.602176634\times10^{-19}$), the mass in MeV/$c^2$. The energy-loss model is
+moved into the propagator on the first fit. In every macro it is an \code{AtTools::AtELossCATIMA}; note its density
+argument is in g/cm$^3$.
+
+\subsection{What happens to one track}
+
+\begin{enumerate}
+\item Reject tracks with an invalid PRA radius; recover a NaN PRA polar angle from the track end points.
+\item Reject ``beam-like'' tracks: $\theta_\mathrm{lab} = 180^\circ - $ \code{GetGeoTheta()} outside
+  $[10^\circ, 170^\circ]$. The 10$^\circ$ limit (\code{fMinLabTheta}) has no setter.
+\item If adaptive clustering is on (default), re-cluster the hits with a cluster radius and distance chosen from the
+  $B\rho$ momentum estimate, from \code{SetClusteringParams}, or from \code{SetTargetClusters}; with
+  \code{SetUseArcWalk(true)} the kNN arc walk is used instead of the $z$-seeded smoothing clusteriser.
+\item Remove clusters closer than \code{SetMinClusterSpacing} (default 3\,mm) to the previous one and drop the last
+  10\,\% of clusters (the Bragg end), keeping at least \code{SetMinClusters}. This step is unconditional.
+\item Convert to the lab frame if \code{SetZPadPlane} $>0$.
+\item Seed: position of the first cluster, momentum from $B\rho = B_z r/\sin\theta$ of the PRA circle (or
+  \code{SetMomentumSeed}), direction from the cluster sequence when the lab conversion or
+  \code{SetUseClusterDirSeed} is active. Initial covariance: \code{SetMeasurementSigma}$^2$ in position,
+  $(\mathrm{frac}\cdot p)^2$ in momentum with \code{SetMomentumSigmaFrac}, $(1^\circ)^2$ in the angles.
+\item Run the forward UKF pass and the RTS smoother, \code{SetNIterations} times; iterations after the first are
+  seeded from the previous smoothed state (optionally with its covariance, \code{SetUseRefTrackWarmStart}, or with full
+  relinearisation around the previous trajectory, \code{SetUseRefTrack}). A fit is abandoned after 2000\,ms, and a
+  segmentation fault inside the fit is caught and the track dropped.
+\item Back-extrapolate from the first smoothed state to the beam axis, either linearly along the momentum
+  (default, path capped by \code{SetBackExtrapMaxPath}, default 50\,mm) or along the PRA circle
+  (\code{SetUseHelixBackExtrap}). The energy lost over the path is added back as $\mathrm{d}E/\mathrm{d}x(E)\times
+  \mathrm{path}$ evaluated once at the first-cluster energy.
+\end{enumerate}
+
+\subsection{Output conventions of the UKF}
+
+\begin{itemize}
+\item \code{GetKinematics()} holds the KE \emph{at the vertex} (after back-extrapolation and energy correction);
+  \code{GetKinematicsXtr()} holds the KE at the first cluster. This is the reverse of \code{AtGenfitter}. The angles are
+  the same in both slots and are those of the smoothed state at the first cluster, unless
+  \code{SetUpdateAnglesOnBackExtrap(true)} rotates $\phi$ by the back-extrapolated arc.
+\item \code{GetVertex()} is the back-extrapolated point; \code{GetTrackPropertiesStruct()} is filled (first-cluster
+  position, vertex, track length from the smoothed positions, number of clusters).
+\item The smoothed positions (states 1 to $N-1$) are stored in the lab frame.
+\item $\chi^2$ is not the filter's $\chi^2$. It is $\sum_i |\vec r_i^{\,\mathrm{smoothed}} - \vec r_i^{\,\mathrm{meas}}|^2
+  / \sigma^2$ over clusters 1 to $N-1$, with $\sigma$ from \code{SetMeasurementSigma} and
+  $\mathrm{ndf}=\max(1, 3(N-1)-6)$. \code{SetChi2()} is called with $\chi^2/\mathrm{ndf}$, so for UKF output
+  \code{GetChi2()} already \emph{is} the reduced value. The same is written to the event-level \code{AtFitMetadata}
+  when the task provides one.
+\item \code{GetGoodFit()} and \code{GetPValue()} are not set (they keep their defaults, false and 0).
+\end{itemize}
+
+\subsection{Setters}
+
+\begin{table}[p]
+\centering
+\small
+\begin{tabular}{@{}p{6.0cm}p{2.3cm}p{6.5cm}@{}}
+\toprule
+Setter & Default & Meaning \\
+\midrule
+\code{SetBField(XYZVector)} & $(0,0,2.85)$\,T & Signed field; see Table~\ref{tab:fit-bsign}. \\
+\code{SetEField(XYZVector)} & 0 & Electric field, V/m. \\
+\code{SetUKFParameters(a, b, k)} & $10^{-3}$, 2, 0 & Sigma-point scaling. \code{UKF.md}: $\alpha\ge0.1$ made sigma
+points miss measurement planes. \\
+\code{SetMeasurementSigma(mm)} & 1.0 & Position uncertainty of a cluster. \\
+\code{SetMomentumSigmaFrac(f)} & 0.1 & Seed momentum uncertainty. \\
+\code{SetMinClusters(n)} & 3 & Minimum clusters after filtering. \\
+\code{SetMomentumSeed(MeV)} & off & Fixed seed momentum. \\
+\code{SetNIterations(n)} & 1 & Filter passes. \\
+\code{SetUseRefTrackWarmStart(b)}, \code{SetRefTrackInflation(f)} & false, 4.0 & Seed later passes with the inflated
+smoothed covariance. \\
+\code{SetUseRefTrack(b)} & false & Relinearise around the previous smoothed trajectory (needs $\ge2$ iterations). \\
+\code{SetEnableEnergyStraggling(b)} & true & Straggling as process noise. All a1975 and 16C(p,p) macros set false. \\
+\code{SetEnableMultipleScattering(b)}, \code{SetRadiationLength(mm)} & false, $7.6\times10^6$ & Highland angular
+process noise. \\
+\code{SetELossScaleFactor(f)} & 1.0 & Scale of the propagator \dedx{} (diagnostic). \\
+\code{SetUsePerClusterCov(b)} & false & Use \code{AtHitCluster::GetCovMatrix()}. \\
+\code{SetZPadPlane(mm)} & $-1$ (off) & Digi to lab conversion. \\
+\code{SetAdaptiveClustering(b)} & true & Re-cluster inside the fitter. \\
+\code{SetClusteringParams(r, d)} & built-in & Fixed cluster radius and distance. \\
+\code{SetTargetClusters(n)}, \code{SetAdaptiveDistBounds(min, max)} & 0 (off); 4, 20 & Arc-length-aware clustering. \\
+\code{SetMinClusterSpacing(mm)} & 3.0 & Minimum distance between kept clusters. \\
+\code{SetUseArcWalk(b)}, \code{SetArcWalkParams(minHits, kNN)} & false; 3, 10 & kNN arc-walk clustering. \\
+\code{SetUseClusterDirSeed(b)} & false & Direction seed from the clusters, sorted by distance to the axis. \\
+\code{SetBackExtrapMaxPath(mm)} & 50 & Cap on the back-extrapolation; $\le0$ disables it. \\
+\code{SetUseHelixBackExtrap(b)} & false & Back-extrapolate along the PRA circle. \\
+\code{SetForceVertexOnBeamAxis(b)} & false & Put the vertex at $x=y=0$ (helix path). \\
+\code{SetUpdateAnglesOnBackExtrap(b)} & false & Rotate $\phi$ to the vertex. \\
+\code{SetBackExtrapTargetX(mm)} & NaN (off) & Straight tail to a target plane in $x$. \\
+\code{SetVertexZBias(mm)} & 0 & Constant subtracted from the vertex $z$. \\
+\bottomrule
+\end{tabular}
+\caption{\code{AtFitterUKF} setters. The options from \code{SetUseClusterDirSeed} down were added for PUMA and are
+documented in \code{docs/development/PUMA\_UKF\_calibration.md}.}
+\label{tab:ukf-setters}
+\end{table}
+
+\subsection{Multiple hypotheses: AtFitterUKFMulti}
+
+\code{EventFit::AtFitterUKFMulti} holds a list of configured \code{AtFitterUKF}, one per particle:
+\begin{verbatim}
+void AddHypothesis(std::unique_ptr<AtFitterUKF> fitter, std::string name,
+                   int chargeSign = 0);
+\end{verbatim}
+Every hypothesis fits its own copy of the track (the UKF re-clusters, so copies keep hypotheses independent). A
+hypothesis with \code{chargeSign} $\neq0$ is skipped when the track carries a PRA charge sign that disagrees. The
+fitted track with the smallest ranking value is returned and its \code{ParticleInfo.idPDG} is set to the hypothesis
+name. The ranking value is \code{GetChi2()/GetNdf()} of the metadata; since \code{AtFitterUKF} already stores
+$\chi^2/\mathrm{ndf}$ in the $\chi^2$ slot, the quantity compared is $\chi^2/\mathrm{ndf}^2$, which favours hypotheses
+that kept more clusters. \code{SetChi2Cap(cap)} is stored but not used by \code{GetFittedTrack()} in the current code.
+\code{fitUKF\_a1975.C} passes \code{chargeSign = 0} on data because the PRA charge sign was calibrated on simulation
+handedness.
+
+\subsection{UKF examples}
+
+\paragraph{Simulation, 16C(p,p).} The macro \url{macro/Simulation/ATTPC/16C_pp/run_ukf_only.C} fits the file
+\code{data/output\_digi.root} written by \code{run\_digi\_attpc.C}:
+\begingroup\footnotesize
+\begin{verbatim}
+   double charge = 1.602176634e-19;
+   double mass = 938.272;
+   auto eloss = std::make_unique<AtTools::AtELossCATIMA>(3.553e-5);
+   eloss->SetProjectile(1, 1, 1);
+   std::vector<std::tuple<int, int, int>> mat;
+   mat.push_back(std::make_tuple(1, 1, 1));
+   eloss->SetMaterial(mat);
+
+   auto ukfFitter = std::make_unique<EventFit::AtFitterUKF>(charge, mass, std::move(eloss));
+   ukfFitter->SetBField(ROOT::Math::XYZVector(0, 0, 2.85));
+   ukfFitter->SetUKFParameters(1e-3, 2.0, 0.0);
+   ukfFitter->SetMeasurementSigma(2.0);
+   ukfFitter->SetMomentumSigmaFrac(0.5);
+   ukfFitter->SetEnableEnergyStraggling(false);
+   ukfFitter->SetMinClusters(10);
+   ukfFitter->SetNIterations(1);
+   ukfFitter->SetZPadPlane(1000.0);
+
+   AtFitterTask *fitterTask = new AtFitterTask(std::move(ukfFitter));
+   fitterTask->SetInputBranch("AtPatternEvent");
+   fitterTask->SetOutputBranch("AtTrackingEvent");
+   fitterTask->SetFitMetadataBranch("AtFitMetadata");
+   fitterTask->SetPersistence(kTRUE);
+\end{verbatim}
+\endgroup
+\code{UKF.md} records, for digitised 16C(p,p) at $20^\circ$ c.m., 98\,\% convergence, a momentum bias of $-1.6$\,\%
+and 1.0\,\% RMS; part of the bias is a 5\,\% difference between CATIMA and Geant4 stopping powers at 0.5\,MeV, which
+\code{SetELossScaleFactor(1.08)} removes on simulation.
+
+\paragraph{Data, a1975.} \url{macro/Unpack_HDF5/a1975/UKF/pipeline/fitUKF_a1975.C} builds one hypothesis per name in a
+comma-separated list (proton, deuteron, triton, He3, alpha) and combines them in \code{AtFitterUKFMulti}:
+\begingroup\footnotesize
+\begin{verbatim}
+   auto eloss = std::make_unique<AtTools::AtELossCATIMA>(gasDensity);
+   eloss->SetProjectile(p.A, p.Z, massAmu);
+   ...
+   auto ukf = std::make_unique<EventFit::AtFitterUKF>(charge, p.massMeV, std::move(eloss));
+   ukf->SetBField(ROOT::Math::XYZVector(0, 0, bFieldSign * bFieldMag));
+   ukf->SetUKFParameters(1e-3, 2.0, 0.0);
+   ukf->SetMeasurementSigma(measSigma);
+   ukf->SetMomentumSigmaFrac(momSigmaFrac);
+   ukf->SetEnableEnergyStraggling(false);
+   ukf->SetMinClusters(minClusters);
+   ukf->SetNIterations(nIter);
+   ukf->SetUseRefTrack(refTrack);
+   ukf->SetRefTrackInflation(refInflation);
+   ukf->SetZPadPlane(1000.0);
+\end{verbatim}
+\endgroup
+with defaults \code{bFieldSign = -1}, \code{bFieldMag = 2.85}, \code{gasDensity = 9.0e-5}, \code{measSigma = 2.0},
+\code{momSigmaFrac = 0.3}, \code{nIter = 1}, \code{minClusters = 10}. It reads \code{<run>\_reco.root} and writes
+\code{<run>\_ukf<suffix>.root}:
+\begin{verbatim}
+root -b -q 'pipeline/fitUKF_a1975.C("run_0116", -1, "proton", -1)'
+\end{verbatim}
+\code{GENFIT\_PROGRESS.md} records that multiple scattering changes the median KE by about 1\,\% in H2 at 1\,bar and
+that lowering \code{minClusters} from 10 to 4 recovers 29\,\% more fitted tracks on run\_0106.
+
+\paragraph{PUMA.} \code{docs/development/PUMA\_UKF\_calibration.md} documents the opt-in options of
+Table~\ref{tab:ukf-setters} (cluster-direction seed, arc walk, helix back-extrapolation, target cluster count,
+\code{SetVertexZBias(8.6)} for a constant PSA $z$ offset) and the configuration block used in
+\url{macro/Simulation/ATTPC/PUMA/run_digi_attpc.C}.
+
+\paragraph{Display.} \code{AtUKFDisplay} (\url{AtReconstruction/AtFitter/AtUKFDisplay.h}) is a stand-alone TCanvas
+display with live refitting that does not need OpenGL.
+
+\section{Other fitters}
+\label{sec:fit-other}
+
+\paragraph{Legacy AtGenfit.} \code{AtFITTER::AtGenfit} derives from the deprecated \code{AtFitterOld} and runs in the
+deprecated \code{AtFitterTaskOld}; all three are compiled only with GENFIT2, and
+\url{AtReconstruction/CMakeLists.txt} lists the last two as ``deprecated, to be removed''. Its constructor is
+\code{AtGenfit(magfield, minbrho, maxbrho, eLossFile, gasMediumDensity, pdg = 2212, minit = 5, maxit = 20,
+noMatEffects = kFALSE)}; it carries its own merging, single-vertex and reclustering options
+(\code{EnableMerging}, \code{EnableSingleVertexTrack}, \code{EnableReclustering(on, radius, size)}) and a
+\code{SetSimulationConvention(bool)} flag in place of a signed field. The a1975 macro
+\url{macro/Unpack_HDF5/a1975/UKF/pipeline/fitGenfit_a1975.C} shows its use. Use it only to reproduce older results.
+
+Both GENFIT fitters build their measurements with \code{genfit::AtSpacepointMeasurement}, which now uses the covariance
+stored in the cluster when one is set (as \code{AtGenfitter} does) and otherwise a fixed $(2\,\mathrm{mm})^2$,
+$(2\,\mathrm{mm})^2$, $0.08$\,cm$^2$ diagonal. The comment there records that an earlier 10\,mm placeholder made the fit
+follow the seed.
+
+\paragraph{Monte Carlo fitters.} \code{MCFitter::AtMCFitter} (\url{AtReconstruction/AtFitter/AtMCFitter.h}) samples
+parameters from \code{AtParameterDistribution}s, simulates and digitises each trial event with \code{AtClusterize},
+\code{AtPulse} and an optional PSA, and keeps the trials with the lowest objective function; derived classes implement
+\code{CreateParamDistros()}, \code{SetParamDistributions()}, \code{ObjectiveFunction()} and \code{SimulateEvent()}.
+\code{AtMCFission} is the implementation for fission events. \code{AtMCFitterTask} drives them from
+\code{AtPatternEvent} (\code{SetPatternBranchName}). These classes are not used in the a1975/a1954 analyses and are not
+described further here.
+
+\paragraph{AtMCQMinimization.} \code{MCMinimization::AtMCQMinimization}
+(\url{AtReconstruction/AtMinimization/AtMCQMinimization.h}) fits a single track by simulating it (Euler integration
+of the Lorentz force with energy loss, electrons spread over the pad plane with the charge response of
+\code{AtDigiPar}) and comparing the pad charge pattern with the data in a random walk with shrinking steps. The
+objective combines a charge term with either a position term (default) or a range term (\code{SetUseRangeChi2}). It is
+not an \code{AtFitter} and has no task; it is called from a macro with a \code{TrackSeed} and the hits:
+\begin{verbatim}
+   auto eLoss = std::make_shared<AtTools::AtELossCATIMA>(density, material);
+   eLoss->SetProjectile(A, Z, massAmu);
+   auto min = MCMinimization::AtMCQMinimization();
+   min.SetMap(fMap);          // pad plane geometry, mandatory
+   min.SetParticle(A, Z);
+   min.SetELossModel(eLoss);
+   min.SetBFieldSign(-1);     // the par file carries no sign
+   min.Minimize(seed, hits);
+   auto res = min.GetFitPar();
+\end{verbatim}
+\url{macro/tests/AT-TPC/MCQMinimizationOnData.C} applies it to a1975 run\_0106 and reports, over the first 35 events,
+a mean difference to \code{AtGenfitter} of $-1.0^\circ$ in $\theta$ and $+0.57$\,MeV in energy; with the wrong field
+sign the mean hit-to-pad distance goes from about 2\,mm to about 35\,mm.
+
+\section{Comparing fitters and tuning}
+\label{sec:fit-compare}
+
+All fitters read the same \code{AtPatternEvent}, so a difference between two fits of one reco file comes from the
+fitter alone. Table~\ref{tab:fit-compare} summarises the differences between the two maintained fitters and the legacy
+one.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}p{2.4cm}p{3.9cm}p{4.0cm}p{4.5cm}@{}}
+\toprule
+ & \code{AtFitterUKF} & \code{AtGenfitter} & \code{AtGenfit} (legacy) \\
+\midrule
+Algorithm & Unscented KF, RTS smoother & GENFIT reference-track KF & GENFIT reference-track KF \\
+Energy loss & \code{AtELossModel} (CATIMA) & none, Bethe--Bloch, table or CATIMA (Section~\ref{sec:gf-eloss}) & table file \\
+Iterations & \code{SetNIterations} (1) & min--max (2--5) & min--max (5--20) \\
+Field sign & signed \code{SetBField} & signed field & \code{SetSimulationConvention} \\
+Re-clustering & inside the fit (default on) & none; opt-in merge & merge, recluster options \\
+Species selection & \code{AtFitterUKFMulti} & \code{SetPIDGate} & none \\
+Task & \code{AtFitterTask} & \code{AtFitterTask} & \code{AtFitterTaskOld} \\
+\bottomrule
+\end{tabular}
+\caption{The three Kalman-filter fitters side by side.}
+\label{tab:fit-compare}
+\end{table}
+
+\paragraph{Both fitters in one job.} \url{macro/Unpack_HDF5/a1975/UKF/pipeline/fitBoth_a1975.C} runs \code{AtGenfitter}
+and \code{AtFitterUKF} with the proton hypothesis on the same events and writes two tracking branches,
+\code{AtTrackingEventGenfit} and \code{AtTrackingEventUKF}, which \code{dispBoth\_a1975.C} and
+\code{run\_eve\_both\_a1975.C} overlay on the hits:
+\begingroup\footnotesize
+\begin{verbatim}
+root -b -q 'pipeline/fitBoth_a1975.C("run_0106", 200, "/mnt/f/a1975/reco/", "/tmp/")'
+\end{verbatim}
+\endgroup
+
+\paragraph{Tuning macros.} The directory \url{macro/Unpack_HDF5/a1975/UKF/pipeline/} holds the drivers of the studies
+quoted in this chapter: \code{featureScan\_a1975.C} (\code{SetMeasSigma}, \code{SetDiffusion} against median
+$\chi^2/\mathrm{ndf}$ and good-fit rate), \code{testMerge\_a1975.C}, \code{mergeQuality\_a1975.C} and
+\code{mergeDiag\_a1975.C} (continuity merging), \code{ukfMSscan\_a1975.C} and \code{ukfMinClus\_a1975.C} (UKF multiple
+scattering and minimum clusters). \url{macro/Unpack_HDF5/a1975/UKF/README.md} records that \code{measSigma = 0.5}\,mm with
+\code{momSigmaFrac = 0.1} gives about 26\,\% better elastic-peak FWHM than the 2.0 and 0.3 defaults of
+\code{fitUKF\_a1975.C}. Such knobs depend on the channel and the field: re-validate them for each reaction, and write
+each variant to its own output file (\code{outSuffix}).
+
+\section{The fit output}
+\label{sec:fit-output}
+
+\subsection{Classes}
+
+\code{AtTrackingEvent} (one per event, in a \code{TClonesArray} of size one) holds the event ID, the copies of the input
+\code{AtTrack}s (\code{GetTrackArray()}, returned by value) and the fitted tracks (\code{GetFittedTracks()}, a vector
+of \code{unique\_ptr<AtFittedTrack>}). A fitted track keeps the ID of the pattern track it came from
+(\code{GetTrackID()}); with the \code{AtTrackFinderTC} finder that ID is a cluster label, not an array index, so
+fitted tracks are matched to pattern tracks and to \code{AtPIDEvent} entries by ID.
+
+\code{AtFittedTrack} (Table~\ref{tab:fit-fittedtrack}) stores per-particle vectors; both fitters fill index 0.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}p{5.2cm}p{4.8cm}p{4.8cm}@{}}
+\toprule
+Accessor & \code{AtGenfitter} & \code{AtFitterUKF} \\
+\midrule
+\code{GetKinematics()} (KE MeV, $\theta$, $\phi$ rad) & raw fit at the first measurement point & at the vertex, after
+back-extrapolation \\
+\code{GetKinematicsXtr()} & after \code{SetBackExtrapToAxis}/\allowbreak\code{SetManualELoss}; equals the raw fit if neither is
+on & at the first cluster \\
+\code{GetVertex()} (mm, lab frame) & final state position (axis point or first fitted point) & back-extrapolated point \\
+\code{GetSmoothedPositions()} & fitted position at each measurement, lab frame & smoothed states 1..$N-1$, lab
+frame \\
+\code{GetParticleInfo()} & \code{idPDG} = $Z$ as a string, charge $Z$, mass (u) & same; \code{AtFitterUKFMulti}
+writes the hypothesis name into \code{idPDG} \\
+\code{GetTrackPropertiesStruct()} & not filled (defaults $-1$) & filled \\
+\code{GetTrackMetadata()} & see below & see below \\
+\bottomrule
+\end{tabular}
+\caption{What each fitter writes into \code{AtFittedTrack}.}
+\label{tab:fit-fittedtrack}
+\end{table}
+
+\code{AtFitTrackMetadata} (\code{GetTrackMetadata()}) carries:
+\begin{itemize}
+\item \code{GetChi2()}, \code{GetNdf()}: for \code{AtGenfitter} GENFIT's total $\chi^2$ and ndf; for the UKF the
+  reduced $\chi^2$ and its ndf. The same macro cannot read both as the same quantity.
+\item \code{GetFitConverged()}; \code{GetGoodFit()} (\code{AtGenfitter} quality flag only);
+  \code{GetPValue()} (always 0);
+\item \code{GetMatEffects()}, \code{GetMatEffectsFallback()} (\code{AtGenfitter} only): whether material effects were
+  active in the fit that produced the result, and whether it came from the no-material retry.
+\end{itemize}
+The event-level \code{AtFitMetadata} branch is filled by the UKF; \code{AtGenfitter} ignores it, so in GENFIT output the
+branch exists but holds no track entries.
+
+\subsection{Frame of the smoothed positions}
+
+Both fitters return smoothed positions in the lab frame, $z_\mathrm{lab} = z_\mathrm{pad} - z_\mathrm{digi}$. The hits
+and clusters stored in the same file (in \code{AtPatternEvent} and in \code{AtTrackingEvent::GetTrackArray()}) are in
+the digi frame. To overlay a fit on its clusters, transform one of them: with $z_\mathrm{pad}=1000$\,mm a smoothed point
+and the cluster it belongs to satisfy $z_\mathrm{fit} + z_\mathrm{cluster} \approx 1000$\,mm, and $x$, $y$ agree
+directly.
+
+\subsection{Reading the output}
+
+The recommended loop starts from the PID results, skips entries without them, and matches fitted tracks by ID. This
+is the core of \url{macro/Unpack_HDF5/a1975/D2_UKF/ab_catima_collapse.C}:
+\begin{verbatim}
+   TTree *t = (TTree *)fl->Get("cbmsim");
+   TClonesArray *te = nullptr, *pe = nullptr;
+   t->SetBranchAddress("AtTrackingEvent", &te);
+   t->SetBranchAddress("AtPIDEvent", &pe);
+   for (Long64_t i = 0; i < t->GetEntries(); ++i) {
+      t->GetEntry(i);
+      if (!te || !pe || te->GetEntries() == 0 || pe->GetEntries() == 0)
+         continue;
+      auto *ev = (AtTrackingEvent *)te->At(0);
+      auto *pidev = (AtPIDEvent *)pe->At(0);
+      if (!ev || !pidev)
+         continue;
+      std::map<int, AtFittedTrack *> fmap;
+      for (auto &ft : ev->GetFittedTracks())
+         if (ft)
+            fmap[ft->GetTrackID()] = ft.get();
+      for (auto &sr : pidev->GetSpyral()) {
+         if (!sr.valid || sr.brho <= 0)
+            continue;
+         auto it = fmap.find(sr.trackID);
+         if (it == fmap.end())
+            continue;
+         const auto &m = it->second->GetTrackMetadata();
+         const bool isBad = !(m->GetNdf() > 0 && m->GetChi2() > 0);
+         ...
+\end{verbatim}
+Analysis macros then read \code{GetKinematicsXtr()} for GENFIT output (for example
+\code{ex\_dt\_a1975.C}, ``back-extrapolated: the value the analysis uses'').
+
+\section{Pitfalls}
+\label{sec:fit-pitfalls}
+
+\begin{enumerate}
+\item \textbf{Repeated entries in the output tree.} When the pattern recognition cannot handle an event it leaves
+  \code{AtPatternEvent} empty (\code{AtPRAtask} logs ``pattern recognition returned nothing for this event''). For such
+  an event \code{AtFitterTask::Exec()} returns before clearing its arrays, so the tree entry repeats the previous
+  event's \code{AtTrackingEvent}, with the previous event ID. \code{AtPIDTask} clears first, so the same entry has an
+  empty \code{AtPIDEvent}. Loops over \code{GetFittedTracks()} alone count these tracks twice. Loop over the PID (or
+  Spyral) results and match fitted tracks by track ID, as in the example above, or reject entries whose event ID
+  repeats.
+\item \textbf{Zero energy loss below $\beta\gamma=0.05$.} With material effects on and no \dedx{} source for that
+  region, GENFIT applies no stopping power below KE 1.17\,MeV (proton) or 3.5\,MeV (triton). Load a hybrid table and/or
+  enable \code{SetCatimaELoss}.
+\item \textbf{Parameterisation-only table.} Passing a table without \code{SetELossHybrid(kTRUE, rho)} puts GENFIT in
+  table-only mode, which throws above the table's highest energy.
+\item \textbf{Collapsed fits are kept.} A GENFIT fit can return with $\mathrm{ndf}\le0$ and still carry kinematics.
+  Require $\mathrm{ndf}>0$ (or \code{GetGoodFit()}) before using a track.
+\item \textbf{Navigator state.} Material-effects productions made before the per-track navigator re-seed collapsed in
+  contiguous blocks; they are not comparable with later productions.
+\item \textbf{Vertex gap counted twice.} \code{SetManualELoss} together with material effects and
+  \code{SetBackExtrapToAxis} adds the gap loss twice ($+5.25$\,\% on the (d,t) low branch).
+\item \textbf{Kinematics slots.} \code{GetKinematics()} is the raw first-point fit for \code{AtGenfitter} and the
+  vertex value for the UKF; \code{GetKinematicsXtr()} is the reverse. Check which fitter produced a file before
+  reading it.
+\item \textbf{$\chi^2$ conventions.} \code{GetChi2()} is total for GENFIT and reduced for the UKF. At the GENFIT default
+  $\sigma_0=4$\,mm the residuals are about 0.6\,mm, $\chi^2/\mathrm{ndf}$ is of order 0.1 and grows with track length,
+  so a fixed cut selects long tracks out. Set any threshold from the measured distribution.
+\item \textbf{Mirrored frame of smoothed positions.} Smoothed positions are in the lab frame, clusters in the digi
+  frame: $z_\mathrm{fit} + z_\mathrm{cluster} = z_\mathrm{pad}$.
+\item \textbf{Field sign.} The sign is a property of the setup; forward tracks hide a wrong sign. See
+  Table~\ref{tab:fit-bsign}.
+\item \textbf{Simulated polar angles.} After digitisation the reconstructed polar angle of a simulated track is
+  $180^\circ$ minus the true one.
+\item \textbf{z sort near $90^\circ$.} Sorting clusters by $z$ scrambles tracks close to $90^\circ$;
+  \code{SetUseClusterOrder} is the alternative but lost fits in the tests made so far and is not adopted.
+\item \textbf{Fallback mixes models.} With \code{SetMatEffectsFallback(kTRUE)} (the default) a material-effects
+  production contains no-material fits; filter on \code{GetMatEffectsFallback()} or turn the fallback off.
+\item \textbf{Geometry is the material.} With material effects on, the medium of the loaded geometry must be the target
+  gas; \code{ATTPC\_H1bar\_geomanager.root} is ordinary hydrogen.
+\item \textbf{Silent defaults.} The fit macros have long positional argument lists; a call that stops early takes the
+  defaults for everything after it. Pass every argument in production scripts and check the log banners.
+\item \textbf{PID gate drawn on another plane.} The internal gate uses \code{AtSpyralPID} with 30 minimum points, or
+  \code{AtHelix3D} with \code{SetPIDGateFrom3D}, with the gains of \code{SetDedxGain}; a gate drawn under other settings
+  selects a different sample. A missing gate file disables gating with only a log message.
+\end{enumerate}

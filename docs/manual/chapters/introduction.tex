@@ -1,0 +1,103 @@
+\chapter{Introduction}
+\label{ch:introduction}
+
+ATTPCROOTv2 (ATTPCROOT in the rest of this manual) is a C++ framework for the simulation and analysis of
+data from the Active Target Time Projection Chamber (AT-TPC) and related detectors. It is built on ROOT and
+FairRoot: every processing step is a \code{FairTask} that reads branches of a ROOT tree and writes new ones, and
+every analysis is a ROOT macro that assembles those tasks into a run.
+
+This manual describes the framework as it stands on the \code{OpenKF-Claude} branch. It is written for physicists who
+use the framework to simulate an experiment, reconstruct its data and extract physics, and for those who extend it.
+Every chapter explains what a component does, how it is configured, and why the choices matter, with an example
+taken from a macro in the repository.
+
+\section{The detector in brief}
+
+In an active target the counting gas is also the reaction target. A beam enters the gas volume, a reaction takes
+place somewhere along its path, and the charged products ionise the gas. The ionisation electrons drift in a uniform
+electric field towards the pad plane, where a Micromegas amplifies them. The AT-TPC pad plane has about ten thousand
+pads, read out by the GET electronics, which samples each pad's signal in time buckets. The pad position gives the
+$x$ and $y$ coordinates of a track point, the drift time gives $z$, and the amplitude gives the deposited charge. A
+solenoid field (2.85~T for the a1975 experiment used as the running example) bends the tracks into helices, whose
+curvature gives the rigidity $B\rho$ of each particle.
+
+A complete measurement therefore needs: the positions of the ionisation along each track (from the traces, by
+pulse-shape analysis), the separation of the cloud of points into tracks (pattern recognition), a fit of each track
+to obtain its momentum and angles at the reaction vertex (track fitting), and the identity of the particle (from the
+energy loss and the rigidity). ATTPCROOT provides all of these, together with a full simulation that produces the
+same kind of data from a model of the experiment.
+
+\section{Processing chain}
+
+Simulated and experimental data follow separate paths up to the pad traces and the same path after them.
+
+\begin{center}
+\small
+\begin{tabular}{p{0.45\textwidth}p{0.45\textwidth}}
+\toprule
+Simulation & Experiment \\
+\midrule
+Event generators (beam, reaction) & \\
+Geant4 transport $\rightarrow$ \code{AtMCPoint} & \\
+Electron drift and diffusion (\code{AtClusterizeTask}) & \\
+Pad signals (\code{AtPulseTask}) $\rightarrow$ \code{AtRawEvent} & Unpacking (\code{AtUnpackTask}) $\rightarrow$ \code{AtRawEvent} \\
+\midrule
+\multicolumn{2}{c}{Pulse-shape analysis (\code{AtPSAtask}) $\rightarrow$ \code{AtEvent} (hits)} \\
+\multicolumn{2}{c}{Optional cleaning, space-charge correction} \\
+\multicolumn{2}{c}{Pattern recognition (\code{AtPRAtask}) $\rightarrow$ \code{AtPatternEvent} (tracks)} \\
+\multicolumn{2}{c}{Particle identification (\code{AtPIDTask}) $\rightarrow$ \code{AtPIDEvent}} \\
+\multicolumn{2}{c}{Track fitting (\code{AtFitterTask}) $\rightarrow$ \code{AtTrackingEvent}} \\
+\multicolumn{2}{c}{Analysis macros: kinematics, excitation energy, cross sections} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Because the reconstruction is shared, a simulated experiment can be processed with exactly the same tasks and
+settings as the data. This is how acceptances and resolutions are measured, and it is only meaningful when the
+simulation reproduces the detector response (gain, noise, saturation, pad response) closely enough. Chapters
+\ref{ch:simulation} and \ref{ch:unpacking} point out where the two paths differ.
+
+\section{Modules}
+
+The source tree is organised in CMake libraries, one per directory. Each produces a shared library \code{libAt...}
+with a ROOT dictionary, so its classes can be used from macros.
+
+\begin{center}
+\small
+\begin{tabular}{p{0.2\textwidth}p{0.72\textwidth}}
+\toprule
+Module & Role \\
+\midrule
+\code{AtData} & persisted event, hit, pad, track and fit containers (Chapter~\ref{ch:datamodel}) \\
+\code{AtSimulationData} & Monte Carlo truth: points, tracks, stack, vertex propagation \\
+\code{AtGenerators} & beam and reaction generators (Chapter~\ref{ch:simulation}) \\
+\code{AtDetectors} & detector geometries, sensitive volumes, field (Chapter~\ref{ch:parameters}) \\
+\code{AtDigitization} & electron drift, pad signals, trigger (Chapter~\ref{ch:simulation}) \\
+\code{AtMap} & pad-plane maps and pad inhibition (Chapter~\ref{ch:parameters}) \\
+\code{AtParameter} & run-time parameter containers (Chapter~\ref{ch:parameters}) \\
+\code{AtUnpack} & raw data (GRAW, HDF5, FRIBDAQ) to \code{AtRawEvent} (Chapter~\ref{ch:unpacking}) \\
+\code{AtReconstruction} & PSA, filters, cleaning, pattern recognition, PID and fitting tasks
+  (Chapters~\ref{ch:unpacking}--\ref{ch:pid}) \\
+\code{AtTools} & energy loss, propagation, PID estimators, sampling, cleaning algorithms (Chapter~\ref{ch:tools}) \\
+\code{AtAnalysis}, \code{AtS800} & higher-level analysis and the S800 spectrometer (Chapter~\ref{ch:tools}) \\
+\code{AtEventDisplay} & the event viewer (Chapter~\ref{ch:visualization}) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Besides the libraries, the repository holds the run-time assets: \code{geometry/} (detector geometries and media),
+\code{parameters/} (parameter files), \code{scripts/} (pad maps and lookup tables), \code{resources/} (energy-loss
+tables, correction maps), and \code{macro/} (example, test and experiment macros).
+
+\section{How to read this manual}
+
+Chapter~\ref{ch:installation} explains how to build the framework and run macros. Chapters
+\ref{ch:datamodel}--\ref{ch:visualization} describe the framework component by component, in the order in which
+data flow through it. Chapter~\ref{ch:workflows} assembles them into complete simulation and data workflows, using
+the a1975 experiment ($^{16}$C on a deuterium target) as the worked example. Chapter~\ref{ch:conventions} collects the
+coordinate, sign and unit conventions, which are the most common source of silent errors. Chapter~\ref{ch:development}
+covers contributing to the framework.
+
+Class, file, task and branch names are set in \code{typewriter}. Setters are listed with the default value taken
+from the code. Lengths are in millimetres, energies in MeV, fields in tesla and rigidities in tesla-metres unless
+stated otherwise.

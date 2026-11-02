@@ -1,0 +1,643 @@
+\chapter{Analysis tools and energy loss}
+\label{ch:tools}
+
+The \code{AtTools} library collects the physics and utility code that the simulation, reconstruction and fitting
+chapters build on: energy-loss models, a charged-particle propagator, relativistic kinematics helpers, random hit
+samplers for the sample-consensus pattern finders, electronic response functions, hit-cloud cleaners, space-charge
+models and a set of small parsers and helpers. The particle-identification classes in \code{AtTools/AtPID/} are
+described separately in Chapter~\ref{ch:pid}. At the end of the chapter two smaller libraries are covered:
+\code{AtAnalysis} (a FairRoot run class, vertex finding and the E12014 fission helpers) and \code{AtS800} (merging
+of S800 spectrometer data with AT-TPC events).
+
+Most classes live in the namespace \code{AtTools}; the hit samplers live in \code{RandomSample}, the response
+functions in \code{ElectronicResponse}, and the cleaners in \code{AtTools::DataCleaning}. The build is controlled by
+\url{AtTools/CMakeLists.txt}: \code{AtELossCATIMA} is compiled only when CATIMA is found (\code{CATIMA\_FOUND}), and
+\code{AtCutHEIST} only when the HiRA event library is found (\code{HiRAEVT\_FOUND}).
+
+\section{Energy-loss models}
+\label{sec:tools-eloss}
+
+The energy-loss code has two independent layers. The modern layer is the abstract class
+\code{AtTools::AtELossModel} with three implementations (\code{AtELossCATIMA}, \code{AtELossTable},
+\code{AtELossBetheBloch}). The legacy layer is \code{AtTools::AtELossManager}, a self-contained lookup-table class
+that predates the interface and does not derive from it. The repository note
+\url{docs/subsystems/energy-loss.md} gives the same split.
+
+\subsection{The \code{AtELossModel} interface}
+
+\code{AtELossModel} (\url{AtTools/AtELossModel.h}) stores one number, the material density \code{fDensity} in
+g/cm$^3$, passed to the constructor and changed with \code{SetDensity(double)}. All energies are kinetic energies in
+MeV and all lengths are in mm. The pure virtual methods are:
+
+\begin{center}
+\begin{tabular}{p{0.42\textwidth}p{0.50\textwidth}}
+\toprule
+Method & Meaning \\
+\midrule
+\code{GetdEdx(E)} & stopping power at kinetic energy $E$ (MeV/mm) \\
+\code{GetRange(Eini, Efin = 0)} & path length to slow from \code{Eini} to \code{Efin} (mm) \\
+\code{GetEnergyLoss(Eini, d)} & energy lost over a distance \code{d} (MeV) \\
+\code{GetEnergy(Eini, d)} & energy left after a distance \code{d} (MeV) \\
+\code{GetElossStraggling(Eini, Efin)} & energy-loss straggling between two energies \\
+\code{GetdEdxStraggling(Eini, Efin)} & straggling of \dedx{}, assuming constant \dedx{} (MeV/mm) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent
+Non-pure virtual methods with defaults in the base class are \code{GetRangeVariance(E)} (returns 0),
+\code{GetRangeStraggling(E)} ($\sqrt{}$ of the variance), \code{GetElossStragglingDistance(Eini, d)} (calls
+\code{GetElossStraggling} with the energy after \code{d}) and \code{GetBraggCurve(E, rangeStepSize = 0.1,
+totalFractionELoss = 0.001)}, which returns a vector of (\dedx{} in MeV/mm, distance in mm) pairs until the energy
+drops below \code{E*totalFractionELoss}. The header comment for \code{GetElossStraggling} calls the return value
+``straggling in MeV'' while the comment of \code{GetElossStragglingDistance} calls it a ``variance in MeV$^2$''; the
+implementations return a width, not a variance (for \code{AtELossCATIMA}, see the pitfall on nucleon units below).
+
+The interface is what the fitters consume: \code{AtFitterUKF} and the propagator of Section~\ref{sec:tools-prop}
+take a \code{std::unique\_ptr<AtELossModel>}, so any of the three implementations can be plugged in.
+
+\subsection{\code{AtELossCATIMA}}
+
+\code{AtELossCATIMA} (\url{AtTools/AtELossCATIMA.h}) wraps the CATIMA library. It needs three things before it
+returns anything useful: a density, a material and a projectile.
+
+\paragraph{Construction and set-up.}
+\begin{itemize}
+\item Three constructors take the density first: alone, followed by a vector of (A, Z, stoichiometry) tuples, or
+  followed by a \code{catima::Material}. The density is in g/cm$^3$ (the
+  header comment says ``g/cm\^{}2'', but the code multiplies CATIMA's mass stopping power in MeV/(g/cm$^2$) by it to
+  obtain MeV/cm, so g/cm$^3$ is the unit actually used).
+\item \code{SetMaterial(components)}: each tuple is (A, Z, stoichiometry) and is passed to
+  \code{catima::Material::add\_element}. For a pure hydrogen or deuterium gas the repository uses a single entry, e.g.
+  \code{\{1,1,1\}} or \code{\{2,1,1\}}.
+\item \code{SetProjectile(double A, double Z, double massAmu)}: mass number, charge number and the projectile mass
+  in atomic mass units. Energies are converted to MeV/u by dividing by \code{massAmu}.
+\item \code{SetRangeStepSize(double mm)}: integration step, default \code{fRangeStepSize\{0.1\}} mm.
+\item \code{SetConfig(catima::Config)}: CATIMA physics options; the default is\\ \code{catima::default\_config}.
+\end{itemize}
+\code{SetMaterial} and \code{SetProjectile} both call a private \code{WarmUp()}, which performs one
+\code{catima::calculate} at 10 MeV/u as soon as material and projectile are both set. The code comment explains that
+CATIMA caches stopping-power tables on the first call, and that a first call made later inside a fully initialised
+\code{FairRunAna} could leave NaN tables; the warm-up primes the cache early.
+
+\paragraph{How the quantities are computed.}
+\begin{itemize}
+\item \code{GetdEdx(E)} calls \code{catima::calculate} once and returns \code{dEdxi * fDensity / 10} (MeV/mm). It
+  returns 0 with a warning if the projectile is not set or its mass is not positive, and returns 0 silently for a
+  non-finite or non-positive energy (a guard added for the UKF, whose sigma points can reach $E\le 0$).
+\item \code{GetRange(E, 0)} uses \code{catima::range} directly; it does not depend on the step size.
+  \code{GetRange(E, Efin)} with \code{Efin > 0} integrates in steps of \code{fRangeStepSize}, using the stopping
+  power at the start of each step.
+\item \code{GetEnergy(E, d)} and \code{GetEnergyLoss(E, d)} both integrate in steps of \code{fRangeStepSize} with
+  the stopping power evaluated at the start of each step, plus one partial step at the end.
+\item \code{GetRangeVariance}, \code{GetElossStraggling} and \code{GetdEdxStraggling} use CATIMA's
+  \code{range\_variance} and \code{energy\_straggling\_from\_E}. \code{GetdEdxStraggling} logs a warning if \dedx{}
+  changes by more than 1\,\% between the two energies. A separate \code{GetdEdxStragglingCATIMA(E, d)} uses
+  \code{catima::domega2dx}; unlike the other methods it calls \code{catima::calculate} without \code{fConfig}.
+\item \code{GetBraggCurve(E, step = 0, ...)}: a step of 0 means \code{fRangeStepSize}.
+\end{itemize}
+
+\paragraph{Example.}
+The UKF unit test builds a proton in 300\,torr H$_2$ as follows
+(\url{AtReconstruction/AtFitter/AtFitterUKFTest.cxx}):
+\begin{verbatim}
+auto eloss = std::make_unique<AtTools::AtELossCATIMA>(3.553e-5); // g/cm^3
+eloss->SetProjectile(1, 1, 1); // A, Z, mass [amu]
+std::vector<std::tuple<int, int, int>> mat;
+mat.push_back({1, 1, 1}); // H2: A=1, Z=1, stoich=1
+eloss->SetMaterial(mat);
+\end{verbatim}
+\code{AtGenfitter::SetManualELoss} and \code{SetRangeConstraint}
+(\url{AtReconstruction/AtFitter/AtGenfitter.cxx}) build the same object internally from a density and the gas mass
+number, with the projectile taken from the fitter's particle hypothesis.
+
+\paragraph{Pitfall: density units.}
+\code{AtELossCATIMA} (and every \code{AtELossModel}) expects g/cm$^3$. The parameter container \code{AtDigiPar}
+stores the gas density as \code{fDensity} with the comment ``[kg/m\^{}3]'', which is numerically the same as
+mg/cm$^3$; the parameter files write it that way (for example
+\url{parameters/ATTPC.46Ar_3Hed_sim.par}: \code{Density:Double\_t 0.0831 \# mg/cm3}). A value read with
+\code{AtDigiPar::GetDensity()} must therefore be multiplied by $10^{-3}$ before it is given to
+\code{AtELossCATIMA}; passing it unchanged makes the gas a thousand times denser. The fitting macros in the
+repository avoid the issue by passing the density in g/cm$^3$ explicitly (e.g. \code{gasDensity = 9.0e-5} in
+\url{macro/Unpack_HDF5/a1975/UKF/pipeline/fitUKF_a1975.C}).
+
+\paragraph{Pitfall: the integration step on thin solid layers.}
+Because \code{GetEnergy} and \code{GetEnergyLoss} use the stopping power at the start of each 0.1\,mm step, a layer
+thinner than one or a few steps is integrated with one or two evaluations of \dedx{}. In a gas this is harmless
+(stopping powers change little over 0.1\,mm), but in a solid absorber in which the ion enters its Bragg peak it
+underestimates the energy loss. The comment block of \url{geometry/Ar46_telescope.C} documents a measured case: a
+$^{47}$K ion in a 100\,$\mu$m silicon layer deposits 256.0, 279.1, 306.8 and 315.2\,MeV with steps of 0.1, 0.05, 0.01
+and 0.001\,mm, i.e.\ the default step is 19\,\% low. \code{SetRangeStepSize()} must be called before
+\code{GetEnergy}/\code{GetEnergyLoss} for anything thinner than a few millimetres. A search of the repository finds no
+consumer (task, fitter or macro) that calls \code{SetRangeStepSize}; every user runs with 0.1\,mm. The stepped
+integration also differs slightly from CATIMA's own range: for a proton in H$_2$ at $3.553\times10^{-5}$\,g/cm$^3$,
+\code{GetRange(2,1)} returns 565.2\,mm while \code{GetRange(2)-GetRange(1)} returns 561.1\,mm (0.7\,\%; measured
+for this chapter with the installed library).
+
+\paragraph{Pitfall: straggling is per nucleon.}
+\code{GetElossStraggling} returns the value of the CATIMA function \code{energy\_straggling\_from\_E} without
+rescaling. The CATIMA source fetched into the build tree divides by the projectile $A$
+(\url{build/_deps/catima-src/src/catima.cpp}), so the value is a width in MeV/u, although the header says MeV. Measured for this chapter in the H$_2$ gas above, \code{GetElossStraggling} agrees with
+the width built from \code{GetdEdx} at the final energy and the difference of the two
+\code{GetRangeVariance} values for a proton (0.0305\,MeV, 5 to 4\,MeV), but
+is smaller by exactly 12 for $^{12}$C (0.0152 against 0.1826\,MeV, 120 to 100\,MeV). \code{GetdEdxStraggling} uses this
+value and inherits the factor; \code{TrackFitterUKF} takes its energy-straggling process noise from
+\code{GetdEdxStraggling}, so for an ion heavier than the proton that noise is affected. Multiply by the mass number when
+an energy width in MeV is needed for an ion.
+
+\paragraph{Pitfall: unset projectile.}
+Only \code{GetdEdx} and the straggling methods check that the projectile and material exist. \code{GetRange},
+\code{GetEnergy} and \code{GetBraggCurve} dereference \code{fProjectile} without a check, so calling them before
+\code{SetProjectile} is undefined behaviour.
+
+\subsection{\code{AtELossTable}}
+
+\code{AtELossTable} (\url{AtTools/AtELossTable.h}) interpolates a stopping-power table with a cubic spline
+(\code{tk::spline}, Section~\ref{sec:tools-misc}). Internally it stores $\mathrm{d}x/\mathrm{d}E$ against energy, so
+that the range is the analytic integral of the spline.
+
+\begin{itemize}
+\item \code{AtELossTable(double density = 0)} or \code{AtELossTable(energy, dEdX, density = 0)} from two vectors
+  (MeV, MeV/mm).
+\item \code{LoadSrimTable(fileName)} reads a SRIM output file. It takes the density from the
+  ``\code{Target Density}'' line, sums electronic and nuclear stopping, converts energies and ranges using the unit
+  tokens (eV, keV, MeV, GeV; um, mm, cm, m) and reads the longitudinal straggling column into a range-variance spline.
+  The stopping powers are multiplied by the factor found on the line of the ``\code{Multiply}'' section whose units
+  are ``MeV / mm''. A file without that section leaves the conversion factor at 0; the header of
+  \url{macro/tests/ELossComparison/ELossComparison.C} notes that such simple tables load without straggling data.
+\item \code{LoadLiseTable(fileName, mass, density, column = 2)} reads a LISE++ export (tab separated). The energy
+  column is in MeV/u and is multiplied by \code{mass} (u). If \code{density > 0} the table is taken to be in
+  MeV/(mg/cm$^2$) and is scaled by \code{100*density}; otherwise it is taken to be in MeV/$\mu$m and the density is
+  $|$\code{density}$|$. The E12014 macros use \code{LoadLiseTable(file, A, 0)}
+  (\url{macro/e12014/adam/ML/run_simp_fiss.C}).
+\item \code{SetDensity(rho)} rescales the table from the loaded density; it throws if the current density is 0.
+\item \code{SetDistanceError(val)}: convergence tolerance on the range in \code{GetEnergy}, default
+  \code{fDistErr\{1e-4\}} mm.
+\end{itemize}
+\code{GetEnergy} solves \code{GetRange(E, Efinal) = d} with a Newton iteration (at most 100 iterations, returns $-1$
+with an error if it does not converge); it returns 0 if the distance exceeds the range. Below the lowest tabulated
+energy the range integral is truncated at the table minimum. Every converged call writes an \code{info}-level log line
+(``Energy converged in \ldots{} iterations''), which is very verbose inside an event loop.
+
+\subsection{\code{AtELossBetheBloch}}
+
+\code{AtELossBetheBloch} (\url{AtTools/AtELossBetheBloch.h}) is an analytic model. Its constructor is
+\code{AtELossBetheBloch(part\_q, part\_mass, mat\_Z, mat\_A, density, I\_eV = -1)} with the projectile charge in units
+of $e$, the projectile mass in MeV/$c^2$, the target $Z$ and $A$, the density in g/cm$^3$ and the mean excitation
+energy in eV (if $\le 0$, the Bloch approximation $I = 13.5\,Z$\,eV is used). Heavy particles use PDG\,2022
+Eq.~34.1 without density correction; a projectile whose mass is within 0.01\,MeV of the electron mass uses the
+electron formula (Leo 1994, Eq.~2.38). The formula is tabulated by \code{BuildSpline(E\_min = 0.01, E\_max = 1000,
+nPoints = 200)} on a logarithmic grid; below the lowest energy at which the formula is positive the stopping power is
+extrapolated as $\propto\sqrt{E}$. Straggling uses the Bohr approximation, integrated into a range-variance spline.
+\code{SetMaterial}, \code{SetI} and \code{SetDensity} rebuild the spline. There is no effective-charge treatment, so
+for ions at low velocity this model is not a substitute for CATIMA. Example:
+\url{macro/tests/AT-TPC/plot_bethe_bloch_Al.C}.
+
+\subsection{Comparing the models}
+
+\url{macro/tests/ELossComparison/ELossComparison.C} draws \dedx{}, range, Bragg curve and range straggling of the
+three models for protons in H$_2$, deuterons and alphas in D$_2$ and protons in He, and writes
+\code{ELossComparison.pdf}. Its header summarises the differences in physics content (CATIMA's Pierce--Blann
+effective charge, shell, Barkas and Lindhard corrections, and Firsov-capped straggling at low energy, against the bare
+Bethe--Bloch/Bohr calculation) and is the place to look before choosing a model. SRIM tables for several
+projectile/gas combinations are in \url{resources/energy_loss/}.
+
+\subsection{\code{AtELossManager} (legacy)}
+
+\code{AtELossManager} (\url{AtTools/AtELossManager.h}, a \code{TObject}) reads a six-column text table
+(energy, electronic and nuclear stopping, range and two straggling columns) through
+\code{AtELossManager(std::string file, Double\_t mass)}, with the ion mass in MeV/$c^2$. Its methods are
+\code{GetEnergyLoss}, \code{GetEnergyLossLinear}, \code{GetFinalEnergy(Eini, path, step)},
+\code{GetInitialEnergy(Efin, path, step)}, \code{GetDistance(Eini, Efin, step)},
+\code{GetTimeOfFlight}, and a pre-computed energy--distance lookup (\code{InitializeLookupTables},
+\code{GetLookupEnergy}). No source file outside the class itself uses it. When reading the file, the counting pass
+skips six header tokens and reads six columns per row, while the storing pass skips four header tokens and reads four
+columns per row; the file layout this assumes is not documented in the code. New code should use an
+\code{AtELossModel}.
+
+\section{Propagator and steppers}
+\label{sec:tools-prop}
+
+\code{AtTools::AtPropagator} (\url{AtTools/AtPropagator.h}) integrates the equation of motion of one charged
+particle in uniform electric and magnetic fields with continuous energy loss from an \code{AtELossModel}. It is the
+transport engine of the unscented Kalman filter: \code{AtFitterUKF::InitUKF} builds an \code{AtPropagator} and an
+\code{AtRK4Stepper} and hands both to \code{kf::TrackFitterUKF}, which propagates each sigma point to the next
+measurement with \code{PropagateToMeasurementSurface}
+(\url{AtReconstruction/AtFitter/AtFitterUKF.cxx}, \url{AtReconstruction/AtFitter/OpenKF/kalman_filter/TrackFitterUKF.cxx}).
+
+\paragraph{Units and state.}
+The constructor is \code{AtPropagator(double charge, double mass, std::unique\_ptr<AtELossModel>)} with the charge
+in coulombs and the mass in MeV/$c^2$. \code{SetEField} takes V/m, \code{SetBField} tesla, \code{SetState(pos, mom)}
+mm and MeV/$c$. The state (\code{StepState}) holds position, momentum, the previous position and momentum, mass,
+charge, the step size \code{h} and \code{hUsed} (in \emph{metres}) and a status (\code{kSuccess},
+\code{kInvalidStepSize}, \code{kStopped}). The force is the Lorentz force plus a drag
+$-\,s\,(\mathrm{d}E/\mathrm{d}x)\,\hat p$, where $s$ is the public member \code{fScalingFactor} (default 1);
+\code{dpds} divides it by the speed to obtain $\mathrm{d}\vec p/\mathrm{d}s$. The propagator is meant for one particle
+species and one material; the header asks for a new instance if either changes.
+
+\paragraph{Steppers.}
+\begin{itemize}
+\item \code{AtRK4Stepper}: classical fourth-order Runge--Kutta in path length with a fixed step of \code{1e-4}\,m
+  (0.1\,mm), returned by \code{GetInitialStep()}. The step is a private member with no setter.
+\item \code{AtRK4AdaptiveStepper}: Dormand--Prince 5(4) with public tolerances \code{fAtolPos = 1e-2} mm,
+  \code{fAtolMom = 1e-2} MeV/$c$, \code{fRtol = 1e-6}, step limits \code{fMinStep = 1e-6} m and \code{fMaxStep = 10}
+  m, \code{fInitialStep = 1e-4} m; it gives up after 100 attempts per step.
+\end{itemize}
+
+\paragraph{Measurement surfaces.}
+\code{AtMeasurementPoint(point)} stops at the point of closest approach (the sign of $(\vec x_0-\vec x)\cdot\hat p$
+changes); \code{AtMeasurementPlane(ROOT::Math::Plane3D)} stops when the plane is crossed and projects the final
+position onto it (\code{fClipToSurface = true}).
+
+\paragraph{Propagation.}
+\begin{itemize}
+\item \code{PropagateOneStep(stepper)} takes one step.
+\item \code{PropagateToMeasurementSurface(surface, stepper)} steps until the surface is passed, the kinetic energy
+  falls below \code{fStopTol} (0.01\,MeV) or the momentum reverses, with at most \code{fMaxPropIter} (500)
+  iterations; on reaching the limit it sets the status to \code{kStopped} and returns. When the surface is passed it
+  redoes the last step with a step equal to the distance to the surface. When the particle stops it estimates the
+  remaining distance from \dedx{}, and then sets the momentum to \code{fStopTol} along the last direction instead of
+  zero, so that a stopped UKF sigma point stays close to its neighbours (the code comment explains the reasoning).
+\item \code{PropagateToMeasurementSurface(surface, eLoss, stepper)} repeats the propagation, rescaling
+  \code{fScalingFactor} until the energy lost matches \code{eLoss} to $10^{-4}$\,MeV; it throws
+  \code{std::runtime\_error} after 100 iterations and resets the factor to 1 at the end.
+\end{itemize}
+
+\paragraph{Example.}
+\url{macro/tests/UKF/AtPropagator.C} propagates a proton through 300\,torr H$_2$ in a 2.85\,T field step by step:
+\begin{verbatim}
+auto elossModel2 = std::make_unique<AtTools::AtELossCATIMA>(3.553e-5);
+elossModel2->SetProjectile(1, 1, 1);
+std::vector<std::tuple<int, int, int>> mat;
+mat.push_back({1, 1, 1});
+elossModel2->SetMaterial(mat);
+
+AtTools::AtPropagator propagator(charge, mass, std::move(elossModel2));
+propagator.SetEField({0, 0, 0});    // V/m
+propagator.SetBField({0, 0, 2.85}); // T
+AtTools::AtRK4Stepper stepper;
+propagator.SetState(startPos, startMom); // mm, MeV/c
+const auto &st = propagator.GetState();
+while (Kinematics::KE(st.fMom, st.fMass) > 0.1)
+   propagator.PropagateOneStep(stepper);
+\end{verbatim}
+
+\paragraph{Pitfalls.}
+\begin{itemize}
+\item With \code{AtRK4Stepper}, one call of \code{PropagateToMeasurementSurface} covers at most
+  $500 \times 0.1\,\mathrm{mm} = 50$\,mm. If the surface is farther away, the call returns at 50\,mm with status
+  \code{kStopped}, as if the particle had stopped. The UKF propagates between neighbouring clusters, which are much
+  closer than this; standalone users must either call it repeatedly or use the adaptive stepper.
+\item When a particle stops before an \code{AtMeasurementPlane}, the clipping loop sets \code{fScalingFactor = 0}
+  (energy loss off) to move the stopped particle onto the plane, and the two-argument
+  \code{PropagateToMeasurementSurface} does not restore it. \code{TrackFitterUKF} sets the factor explicitly before
+  every propagation; other users must reset it themselves.
+\item The propagator uses only the mean \dedx{}; straggling and multiple scattering are added as process noise by
+  the UKF, not by the propagator.
+\end{itemize}
+
+\paragraph{Known issue: failing unit tests.}
+The Google tests in \url{AtTools/AtPropagatorTest.cxx} load the SRIM table
+\url{resources/energy_loss/HinH.txt} through \code{\$VMCWORKDIR} (or the relative path
+\url{../../resources/energy_loss/HinH.txt} when the variable is not set). Running \code{build/tests/AtToolsTests} on
+this branch gives 53 of 56 tests passing; the three failures are all in \code{AtPropagatorTest}:
+\begin{itemize}
+\item \code{PropagateToPoint\_StoppingNoField}: final $x$ = 50.0\,mm, expected $210\pm10$\,mm;
+\item \code{PropagateToPlane\_StoppingNoField}: final $x$ = 50.0\,mm, expected $220\pm1$\,mm;
+\item \code{PropagateToPoint\_Field}: final $x = -12.07$\,mm, expected $-14.895\pm1$\,mm.
+\end{itemize}
+The table is found and loaded in this build (the test log prints its density, $4.1906\times10^{-5}$\,g/cm$^3$). The
+50.0\,mm end point of the two stopping tests equals the 500-iteration limit times the 0.1\,mm RK4 step described above;
+the cause of the third failure has not been investigated here.
+
+\section{Kinematics helpers}
+
+\url{AtTools/AtKinematics.h} contains a class and a namespace.
+
+\paragraph{\code{AtTools::AtKinematics}} (a \code{TObject}).
+\begin{itemize}
+\item \code{GetMomFromBrho(A, Z, brho)} returns (momentum, kinetic energy) in \emph{GeV}, with $A$ in u and
+  $B\rho$ in T\,m.
+\item \code{TwoBodyEx(m1, m2, m3, m4, K\_proj, thetalab, K\_eject)} returns (excitation energy in MeV,
+  $\theta_\mathrm{cm}$ in degrees) for a two-body reaction from the beam kinetic energy, the ejectile laboratory angle
+  (radians) and kinetic energy. The masses are projectile, target, ejectile and recoil in MeV/$c^2$. The code comment
+  states that the returned $\theta_\mathrm{cm}$ corresponds to the recoil, for inverse kinematics.
+\item \code{KinematicalFit(parameters)}: a constrained kinematic fit of \code{fNumParticles} (3) four-vectors following
+  the Avery method, with \code{SetKFIterations} (default 100), \code{SetKFWeighting} (default 0.05) and
+  \code{SetKFTargetMass} (default 2.01410177812\,u). It calls \code{std::exit(0)} if the parameter vector does not
+  have $4\times3$ entries, and the loop uses a local weighting of 0.05 rather than \code{fWeigth}, so
+  \code{SetKFWeighting} has no effect. The constructor prints a line to \code{std::cout}.
+\end{itemize}
+Example (\url{macro/Unpack_HDF5/a1975/plot_C15pd.C}):
+\begin{verbatim}
+AtTools::AtKinematics kinematics;
+auto [ex, thetacm] = kinematics.TwoBodyEx(m_C16, m_p, m_d, m_C15, Ebeam,
+                                          theta * TMath::DegToRad(), energy);
+\end{verbatim}
+
+\paragraph{\code{AtTools::Kinematics}} (free functions, natural units unless stated):
+\code{GetGamma(KE, m1, m2)}, \code{GetGamma(beta)}, \code{GetBeta(gamma)}, \code{GetBeta(p, mass)},
+\code{GetBeta(p, int A)}, \code{GetVelocity(gamma)} (cm/ns), \code{GetSpeed(p, mass)} (m/s),
+\code{GetVel(mom, mass)} (velocity vector in m/s), \code{KE(mom, mass)} (MeV), \code{GetRelMom(gamma, mass)},
+\code{GetRelMomFromKE(KE, mass)}, \code{AtoE}/\code{EtoA} (conversion with 931.5\,MeV/u), the template
+\code{Get4Vector(mom, m)}, and \code{GetMomFromBrho(mass, Z, brho)}, which returns momentum and kinetic energy in
+\emph{MeV} using 931.49401\,MeV/u. The two \code{GetMomFromBrho} functions therefore differ in output unit (GeV
+for the class method, MeV for the namespace function) and in the atomic mass unit used by \code{AtoE}.
+\code{AtFitterUKF} uses the namespace version; \code{AtGenfit} uses the class method.
+
+\section{Hit sampling}
+\label{sec:tools-sampling}
+
+The classes in \url{AtTools/AtHitSampling/} (namespace \code{RandomSample}) draw random subsets of hits for the
+sample-consensus estimators (RANSAC and variants) in \code{AtSampleConsensus}. Each sampler is given a vector of hit
+pointers with \code{SetHitsToSample(const std::vector<const AtHit*>\&)} and returns hits with \code{SampleHits(N)} or
+positions with \code{SamplePoints(N)}. The base class \code{AtSample} builds a cumulative distribution from the
+product of the marginal PDFs returned by \code{PDF(hit)} and samples indices from it; sampling is without
+replacement unless \code{SetSampleWithReplacement(true)}. Samplers are created by
+\code{RandomSample::CreateSampler(SampleMethod, params...)} from \url{AtTools/AtHitSampling/AtSampleMethods.h}:
+
+\begin{center}
+\begin{tabular}{p{0.30\textwidth}p{0.62\textwidth}}
+\toprule
+\code{SampleMethod} / class & Behaviour \\
+\midrule
+\code{kUniform} / \code{AtUniform} & uniform over the hits \\
+\code{kChargeWeighted} / \code{AtChargeWeighted} & $P \propto q$ \\
+\code{kGaussian} / \code{AtGaussian(sigma = 30)} & a uniformly chosen reference hit, then a spatial Gaussian of
+  width $\sigma$ (mm) around it \\
+\code{kWeightedGaussian} / \code{AtWeighted\-Gaussian(sigma = 30)} & reference hit drawn by charge, then Gaussian
+  $\times$ charge \\
+\code{kWeightedGaussianTrunc} / \code{AtWeightedGaussianTrunc} & one uniform hit, then accept/reject on a Gaussian of
+  fixed $\sigma = 30$\,mm or on charge above a random fraction of $4\langle q\rangle$, at most 50 trials \\
+\code{kWeightedY} / \code{AtWeightedY} & charge weighted; 2 hits from $\rho < 20$\,mm (beam) and $N-2$ from outside \\
+\code{kY} / \code{AtY} & uniform; 2 hits from $\rho < 40$\,mm (\code{fBeamRadius}) and $N-2$ from outside \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent
+\code{AtSampleConsensus} calls \code{CreateSampler(sampleMethod)} without extra arguments
+(\url{AtReconstruction/AtPatternRecognition/AtSampleConsensus.cxx}), so the Gaussian samplers always run with
+$\sigma = 30$\,mm when used through it. A typical selection (\url{macro/e12014/adam/ransac/run_unpack_attpc.C}):
+\begin{verbatim}
+auto method = std::make_unique<SampleConsensus::AtSampleConsensus>(
+   SampleConsensus::Estimators::kRANSAC, AtPatterns::PatternType::kY,
+   RandomSample::SampleMethod::kWeightedY);
+\end{verbatim}
+
+\paragraph{Pitfalls.}
+The beam radii of the Y samplers are hard-coded (20\,mm in \code{AtWeightedY}, 40\,mm in \code{AtY}) with no setter.
+In \code{AtY::SampleHits} the condition that fragment hits lie closer to the pad plane than the beam hits is
+initialised to \code{true} and combined with \code{|=}, so it is always satisfied and the condition is not enforced.
+All samplers draw from \code{gRandom}.
+
+\section{Electronic response}
+
+The classes in \url{AtTools/ElectronicResponse/} (namespace \code{ElectronicResponse}) describe the response of the
+electronics to a delta-function charge at $t = 0$, with time in $\mu$s. The base class \code{AtElectronicResponse} is a
+function object: \code{operator()(time)} and \code{operator()(padNum, time)} return the response times a scale set by
+\code{SetScale} (default 1). The header comment notes that there is no intrinsic normalisation.
+
+\begin{itemize}
+\item \code{AtNominalResponse(peakingTime)}: $e^{-3u}\sin(u)\,u^3$ with $u = t/\tau$ (the code uses 2.718 for $e$).
+  This is the default of \code{AtPulse}, which creates it from \code{fPeakingTime} when no response is set
+  (\url{AtDigitization/AtPulse.cxx}); the same shape is used by \code{AtPSAMultiFit}.
+\item \code{AtReducedTimeResponse(peakingTime, std::function<double(double)>)}: any function of the reduced time.
+\item \code{AtVectorResponse(tbTime, std::vector<double>)}: a sampled trace, assumed to be at
+  $(0.5, 1.5, 2.5, \ldots)\times$\code{tbTime}; the lookup truncates \code{time/tbTime} to an integer and returns 0
+  beyond the trace.
+\item \code{AtFileResponse(tbTime, path)}: the same, read from a text file, one value per line; it prints every sample
+  to \code{std::cout}.
+\item \code{AtRootResponse(tbTime, file, objectName)} or \code{(tbTime, AtRawEvent)}: a per-pad response stored as an
+  \code{AtRawEvent}; the time-only call throws \code{std::invalid\_argument}.
+\end{itemize}
+The PSA deconvolution example sets it explicitly with the peaking time from \code{AtDigiPar} (stored in ns):
+\begin{verbatim}
+psa->SetResponse(
+   ElectronicResponse::AtNominalResponse(fPar->GetPeakingTime() / 1000.));
+\end{verbatim}
+\noindent
+(from \url{macro/e12014/adam/filtering/fft/deconvolution.C}).\\ The file
+\url{AtTools/ElectronicResponse/AtNominalResponse.h} contains only include guards; the class is declared in
+\code{AtElectronic\-Response.h}. The older
+\code{AtVectorResponse} in \url{AtDigitization/} is marked \code{[[deprecated]]} in favour of
+\code{AtFileResponse}.
+
+\section{Data cleaning}
+
+The cleaners in \url{AtTools/DataCleaning/} implement \code{AtTools::DataCleaning::AtDataCleaner}, whose single
+method \code{HitCloud CleanData(const HitCloud\&)} returns a new vector of \code{std::unique\_ptr<AtHit>} with the hits
+it keeps. They are run inside a reconstruction chain by \code{AtDataCleaningTask}
+(\url{AtReconstruction/AtDataCleaningTask.h}), which takes the cleaner in its constructor and reads branch
+\code{AtEventH} and writes \code{AtEventCleaned} by default (\code{SetInputBranch}, \code{SetOutputBranch},
+\code{SetPersistence}, default persistent).
+
+\paragraph{\code{AtkNN(int kNN, double kNNDist)}.}
+Keeps a hit if the mean distance to its \code{kNN} nearest neighbours is below \code{kNNDist} (mm); distances with
+$d^2 \le 0.01$\,mm$^2$ are skipped as ``self''. There are no defaults. The number of neighbours is capped at the
+number of hits, but the self distance has already been removed, so for an event with \code{kNN} or fewer hits
+\code{distances.at()} runs past the end of the vector and throws \code{std::out\_of\_range}.
+
+\paragraph{\code{AtDirDeDxCleaner}.}
+A per-hit noise filter: a hit is kept if at least \code{minDeg} of its neighbours are both direction-continuous (local
+tangents and connecting segment collinear) and \dedx{}-continuous (smoothed charge ratio above \code{qRatio}). The
+constructor defaults are
+\begin{verbatim}
+AtDirDeDxCleaner(int k = 12, double cosSeg = 0.78, double cosTan = 0.72,
+                 double rMax = 32.0, double qRatio = 0.65, int minDeg = 1,
+                 bool smoothQ = true, double qKeep = 150.0)
+\end{verbatim}
+with \code{rMax} the maximum edge length in mm and \code{qKeep} a charge above which a hit is always kept. Events with
+fewer than \code{k+1} hits are returned unchanged. The header states that on AT-TPC simulation truth it keeps about
+95\,\% of signal while removing about 98.5\,\% of background. It is used in front of the pattern recognition in the
+a1975, a1954 and a2091 pipelines, e.g.\ \url{macro/Unpack_HDF5/a1975/D2_UKF/unpackReco_multifit.C}:
+\begin{verbatim}
+// min_deg=1
+auto cleaner = std::make_unique<AtTools::DataCleaning::AtDirDeDxCleaner>();
+cleanTask = new AtDataCleaningTask(std::move(cleaner));
+cleanTask->SetInputBranch(praSrc);
+cleanTask->SetOutputBranch("AtEventClean");
+cleanTask->SetPersistence(false);
+\end{verbatim}
+
+\section{Space-charge and field-distortion models}
+
+\code{AtSpaceChargeModel} (\url{AtTools/AtSpaceChargeModel.h}) is the interface for distortions of the electron
+drift. \code{CorrectSpaceCharge(pos)} maps a position measured at the pad plane back to where the charge was deposited
+(used on data by \code{AtSpaceChargeCorrectionTask}, which reads \code{AtEventH} and writes \code{AtEventCorrected}
+by default); \code{ApplySpaceCharge(pos)} applies the distortion (called in simulation by \code{AtSimpleSimulation} in
+\url{AtDigitization/}). \code{LoadParameters(const AtDigiPar*)} reads gas parameters, and
+\code{SetBeamLocation(window, padPlane)} (defaults $(0,0,0)$ and $(0,0,1000)$\,mm) defines the beam axis about which
+radial models are evaluated. Positions are in mm.
+
+\begin{itemize}
+\item \code{AtLineChargeModel}: radial displacement from a uniform line charge along the beam. Defaults:
+  \code{fLambda = 1.54e-8} C/m (\code{SetLambda}), drift field \code{fField = 70000} V/m (\code{SetDriftField}),
+  detector length 1\,m, beam radius 0.02\,m inside which no correction is applied (\code{SetBeamRadius}, in m), and a
+  field that grows linearly from the pad plane (\code{SetConstantCharge()} switches this off).
+  \code{LoadParameters} takes the field and the detector length (\code{GetZPadPlane()/1000}) from \code{AtDigiPar}.
+\item \code{AtRadialChargeModel(EFieldPtr)}: integrates the electron motion for an arbitrary radial field
+  \code{std::function<double(double rho, double z)>} (cm in, V/cm out). Defaults: axial field 700\,V/cm, drift
+  velocity 0.815\,cm/$\mu$s, mobility derived from them, integration step \code{1e-4}\,$\mu$s (\code{SetStepSize}).
+  \code{LoadParameters} takes the field (converted from V/m) and the drift velocity from \code{AtDigiPar}. The helper
+  functor \code{AtLineChargeZDep(lambda)} provides a $z$-dependent line-charge field with a hard-coded 2\,cm beam
+  radius. Example: \url{macro/e12014/adam/spaceCharge/test.C}.
+\item \code{AtEDistortionModel}: a look-up-table correction for measured field distortions.
+  \code{SetCorrectionMaps(zlut, radlut, tralut)} reads three text tables (longitudinal, radial and transverse
+  corrections); each line is one integer radius in mm, each column one integer $z$ in mm; lines are split on the
+  carriage-return character \code{'\textbackslash r'}. \code{CorrectSpaceCharge} clamps $z$ to $[0,1000]$\,mm, truncates
+  radius and $z$ to integers, looks up the three corrections (zero if the cell is missing) and shifts the hit.
+  \code{LoadParameters} is empty.
+\end{itemize}
+Example (\url{macro/Unpack_HDF5/a1975/UKF/pipeline/unpackNFit_a1975_UKF.C}):
+\begin{verbatim}
+auto SCModel = std::make_unique<AtEDistortionModel>();
+SCModel->SetCorrectionMaps(zlutFile.Data(), radlutFile.Data(),
+                           tralutFile.Data());
+auto SCTask = new AtSpaceChargeCorrectionTask(std::move(SCModel));
+SCTask->SetInputBranch("AtEventH");
+\end{verbatim}
+
+\paragraph{Pitfalls.}
+\code{AtEDistortionModel::ApplySpaceCharge} returns a default-constructed point (the origin), so this model cannot be
+used to add distortions in simulation. A missing or unreadable LUT makes \code{SetCorrectionMaps} return
+\code{kFALSE} and every later \code{CorrectSpaceCharge} logs an error and returns the input unchanged; the macro above
+does not check the return value. \code{AtRadialChargeModel} declares its own \code{fWindow} and \code{fPadPlane}
+members, which shadow those of the base class; \code{SetBeamLocation} sets the base-class copies, which are the ones
+used by the beam-offset helpers. The older macro \url{macro/Unpack_HDF5/e20009/unpack_e20009_corr.C} calls
+\code{SetInputBranchName}, a method that \code{AtSpaceChargeCorrectionTask} does not have.
+
+\section{Other utilities}
+\label{sec:tools-misc}
+
+\paragraph{\code{AtDataManip}} (\url{AtTools/AtDataManip.h}): free functions that convert between drift distance and
+time bucket using \code{AtDigiPar}: \code{GetTB(z)} (the window is assumed at $z = 0$ and the pad plane at
+\code{GetZPadPlane()}), \code{GetDriftTB(d)}, and \code{GetHitFunction}/\code{GetHitFunctionTB}, which return a
+Gaussian \code{TF1} of the hit charge versus $z$ or time bucket (hits with $\sigma_z = 0$ are rejected). When the
+parameter pointer is \code{nullptr} they fetch \code{AtDigiPar} from the runtime database; the header warns that this
+works only in the primary thread. Used by \url{AtAnalysis/E12014/AtE12014.cxx}.
+
+\paragraph{\code{AtCSVReader}} (\url{AtTools/AtCSVReader.h}): header-only templates \code{CSVRow<T>},
+\code{CSVIterator<T>} and \code{CSVRange<T>} for range-based loops over comma-separated files. Commas cannot be escaped
+and entries that do not parse as \code{T} are skipped silently (\code{CSVRow<int>} turns \code{"0,tr,-2"} into
+\code{\{0,-2\}}), so column indices shift if a field is malformed. Example: \url{macro/e12014/adam/determineZ/PlotZ.C}:
+\begin{verbatim}
+for (auto &row : CSVRange<double>(file)) { ... row[3] ... }
+\end{verbatim}
+
+\paragraph{\code{AtCutHEIST}} (\url{AtTools/AtCutHEIST.h}, built only with HiRAEVT): PID gates on the HEIST
+beam-identification data of E12014. It is constructed from a HEIST tree (or file and tree name, default
+\code{"E12014"}) and a file of \code{TCutG}s; \code{AddSpecies(name)} or \code{AddAllSpecies()} selects gates,
+\code{operator()} returns whether the current FairRoot entry lies in any selected gate in the (time of flight, energy)
+plane, and \code{GetSpecies()} returns the name of the first matching gate. It is designed as a reduction function for
+\code{AtDataReductionTask} (\url{macro/e12014/curtis/viewer/run_eve_dQdtA.C}).
+
+\paragraph{\code{AtTrackTransformer}} (\url{AtTools/AtTrackTransformer.h}): turns the hits of an \code{AtTrack} into
+clusters for the fitters. There are three clusterisers: \code{ClusterizeSmooth3D(track, radius, distance)},
+\code{ClusterizeByGroup(track, hitsPerCluster = 15)} and\\
+\code{ClusterizeArcWalk(track, targetClusters = 25, minHitsPerCluster = 3, kNN = 10)}.\\
+\code{SetDiffusionParams(coefT, coefL, driftVel, tbTime, padResXY = -1)} sets the cluster covariance model, whose defaults (\code{fCoefT = 0.00009} cm$^2$/$\mu$s, \code{fCoefL = 0.0000009}, drift velocity
+1.0\,cm/$\mu$s, 0.320\,$\mu$s per bucket, \code{fPadResXY = 2.3} mm) the header warns may not match the detector.
+\code{GetPIDFromHits}, \code{FindVertexTrack} and \code{MergeTracks} serve the pattern-recognition stage. The use of the
+clusterisers is described with the fitters.
+
+\paragraph{Smaller helpers.}
+\begin{itemize}
+\item \code{AtSpline.h}: the \code{tk::spline} cubic-spline library by T.~Kluge (GPL), used by the table and
+  Bethe--Bloch models.
+\item \code{AtVectorUtil.h}: \code{GetRotationToZ(vec)} and \code{GetIntersection(points, directions)} for
+  \code{ROOT::Math} vectors.
+\item \code{AtStringManip.h}: \code{SplitString(s, delim)}.
+\item \code{AtFormat.h}: ANSI colour macros (\code{cRED}, \code{cGREEN}, \code{cNORMAL}, \ldots) used in log output.
+\item \code{AtParsers}: \code{ParseIonFitXML(file)} reads an XML list of ions (name, PDG code, mass, $Z$, $A$,
+  energy-loss file) into \code{IonFitInfo} records.
+\item \code{AtEulerTransformation}: beam-to-laboratory angle transformation adapted from ActarSim.
+\item \code{AtVirtualTerminal}: opens an \code{xterm} and streams output to it.
+\item \code{AtFindVertex}: see Section~\ref{sec:tools-ana}.
+\end{itemize}
+
+\section{The \code{AtAnalysis} library}
+\label{sec:tools-ana}
+
+The file \url{AtAnalysis/CMakeLists.txt} compiles three sources:\\ \code{AtRunAna.cxx},
+\code{E12014/AtFissionTask.cxx} and \code{E12014/AtE12014.cxx}.
+
+\paragraph{\code{AtRunAna}} derives from \code{FairRunAna} and adds one accessor, \code{GetMarkFill()}, which returns
+the protected \code{fMarkFill} flag. \code{AtLinkDAQTask} (\url{AtReconstruction/AtLinkDAQTask.cxx}) uses it to know
+whether the current event will be filled; a macro that uses that task must create the run as \code{AtRunAna} instead
+of \code{FairRunAna} (\url{macro/e12014/adam/unpack/unpack_linked.C}).
+
+\paragraph{\code{AtFindVertex}.}
+Finds vertices from straight-line track fits: \code{AtFindVertex(lineDistThreshold = 15)} (mm),
+\code{SetBeam(point, direction)}, \code{FindVertex(tracks, nbTracksPerVtx)}, and \code{GetTracksVertex()}, which
+returns \code{tracksFromVertex} records (vertex and tracks). The directory \url{AtAnalysis/} contains a copy of
+\code{AtFindVertex.h/.cxx} that derives from \code{TObject}, and \url{AtAnalysis/AtAnalysisLinkDef.h} requests a
+dictionary for it, but that \code{.cxx} is not in the library's source list; the compiled class is the one in
+\url{AtTools/}. Example: \url{macro/Unpack_HDF5/e18008_S800/ana_d2He.C} (\code{AtFindVertex findVtx(9);}).
+
+\paragraph{E12014.}
+\code{AtFissionTask(lambda = 0)} builds an \code{AtFissionEvent} (output branch \code{AtFissionEvent}) by combining
+the space-charge-corrected pattern event (\code{AtPatternEvent}) with the hits of the uncorrected event
+(\code{AtEventH}); the branch names have setters. The class \code{E12014} holds static helpers (\code{CreateMap},
+\code{FillChargeSum}, \code{FillHitSum}, \code{FillSimHitSum}, \ldots) that compare experimental and simulated charge
+profiles for the fission experiment; the header states that it deliberately breaks the \code{At} naming pattern because
+it is specific to one experiment.
+
+\section{The \code{AtS800} library}
+
+\code{AtS800} (\url{AtS800/}) holds the S800 spectrometer data classes and the task that merges S800 events with
+AT-TPC events.
+
+\paragraph{Data and calibration classes.}
+\code{S800} with its detector sub-objects (\code{GTimeOfFlight}, \code{GTrigger}, \code{GScintillator},
+\code{GHodoscope}, \code{GIonChamber}, \code{GCrdc}, \code{GMultiHitTOF}) holds raw S800 data and decodes it with
+\code{DecodeS800}. \code{S800Calibration} (configured by \code{S800Settings}) fills an \code{S800Calc} (CRDC
+positions, time of flight, ion chamber, scintillators, hodoscope, trigger) through \code{S800Calculate(S800*,
+S800Calc*)}, with \code{ReadCrdcCalibration}, \code{ReadCrdcBadPads} and \code{ReadICCalibration} for the input files.
+\code{TInverseMap} reads inverse-map files and returns the target-frame quantities \code{Ata}, \code{Bta}, \code{Yta}
+and \code{Dta} from the focal-plane coordinates, optionally as a function of an extra variable $z$ when several maps
+are loaded (\url{macro/Unpack_HDF5/e18008_S800/analysis.C}). The \code{lmfit} sub-directory is a bundled
+Levenberg--Marquardt library.
+
+\paragraph{\code{AtMergeTask}.}
+At \code{Init} the task reads all timestamps (\code{fts}) from the tree \code{caltree} of the S800 file given with
+\code{SetS800File}, and builds an interpolating function from timestamp to S800 entry number. It registers the output
+branch \code{s800cal} (an \code{S800Calc}). For each AT-TPC event (input branch \code{AtRawEvent}) it takes the
+external timestamp (\code{GetTimestamp(1)}) or, with \code{SetATTPCClock(kTRUE)}, the internal one
+(\code{GetTimestamp(0)}) rebased to the first event and divided by \code{SetATTPCClockFreq}. It then searches
+$\pm$\code{fEvtDelta} entries (\code{SetOptiEvtDelta}, default 5) around the predicted entry for an S800 timestamp
+that, shifted by \code{fTsDelta} (\code{SetTsDelta}, default 1272), matches within \code{fGlom} (\code{SetGlom},
+default 2). On a match it copies the \code{S800Calc} entry into the output branch, evaluates the PID gates with
+\code{S800Ana::isInPID} and stores the result with \code{S800Calc::SetIsInCut} and \code{AtRawEvent::SetIsExtGate}.
+
+\code{S800Ana} computes the Xf--Obj and corrected Obj times of flight, the CRDC positions, the focal-plane angles
+($a_{fp} = \arctan((x_1-x_0)/1073)$) and the ion-chamber sum. Up to three families of \code{TCutG} files are accepted
+(\code{SetPID1cut}: corrected ToF vs.\ Xf--Obj ToF; \code{SetPID2cut}: $x_0$ vs.\ $a_{fp}$; \code{SetPID3cut}:
+corrected ToF vs.\ IC sum); gates within a family are OR-ed, families are AND-ed, and an empty family counts as
+passed. \code{SetMTDCXfRange}, \code{SetMTDCObjRange} and \code{SetTofObjCorr} each need two values, otherwise the
+event is skipped with a warning. Example (\url{macro/Unpack_HDF5/e18008_S800/unpack_new.C}):
+\begin{verbatim}
+AtMergeTask *MergeEvt = new AtMergeTask();
+MergeEvt->SetS800File(S800File);
+MergeEvt->SetPersistence(kTRUE);
+MergeEvt->SetOptiEvtDelta(5);
+MergeEvt->SetGlom(2);
+MergeEvt->SetTsDelta(1192);
+MergeEvt->SetPID1cut(".../XfObjObj_run60to70.root");
+MergeEvt->SetTofObjCorr(S800MTDCObjCorr);
+MergeEvt->SetMTDCObjRange(S800MTDCObjRange);
+MergeEvt->SetMTDCXfRange(S800MTDCXfRange);
+\end{verbatim}
+
+\paragraph{Pitfalls.}
+\begin{itemize}
+\item The timestamp offset \code{SetTsDelta} depends on the run (the macro above lists 1192, 792 and 1272 in comments
+  and notes that it depends on the drift velocity), and runs without clock synchronisation need
+  \code{SetATTPCClock(kTRUE)}, an empirical frequency and a glom of 1500.
+\item The merged entry is copied only when the matched S800 entry number is greater than zero, so S800 entry 0 is
+  never merged.
+\item \code{SetParameters} stores a vector that \code{Init} does not pass on to \code{S800Ana}; only the MTDC ranges,
+  the ToF correction and the cut files are forwarded.
+\item \code{AtS800Task} compiles, but the bodies of its \code{Init} and \code{Exec} are commented out; it does
+  nothing.
+\end{itemize}

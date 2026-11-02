@@ -1,0 +1,161 @@
+\chapter{Complete workflows}
+\label{ch:workflows}
+
+This chapter assembles the components of the previous chapters into the two workflows of an experiment: the
+reconstruction of the data and the simulation used to interpret them. The worked example is the a1975 experiment, a
+$^{16}$C beam at 184~MeV on a 300~torr D$_2$ target in a 2.85~T field, whose macros live in
+\code{macro/Unpack\_HDF5/a1975/} (data) and \code{macro/Simulation/ATTPC/16C\_dt/} (simulation of the
+$^{16}$C(d,t)$^{15}$C channel). The analysis downstream of the kinematics caches is plain ROOT and is kept in a
+separate repository; this chapter stops at the reconstructed and fitted events.
+
+\section{Data: from HDF5 files to fitted tracks}
+
+The data reconstruction runs in two passes, so that the slow fit can be repeated with different settings on the same
+pattern-recognition output.
+
+\subsection{Pass 1: unpacking, PSA, cleaning, pattern recognition}
+
+\code{D2\_UKF/unpackReco\_multifit.C} builds one \code{FairRunAna} with the parameter file, the pad map and four
+tasks. The production script \code{D2\_UKF/dv\_dt.sh} calls it per run with the multi-fit PSA, a threshold of 40 and
+the HDBSCAN track finder (the macro's default finder is \code{AtTrackFinderTC}):
+\begin{verbatim}
+root -l -b -q "unpackReco_multifit.C(\"$r\",0,false,\"$REC\",\"$H5\",false,true,
+               \"multifit\",0,40,\"hdbscan\",0,3,0,0.1,\"$PAR\")"
+\end{verbatim}
+The tasks, as set up in the macro:
+\begin{verbatim}
+auto fAtMapPtr = std::make_shared<AtTpcMap>();
+fAtMapPtr->ParseXMLMap(mapDir.Data());              // scripts/ANL2023.xml
+fAtMapPtr->GeneratePadPlane();
+
+auto unpacker = std::make_unique<AtHDFUnpacker>(fAtMapPtr);
+unpacker->SetInputFileName(inputFile.Data());
+unpacker->SetNumberTimestamps(2);
+unpacker->SetBaseLineSubtraction(true);
+auto unpackTask = new AtUnpackTask(std::move(unpacker));
+
+auto p = new AtPSAMultiFit();                       // multi-peak pulse fit
+p->SetThreshold(thr);
+p->SetPeakingTime(0.720);
+p->SetMaxPeaks(4);
+p->SetMinSeparation(4);
+AtPSAtask *psaTask = new AtPSAtask(p);
+psaTask->SetOutputBranch("AtEventH");
+
+auto cleaner = std::make_unique<AtTools::DataCleaning::AtDirDeDxCleaner>();
+cleanTask = new AtDataCleaningTask(std::move(cleaner));    // -> AtEventClean
+
+auto h = std::make_unique<AtPATTERN::AtTrackFinderHDBSCAN>();
+h->SetMinClusterSize(hdMcs);                        // 0 = adaptive
+h->SetMinSamples(hdMs);                             // 3
+h->SetClusterSelectionEpsilon(10.0);
+h->SetJoinMethod("mover");
+h->SetMinClusterSizeJoin(15);
+h->SetCircleOverlapRatio(0.25);
+h->SetMotionGapTol(40);
+h->SetMotionAngleTol(35);
+AtPRAtask *praTask = new AtPRAtask(std::move(h));   // -> AtPatternEvent
+\end{verbatim}
+The cleaning step removes scattered background before track finding; the comment in the macro records its effect on
+run 0016 (clean-proton yield from 5 to 20\,\%, median $\chi^2/\mathrm{ndf}$ of the fits from 206 to 59). The output,
+\code{run\_XXXX\_multifit\_reco.root}, holds the hit cloud and the track candidates. The script writes a completion
+marker only when the macro reports success, the output exceeds a size floor and the log has no segmentation fault,
+and a failed stage deletes its own partial output. Chapter~\ref{ch:unpacking} describes the unpacker and the PSA,
+Chapter~\ref{ch:patternrecognition} the track finders.
+
+\subsection{Pass 2: PID and fit}
+
+\code{D2\_UKF/fitGenfitter\_a1975\_deuterium.C} reads the pass-1 file and adds two tasks:
+\begin{verbatim}
+AtFitterTask *fitterTask = new AtFitterTask(std::move(fitter));  // AtGenfitter
+fitterTask->SetInputBranch("AtPatternEvent");
+fitterTask->SetOutputBranch("AtTrackingEvent");
+AtPIDTask *pidTask = new AtPIDTask();
+pidTask->SetInputBranch("AtPatternEvent");
+pidTask->SetOutputBranch("AtPIDEvent");
+run->AddTask(pidTask);
+run->AddTask(fitterTask);
+\end{verbatim}
+The fitter takes the particle hypothesis, the material model and an optional PID gate (a JSON file of graphical cuts)
+from the macro arguments. The production script \code{D2\_UKF/prod\_dt\_catima.sh} runs it for the triton hypothesis
+on every run in parallel, checks each log for the banners that prove the intended energy-loss model was active, and
+writes a \code{.done} marker per run so that a rerun skips what is complete. Chapter~\ref{ch:fitting} explains every
+option; Chapter~\ref{ch:pid} the PID configuration.
+
+\subsection{Reading the fitted events}
+
+The fit output pairs each fitted track with its PID result through the track ID. The pattern used in
+\code{D2\_UKF/ex\_dt\_a1975.C}:
+\begin{verbatim}
+tu->SetBranchAddress("AtTrackingEvent", &te);
+tu->SetBranchAddress("AtPIDEvent", &pe);
+for (Long64_t i = 0; i < tu->GetEntries(); ++i) {
+   tu->GetEntry(i);
+   if (pe->GetEntries() == 0 || te->GetEntries() == 0) continue;
+   auto *pidev = (AtPIDEvent *)pe->At(0);
+   auto *ev = (AtTrackingEvent *)te->At(0);
+   std::map<int, AtFittedTrack *> fmap;
+   for (auto &ft : ev->GetFittedTracks())
+      if (ft) fmap[ft->GetTrackID()] = ft.get();
+   for (auto &sr : pidev->GetSpyral()) {
+      if (!sr.valid) continue;
+      auto it = fmap.find(sr.trackID);
+      if (it == fmap.end()) continue;
+      auto &k = it->second->GetKinematicsXtr();   // at the vertex
+      // ... k.kineticEnergy, k.theta, k.phi
+   }
+}
+\end{verbatim}
+Looping over the PID results rather than over the fitted tracks matters: the fit trees can repeat an
+\code{AtTrackingEvent} in the next entry, and the copy carries an empty \code{AtPIDEvent}, so this loop skips it while a
+loop over \code{GetFittedTracks()} would count the event twice.
+
+\section{Simulation: from the reaction to reconstructed tracks}
+
+\subsection{Generation}
+
+\code{C16\_dt\_sim.C} sets up \code{FairRunSim} with Geant4, the AT-TPC detector filled with the D$_2$ medium, a
+uniform field and two generators: \code{AtTPCIonGenerator} for the beam and \code{AtTPC2Body} for the reaction (beam,
+target, heavy residual and light ejectile, in that order). The script \code{run\_states\_dt.sh} runs it once per
+final state of $^{15}$C and records a marker only when the log shows both the requested seed and successful
+completion:
+\begin{verbatim}
+root -b -q -l "C16_dt_sim.C($NEV,2.,70.,\"TGeant4\",-28.5,
+                            \"$OUT/${J}_sim.root\",$EX,$SEED)"
+grep -q "RNG seed requested: $SEED" "$OUT/${J}_gen.log" || echo NO_SEED
+grep -q "Macro finished successfully" "$OUT/${J}_gen.log" || echo NOT_DONE
+\end{verbatim}
+The field is given in the data convention ($-28.5$~kG) so that simulated tracks turn like the data
+(Chapter~\ref{ch:conventions}).
+
+\subsection{Digitisation and reconstruction}
+
+\code{run\_reco\_C16dt.C} reads the Monte Carlo points and runs the digitisation (\code{AtClusterizeTask},
+\code{AtPulseTask}) followed by the same reconstruction chain as the data production: multi-fit PSA, the
+\code{AtDirDeDxCleaner} cleaning and the HDBSCAN finder. Its parameter file is a copy of the data's
+(\code{ATTPC.a1975\_deuterium\_dv1104\_g35000.par}, produced by \code{make\_gain\_pars.sh}) with only the gain changed,
+so that the drift velocity, \code{TBEntrance} and \code{ZPadPlane}, hence the $z$ scale, are identical. Two choices in it carry the lesson of this
+example:
+\begin{itemize}
+\item \emph{Gain.} The gain in the parameter file sets how many electrons reach a pad, hence how many hits each track
+  keeps above the PSA threshold. It was matched to the data on the number of hits per track (gain 35\,000, ratio 0.99
+  to run 0016); the header of \code{run\_reco\_batch\_dt.sh} documents the scan.
+\item \emph{Beam hole.} The real detector does not read out the region around the beam; the simulation inhibits the
+  same pads (\code{AtBeamHole.h}), otherwise the clustering merges the beam into the ejectile tracks.
+\end{itemize}
+The simulation and the data then go through \code{fitGenfitter\_a1975\_deuterium.C} with the same settings, which is
+what makes an acceptance measured on the simulation applicable to the data.
+
+\section{Running at scale}
+
+\begin{itemize}
+\item Split productions by run (data) or by seed (simulation) and run several jobs in parallel; each simulated job
+  needs a distinct seed.
+\item Write logs per job and check them for positive evidence of the intended configuration (the seed, the
+  parameter file, the energy-loss banner), not only for the absence of errors.
+\item Write a completion marker only after those checks; a file that exists is not a job that finished.
+\item Start long jobs with \code{nohup} from a script, and never edit a script while it is running: bash reads it
+  incrementally.
+\item Record the exact command and inputs of every product, so that it can be regenerated and so that a cached result
+  can be checked against its inputs.
+\end{itemize}

@@ -1,0 +1,690 @@
+\chapter{Parameters, pad maps and geometry}
+\label{ch:parameters}
+
+Three kinds of static configuration sit underneath every simulation and reconstruction job in
+ATTPCROOTv2:
+\begin{itemize}
+  \item \textbf{parameter containers} (\code{AtParameter/}), read from ASCII \code{.par} files in
+    \code{parameters/} through FairRoot's runtime database. \code{AtDigiPar} holds the fields, the
+    drift-volume geometry, the gas and the electronics constants that the digitisation and the pulse
+    shape analysis use;
+  \item \textbf{pad maps} (\code{AtMap/}), which describe the pad plane as a \code{TH2Poly}, convert
+    between electronics addresses (CoBo, AsAd, AGET, channel) and pad numbers, and carry the list of
+    inhibited pads;
+  \item \textbf{transport geometry} (\code{geometry/}, \code{AtDetectors/}), the ROOT geometry files
+    built from \code{geometry/*.C} with the materials of \code{geometry/media.geo}, the \code{AtTpc}
+    sensitive detector and the magnetic-field classes.
+\end{itemize}
+These three are independent of each other. Nothing in the code checks that the gas in the transport
+geometry is the gas described in the \code{.par} file, or that the pad map covers the drift volume of
+the geometry. Keeping them consistent is the job of the macro author, and several of the pitfalls at
+the end of each section come from exactly that gap.
+
+%======================================================================
+\section{Parameter containers}
+\label{sec:par-containers}
+
+\subsection{The container factory: \code{AtContFact}}
+
+\code{AtContFact} (\code{AtParameter/AtContFact.cxx}) is a \code{FairContFact}. A static instance is
+created when the parameter library is loaded; its constructor registers itself with
+\code{FairRuntimeDb::instance()}. \code{setAllContainers()} declares two containers, both with an empty
+context:
+\begin{itemize}
+  \item \code{AtDigiPar}, title ``AtTPC Parameter Container'';
+  \item \code{AtTriggerPar}, same title.
+\end{itemize}
+\code{createContainer()} instantiates the matching class by name. A commented-out \code{STGeoPar}
+entry is a leftover of the SpiRIT code from which the factory was copied. Detector packages carry their
+own factories (for example \code{AtTpcContFact}, \code{AtSiArrayContFact}, \code{AtApolloContFact}
+in \code{AtDetectors/}).
+
+\subsection{Loading a parameter file in a macro}
+
+All tasks that need parameters ask the runtime database for the container by name in their
+\code{Init()} (or \code{SetParContainers()}). The macro only has to attach an input. The pattern used in
+every reconstruction macro is (from \url{macro/Simulation/ATTPC/16C_pd/run_reco_C16pd.C}):
+\begin{verbatim}
+TString dir = getenv("VMCWORKDIR");
+TString digiParFile = dir + "/parameters/" + paramFile;
+
+FairRuntimeDb *rtdb = fRun->GetRuntimeDb();
+FairParAsciiFileIo *parIo1 = new FairParAsciiFileIo();
+parIo1->open(digiParFile.Data(), "in");
+rtdb->setFirstInput(parIo1);
+\end{verbatim}
+A second file (for instance a trigger parameter file) is attached with \code{setSecondInput()}, as in
+\url{macro/e15250/digi/rundigi_sim.C}. Inside a task the container is obtained with
+\begin{verbatim}
+auto *rtdb = FairRuntimeDb::instance();
+fPar = dynamic_cast<AtDigiPar *>(rtdb->getContainer("AtDigiPar"));
+\end{verbatim}
+and the getters are then valid after the runtime database has initialised the containers.
+
+\subsection{The \code{.par} file format}
+
+A FairRoot ASCII parameter file is a sequence of sections. Each section starts with the container
+name in square brackets; each line in it is
+\begin{verbatim}
+Name:Type   value   # comment
+\end{verbatim}
+with \code{Type} one of \code{Int\_t} or \code{Double\_t} for the keys used here. Lines starting with
+\code{\#} are comments. A key that the container does not ask for is ignored, so a file may carry extra
+entries. The following excerpt is the \code{[AtDigiPar]} block of
+\url{parameters/ATTPC.a1975_deuterium_dv1104.par} (the a1975 deuterium-target data), shortened to the
+keys discussed below plus a few that nothing reads:
+\begin{verbatim}
+[AtDigiPar]
+PadPlaneX:Int_t                864   # mm
+EField:Double_t               5000   # V/m
+NumTbs:Int_t                   512
+SamplingRate:Int_t             6.0   #
+DriftVelocity:Double_t        1.10424 # cm/us  two-point: micromegas TB 10 ...
+BField:Double_t               2.85   # Tesla
+TB0:Int_t                     10      # DEPRECATED and IGNORED: AtPSA ...
+TBEntrance:Int_t              560     # Beam position at entrance in TB
+ZPadPlane:Double_t            971.7312   # mm  FOLLOWS from dv and ...
+Density:Double_t            0.0661   # mg/cm3. D2 at 300 torr, 293 K
+GasPressure:Double_t           300   # torr (was 600; the D2 target ran at 300)
+EIonize:Double_t            15.603   # Ionization energy of gas in eV
+Fano:Double_t                 0.24   # Fano factor of the gas
+CoefL:Double_t              0.0009   # Longitudal diffusion [cm^2/us]
+CoefT:Double_t              0.0009   # Transverse diffusion [cm^2/us]
+Gain:Double_t                10000   # Average gain of micromegas
+GETGain:Double_t              1000   # Gain of the GET electronics in fC
+PeakingTime:Int_t              720   # Electronic peaking time in ns
+\end{verbatim}
+The file in the repository ends with a comment block explaining why \code{ZPadPlane} is 971.7312~mm
+and not 1000~mm; see Section~\ref{sec:par-zcal}. Entries such as \code{PadPlaneX}, \code{PadSizeX},
+\code{NumTbs}, \code{DriftLength}, \code{TB0}, \code{ThetaPad}, \code{LorentzAngle} or
+\code{MaxRange} are present in most files in \code{parameters/} for historical reasons;
+\code{AtDigiPar::getParams()} does not read any of them.
+
+The \code{parameters/} directory holds about a hundred files. The naming convention is
+\code{ATTPC.<experiment>[\_variant].par} for the AT-TPC, \code{pATTPC.*} for the prototype,
+\code{SpecMAT.*} and \code{GADGET.sim.par} for the other detectors. Variants of one experiment
+(different drift velocities, gains or fields) are separate files, for example
+\code{ATTPC.a1975\_deuterium\_dv1104\_g35000.par}. To start a new experiment, copy the file of a recent
+experiment with the same gas and edit it.
+
+\subsection{\code{AtDigiPar}: every parameter}
+\label{sec:par-digipar}
+
+\code{AtDigiPar} (\code{AtParameter/AtDigiPar.h}) is a \code{FairParGenericSet}. Its
+\code{getParams()} requires fifteen keys; each missing key is a \code{LOG(fatal)}. One more key,
+\code{ReverseDrift}, is optional. Table~\ref{tab:digipar} lists them with the units of the header
+comments and the classes that read them (found by searching the source tree for the getters).
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{p{2.5cm}p{1.5cm}p{1.6cm}p{3.8cm}p{4.0cm}}
+\toprule
+Key & Type & Unit & Meaning & Read by \\
+\midrule
+\code{EField} & Double\_t & V/m & drift field & \code{AtPSA} (printed), \code{AtLineChargeModel},
+  \code{AtRadialChargeModel} \\
+\code{BField} & Double\_t & T & solenoid field & \code{AtPSA} (printed),
+  \code{AtMCQMinimization} \\
+\code{TBEntrance} & Int\_t & time bucket & TB of the far end of the drift volume (beam entrance in
+  normal running) & \code{AtPSA}, \code{AtPulse}, \code{AtDataManip}, \code{AtMCQMinimization} \\
+\code{ZPadPlane} & Double\_t & mm & full drift length, pad plane to entrance & \code{AtClusterize},
+  \code{AtPulse}, \code{AtPSA}, \code{AtSpaceChargeTask}, others \\
+\code{EIonize} & Double\_t & eV & effective ionisation energy $W$ & \code{AtClusterize},
+  \code{AtMCQMinimization} \\
+\code{Fano} & Double\_t & -- & Fano factor & \code{AtClusterize} \\
+\code{CoefL} & Double\_t & cm$^2$/$\mu$s & longitudinal diffusion coefficient & \code{AtClusterize},
+  \code{AtPRAtask}, \code{AtPSADeconvFit} \\
+\code{CoefT} & Double\_t & cm$^2$/$\mu$s & transverse diffusion coefficient & \code{AtClusterize},
+  \code{AtPRAtask} \\
+\code{GasPressure} & Double\_t & torr & gas pressure & \code{AtMCQMinimization} only \\
+\code{Density} & Double\_t & kg/m$^3$ $=$ mg/cm$^3$ & gas density & \code{AtMCQMinimization} only \\
+\code{DriftVelocity} & Double\_t & cm/$\mu$s & electron drift velocity & \code{AtClusterize},
+  \code{AtPulse}, \code{AtPSA}, \code{AtPRAtask}, others \\
+\code{Gain} & Double\_t & -- & mean micromegas gain (Polya mean) & \code{AtPulse} \\
+\code{SamplingRate} & Int\_t & MHz (nominal) & GET sampling frequency; selects the TB width &
+  via \code{GetTBTime()}: \code{AtPulse}, \code{AtPSA}, \code{AtPRAtask}, \ldots \\
+\code{GETGain} & Double\_t & fC & GET dynamic range & \code{AtPulse} \\
+\code{PeakingTime} & Int\_t & ns & shaper peaking time & \code{AtPulse}, \code{AtVectorResponse} \\
+\code{ReverseDrift} & Int\_t & 0/1 & optional; 1 = beam enters through the pad plane &
+  \code{AtClusterize}, \code{AtPSA} \\
+\bottomrule
+\end{tabular}
+\caption{Keys read by \code{AtDigiPar::getParams()}. Every key except \code{ReverseDrift} is
+mandatory.}
+\label{tab:digipar}
+\end{table}
+
+\paragraph{Getters.} The getters are named after the members, with two exceptions:
+\code{CoefT} and \code{CoefL} are returned by \code{GetCoefDiffusionTrans()} and
+\code{GetCoefDiffusionLong()}, and there is no getter for the sampling rate itself. Instead,
+\code{GetTBTime()} returns the width of one time bucket in nanoseconds from a hard-coded switch:
+\begin{center}
+\begin{tabular}{lcccccc}
+\toprule
+\code{SamplingRate} & 3 & 6 & 12 & 25 & 50 & 100 \\
+\code{GetTBTime()} [ns] & 320 & 160 & 80 & 40 & 20 & 10 \\
+\bottomrule
+\end{tabular}
+\end{center}
+Any other value returns $-1$. The keys are the nominal GET frequencies; the widths correspond to
+3.125, 6.25, 12.5, 25, 50 and 100~MHz. \code{GetReverseDrift()} returns \code{true} when the
+\code{ReverseDrift} entry is non-zero.
+
+\paragraph{How the electronics constants are used.} In \code{AtPulse::SetParameters()} the
+\code{GETGain} value in fC is converted to an ADC scale,
+$1.602\times10^{-19}\cdot 4096/(\mathtt{GETGain}\cdot10^{-15})$, the peaking time is converted to
+$\mu$s, and the gain of each electron avalanche is drawn from a Polya distribution with mean
+\code{Gain} (or from a Gaussian when the fast-gain option of \code{AtPulse} is on).
+
+\paragraph{The number of time buckets is not a parameter.} The readout window has 512 time buckets:
+\code{AtPulse::fNumTbs} and \code{AtPSA::fNumTbs} are initialised to 512 and no setter exists for
+either. The \code{NumTbs} line in the \code{.par} files is not read. The readout window of the
+simulation is therefore $512\times\mathtt{GetTBTime()}$, i.e.\ 81.92~$\mu$s at
+\code{SamplingRate 6} and 163.84~$\mu$s at \code{SamplingRate 3}.
+
+\subsection{Time-to-$z$ calibration: \code{ZPadPlane}, \code{TBEntrance} and \code{DriftVelocity}}
+\label{sec:par-zcal}
+
+\code{AtPSA::Init()} computes the time bucket of the pad plane and \code{CalculateZGeo()} maps a pulse
+peak position to a hit $z$:
+\begin{equation*}
+  \mathrm{TB}_0 = \mathtt{TBEntrance} - \frac{\mathtt{ZPadPlane}}{v_d\,t_\mathrm{TB}},\qquad
+  z_\mathrm{digi} = \mathtt{ZPadPlane} - (\mathtt{TBEntrance} - \mathrm{TB}_\mathrm{peak})\,
+  t_\mathrm{TB}\,v_d ,
+\end{equation*}
+with $t_\mathrm{TB}$ from \code{GetTBTime()} and $v_d$ the \code{DriftVelocity}.
+$z_\mathrm{digi}$ is the drift length: 0 at the pad plane and \code{ZPadPlane} at the entrance. The
+fitters convert back with $z_\mathrm{lab} = \mathtt{ZPadPlane} - z_\mathrm{digi}$.
+\code{AtPulse} uses the same relation in reverse to place the simulated signal
+(\code{fTBPadPlane = TBEntrance - ZPadPlane/10/TBTime/DriftVelocity}).
+
+The three quantities are over-determined: the drift velocity and the time buckets of the two ends fix
+the drift length. The comment block in \url{parameters/ATTPC.a1975_deuterium_dv1104.par} spells out
+the consequence: with $v_d = 1.10424$~cm/$\mu$s, the micromegas at TB~10 and the entrance at TB~560,
+\code{ZPadPlane} has to be $550 \times 160~\mathrm{ns} \times 1.10424~\mathrm{cm}/\mu\mathrm{s}
+= 971.7312$~mm. Keeping the nominal 1000~mm instead would put the pad plane at TB~$-6$. When a new
+drift velocity is adopted, recompute \code{ZPadPlane} (or \code{TBEntrance}) rather than editing only
+$v_d$, and rescale any cut in $z$ inherited from an older production. The \code{TB0} line of the
+\code{.par} files is ignored: \code{AtPSA} derives it.
+
+\subsection{\code{ReverseDrift}: the reversed detector}
+\label{sec:par-reverse}
+
+\code{ReverseDrift:Int\_t 1} describes a detector in which the beam enters through the pad plane and
+leaves through the cathode, so that the exit aperture for a downstream telescope can be large
+(\url{docs/REVERSED_DETECTOR.md}). The entry is optional and defaults to 0, so every existing file
+behaves as before; \code{getParams()} probes it with \code{FairParamList::find()}, which is silent,
+instead of \code{fill()}, which would print an error and make \code{FairRuntimeDb} report a failed
+initialisation on every old file. When the flag is on, \code{AtDigiPar} prints a warning.
+
+Only the drift length of a point changes: \code{ZPadPlane}$-z_\mathrm{beam}$ in normal running,
+$z_\mathrm{beam}$ in reversed running. The hit coordinate stays
+$z_\mathrm{digi} = \mathtt{ZPadPlane} - z_\mathrm{beam}$ in both modes, because the two places that
+implement the option compensate each other: the digitisation
+(\code{AtClusterize::}\allowbreak\code{getCurrentPointLocation}) uses the reversed drift length, and
+the PSA (\code{AtPSA::CalculateZGeo}) returns \code{ZPadPlane}$-$drift instead of the
+drift. Pattern recognition, fitters, the vertex convention and the field handedness are therefore
+untouched; diffusion and the time bucket of each hit differ. The option lives in the parameter file
+and not in a task setter on purpose: digitisation and PSA read the same container and cannot disagree
+about which end the pad plane is on.
+
+The document lists three traps:
+\begin{itemize}
+  \item \code{TBEntrance} keeps its arithmetic role (time bucket of the far end of the drift volume)
+    but in reversed running that end is where the beam \emph{leaves}. A data calibration that finds the
+    beam entrance at high TB finds the exit instead.
+  \item A $z$ offset tuned in millimetres on $z_\mathrm{digi}$ changes sign in reversed running
+    (corrections expressed in time buckets, such as \code{AtPSAMax::SetPeakingShiftTBs}, carry over).
+  \item \code{AtSpaceChargeTask}, the deprecated \code{AtPSA::CalculateZ} and the pad-plane material
+    are not reversal-aware; the geometry has a thin entrance window at $z=0$ and no pad-plane volume.
+\end{itemize}
+Independently of the reversed mode, the Spyral branch of \code{AtPSA::CalibrateZ}
+(\code{SetSpyralZ}) uses the opposite $z$ convention from \code{CalculateZGeo} (0 at the window
+instead of 0 at the pad plane); a chain that enables it gets a mirrored $z_\mathrm{lab}$ from the
+fitters.
+
+\subsection{\code{AtTriggerPar}}
+
+The trigger container \code{AtTriggerPar} describes the GET trigger and is read by the task
+\code{AtTriggerTask} (\url{AtDigitization/AtTriggerTask.cxx}). Its \code{getParams()} requires ten
+\code{Double\_t} keys, each fatal if missing:
+\begin{verbatim}
+Write_clock  Read_clock  Master_clock      (Hz)
+Pad_thresh_MSB  Pad_thresh_LSB  Trigger_signal_width
+Trigger_discriminator_fraction            (a fraction, not a percentage)
+Multiplicity_threshold  Multiplicity_window  Trigger_height
+\end{verbatim}
+The example file is
+\url{parameters/AT.trigger.par} (CoBo write clock 12.5~MHz, read clock 25~MHz, master clock 100~MHz).
+\code{putParams()} writes two keys with a typo (\code{Tultiplicity\_threshold},
+\code{Tultiplicity\_window}), so a file written back by FairRoot cannot be read in again without
+editing. \code{GetFile(n)} returns line \code{n} of the file
+\url{$VMCWORKDIR/parameters/AT.files.par}, prefixed with \code{\$VMCWORKDIR}.
+
+\subsection{\code{AtGas}}
+
+\code{AtGas} is not a FairRoot container. Its constructor takes a file name and reads lines of the form
+\code{Name:Type value}, skipping lines starting with \code{\#} or \code{[}. It recognises
+\code{EIonizeP10}, \code{DriftVelocity}, \code{CoefAttachment}, \code{CoefDiffusionLong},
+\code{CoefDiffusionTrans} and \code{Gain}; the example is \url{parameters/Gas.test.par}.
+\code{GetRandomCS()} returns a Gaussian random integer (mean 50, sigma 20, at least 1). No class or
+macro in the repository outside \code{AtParameter/} instantiates \code{AtGas}; gas properties used by
+the digitisation come from \code{AtDigiPar}.
+
+\subsection{Pitfalls in parameter files}
+\label{sec:par-pitfalls}
+
+\paragraph{\code{SamplingRate} must be a GET rate.} A value outside $\{3,6,12,25,50,100\}$ makes
+\code{GetTBTime()} return $-1$~ns. Nothing stops the job: the file parses, the job runs to the end, and
+the time-to-$z$ mapping is built on a negative bucket width. The only sign is in the log
+(\code{==== Sampling Rate : -1 ns} printed by \code{AtPSA}). The readout window cannot be tuned
+continuously; with 512 buckets the choices around a 100~$\mu$s drift are 81.92~$\mu$s and
+163.84~$\mu$s.
+
+\paragraph{The drift must fit inside the readout window.} The full drift time
+$\mathtt{ZPadPlane}/v_d$ must be shorter than $512\,t_\mathrm{TB}$ (minus the pre-trigger offset set by
+\code{TBEntrance}). Electrons that arrive later fall outside the 512 buckets of the pulse histogram in
+\code{AtPulse} and are lost; for the 1~m AT-TPC drift this is a clean cut in $z$ and the surviving
+tracks look normal. No code compares the two numbers. The related check is physical:
+\code{EField} and \code{DriftVelocity} are read by different code and never compared, so a file can
+state a field and a drift velocity that are incompatible for its gas. Check $v_d$ against a gas
+calculation (e.g.\ Magboltz) for the stated field, gas and pressure.
+
+\paragraph{Density units.} \code{Density} is stored in kg/m$^3$ (the header comment), which is
+numerically the same as mg/cm$^3$ (the comments in the \code{.par} files; 0.0661 for D$_2$ at 300~torr).
+The energy-loss models in \code{AtTools} take g/cm$^3$: the \code{AtELossModel} documentation states
+``Density of the target in g/cm\^{}3'', and the a1975 UKF macros pass \code{9.0e-5} for H$_2$. Passing
+\code{AtDigiPar::GetDensity()} to \code{AtELossCATIMA} without dividing by 1000 gives an energy loss a
+factor 1000 too large. Note also that the constructor comment in \code{AtELossCATIMA.h} says
+``g/cm\^{}2'', which is a typo for g/cm$^3$. Only \code{AtMCQMinimization} reads \code{Density} and
+\code{GasPressure}; the transport density comes from \code{media.geo}
+(Section~\ref{sec:geo-media}), which is in g/cm$^3$.
+
+\paragraph{Misleading error messages.} When \code{DriftVelocity} is missing, \code{getParams()} logs
+``Cannot find Density parameter!''; when \code{SamplingRate} is missing it logs ``Cannot find GETGain
+parameter!''. Check the key list in Table~\ref{tab:digipar} rather than the message.
+
+\paragraph{\code{EField} printout.} \code{AtPSA::Init()} prints the field with the unit ``V/cm'' but
+prints the \code{.par} value unchanged, which is in V/m. \code{AtRadialChargeModel} divides by 100
+explicitly when it reads it.
+
+\paragraph{Changing the header.} The comment in \code{AtDigiPar.h} requires any new member to be
+appended at the end of the class: the getters are inline, so a library compiled against an older
+header keeps the old member offsets and reads the wrong field without error. A full rebuild is needed
+after editing the header (\code{AtEventDisplay} and \code{AtUnpack} include it too).
+
+%======================================================================
+\section{Pad maps}
+\label{sec:maps}
+
+\subsection{The \code{AtMap} base class}
+
+\code{AtMap} (\code{AtMap/AtMap.h}) is an abstract \code{TNamed}. It stores
+\begin{itemize}
+  \item \code{AtPadCoord}, a \code{boost::multi\_array<double,3>} of pad vertex coordinates in mm,
+    indexed as \code{[pad][vertex][x/y]};
+  \item \code{fPadPlane}, a \code{TH2Poly} with one bin per pad, built by \code{GeneratePadPlane()};
+  \item \code{fPadMap} / \code{fPadMapInverse}, the electronics-to-pad lookup in both directions. The
+    key is an \code{AtPadReference} \code{\{cobo, asad, aget, ch\}};
+  \item \code{fPadSizeMap} (pad number to size ID), \code{fAuxPadMap} (auxiliary channels) and
+    \code{fIniPads} (inhibited pads).
+\end{itemize}
+A derived class implements four pure virtual functions: \code{Dump()}, \code{BinToPad(Int\_t bin)},
+\code{GeneratePadPlane()} and \code{CalcPadCenter(Int\_t pad)}. The last one returns a
+\code{ROOT::Math::XYPoint} in mm, or $(-9999,-9999)$ on error.
+
+\paragraph{Lookups.}
+\begin{itemize}
+  \item \code{GetPadNum(XYPoint)} generates the plane if needed, calls \code{TH2Poly::FindBin} and
+    converts the bin with \code{BinToPad}; it returns $-1$ for a point outside every pad.
+  \item \code{GetPadNum(const AtPadReference\&)} returns the pad of an electronics channel, or $-1$.
+  \item \code{GetPadRef(int pad)} returns the electronics address of a pad, or a default-constructed
+    \code{AtPadReference} when the pad is not in \code{fPadMapInverse}.
+  \item \code{GetPadPlane()} returns a \emph{clone} of the internal \code{TH2Poly} (owned by ROOT),
+    suitable for filling in a display or analysis.
+  \item \code{GetNumPads()}, \code{GetPadSize(pad)} (returns $-1000$ if unknown),
+    \code{IsFPNchannel(ref)} (true for AGET channels 11, 22, 45, 56) and \code{GetNearestFPN()}.
+\end{itemize}
+
+\paragraph{Lookup tables (\code{ParseXMLMap}).} The electronics map of the AT-TPC and its
+derivatives comes from an XML file in \code{scripts/}. \code{ParseXMLMap(file)} parses it with
+\code{TDOMParser}; each child element of the root carries \code{CoboID}, \code{AsadID}, \code{AgetID},
+\code{ChannelID}, \code{PadID} and, optionally, \code{SizeID}:
+\begin{verbatim}
+<dataroot>
+<Lookup20150611>
+<ID>1</ID>
+<CoboID>8</CoboID>
+<AsadID>0</AsadID>
+<AgetID>1</AgetID>
+<ChannelID>10</ChannelID>
+<PadID>9908</PadID>
+</Lookup20150611>
+...
+\end{verbatim}
+The XML files are generated from the CSV files beside them (columns
+\code{CoboID}, \code{AsadID}, \code{AgetID}, \code{ChannelID}, \code{PadID}) with \code{scripts/csv2xml.pl}. Available tables include
+\code{Lookup20150611.xml} (the AT-TPC map used by the simulation and a1975/a1954 macros),
+\code{LookupProto*.xml} for the prototype, the SpecMAT tables
+\code{LookupSpecMATnoScint*.xml},
+\code{LookupGADGET08232021.xml}, \code{e12014\_pad\_mapping.xml} and \code{ANL2023.xml}.
+
+\code{ParseMapList()} contains a list of accepted element names, but the condition includes the bare
+string literal \code{"ANL2023.xml"}, which is always true. Every element name is therefore accepted
+and the ``Node not found'' branch never runs; a misspelled table does not produce a warning.
+
+\paragraph{Auxiliary channels.} \code{AddAuxPad(ref, name)} marks an electronics channel as an
+auxiliary signal (not a pad); unpackers query \code{IsAuxPad()} and \code{GetAuxName()}. Example from
+\url{macro/e12014/adam/unpack/develop/unpackCalibrated.C}:
+\begin{verbatim}
+mapping->AddAuxPad({10, 0, 0, 0}, "MCP_US");
+mapping->AddAuxPad({10, 0, 0, 34}, "TPC_Mesh");
+\end{verbatim}
+
+\subsection{Inhibiting pads}
+\label{sec:maps-inhibit}
+
+\code{AtMap::InhibitType} is an ordered enum:
+\begin{center}
+\begin{tabular}{lcp{9.5cm}}
+\toprule
+Value & Number & Effect where implemented \\
+\midrule
+\code{kNone} & 0 & pad read normally \\
+\code{kLowGain} & 1 & \code{AtPulse::GetGain} multiplies the gain by \code{SetLowGain(val)}
+  (default factor 0) \\
+\code{kXTalk} & 2 & no special handling in digitisation \\
+\code{kTotal} & 3 & \code{AtPulse}, \code{AtPulseLine}, \code{AtPulseLineTask}: no signal \\
+\code{kBadPad} & 4 & used by \code{AtE12014}; not blanked by \code{AtPulse} \\
+\bottomrule
+\end{tabular}
+\end{center}
+\code{InhibitPad(pad, type)} keeps the higher of the old and new types, so adding \code{kTotal} to a
+\code{kLowGain} pad inhibits it. \code{IsInhibited(pad)} returns \code{kNone} for pads not in the list.
+The unpackers (\code{AtGRAWUnpacker}, \code{AtROOTUnpacker}) skip every pad whose type is not
+\code{kNone}, while the digitisation tests for \code{kTotal} (and \code{kLowGain}) explicitly; a pad
+marked \code{kBadPad} or \code{kXTalk} is therefore dropped from data but still digitised in a
+simulation.
+
+\code{ParseInhibitMap(file, type)} reads a whitespace-separated list of pad numbers from a text file
+and inhibits each with the given type, as in \url{macro/e12014/simulation/rundigi_fast.C}:
+\begin{verbatim}
+mapping->ParseInhibitMap("inhibit.txt", AtMap::InhibitType::kTotal);
+\end{verbatim}
+
+\paragraph{The beam hole in simulations.} The AT-TPC pad plane is not read out around the beam, but a
+simulation digitises the beam over that region. The helper \code{AtSim::InhibitBeamHole} in
+\url{macro/Simulation/ATTPC/AtBeamHole.h} inhibits, as \code{kTotal}, every pad whose
+\code{CalcPadCenter} lies at a radius below \code{holeR} (mm), and prints a warning when it inhibits
+none. It must be called after \code{GeneratePadPlane()} and before \code{AtPulseTask} is built. The
+header documents the motivation: on a1954 $^{14}$C$(p,p')$ the beam cloud merged into 67\% of the
+recoil-proton clusters without the hole and 0.2\% with it. The radius is per experiment and is
+measured from the data (radial hit density, sim versus data): 30~mm for a1954, 20~mm for a1975. From
+\url{macro/Simulation/ATTPC/16C_pd/run_reco_C16pd.C}:
+\begin{verbatim}
+#include "../AtBeamHole.h"
+...
+auto mapping = std::make_shared<AtTpcMap>();
+mapping->ParseXMLMap(mapParFile.Data());  // scripts/Lookup20150611.xml
+mapping->GeneratePadPlane();
+AtSim::InhibitBeamHole(mapping, holeR);       // holeR = 20.0 mm for a1975
+AtPulseTask *pulse = new AtPulseTask(std::make_shared<AtPulse>(mapping));
+\end{verbatim}
+
+\paragraph{Inhibition needs \code{fPadMapInverse}.} \code{InhibitPad(int)} and \code{IsInhibited(int)}
+go through \code{GetPadRef(pad)}. A map that never fills \code{fPadMapInverse} returns the same
+default \code{AtPadReference} for every pad, so inhibiting one pad inhibits all of them. This was the
+\code{AtTpcSquareMap} bug: with any beam hole, \code{AtPulse} logged ``Skipped 100\% of N points'' and
+the events came out empty. It is fixed in the current \code{AtMap/AtTpcSquareMap.cxx}: the constructor
+fills \code{fPadMap} and \code{fPadMapInverse} with a synthetic unique reference per pad, laid out as
+68 channels $\times$ 4 AGETs $\times$ 4 AsAds per CoBo. \code{AtTpcPUMAMap} does not fill the two maps
+in this tree and has the same failure mode if any pad is inhibited. \code{AtTpcMap},
+\code{AtSpecMATMap} and \code{AtGadgetIIMap} get the maps from \code{ParseXMLMap}, so the XML must be
+parsed before inhibiting.
+
+\subsection{The concrete maps}
+
+\paragraph{\code{AtTpcMap} (AT-TPC).} 10240 triangular pads generated in \code{GeneratePadPlane()}
+from constants written in thousandths of an inch: micromegas radius 275~mm, small triangles of side
+4.67~mm inside a beam region of radius 123~mm, large triangles (about 9.6~mm) outside; the upper half
+is built row by row and mirrored in $y$. \code{CalcPadCenter} returns the centroid of the three
+vertices; \code{BinToPad(bin)} is \code{bin-1}. \code{Dump()} writes \code{coordmap.txt}. Typical setup:
+\code{ParseXMLMap("\$VMCWORKDIR/scripts/Lookup20150611.xml")} followed by \code{GeneratePadPlane()}.
+
+\paragraph{\code{AtTpcProtoMap} (prototype AT-TPC).} The pad shapes are not generated but read from a
+ROOT file: \code{SetGeoFile(name)} opens \code{\$VMCWORKDIR/geometry/<name>}, and
+\code{GeneratePadPlane()} builds the \code{TH2Poly} from the \code{TMultiGraph} objects (or takes a
+\code{TH2Poly}) found in the current directory. \code{SetProtoMap(file)} reads a text table
+(pad number, pad name, $x$, $y$, bin number) that supplies \code{CalcPadCenter} and \code{BinToPad}.
+From \url{macro/Unpack_HDF5/eX17/run_eve_proto_lite.C}:
+\begin{verbatim}
+auto fMap = std::make_shared<AtTpcProtoMap>();
+fMap->ParseXMLMap(scriptdir.Data());     // scripts/LookupProtoX17.xml
+fMap->SetGeoFile(geo.Data());            // proto20181201_geo_hires.root
+fMap->SetProtoMap(protomapdir.Data());   // scripts/proto20181201.map
+fMap->GeneratePadPlane();
+\end{verbatim}
+\code{BinToPad} dereferences the lookup result before testing it, so an unknown bin is undefined
+behaviour rather than a clean $-1$.
+
+\paragraph{\code{AtSpecMATMap} (SpecMAT).} Constructor argument: number of pads, default 3174.
+Triangular pads in six segments of 529 (23 rows) generated by a function in the source; the
+\code{TH2Poly} skips one triangle at each segment boundary, and \code{CalcPadCenter} compensates with a
+per-segment index offset. \code{BinToPad(bin)} returns \code{bin} unchanged. Macros use
+\code{std::make\_shared<AtSpecMATMap>(3174)} with \code{LookupSpecMATnoScint.xml}
+(\url{macro/tests/SpecMAT/run_unpack_SpecMAT.C}).
+
+\paragraph{\code{AtGadgetIIMap} (GADGET~II).} Square pads of 2.2~mm built in mirrored quadrants from a
+hard-coded pads-per-row list, plus small 2~mm veto pads; \code{fNumberPads} is 1012. The constructor
+reads \code{\$VMCWORKDIR/scripts/GADGETII\_BinToPad\_08232021.txt} into a bin-to-pad table, but
+\code{BinToPad} is \code{bin-1} and the table is not used. Electronics map:
+\code{LookupGADGET08232021.xml} (\url{macro/tests/GADGETII/run_unpack_GADGET_all.C}).
+
+\paragraph{\code{AtTpcSquareMap} (uniform square pads).} A programmatic map for design studies; no
+XML is needed. Constructor:
+\begin{verbatim}
+AtTpcSquareMap(double padSize_mm = 2.0, int nPadsX = 100, int nPadsY = 100,
+               double originX_mm = NaN, double originY_mm = NaN);
+\end{verbatim}
+With the origin left at NaN the plane is centred on $(0,0)$; passing \code{(0, 0)} puts the lower-left
+corner at the origin. Pad number is \code{ix + iy*nPadsX}; \code{CalcPadCenter} is analytic. Used in
+\url{macro/Simulation/ATTPC/46Ar_3Hed/run_reco_Ar46_TC.C} and
+\url{macro/Simulation/ATTPC/14C_pp/run_reco_C14.C} for pad-pitch studies,
+\begin{verbatim}
+int nPad = (int)std::lround(activeExtent_mm / padSize_mm);
+auto sq = std::make_shared<AtTpcSquareMap>(padSize_mm, nPad, nPad);
+sq->GeneratePadPlane();
+\end{verbatim}
+and in \url{macro/Simulation/ATTPC/HYDRA/run_digi_HYDRA.C} for the HYDRA prototype
+(\code{AtTpcSquareMap(2.0, 128, 44, 0.0, 0.0)}).
+
+\paragraph{\code{AtTpcPUMAMap} (PUMA TPC).} An annular pad plane: \code{AtTpcPUMAMap(rInner = 62.9,
+rOuter = 121.1, nRings = 16, nPadsPerRing = 256)}, i.e.\ 4096 pads by default, in equal-area rings
+($r_{i+1}^2 = r_i^2 + (r_\mathrm{out}^2 - r_\mathrm{in}^2)/n_\mathrm{rings}$). Pad number is
+\code{ring*nPadsPerRing + sector}; each pad is drawn as a straight-edged quadrilateral. Used in
+\url{macro/Simulation/ATTPC/PUMA/run_digi_attpc.C}. See the inhibition caveat above.
+
+\paragraph{Probing a map by hand.} \code{TH2Poly::FindBin} returns ``outside'' for a point exactly on a
+pad edge. With a square plane centred at 0 and 2~mm pads, every even coordinate is an edge, so a test
+at round numbers reports a correct map as broken; probe with non-round coordinates.
+
+%======================================================================
+\section{Transport geometry}
+\label{sec:geometry}
+
+\subsection{Geometry files and how they are built}
+
+The transport geometry is a ROOT \code{TGeo} tree written by a generator macro in \code{geometry/}.
+Each macro (for example \url{geometry/ATTPC_H600torr.C}) follows the same structure:
+\begin{enumerate}
+  \item load the media it needs from \code{geometry/media.geo} (located through
+    \code{\$VMCWORKDIR}) with \code{FairGeoLoader} and \code{FairGeoMedia}, and create them in the \code{TGeoManager};
+  \item build the volumes. For the AT-TPC: a tube \code{drift\_volume} of the gas medium, radius
+    25~cm, length 100~cm (all sizes in cm), placed with its upstream face at $z=0$; a thin
+    \code{tpc\_window} (aramid, 3.6~$\mu$m) at $z=0$ (the steel medium is loaded but no cylinder volume is built in \code{ATTPC\_H600torr.C});
+  \item close and test the geometry, then write two files: \code{<version>.root} (the top volume, used
+    by \code{AtTpc::SetGeometryFileName}) and \code{<version>\_geomanager.root} (the full
+    \code{TGeoManager}, used by reconstruction code that navigates materials, such as the fitters).
+\end{enumerate}
+To build one:
+\begin{verbatim}
+cd $VMCWORKDIR/geometry
+root -b -q ATTPC_H600torr.C
+# writes ATTPC_H600torr.root and ATTPC_H600torr_geomanager.root
+\end{verbatim}
+The generator macros end with \code{top->Draw("ogl")}, which opens a GL viewer unless ROOT runs in
+batch mode. \url{macro/tests/generateGeometry.sh} rebuilds only the five geometries used by the tests
+(\code{ATTPC\_He1bar.C}, \code{ATTPC\_v1\_1.C}, \code{SpecMAT\_He1Bar.C}, \code{GADGET\_II\_lp.C},
+\code{GADGET\_II.C}). Many generated files are committed in \code{geometry/}; regenerate only when
+\code{media.geo} or the macro has changed.
+
+Most AT-TPC generators differ only in the gas medium name. Examples: \code{ATTPC\_v1\_2.C} and
+\code{ATTPC\_v1\_1.C} (generic AT-TPC), \code{ATTPC\_He1bar.C} (integration test),
+\code{ATTPC\_H300torr\_RT.C}, \code{ATTPC\_H600torr.C}, \code{ATTPC\_D300torr\_v2.C},
+\code{ATTPC\_He3CO2\_300torr.C}, \code{ATTPC\_Proto\_v1\_0.C} (prototype, 500~mm drift),
+\code{SpecMAT\_*.C}, \code{GADGET\_II*.C}, \code{FRIB\_TPC\_v*.C}, \code{ATTPC\_PUMA.C},
+\code{ATTPC\_HYDRA\_*.C}, and ancillary arrays (\code{HELIOS\_SiArray\_*.C}, \code{APOLLO\_v0.C},
+\code{SeGA.C}, \code{DeGAi.C}, \code{PxCT.C}, \code{Si\_forward\_telescope.C}). The header comment of
+\code{ATTPC\_H600torr.C} gives a reason to pick the gas file carefully: the H$_2$ 1~bar geometry is
+27\% too dense for a 600~torr run, and the fitters' material effects use this density.
+
+Note that the AT-TPC macros place \code{drift\_volume} with a transverse offset of
+6.079~cm in $y$ (\code{TGeoCombiTrans(0.0, 6.079, drift\_length / 2.0, ...)}), in \code{ATTPC\_H600torr.C},
+\code{ATTPC\_He1bar.C} and \code{ATTPC\_D300torr\_v2.C}. The reason is not documented in the code.
+
+\subsection{Materials: \code{media.geo}}
+\label{sec:geo-media}
+
+\code{geometry/media.geo} defines every medium in the FairRoot ASCII format documented at the top of
+the file. A medium is a name followed by \code{ncomp}, the atomic weights, atomic numbers, the density
+in g/cm$^3$ and, for a mixture, the weights (positive \code{ncomp}: by mass; negative: by number of
+atoms); then a line with \code{sensflag fldflag fld epsil}; then \code{npckov} (0 except for Cherenkov
+media). Example:
+\begin{verbatim}
+H_600torr	   1  1.007   1.   6.616e-5
+\end{verbatim}
+About two thirds down the file a marker line reads
+\code{// ----- Caution with putting materials below that line -----}, followed by the keyword
+\code{AUTONULL}. From there on every medium carries an additional line of four numbers
+(\code{madfld maxstep maxde minstep}) before \code{npckov}:
+\begin{verbatim}
+He3_300torr         1  3.0160293  2.  4.94933e-5
+                    1  1  20.  .001
+                    99. 0.001    0.0001  0.0000001
+                    0
+\end{verbatim}
+A simulation macro calls \code{run->SetMaterials("media.geo")}; the generator macros read the same
+file. A change in \code{media.geo} therefore affects every geometry built afterwards and, if a medium
+is malformed, every simulation.
+
+\paragraph{Pitfall: do not append after the last medium.} The last entry, \code{Ar90CF4\_250mbar}, sits
+below the \code{AUTONULL} marker but has no four-number line. It parses only because it is last and
+the reader reaches the end of the file. Anything appended after it, including comment lines, is
+consumed out of step as numeric data: \code{FairGeoMedia} hangs at ``Read media'' while allocating
+memory until the machine runs out. Insert a new medium \emph{above} \code{Ar90CF4\_250mbar}, with its
+four-number line if it is below the marker, and run a short simulation of an unrelated geometry to
+confirm the file still parses. \url{docs/subsystems/geometry.md} still advises to ``append a new
+block''; do not follow that advice.
+
+\subsection{The \code{AtTpc} detector}
+
+\code{AtTpc} (\code{AtDetectors/AtTpc/AtTpc.h}) is the \code{FairDetector} for the gas volume.
+Construction and registration in a simulation macro (from
+\url{macro/Simulation/ATTPC/16C_pd/C16_pd_sim.C}):
+\begin{verbatim}
+run->SetMaterials("media.geo");
+FairModule *cave = new AtCave("CAVE");
+cave->SetGeometryFileName("cave.geo");
+run->AddModule(cave);
+
+FairDetector *ATTPC = new AtTpc("ATTPC", kTRUE);
+ATTPC->SetGeometryFileName("ATTPC_H300torr_RT.root");
+run->AddModule(ATTPC);
+\end{verbatim}
+\code{ConstructGeometry()} calls \code{ConstructRootGeometry()} for a \code{.root} file; the
+\code{.geo} branch only prints a message. \code{CheckIfSensitive()} marks every volume whose name
+contains \code{drift\_volume}, \code{window} or \code{cell} as sensitive. \code{ProcessHits()} stores
+one \code{AtMCPoint} per step in the \code{TClonesArray} registered as branch \code{AtTpcPoint}, which
+\code{AtClusterizeTask} reads. Each point carries the volume name, position and momentum at the step,
+energy loss, and the mass and charge numbers decoded from the PDG code; for tracks other than
+\code{trackID} 0 it also stores the initial energy and angle from \code{AtVertexPropagator}.
+
+\paragraph{Reaction trigger.} \code{reactionOccursHere()} stops the primary (\code{trackID} 0) inside
+\code{drift\_volume} or \code{cell} once its accumulated energy loss exceeds the random threshold of
+\code{AtVertexPropagator::GetRndELoss()}, and \code{startReactionEvent()} hands the stop position and
+momentum to \code{AtVertexPropagator}, which the reaction generator uses for the next event. The
+comment in the code warns that \code{trackID} 0 is not always the beam (in the reaction event the
+first primary is the heavy residual), and that the generator disarms the threshold for reaction
+events.
+
+\paragraph{\code{SetDriftMaxStep(cm)}.} An optional maximum step length in \code{drift\_volume}
+(default: off). It sets \code{STEMAX} on the gas medium and, for Geant4, issues the
+Geant4 command \url{/mcDet/setMaxStepInLowDensityMaterials}. The comment notes that Geant4 accepts that command only
+in PreInit, before the hook runs, so it may have no effect; the log line reports the attempt.
+
+\subsection{Magnetic field: \code{AtDetectors/AtField}}
+
+\code{AtConstField} is a \code{FairField} with a uniform field inside a box. \code{SetField(bX, bY, bZ)}
+takes kilogauss; \code{SetFieldRegion(xMin, xMax, yMin, yMax, zMin, zMax)} takes cm; outside the
+region every component is 0. From \url{macro/Simulation/ATTPC/16C_pd/C16_pd_sim.C}:
+\begin{verbatim}
+AtConstField *fMagField = new AtConstField();
+fMagField->SetField(0., 0., bFieldkG);                 // kG, default -28.5
+fMagField->SetFieldRegion(-50, 50, -50, 50, -10, 230); // cm
+run->SetField(fMagField);
+\end{verbatim}
+The sign of the field matters: the comment in that macro states that the simulation is generated with
+the field sign of the data so that the sense of rotation matches, because direction-dependent
+reconstruction (such as \code{AtSpyralPID}) otherwise rejects most simulated tracks. The field
+magnitude used by the transport is set here; \code{AtDigiPar::BField} is a separate number read by
+reconstruction code (Table~\ref{tab:digipar}). Keep both consistent.
+
+\code{AtFieldPar} is a parameter set with a field type and, for type 0, the region and components;
+\code{AtFieldCreator} builds an \code{AtConstField} from it for type 0 and prints a warning for any
+other type. No container factory in the repository declares an \code{AtFieldPar} container, and the
+macros construct \code{AtConstField} directly.
+
+\subsection{Passive modules and ancillary detectors}
+
+\code{AtDetectors/AtPassive} provides \code{AtCave} (the world volume, geometry \code{cave.geo} or
+\code{caveSmall.geo}), \code{AtMagnet} and \code{AtPipe}. The other detectors are optional
+\code{FairDetector}s, each with a geometry macro in \code{geometry/}:
+\begin{itemize}
+  \item \code{AtSiArray}: silicon arrays (HELIOS/SOLARIS style); sensitive volumes contain
+    \code{silicon} or \code{CsI}; points in branch \code{AtSiArrayPoint} (\code{AtSiPoint}).
+  \item \code{AtApollo}: the APOLLO array (LaBr and CsI scintillators in \code{APOLLO\_v0.C});
+    sensitive volumes contain \code{Crystal\_}; points in \code{AtApolloPoint}; \code{AtApolloDigitizer}
+    produces \code{ApolloCrystalCalData} with configurable resolution, non-uniformity and threshold.
+  \item \code{AtSeGA}, \code{AtDeGAi}, \code{AtPxCT}: germanium arrays used with GADGET-type gas
+    volumes; sensitive volumes contain \code{Crystal\_}; points registered as \code{AtMCPoint};
+    digitizers produce \code{SeGACrystalCalData}, \code{DeGAiCrystalCalData}, \code{PxCTCrystalCalData}.
+\end{itemize}
+Examples: \url{macro/Simulation/SeGA/sega_gamma_sim.C}, \url{macro/Simulation/HELIOS/apollo_gamma_sim.C}.
+Since \code{AtSeGA}, \code{AtDeGAi} and \code{AtPxCT} all register a branch named \code{AtMCPoint},
+combining two of them in one job would collide on the branch name; no macro in the repository does so.
+
+%======================================================================
+\section{Keeping the three consistent: a checklist}
+\label{sec:par-checklist}
+
+Before running a new simulation or reconstruction configuration:
+\begin{enumerate}
+  \item \code{SamplingRate} is one of 3, 6, 12, 25, 50, 100, and the drift time
+    $\mathtt{ZPadPlane}/v_d$ fits inside $512\times t_\mathrm{TB}$ together with the pre-trigger
+    offset.
+  \item \code{ZPadPlane}, \code{TBEntrance} and \code{DriftVelocity} satisfy
+    $\mathtt{ZPadPlane} = (\mathtt{TBEntrance} - \mathrm{TB}_0)\,t_\mathrm{TB}\,v_d$ for the measured pad
+    plane bucket $\mathrm{TB}_0$.
+  \item \code{DriftVelocity} is what a gas calculation gives for the \code{EField}, gas and pressure of
+    the file.
+  \item The geometry file's gas medium has the density of the run (g/cm$^3$ in \code{media.geo});
+    \code{Density} in the \code{.par} file, if used, is mg/cm$^3$.
+  \item The \code{AtConstField} magnitude and sign match the data, and \code{BField} in the
+    \code{.par} file has the same magnitude.
+  \item The pad map matches the detector; for a simulation of the AT-TPC, the beam-hole radius has been
+    measured for this experiment; for a programmatic map, inhibition works (the map fills
+    \code{fPadMapInverse}).
+  \item New media were inserted above the last entry of \code{media.geo}, and a short unrelated
+    simulation still runs.
+\end{enumerate}

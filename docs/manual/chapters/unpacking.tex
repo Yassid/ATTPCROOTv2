@@ -1,0 +1,796 @@
+\chapter{Unpacking and pulse-shape analysis}
+\label{ch:unpacking}
+
+This chapter covers the first two stages of the reconstruction of experimental data: turning the
+files written by the data-acquisition systems into \code{AtRawEvent} objects (\emph{unpacking}), and
+turning the digitized pad traces of an \code{AtRawEvent} into three-dimensional \code{AtHit} objects
+collected in an \code{AtEvent} (\emph{pulse-shape analysis}, PSA). Between the two sit optional
+trace filters (baseline, fixed-pattern noise, Fourier filters) and event-selection tasks. The same
+PSA stage also runs on simulated data, after the digitization produces an \code{AtRawEvent} from
+Monte Carlo points; Section~\ref{sec:unp-pitfalls} explains why the PSA configuration must then be
+the same for data and simulation.
+
+The code lives in three places of the repository:
+\begin{itemize}
+  \item \url{AtUnpack/}: the unpacker interface, the GET (GRAW and HDF5) unpackers, the FRIBDAQ
+        auxiliary-stream unpackers, the FRIBDAQ scaler reader and the FPN pedestal helper.
+  \item \url{AtReconstruction/AtFilter/} and the tasks \code{AtFilterTask}, \code{AtAuxFilterTask},
+        \code{AtDataReductionTask}, \code{AtCopyTreeTask}, \code{AtCopyAuxTreeTask},
+        \code{AtDataCleaningTask} in \url{AtReconstruction/}.
+  \item \url{AtReconstruction/AtPulseAnalyzer/}: \code{AtPSA} and its implementations, run by
+        \code{AtPSAtask} (\url{AtReconstruction/AtPSAtask.h}).
+\end{itemize}
+
+A typical data chain, with the default branch names, is
+\begin{verbatim}
+  .h5/.graw    --AtUnpackTask-->  AtRawEvent
+               --AtFilterTask (optional)-->  AtRawEventFiltered
+               --AtPSAtask-->  AtEventH
+               --space-charge correction, AtDataCleaningTask (optional)--> ...
+\end{verbatim}
+
+%=====================================================================================================
+\section{The unpacker framework}
+\label{sec:unp-framework}
+
+\subsection{\code{AtUnpacker}}
+
+\code{AtUnpacker} (\url{AtUnpack/AtUnpacker.h}) is the abstract interface every unpacker implements.
+It holds a shared pointer to the pad map (\code{AtMap}), the input file name and two event
+counters:
+\begin{itemize}
+  \item \code{fEventID}: the internal event number, starting at the value given to
+        \code{SetInitialEventID()} (default 0). This is the number written into the
+        \code{AtRawEvent} with \code{SetEventID()}.
+  \item \code{fDataEventID}: the event number as the DAQ (or merger) recorded it. Each unpacker
+        computes it from \code{fEventID} and the first event found in the file.
+\end{itemize}
+The pure virtual methods are \code{Init()}, \code{FillRawEvent(AtRawEvent\&)},
+\code{IsLastEvent()} and \code{GetNumEvents()}. \code{SetSaveFPN(bool)} (default \code{false})
+asks the unpacker to store the fixed-pattern-noise (FPN) channels of the AGET chips in the event
+as well (\code{AtRawEvent::AddFPN}).
+
+\subsection{\code{AtUnpackTask}}
+
+\code{AtUnpackTask} (\url{AtUnpack/AtUnpackTask.h}) is the \code{FairTask} that owns an unpacker,
+passed to the constructor as a \code{std::unique\_ptr<AtUnpacker>}. In \code{Init()} it calls the
+unpacker's \code{Init()} and registers the output branch; in \code{Exec()} it fills one
+\code{AtRawEvent} per call.
+
+\begin{center}
+\begin{tabular}{p{5.2cm}p{3.0cm}p{6.5cm}}
+\toprule
+Setter & Default & Meaning \\
+\midrule
+\code{SetOuputBranchName(name)} & \code{"AtRawEvent"} & Output branch (note the spelling of the
+setter). \\
+\code{SetPersistence(bool)} & \code{true} & Write the raw event to the output file. \\
+\code{GetNumEvents()} & -- & Forwards to the unpacker; use it as the upper limit of
+\code{FairRunAna::Run(0, n)}. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The unpacking runs without a FairRoot source, so the run length must be given explicitly. All the
+macros in \url{macro/Unpack_HDF5/} use the same pattern:
+\begin{verbatim}
+  run->Init();
+  auto numEvents = unpackTask->GetNumEvents();
+  run->Run(0, numEvents);
+\end{verbatim}
+After the unpacker reports its last event, further \code{Exec()} calls log
+\code{"Hit last event at: ..."} and mark the event bad. \code{AtUnpackTask::FinishEvent()}, which
+would stop the run, carries the comment that it is normally not called because there is no source.
+
+%=====================================================================================================
+\section{GET data in HDF5 files}
+\label{sec:unp-hdf5}
+
+\subsection{\code{AtHDFUnpacker}: the remerged layout}
+
+\code{AtHDFUnpacker} (\url{AtUnpack/AtHDFUnpacker.h}) reads the \emph{remerged} HDF5 layout used by
+most AT-TPC experiments at FRIB and Argonne: a group \code{/get} with one dataset
+\code{evt<N>\_data} per event (shape \{number of pads, 517\}, native 16-bit integers), an optional
+\code{evt<N>\_header} dataset, and a \code{/meta} group.
+
+\paragraph{Event range.} \code{Init()} opens the file and determines the first and last DAQ event
+number. If \code{/meta/meta} exists, the first event is word 0 and the last event is word 2 of that
+dataset. If the \code{/meta} group lacks the \code{meta} dataset (the code notes that some merger
+versions write it that way, for example 12 of 104 a2091 runs), the unpacker logs a warning and
+scans the names of all objects in \code{/get} instead, taking the minimum and maximum number
+found. \code{GetNumEvents()} returns \code{last - first + 1}; if this differs from the number of
+objects in \code{/get}, an error is logged (the count includes the header datasets, so this error
+does not by itself mean data are missing). The DAQ number of the event being unpacked is
+\code{fDataEventID = first + fEventID}.
+
+\paragraph{One pad.} Each row of \code{evt<N>\_data} has 517 words: the first four are the CoBo,
+AsAd, AGET and channel numbers (the fifth identification word is skipped), followed by 512 ADC
+samples. The \code{AtPadReference} built from the first four words is resolved through the map:
+\begin{enumerate}
+  \item if \code{SetSaveFPN(true)} was called and the channel is an FPN channel, it is stored with
+        \code{AtRawEvent::AddFPN};
+  \item if the map declares the channel auxiliary (\code{AtMap::AddAuxPad}), it is stored as an
+        auxiliary pad under the name given in the map;
+  \item otherwise it is stored as a pad with the pad number from \code{AtMap::GetPadNum}, and the
+        pad centre and size identifier are taken from the map.
+\end{enumerate}
+The HDF5 unpackers do not consult the inhibit map: pads declared inhibited in \code{AtMap} are
+unpacked like any other pad. \code{AtGRAWUnpacker} and the digitization (\code{AtPulse}) do skip
+them.
+
+\paragraph{Baseline.} With \code{SetBaseLineSubtraction(true)} the baseline is the mean of the first
+20 samples (time buckets 0--19), and \code{fAdc[tb] = raw[tb] - baseline} for all 512 buckets; the
+pad is then flagged \code{IsPedestalSubtracted()}. With the default (\code{false}) the baseline is
+zero, \code{fAdc} equals the raw ADC, and the pad is \emph{not} flagged; every PSA class then logs
+\code{"Pedestal should be subtracted to use this class!"} for each pad. The raw samples are always
+kept in \code{fRawAdc}.
+
+\paragraph{Timestamps.} \code{SetNumberTimestamps(n)} (default 0) copies words $1\ldots n$ of
+\code{evt<N>\_header} into the event (\code{AtRawEvent::SetTimestamp(value, i)}). The meaning of
+each header word is not documented in the code; the a1975 macros use \code{n = 2} for the GET
+stream and \code{n = 1} for the FRIBDAQ stream. If the header cannot be read, no timestamps are
+set.
+
+\paragraph{Missing events.} If \code{evt<N>\_data} does not exist, the pad count is zero and the
+event is still marked good. The a1975 macros therefore define a selection
+\code{(evt->GetNumPads() > 0) \&\& evt->IsGood()}.
+
+\subsection{\code{AtMergerHDFUnpacker}: the raw merger layout}
+
+\code{AtMergerHDFUnpacker} reads files written directly by \code{libattpc\_merger} before the
+remerge step: a group \code{/events} with one subgroup \code{event\_<N>} per event, the pad data in
+\code{event\_<N>/get\_traces} (same 517-word rows, so pad decoding is inherited unchanged), FRIBDAQ
+data in \code{event\_<N>/frib\_physics/1903} and \code{.../977}, and scalers in \code{/scalers}. The
+event range is the minimum and maximum \code{<N>} among the subgroup names. This layout carries no
+GET header, so no timestamps are set. Events missing from the file give an empty event.
+
+The static function \code{AtMergerHDFUnpacker::IsMergerFile(file)} returns \code{true} when the
+file has an \code{/events} group and no \code{/get} group, so a macro can choose the reader:
+\begin{verbatim}
+  std::unique_ptr<AtHDFUnpacker> unp;
+  if (AtMergerHDFUnpacker::IsMergerFile(inputFile.Data()))
+     unp = std::make_unique<AtMergerHDFUnpacker>(map);
+  else
+     unp = std::make_unique<AtHDFUnpacker>(map);
+\end{verbatim}
+
+\subsection{\code{AtFRIBLinkedHDFUnpacker} and \code{AtFRIBSiUnpacker}}
+
+\code{AtFRIBLinkedHDFUnpacker} (\url{AtUnpack/AtFRIBLinkedUnpacker.h}; note that the file name and
+the class name differ) reads files in which GET and FRIBDAQ data were already linked by timestamp,
+both under \code{/events/event\_<N>}. It assumes events are numbered contiguously from 0
+(\code{last = number of objects - 1}). Pads come from \code{event\_<N>/get\_traces}. The
+timestamps are the HDF5 attributes \code{timestamp} and \code{timestamp\_other} of the
+\code{get\_traces} object (one or two timestamps are set). For every path in \code{fFribPaths}
+(default \code{\{"1903"\}}; \code{SetFribPaths}, \code{AddFribPath}) the dataset
+\code{event\_<N>/frib\_physics/<path>} is read and each of its channels is added as an
+\code{AtGenericTrace}, with the trace length taken from the dataset shape. These generic traces are
+not baseline-subtracted.
+
+\code{AtFRIBSiUnpacker} extends it for files with silicon detectors read by GET: pads are read from
+\code{event\_<N>/get/pads}, \code{fFribPaths} defaults to \code{977, 1903, 1904, 1905, 1906}, and
+the channels of the datasets \code{si\_downstream\_back}, \code{si\_downstream\_front},
+\code{si\_upstream\_back}, \code{si\_upstream\_front} under \code{event\_<N>/get/} are added as
+auxiliary pads named \code{Si\_<cobo>\_<asad>\_<aget>\_<ch>}. Test macros:
+\url{macro/tests/AT-TPC/run_unpack_linked.C} and \url{macro/tests/AT-TPC/run_unpack_si.C}.
+
+%=====================================================================================================
+\section{The FRIBDAQ auxiliary stream}
+\label{sec:unp-frib}
+
+At FRIB the ion chamber (IC) and other auxiliary signals are digitized by the FRIBDAQ system (a
+SIS3300-type digitizer, module 1903) and stored next to the GET data. Two unpackers read them into
+a separate \code{AtRawEvent} whose content is a list of \code{AtGenericTrace} objects
+(\code{AtRawEvent::GetGenTraces()}), not pads.
+
+\begin{center}
+\begin{tabular}{p{4.4cm}p{5.4cm}p{4.8cm}}
+\toprule
+Unpacker & Dataset per event & Notes \\
+\midrule
+\code{AtFRIBHDFUnpacker} & \code{/frib/evt/evt<N>\_1903}, shape \{2048, 8\} & Remerged layout.
+Event range from the dataset names, header datasets skipped. \\
+\code{AtMergerFRIB-} \code{HDFUnpacker} & \code{/events/event\_<N>/} \code{frib\_physics/1903} & Raw merger layout,
+same shape and decoding. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Each of the 8 columns becomes one \code{AtGenericTrace} of 2048 samples, with the column index as
+trace ID. The header of \code{AtMergerFRIBHDFUnpacker} states that the ion chamber is channel 0, so
+the a1975 analysis macros read the IC from \code{GetGenTraces()[0]}. With
+\code{SetBaseLineSubtraction(true)} the baseline is the mean of samples 5--24 of the FRIB trace
+(the same index range as for GET rows, where the first five words are identifiers; here there are
+no identifier words). \code{AtFRIBHDFUnpacker::Init()} logs an error when the number of events
+derived from the dataset names is not one third of the number of objects in \code{/frib/evt}
+(three objects per event in that layout); \code{AtMergerFRIBHDFUnpacker} does not make that
+check because its layout has one subgroup per event.
+
+The FRIBDAQ stream is unpacked in a separate run that writes its own file
+named \code{<run>\_FRIB.root}. The example from
+\url{macro/Unpack_HDF5/a1975/unpack_a1975_FRIBDAQ.C}:
+\begin{verbatim}
+  auto unpacker = std::make_unique<AtFRIBHDFUnpacker>(fAtMapPtr);
+  unpacker->SetInputFileName(inputFile.Data());
+  unpacker->SetNumberTimestamps(1);
+  unpacker->SetBaseLineSubtraction(true);
+  auto unpackTask = new AtUnpackTask(std::move(unpacker));
+  unpackTask->SetPersistence(true);
+  run->AddTask(unpackTask);
+\end{verbatim}
+
+\subsection{Auxiliary channels in the GET stream}
+
+Auxiliary signals recorded by GET itself (for example a mesh or an IC fed into an AGET channel)
+are declared in the map before unpacking:
+\begin{verbatim}
+  fAtMapPtr->AddAuxPad({cobo, asad, aget, ch}, "IC");
+\end{verbatim}
+The HDF5 unpackers then store that channel as an auxiliary pad, retrieved with
+\code{AtRawEvent::GetAuxPad(name)}, instead of a pad of the pad plane, and the PSA never sees it. The macro
+\url{macro/Unpack_HDF5/a1975/UKF/pipeline/discover_aux_a1975.C} scans a run for channels that could
+be added this way.
+
+\subsection{How the streams are aligned}
+\label{sec:unp-align}
+
+There is no event-by-event linking task for the GET and FRIBDAQ streams in the remerged layout.
+Each unpacker numbers its events from 0 (\code{fEventID}) relative to the first event it finds in
+its own group, and writes that number into the \code{AtRawEvent}; the DAQ event number
+(\code{fDataEventID}) is not stored for the GET stream. The analysis macros pair the two files by
+tree entry. For example \url{macro/Unpack_HDF5/a1975/UKF/pd/ex_pd_a1975.C} loops over
+\code{std::min(tu->GetEntries(), tc->GetEntries())} entries and reads entry $i$ of both trees. This
+is correct only when
+\begin{itemize}
+  \item both groups start at the same DAQ event number (compare the \code{"Events: X to Y"} lines
+        that both unpackers log at \code{Init()});
+  \item neither stream has gaps (a missing GET event still produces an entry, see above);
+  \item no task removed entries from one of the two trees (\code{AtDataReductionTask} does, see
+        Section~\ref{sec:unp-tasks});
+  \item both streams were unpacked to the end. Nothing in the unpackers compares the event count
+        of one stream with the other, so a FRIBDAQ stream shorter than the GET stream produces a
+        short \code{\_FRIB.root} without any warning, and the \code{std::min} loop then silently
+        drops the remaining GET events.
+\end{itemize}
+In the linked layouts (\code{AtFRIBLinkedHDFUnpacker}) the linking is done upstream and the IC
+traces are in the same \code{AtRawEvent} as the pads. For experiments with a separate NSCL/FRIB DAQ
+recorded in a HiRAEVT tree, \code{AtLinkDAQTask} links the two by the ratio of the time intervals
+between consecutive events; it is compiled only when HiRAEVT is found
+(\url{AtReconstruction/CMakeLists.txt}).
+
+%=====================================================================================================
+\section{FRIBDAQ scalers: \code{AtFribScalers}}
+\label{sec:unp-scalers}
+
+\code{AtFribScalers} (\url{AtUnpack/AtFribScalers.h}) reads the FRIBDAQ scaler counters of a run.
+None of the unpackers reads them. The header states that the class was validated bit-identical
+against Spyral's reader on a1975 run 0016 for all eleven counters.
+
+\code{ReadRun(fileName)} looks for the scaler group \code{frib/scaler} (remerged layout) and then
+\code{scalers} (raw merger layout), and reads the datasets \code{scaler0\_data},
+\code{scaler1\_data}, \ldots{} until one is missing; this missing dataset is the normal end of the
+scan. Of the 32 words of each dataset, the first eleven are read:
+
+\begin{center}
+\begin{tabular}{p{0.9cm}p{3.0cm}p{10.1cm}}
+\toprule
+Index & Enum & Meaning (from the header) \\
+\midrule
+0 & \code{kClockFree} & time elapsed while the DAQ was running \\
+1 & \code{kClockLive} & time for which the DAQ could accept triggers \\
+2 & \code{kTriggerFree} & triggers received \\
+3 & \code{kTriggerLive} & triggers that produced events \\
+4 & \code{kIcSca} & ion-chamber counts (the beam counter) \\
+5 & \code{kMeshSca} & mesh signals \\
+6, 7 & \code{kSi1Cfd}, \code{kSi2Cfd} & silicon detectors 1 and 2 \\
+8 & \code{kSiPM} & unclear (the header says FRIBDAQ's documentation says so) \\
+9 & \code{kIcDs} & downscaled ion chamber \\
+10 & \code{kIcCfd} & unclear; equal to \code{kIcSca} in every a1975 run checked \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{The counters are incremental.} Each scaler event holds the counts since the previous
+one. A run total is therefore the \emph{sum} over all scaler events of the run, which is what
+\code{ReadRun} computes, and not the last value. Several runs are combined with \code{Add()}, which
+again sums. Never take the difference between the values at the start and end of a run range.
+\code{GetLiveFractionClock()} and \code{GetLiveFractionTrigger()} return live/free for the two
+pairs of counters; the header notes that they differ by about 2\% and that the right one depends on
+what the yield was normalised to.
+
+\paragraph{A run range is not a run list.} The macro
+\url{macro/Unpack_HDF5/a1975/frib_scalers_a1975.C} turns the IC counts into a luminosity. Its
+documentation records that summing all runs numbered 16--103 instead of the 47 runs used by the
+(d,t) analysis gave 483.7 instead of 330.0. The macro therefore takes a run-list file (one run per
+line) and prints a warning when it is given a bare range:
+\begin{verbatim}
+  root -b -q 'frib_scalers_a1975.C(0,0,"/mnt/f/a1975/h5/",2,300,293,
+                                   97.1731,0.613,"d2_runs.txt")'
+\end{verbatim}
+The core of the macro is
+\begin{verbatim}
+  AtFribScalers total;
+  for (int r : runs) {
+     AtFribScalers one;
+     if (!one.ReadRun(Form("%srun_%04d.h5", h5dir.Data(), r))) {
+        ++nMiss;
+        continue;
+     }
+     total.Add(one);
+  }
+  const double ic = total.Get(AtFribScalers::kIcSca);
+\end{verbatim}
+Runs without scaler data are counted and reported; the macro states that the result is then a
+lower bound.
+
+%=====================================================================================================
+\section{GET data in GRAW files}
+\label{sec:unp-graw}
+
+\code{AtGRAWUnpacker} (\url{AtUnpack/AtGRAWUnpacker.h}) decodes the binary GRAW files written by the
+GET DAQ, using the \code{GETDecoder2} library in \url{AtUnpack/GETDecoder2/}. It was written for
+GADGET~II and also serves AT-TPC data; the \code{deprecated/} directory holds its predecessor
+\code{AtCore2}.
+
+The constructor \code{AtGRAWUnpacker(map, numGrawFiles = 4)} creates one decoder and one
+\code{AtPedestal} per file stream (one per CoBo or AsAd); with more than one stream the data are
+treated as \emph{separated} and the streams are decoded in parallel threads. The input file is a
+text list of GRAW files. \code{SetInputFileName(list, "file\%i\_")} assigns each line to decoder
+$i$ when it contains the formatted string; with the one-argument version the pattern defaults to
+\code{"AsAd\%i"} and a warning is printed.
+
+\paragraph{Event alignment.} At \code{Init()} the unpacker reads the first frame of every stream and
+starts at the largest of their event IDs (plus \code{SetInitialEventID}). For each event it asks
+every decoder for the frame with that ID and compares the event IDs returned; a mismatch logs
+\code{"Event IDs don't match between files!"} and marks the event bad. \code{IsLastEvent()} is
+true as soon as any stream has no frame for the next ID. \code{GetNumEvents()} returns $-1$ unless
+\code{SetCheckNumEvents()} was called, in which case all files are scanned once (or only the first,
+with \code{SetMutantOneRun(true)}). \code{SetUseCoboFrame(true)} (default \code{false}) assembles
+each event from a full CoBo frame; the header states this is required for multi-AsAd data such as
+the December 2014 alpha runs, together with \code{SetPseudoTopologyFrame(mask, check)}.
+
+\paragraph{FPN subtraction.} With \code{SetSubtractFPN(true)} (the default) each pad is corrected
+with the FPN channel of the same AGET quarter (\code{AtMap::GetNearestFPN}: channel 11, 22, 45 or
+56). \code{AtPedestal::SubtractPedestal} looks for a window of 10 time buckets, starting at bucket
+3 and stepping by 10, whose RMS is below \code{SetFPNSigmaThreshold} (default 5 ADC). It takes the
+difference between the means of the pad and of the FPN channel in that window, and sets
+\code{adc = raw - (fpn - offset)}. If no window satisfies the RMS cut, it prints a message and
+leaves the pad unchanged. Inhibited pads (\code{AtMap::InhibitType} other than \code{kNone}) are
+not unpacked.
+
+\paragraph{Baseline subtraction.} If FPN subtraction is off and
+\code{SetBaseLineSubtraction(true)}, the baseline is the mean of raw samples 5--24.
+
+\paragraph{Other options.} \code{SetSaveFPN()} stores the FPN channels; \code{SetSaveLastCell(true)}
+stores the SCA last-read cell of each AGET as a pad augment \code{"lastCell"}, needed by
+\code{AtSCACorrect}. \code{SetIsPositivePolarity()} stores a flag that is not used anywhere in
+\code{AtGRAWUnpacker.cxx}: the FPN subtraction always uses the default (positive) polarity of
+\code{AtPedestal::SubtractPedestal}.
+
+\code{AtROOTUnpacker} reads SpecMAT-style ROOT files through the same interface; it throws if
+\code{SetSaveFPN} is called. The test macro \url{macro/tests/AT-TPC/run_unpack_graw.C} shows a
+36-stream GRAW configuration.
+
+%=====================================================================================================
+\section{Trace filters}
+\label{sec:unp-filters}
+
+\subsection{\code{AtFilter} and \code{AtFilterTask}}
+
+A trace filter implements \code{AtFilter} (\url{AtReconstruction/AtFilter/AtFilter.h}):
+\code{Init()} once, \code{InitEvent(rawEvent)} at the start of each event, \code{Filter(pad,
+padRef)} for each trace, and \code{IsGoodEvent()} at the end. \code{AtFilterTask}
+(\url{AtReconstruction/AtFilterTask.h}) copies the input \code{AtRawEvent} to a new branch and
+applies the filter to the copy:
+
+\begin{center}
+\begin{tabular}{p{4.0cm}p{4.0cm}p{6.6cm}}
+\toprule
+Setter & Default & Meaning \\
+\midrule
+\code{SetInputBranch} & \code{"AtRawEvent"} & \\
+\code{SetOutputBranch} & \code{"AtRawEventFiltered"} & \\
+\code{SetPersistence} & \code{false} & \\
+\code{SetFilterPads} & \code{true} & Filter the pads of the pad plane. \\
+\code{SetFilterAux} & \code{false} & Filter the auxiliary pads. \\
+\code{SetFilterFPN} & \code{false} & Filter the stored FPN channels. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The task takes a raw \code{AtFilter*}. Remember to point the next task (normally \code{AtPSAtask})
+at \code{"AtRawEventFiltered"}; otherwise it reads the unfiltered branch. The filtered event is
+marked good only if the input event was good and \code{IsGoodEvent()} returns \code{true}.
+
+\subsection{Available filters}
+
+\begin{center}
+\begin{tabular}{p{3.9cm}p{10.9cm}}
+\toprule
+Class & What it does \\
+\midrule
+\code{AtFilterSubtraction} & Per event, averages the traces of AGET channel 0 of every AsAd whose
+samples all stay below \code{SetThreshold} (default 0), and subtracts that average from every pad
+of the same CoBo and AsAd. Pads not flagged pedestal-subtracted are left unchanged. AsAds without a
+usable channel 0 are logged; with \code{SetIsGood(true)} (default \code{false}) such an event is
+marked bad. Constructor \code{(map, numCoBos = 10, numAget = 4)}; the second size is used as the
+number of AsAds per CoBo. \\
+\code{AtFilterFPN} & Same subtraction, but the reference is the average of the stored FPN channels
+(it reads \code{GetFpnPads()}, so the unpacker must be run with \code{SetSaveFPN}). An FPN trace is used only if no sample-to-sample jump exceeds the threshold.
+With \code{averageAgets = false} each AGET gets its own reference. \\
+\code{AtSCACorrect} & Subtracts a stored average baseline and a phase (last-cell) effect read from
+an \code{AtRawEvent} in a file; \code{DoBaseline}, \code{DoPhase} (both set \code{true} by the constructors),
+\code{UseChannelZero()}. \\
+\code{AtFilterZero} & Fills isolated zero samples by interpolation between neighbours, or copies the
+previous sample when the neighbours differ by more than \code{SetThreshold} (default 1000). \\
+\code{AtFilterFFT} & Multiplies the Fourier transform of each trace by factors defined on frequency
+ranges (\code{AddFreqRange}); \code{SetLowPass(order, cutoff)} builds a Butterworth low-pass.
+\code{SetSaveTransform} keeps the transform. \\
+\code{AtFilterCalibrate} & Per-pad linear gain calibration (slope and intercept) from
+\code{SetCalibrationFile}. \\
+\code{AtTrapezoidFilter} & Trapezoidal shaping (\code{SetM}, \code{SetRiseTime},
+\code{SetTopTime}, \code{SetDiscriminatorThreshold}). \\
+\code{AtRemovePulser} & Removes a pulser signal between two thresholds given to the
+constructor. \\
+\code{AtFilterDivide}, \code{AtFilterNoOp} & Example filters. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\code{AtCalibration} in \url{AtReconstruction/AtPulseAnalyzer/} (gain and jitter files) is used
+only by the deprecated \code{AtPSASimple2}; its header recommends \code{AtFilter} instead.
+
+\subsection{\code{AtAuxFilterTask}}
+
+\code{AtAuxFilterTask(filter)} applies a filter to named auxiliary pads (\code{AddAuxPad(name)})
+of the input event (\code{SetInputBranchName}, default \code{"AtRawEvent"}). The filtered trace is
+added to the \emph{same} event as a new auxiliary pad called \code{<name>Filtered}, and the event's
+good flag is replaced by \code{IsGoodEvent()} of the filter.
+
+%=====================================================================================================
+\section{Event-selection and tree-copy tasks}
+\label{sec:unp-tasks}
+
+\paragraph{\code{AtDataReductionTask}.} It takes a function returning \code{bool}. When the
+function returns \code{false}, the task sets \code{IsGood(false)} on the input branch and on every
+branch given with \code{SetOutputBranch}, and calls \code{FairRunAna::MarkFill(false)}: the event
+is \emph{not written} to the output tree. Overloads accept \code{std::function<bool()>},
+\code{std::function<bool(AtBaseEvent*)>} or a templated \code{std::function<bool(T*)>}. The input
+branch defaults to \code{"AtRawEvent"}. An example is \url{macro/Unpack_HDF5/e18008_S800/unpack_new.C}:
+\begin{verbatim}
+  AtDataReductionTask *reduceTask = new AtDataReductionTask();
+  reduceTask->SetInputBranch("AtRawEvent");
+  reduceTask->SetReductionFunction(&reduceFunc);
+\end{verbatim}
+Because the rejected entries disappear, a file reduced this way no longer matches a separate
+FRIBDAQ file entry by entry.
+
+\paragraph{\code{AtCopyTreeTask} and \code{AtCopyAuxTreeTask}.} \code{AtCopyTreeTask} copies all
+branches of the input FairRoot tree to the output; its header states it must be the first task of
+the run. It is meant to be combined with \code{AtDataReductionTask} to apply cuts to existing files.
+\code{AtCopyAuxTreeTask} copies the matching entries of a tree from another DAQ (\code{SetInputTree},
+\code{AddInputFile}, \code{SetOutputFile}), keeping only events whose check branch
+(\code{SetCheckEventBranch}, default \code{"AtRawEvent"}) is good, so that the two files stay in
+step after a reduction.
+
+%=====================================================================================================
+\section{Pulse-shape analysis}
+\label{sec:unp-psa}
+
+\subsection{\code{AtPSAtask}}
+
+\code{AtPSAtask} (\url{AtReconstruction/AtPSAtask.h}) reads an \code{AtRawEvent}, copies the event
+header into a new \code{AtEvent}, and passes both to the PSA object.
+
+\begin{center}
+\begin{tabular}{p{5.0cm}p{3.0cm}p{6.8cm}}
+\toprule
+Setter & Default & Meaning \\
+\midrule
+\code{SetInputBranch} & \code{"AtRawEvent"} & Use \code{"AtRawEventFiltered"} after a filter. \\
+\code{SetOutputBranch} & \code{"AtEventH"} & \\
+\code{SetPersistence} & \code{false} & \\
+\code{SetSimlulatedPointBranch} & \code{"AtTpcPoint"} & If this branch exists, MC points are
+attached to hits (simulation). \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The preferred constructor takes a \code{std::unique\_ptr<AtPSA>}. The constructor taking a raw
+\code{AtPSA*} is marked deprecated and stores a \emph{clone} of the object: every setter must be
+called before the task is constructed, because later calls modify the original, not the copy used
+by the task. Events flagged bad are copied to the output without hits.
+
+\subsection{The base class \code{AtPSA}}
+
+\code{AtPSA::Init()} reads from \code{AtDigiPar}: \code{GetTBTime()} (the time-bucket length in ns,
+derived from \code{SamplingRate}: 3, 6, 12, 25, 50, 100 MHz give 320, 160, 80, 40, 20, 10 ns, any
+other value gives $-1$), \code{DriftVelocity} [cm/\textmu s], \code{ZPadPlane} [mm],
+\code{TBEntrance}, \code{BField}, \code{EField} and \code{ReverseDrift}. The number of time
+buckets \code{fNumTbs} is fixed at 512. The values are printed at initialisation; check them in
+the log.
+
+\paragraph{From time bucket to z.} \code{CalculateZGeo(tb)} returns the drift length measured from
+the pad plane:
+\begin{equation}
+  z = Z_\mathrm{pad} - (\mathrm{TB}_\mathrm{ent} - \mathrm{tb})\,
+      \frac{t_\mathrm{TB}\,v_d}{100},
+\end{equation}
+with $t_\mathrm{TB}$ in ns, $v_d$ in cm/\textmu s and $z$ in mm. A hit at the entrance time
+bucket $\mathrm{TB}_\mathrm{ent}$ is at $z = Z_\mathrm{pad}$ (the beam entrance, far from the pad
+plane); $z = 0$ is the pad plane. With \url{parameters/ATTPC.a1954.par} ($t_\mathrm{TB} = 160$~ns,
+$v_d = 1.30$~cm/\textmu s, $\mathrm{TB}_\mathrm{ent} = 480$, $Z_\mathrm{pad} = 1000$~mm) one time
+bucket is 2.08~mm. The fitters convert to the laboratory frame with $z_\mathrm{lab} = Z_\mathrm{pad}
+- z$. When \code{ReverseDrift} is set in the parameter file (beam entering through the pad plane),
+\code{CalculateZGeo} returns $Z_\mathrm{pad} - z$ so that downstream code needs no change. The
+quantity \code{fTB0} printed as ``Pad plane TB'' is not used in the conversion, and the parameter
+\code{TB0} of the file is marked deprecated.
+
+\paragraph{\code{CalibrateZ}.} \code{CalibrateZ(tb, padNum)} first adds a per-pad time offset (if
+loaded with \code{LoadPadTimeOffsets(csv)}, one value per line in pad order, or
+\code{SetPadTimeOffset}) and then calls \code{CalculateZGeo}, unless \code{SetSpyralZ(windowTB,
+mmTB = 10, length = 1000)} was called. The latter uses $z = (\mathrm{windowTB} - \mathrm{tb}) /
+(\mathrm{windowTB} - \mathrm{mmTB}) \times \mathrm{length}$, which is zero at the \emph{window},
+the opposite convention to \code{CalculateZGeo}; the code comment warns that the fitters' $Z_\mathrm{pad}
+- z$ then gives a mirrored $z_\mathrm{lab}$. Only \code{AtPSAMax} and \code{AtPSAMultiFit} call
+\code{CalibrateZ}; all other PSA classes call \code{CalculateZGeo} directly and ignore per-pad
+offsets and \code{SetSpyralZ}.
+
+\paragraph{Thresholds.} \code{SetThreshold(t)} sets the threshold for all pads (and the low
+threshold too, unless \code{SetThresholdLow} was called). \code{SetThresholdLow(t)} sets a separate
+threshold for pads with size identifier 0 (the small central pads). Both default to $-1$; the
+meaning of ``below threshold'' is specific to each class.
+
+\paragraph{Event-level output.} \code{AtPSA::Analyze} loops over the pads, collects the hits,
+attaches MC information when present, and fills: the mesh signal (sum of the ADC traces of all pads
+that produced at least one hit), the event charge (sum of \code{GetTraceIntegral()} over all
+\emph{hits}, so a pad with several hits contributes its trace integral several times when the class
+stores the full integral on each hit), the pad multiplicity map and an $r$ variance. Hits are
+sorted by \code{AtHit::GetTimeStamp()}, which is an \emph{integer} time bucket.
+
+\paragraph{Per-hit time fields.} \code{AtHit} carries three time fields: \code{fTimeStamp}
+(\code{Int\_t}), \code{fTimeStampCorr} and \code{fTimeStampCorrInter} (\code{Double\_t}). Their
+content depends on the class, as listed below.
+
+\subsection{\code{AtPSAMax}}
+
+One hit per pad at the maximum of the trace; used by the a1975 data productions.
+\begin{itemize}
+  \item The maximum is searched in time buckets 20--499. The hit is kept if the maximum exceeds the
+        threshold (when the threshold is positive).
+  \item Position: pad centre in $x,y$; $z$ = \code{CalibrateZ(maxTB - fPeakingShiftTBs)}, at the
+        \emph{integer} time bucket of the maximum. With \code{SetTimeCorrection(true)} (default
+        \code{false}) the centre-of-gravity time \code{TBCorr} is used instead.
+  \item Charge: the maximum ADC value. Trace integral: the sum of all 512 samples, accumulated in an
+        \code{int} (\code{std::accumulate} with an integer initial value), so each partial sum is
+        truncated.
+  \item \code{fTimeStamp} = maximum bucket; \code{fTimeStampCorr} = \code{TBCorr};
+        \code{fTimeStampCorrInter} = the parabolic sub-bucket offset
+        $\frac{1}{2}(a_{-1}-a_{+1})/(a_{-1}+a_{+1}-2a_0)$, stored only, never used for $z$.
+  \item \code{SetPeakingShiftTBs(n)} (default 0) subtracts $n$ buckets before the $z$ conversion to
+        account for the lag between the electron arrival and the response maximum.
+\end{itemize}
+In \code{getTBCorr} the loop runs over $i = 0\ldots10$ and tests
+\code{adc[max-i+10]} ($>0$ and $<4000$) but sums \code{adc[max-i+5]}: the sample tested and the
+sample summed differ by five buckets. When none of the tested samples passes, \code{TBCorr} is 0,
+which with \code{SetTimeCorrection(true)} puts the hit at time bucket 0.
+
+Because $z$ is quantised to whole time buckets (2.08~mm in the a1975 parameters), several hits of
+a track routinely share exactly the same $z$. Algorithms that assume distinct $z$ values (spline or
+ordering by $z$) must handle such ties.
+
+\subsection{\code{AtPSAMultiFit}}
+
+\code{AtPSAMultiFit} fits a sum of GET response pulses, $A\,e^{-3u}\sin(u)\,u^3$ with $u =
+(t-t_0)/\tau$, to each trace, one component per seed peak, so that two pulses on the same pad
+(two tracks crossing it at different drift times) give two hits.
+
+\begin{center}
+\begin{tabular}{p{4.8cm}p{1.6cm}p{8.2cm}}
+\toprule
+Setter & Default & Meaning \\
+\midrule
+\code{SetPeakingTime(us)} & 0.720 & Response time constant $\tau$ [\textmu s]. \\
+\code{SetMaxPeaks} & 4 & Maximum pulses per pad. \\
+\code{SetMinSeparation(tb)} & 8 & Minimum separation of seeds [TB]. \\
+\code{SetSeedSigma} & 4.0 & Prominence (in noise RMS) required of additional seeds. \\
+\code{SetProminence(adc)} & 0 & If $>0$, absolute prominence required of \emph{all} seeds. \\
+\code{SetProminenceOnPrimary} & false & Require prominence of the first seed too. \\
+\code{SetMinSignificance} & 3.0 & Keep a pulse only if $A/\sigma_A \ge$ this. \\
+\code{SetFloatPeakingTime} & false & Fit a common $\tau$. \\
+\code{SetFitChi2Cut} & 0 & If $>0$, reject pulses whose local reduced $\chi^2$ exceeds it (turns on
+floating $\tau$). \\
+\code{SetFitRelErr} & 0.1 & Relative model error in that $\chi^2$. \\
+\code{SetReportT0} & false & Report the impulse arrival $t_0$ instead of the response maximum. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The noise RMS is $1.4826\times$ the median absolute deviation of the trace (floor 1 ADC). Seeds are
+local maxima of a 3-point smoothed trace in buckets 21--499 above the threshold. The fit range is
+from 5 buckets before the first seed to $5\tau$ after the last (at most bucket 510). A pulse is
+kept if its amplitude is at least the threshold and its peak time is within 20--500.
+
+Output per pulse: $z$ = \code{CalibrateZ} at the fitted peak time $t_0 + u_\mathrm{peak}\tau$ (a
+continuous value, not quantised), charge = fitted amplitude at the peak, trace integral = $A\times
+\int\!\mathrm{response}\times\tau$ (with the fixed $\tau$ even when $\tau$ floats),
+\code{fChargeVariance} = local reduced $\chi^2$ (0 unless $\tau$ floats), and
+\code{fTimeStampCorrInter} = fitted $\tau$. The time stamp is written to the integer
+\code{fTimeStamp} and to \code{fTimeStampCorr}.
+
+\paragraph{Saturation.} Nothing in \code{AtPSAMultiFit} identifies or masks clipped samples. The
+amplitude parameter is limited to $5A_0+10$, where $A_0$ is derived from the seed height, so the
+fit of a clipped pulse is driven by its unclipped edges and can return an amplitude above the ADC
+ceiling. The macro \url{macro/Unpack_HDF5/a1975/D2_UKF/saturation_dp.C} histograms hit amplitudes
+up to 6000 ADC to look at this.
+
+\subsection{Other PSA classes}
+
+\paragraph{\code{AtPSATBAvg}.} Splits the trace into consecutive windows of \code{SetNumTBToAvg}
+buckets (default 5) and makes one hit per window whose mean ADC is at or above the threshold, at
+$z$ = \code{CalculateZGeo} of the window centre. Charge = window mean; trace integral = sum of the
+whole trace (stored on every hit). \code{SetMaxThreshold(adc)} (default: largest double) skips the
+whole pad when its maximum exceeds the value; the code comment calls these pads saturated.
+\code{UseArrayAugment(name)} runs on a pad augment (for example a deconvolved charge) instead of
+the ADC.
+
+\paragraph{\code{AtPSAHitPerTB}.} One hit per time bucket whose ADC exceeds the threshold, in the
+range set by \code{SetTBLimits(\{first, last\})} (default 0--512). Charge = ADC of the bucket. With
+\code{SetReplaceTraceIntegral(true)} (default) every hit carries the sum of the above-threshold
+samples as trace integral.
+
+\paragraph{\code{AtPSAFull}.} For traces whose longest above-threshold interval is shorter than 50
+buckets it makes a single hit at the maximum (buckets 20--499) with charge \emph{zero}: the charge
+variable is never assigned in that branch, and the hit is created even when no sample is above
+threshold. Longer intervals are split into 50-bucket windows, one hit per window at the window
+start, with charge = (sum over the window)/50.
+
+\paragraph{\code{AtPSASpectrum}.} Peak finding with \code{TSpectrum::SearchHighRes}, optional
+background suppression and interpolation, optional centre-of-gravity time
+(\code{SetTimeCorrection}). As written, the working copy of the trace is filled with zeros
+(\code{floatADC.fill(0)}) immediately after being copied from the ADC and before the peak search, so
+the search runs on an empty array. Verify that the class produces hits before relying on it.
+
+\paragraph{\code{AtPSASimple2}.} Deprecated (the class attribute recommends \code{AtPSASpectrum} or
+\code{AtPSAMax}). It overrides \code{Analyze} directly. One of \code{SetMaxFinder()} or
+\code{SetPeakFinder()} must be called: with neither, the number of peaks is zero and no hit is
+produced. It has the same tested-versus-summed index offset in the centre-of-gravity time as
+\code{AtPSAMax}, an optional baseline correction (\code{SetBaseCorrection}) and gain and jitter
+calibration through \code{AtCalibration}.
+
+\paragraph{\code{AtPSADeconv}, \code{AtPSADeconvFit}, \code{AtPSAIterDeconv}.}
+\code{AtPSADeconv} divides the Fourier transform of each trace by that of the electronics
+response, applies a Butterworth low-pass filter (\code{SetFilterOrder}, even orders only;
+\code{SetCutoffFreq}; with the default order 0 no filter is applied), transforms back, subtracts
+the mean of the first 20 samples and stores the result as the pad augment \code{"Qreco"}. A response
+must be provided with \code{SetResponse}, either as an \code{AtRawEvent} of response pads or as a
+function \code{(padNum, time[us])}. \code{AtPSADeconv} itself applies no threshold: every pad gives
+one hit at the charge-weighted mean time bucket of the whole deconvolved trace, with $z$ variance
+from the time spread. \code{SetUseSimCharge(true)} uses a simulated \code{"Q"} augment when present.
+\code{AtPSADeconvFit} instead fits a Gaussian to the deconvolved charge around its maximum
+($\pm(3\sigma+2)$ buckets, $\sigma$ from the longitudinal diffusion coefficient \code{CoefL}),
+applies the threshold and the 20--500 window, and returns charge $= A\sigma\sqrt{2\pi}$.
+\code{AtPSAIterDeconv} adds \code{SetIterations(n)} (default 0) corrections, each deconvolving the
+residual between the trace and the reconvolved charge.
+
+\paragraph{\code{AtPSAComposite}.} Constructed as \code{AtPSAComposite(beamPSA, PSA, beamRadius =
+40)}: pads whose centre lies within \code{beamRadius} [mm] of the axis are analysed with
+\code{beamPSA}, the others with \code{PSA}. Thresholds and options must be set on the two
+sub-objects. (The example in \url{docs/subsystems/psa.md} uses an \code{AddPSA} method that does
+not exist.)
+
+\subsection{Summary}
+
+\begin{center}
+\begin{tabular}{p{3.0cm}p{1.6cm}p{3.6cm}p{3.0cm}p{2.8cm}}
+\toprule
+Class & Hits per pad & $z$ from & Hit charge & Uses \code{CalibrateZ} \\
+\midrule
+\code{AtPSAMax} & 1 & integer max TB (or CoG) & peak ADC & yes \\
+\code{AtPSAMultiFit} & 1--4 & fitted peak, continuous & fitted amplitude & yes \\
+\code{AtPSATBAvg} & many & window centre & window mean & no \\
+\code{AtPSAHitPerTB} & many & each TB & ADC & no \\
+\code{AtPSAFull} & 1 or many & max TB / window start & 0 / window mean & no \\
+\code{AtPSASpectrum} & many & peak TB (or CoG) & peak ADC & no \\
+\code{AtPSADeconv} & 1 & CoG of deconvolved charge & integral & no \\
+\code{AtPSADeconvFit} & 1 & Gaussian mean & Gaussian area & no \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+%=====================================================================================================
+\section{Hit-level cleaning: \code{AtDataCleaningTask}}
+
+\code{AtDataCleaningTask} (\url{AtReconstruction/AtDataCleaningTask.h}) takes a
+\code{std::unique\_ptr} to an \code{AtTools::DataCleaning::AtDataCleaner}, reads an \code{AtEvent}
+(default \code{"AtEventH"}), and writes a copy whose hits are those returned by
+\code{CleanData()} (default output \code{"AtEventCleaned"}, persistent by default). Available
+cleaners are \code{AtkNN(k, distance)}, which rejects hits whose mean distance to their $k$ nearest
+neighbours exceeds the distance, and \code{AtDirDeDxCleaner}. The simulation macro
+\url{macro/Simulation/ATTPC/16C_pd/run_reco_C16pd.C} runs it after the PSA:
+\begin{verbatim}
+  auto cleaner = std::make_unique<AtTools::DataCleaning::AtDirDeDxCleaner>();
+  auto *cleanTask = new AtDataCleaningTask(std::move(cleaner));
+  cleanTask->SetInputBranch("AtEventH");
+  cleanTask->SetOutputBranch("AtEventClean");
+\end{verbatim}
+
+%=====================================================================================================
+\section{Worked example: the a1975 data chain}
+\label{sec:unp-example}
+
+The macro \url{macro/Unpack_HDF5/a1975/UKF/pipeline/unpackReco_a1975_UKF.C} runs unpacking, PSA,
+space-charge correction and pattern recognition on one a1975 run. The parts relevant here are
+\begin{verbatim}
+  auto fAtMapPtr = std::make_shared<AtTpcMap>();
+  fAtMapPtr->ParseXMLMap(mapDir.Data());          // scripts/ANL2023.xml
+  fAtMapPtr->GeneratePadPlane();
+
+  auto unpacker = std::make_unique<AtHDFUnpacker>(fAtMapPtr);
+  unpacker->SetInputFileName(inputFile.Data()); // /mnt/f/a1975/h5/run_XXXX.h5
+  unpacker->SetNumberTimestamps(2);
+  unpacker->SetBaseLineSubtraction(true);
+  auto unpackTask = new AtUnpackTask(std::move(unpacker));
+  unpackTask->SetPersistence(persistRaw);
+
+  auto psa = new AtPSAMax();
+  psa->SetThreshold(20);
+  AtPSAtask *psaTask = new AtPSAtask(psa); // clones psa: set options first
+  psaTask->SetPersistence(persistRaw);
+  psaTask->SetOutputBranch("AtEventH");
+\end{verbatim}
+The parameter file is \url{parameters/ATTPC.a1954.par}. The IC traces come from a separate run of
+\url{macro/Unpack_HDF5/a1975/UKF/pipeline/unpackFRIB_a1975_UKF.C} (\code{AtFRIBHDFUnpacker}) and
+are paired with this output by entry number, as described in Section~\ref{sec:unp-align}. The older
+macro \url{macro/Unpack_HDF5/a1975/unpack_a1975.C} constructs an \code{AtFilterSubtraction}
+(threshold 50) and its task but does not add the task to the run, so its PSA reads the unfiltered
+\code{AtRawEvent}.
+
+For the deuterium-target runs, \url{macro/Unpack_HDF5/a1975/D2_UKF/unpackReco_multifit.C} uses
+\code{AtPSAMultiFit} with the same unpacker settings.
+
+%=====================================================================================================
+\section{Pitfalls}
+\label{sec:unp-pitfalls}
+
+\begin{enumerate}
+  \item \textbf{Scalers are incremental.} Sum every scaler event of every run in the run
+        \emph{list} of the analysis (\code{AtFribScalers::ReadRun} and \code{Add}). Do not take the
+        last value of a run, do not difference the values at the ends of a range, and do not sum a
+        range of run numbers when the analysis used a subset.
+  \item \textbf{GET and FRIBDAQ are paired by entry.} Check that both streams start at the same DAQ
+        event and have the same number of entries. A truncated auxiliary stream gives no warning,
+        and \code{AtDataReductionTask} removes entries from one file only.
+  \item \textbf{Baseline subtraction is off by default} in the HDF5 unpackers. Without it pads are
+        not flagged pedestal-subtracted and the threshold of the PSA acts on raw ADC values.
+  \item \textbf{\code{AtPSAMax} quantises $z$} to whole time buckets; the sub-bucket
+        interpolation is only stored in \code{fTimeStampCorrInter}. Hits of a track can share an
+        exact $z$, whereas \code{AtPSAMultiFit} gives continuous $z$. A subsequent space-charge
+        correction shifts $z$ by a position-dependent amount and removes the exact ties, a
+        point the comment in \code{unpackReco\_a1975\_UKF.C} discusses for spline-based
+        estimators.
+  \item \textbf{Centre-of-gravity index offset.} In \code{AtPSAMax::getTBCorr} (and in
+        \code{AtPSASimple2} and \code{AtPSASpectrum}) the sample tested,
+        \code{adc[max-i+10]}, is not the sample summed, \code{adc[max-i+5]}.
+  \item \textbf{Saturated pulses.} \code{AtPSAMultiFit} does not mask clipped samples and can
+        return amplitudes above the ADC ceiling; \code{AtPSATBAvg} with \code{SetMaxThreshold}
+        drops the whole pad; \code{AtPSAMax} excludes samples at or above 4000 only from the
+        centre-of-gravity time.
+  \item \textbf{Same PSA for data and simulation.} Hit charge, $z$ reference (response maximum
+        or impulse) and $z$ quantisation all depend on the class and its options. A PSA change on
+        one side shifts the $z$ scale and the hit-charge distributions relative to the other.
+        As an example, \url{macro/Simulation/ATTPC/16C_pd/run_reco_C16pd.C} labels its
+        \code{AtPSAMultiFit} block ``same as the data'', while the a1975 H$_2$ data production
+        macro \code{unpackReco\_a1975\_UKF.C} uses \code{AtPSAMax}; confirm which data
+        production a simulation is compared with.
+  \item \textbf{Raw-pointer constructors clone.} \code{AtPSAtask(AtPSA*)} copies the PSA at
+        construction; setters called afterwards have no effect.
+  \item \textbf{Inhibit maps.} The HDF5 unpackers ignore \code{AtMap} inhibit flags, while the
+        digitization honours them; inhibited pads therefore appear in data but not in
+        simulation unless they are removed elsewhere.
+  \item \textbf{\code{SetSpyralZ}} uses the opposite $z$ origin from \code{CalculateZGeo};
+        combined with the fitters it mirrors $z_\mathrm{lab}$.
+  \item \textbf{Event charge} from \code{AtPSA::Analyze} sums the trace integral once per hit,
+        so it is inflated for the classes that store the full trace integral on several hits
+        per pad (\code{AtPSATBAvg}, \code{AtPSAHitPerTB} with the default option).
+\end{enumerate}
