@@ -2,6 +2,7 @@
 #define ATPIDEVENT_H
 
 #include "AtHelix3D.h"      // for AtTools::AtHelix3DResult
+#include "AtPIDCombine.h"   // for AtTools::AtPIDCombinedResult
 #include "AtPIDEstimator.h" // for AtTools::AtPIDResult
 #include "AtSpyralPID.h"    // for AtTools::AtSpyralResult
 
@@ -20,12 +21,15 @@
  * Version 2 adds fHelix3D (AtTools::AtHelix3D: 3D-ordered hits, vertex end by majority vote, Brho
  * and dE/dx along the helix path), parallel to the other two when AtPIDTask runs it (default).
  * Version-1 files read back with an empty fHelix3D.
+ * Version 3 (2026-11-02) adds fCombined (AtTools::CombinePID: Spyral with the 3D cross-check, see AtPIDTask::SetCombine),
+ * filled only when AtPIDTask combines; older files read back with it empty.
  */
 class AtPIDEvent : public TNamed {
 private:
    std::vector<AtTools::AtPIDResult> fClassic;   ///< legacy AtPIDEstimator, one per track
    std::vector<AtTools::AtSpyralResult> fSpyral; ///< Spyral-style AtSpyralPID, one per track
    std::vector<AtTools::AtHelix3DResult> fHelix3D; ///< 3D AtHelix3D, one per track (empty if not run)
+   std::vector<AtTools::AtPIDCombinedResult> fCombined; ///< combined PID, one per track (empty unless combining)
 
 public:
    AtPIDEvent() : TNamed("AtPIDEvent", "AtPIDEvent") {}
@@ -35,15 +39,18 @@ public:
       fClassic.clear();
       fSpyral.clear();
       fHelix3D.clear();
+      fCombined.clear();
    }
 
    void AddClassic(const AtTools::AtPIDResult &r) { fClassic.push_back(r); }
    void AddSpyral(const AtTools::AtSpyralResult &r) { fSpyral.push_back(r); }
    void AddHelix3D(const AtTools::AtHelix3DResult &r) { fHelix3D.push_back(r); }
+   void AddCombined(const AtTools::AtPIDCombinedResult &r) { fCombined.push_back(r); }
 
    const std::vector<AtTools::AtPIDResult> &GetClassic() const { return fClassic; }
    const std::vector<AtTools::AtSpyralResult> &GetSpyral() const { return fSpyral; }
    const std::vector<AtTools::AtHelix3DResult> &GetHelix3D() const { return fHelix3D; }
+   const std::vector<AtTools::AtPIDCombinedResult> &GetCombined() const { return fCombined; }
 
    /// The adopted DEFAULT PID method is the Spyral-style first-arc + spline-arclength
    /// estimator (AtSpyralPID): it removes the dEdx-inflation artifact of the legacy
@@ -51,7 +58,7 @@ public:
    /// AtPIDEstimator is kept available via GetClassic() for comparison / fallback.
    const std::vector<AtTools::AtSpyralResult> &GetDefault() const { return fSpyral; }
 
-   ClassDefOverride(AtPIDEvent, 2);
+   ClassDefOverride(AtPIDEvent, 3);
 };
 
 #endif // ATPIDEVENT_H

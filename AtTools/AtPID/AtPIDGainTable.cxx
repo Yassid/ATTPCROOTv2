@@ -66,3 +66,43 @@ int AtPIDGainTable::RunFromName(const std::string &name)
       digits += name[p++];
    return digits.empty() ? -1 : std::stoi(digits);
 }
+
+std::map<int, double> AtPIDGainTable::LoadPadGains(std::istream &in, int column)
+{
+   std::map<int, double> g;
+   std::string line;
+   int nLine = 0;
+   while (std::getline(in, line)) {
+      ++nLine;
+      auto hash = line.find('#');
+      if (hash != std::string::npos)
+         line.erase(hash);
+      std::istringstream ss(line);
+      int pad;
+      if (!(ss >> pad))
+         continue;
+      double v = -1;
+      for (int c = 0; c < column; ++c)
+         if (!(ss >> v)) {
+            v = -1;
+            break;
+         }
+      if (v <= 0) {
+         LOG(error) << "AtPIDGainTable: pad-gain line " << nLine << " has no positive value in column " << column << ": '"
+                    << line << "'";
+         return {};
+      }
+      g[pad] = v;
+   }
+   return g;
+}
+
+std::map<int, double> AtPIDGainTable::LoadPadGains(const std::string &file, int column)
+{
+   std::ifstream in(file);
+   if (!in) {
+      LOG(error) << "AtPIDGainTable: cannot open pad-gain map " << file;
+      return {};
+   }
+   return LoadPadGains(in, column);
+}

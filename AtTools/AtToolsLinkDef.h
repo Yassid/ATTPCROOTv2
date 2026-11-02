@@ -86,5 +86,8 @@
 #pragma link C++ class AtTools::AtHelix3D - !;
 #pragma link C++ struct AtTools::AtHelix3DResult + ;
 #pragma link C++ class AtTools::AtPIDGainTable - !;
+#pragma link C++ struct AtTools::AtPIDCombinedResult + ;
+#pragma link C++ struct AtTools::AtPIDCombineOpt - !;
+#pragma link C++ function AtTools::CombinePID;
 
 #endif

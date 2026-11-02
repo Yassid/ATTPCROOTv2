@@ -100,6 +100,7 @@
 
 #pragma link C++ class std::vector < AtTools::AtPIDResult> + ;
 #pragma link C++ class std::vector < AtTools::AtSpyralResult> + ;
+#pragma link C++ class std::vector < AtTools::AtPIDCombinedResult> + ;
 #pragma link C++ class AtPIDEvent + ;
 #pragma link C++ class AtPIDTask + ;
 // Opt-in per-run dE/dx gain matching. Nothing runs it unless a macro adds it to the chain.

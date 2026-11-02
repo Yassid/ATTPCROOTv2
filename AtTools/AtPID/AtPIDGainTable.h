@@ -30,6 +30,14 @@ public:
    /// -1 if there is none.
    static int RunFromName(const std::string &name);
 
+   /// PAD-GAIN MAP (2026-11-02): relative gain per pad, `pad value [value ...]` per line, `#` comments. The hit
+   /// charges of a pad are DIVIDED by its gain before the PID estimators run (AtPIDTask::SetPadGainMap). `column`
+   /// picks which value after the pad number (1 = the first). Produced from data by
+   /// macro/Unpack_HDF5/a1975/D2_UKF/pad_gain_map_dp.C (column 1 = the gain; check that macro for any further columns).
+   /// Returns an empty map and logs an error on a malformed line or a non-positive gain.
+   static std::map<int, double> LoadPadGains(std::istream &in, int column = 1);
+   static std::map<int, double> LoadPadGains(const std::string &file, int column = 1);
+
 private:
    std::map<int, std::pair<double, double>> fGain;
 };

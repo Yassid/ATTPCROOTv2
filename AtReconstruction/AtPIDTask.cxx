@@ -1,6 +1,8 @@
 #include "AtPIDTask.h"
 
+#include "AtHit.h"
 #include "AtPIDEvent.h"
+#include "AtPIDGainTable.h"
 #include "AtPatternEvent.h"
 #include "AtTrack.h"
 
@@ -28,6 +30,17 @@ void AtPIDTask::SetSmallPadRadius(Double_t r)
    fClassicEst.SetSmallPadRadius(r);
    fSpyralEst.SetSmallPadRadius(r);
    fHelix3DEst.SetSmallPadRadius(r);
+}
+
+Bool_t AtPIDTask::SetPadGainMap(TString file, Int_t column)
+{
+   fPadGain = AtTools::AtPIDGainTable::LoadPadGains(std::string(file.Data()), column);
+   if (fPadGain.empty()) {
+      LOG(error) << "AtPIDTask: pad-gain map " << file << " not loaded -- pad correction OFF";
+      return kFALSE;
+   }
+   LOG(info) << "AtPIDTask: pad-gain map " << file << " (column " << column << "), " << fPadGain.size() << " pads";
+   return kTRUE;
 }
 
 InitStatus AtPIDTask::Init()
@@ -65,7 +78,17 @@ void AtPIDTask::Exec(Option_t * /*opt*/)
    // parallelism. It should still prefer matching on trackID, because a fitted track records only
    // its ID and AtTrackFinderTC's ID is a cluster label, not an array position.
    for (auto &track : patternEvent->GetTrackCand()) {
-      AtTrack &tr = const_cast<AtTrack &>(track);
+      // pad-gain correction on a COPY: the pattern event stays untouched for the fitters downstream
+      AtTrack corrected;
+      if (!fPadGain.empty()) {
+         corrected = track;
+         for (auto &h : corrected.GetHitArray()) {
+            auto it = fPadGain.find(h->GetPadNum());
+            if (it != fPadGain.end())
+               h->SetCharge(h->GetCharge() / it->second);
+         }
+      }
+      AtTrack &tr = fPadGain.empty() ? const_cast<AtTrack &>(track) : corrected;
       auto cl = fClassicEst.Estimate(tr);
       cl.trackID = tr.GetTrackID();
       pidEvent->AddClassic(cl);
@@ -74,8 +97,12 @@ void AtPIDTask::Exec(Option_t * /*opt*/)
       auto sp = fSpyralEst.Estimate(tr);
       pidEvent->AddSpyral(sp);
       // the Spyral direction is one of AtHelix3D's three votes
-      if (fRunHelix3D)
-         pidEvent->AddHelix3D(fHelix3DEst.Estimate(tr, sp.valid ? sp.direction : -1));
+      if (fRunHelix3D) {
+         auto h3 = fHelix3DEst.Estimate(tr, sp.valid ? sp.direction : -1);
+         pidEvent->AddHelix3D(h3);
+         if (fCombine)
+            pidEvent->AddCombined(AtTools::CombinePID(sp, h3, fCombineOpt));
+      }
    }
 }
 

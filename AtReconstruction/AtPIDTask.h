@@ -2,6 +2,7 @@
 #define ATPIDTASK_H
 
 #include "AtHelix3D.h"
+#include "AtPIDCombine.h"
 #include "AtPIDEstimator.h"
 #include "AtSpyralPID.h"
 
@@ -10,6 +11,8 @@
 #include <Rtypes.h>
 #include <TClonesArray.h>
 #include <TString.h>
+
+#include <map>
 
 /**
  * @brief Runs the two PID estimators on every pattern-recognized track.
@@ -21,6 +24,11 @@
  * can be compared with full statistics. The legacy estimator is kept untouched.
  * It also runs AtTools::AtHelix3D (3D estimator, default ON, SetRunHelix3D(false) to skip), passing it
  * the Spyral direction as one of its three direction votes.
+ *
+ * Optional, all default OFF (2026-11-02; the a1975 D2 recipe, see docs/subsystems/pid.md):
+ *  - SetPadGainMap: per-pad gain correction of the hit charges before every estimator runs;
+ *  - SetCombine: one combined PID per track (AtPIDEvent::GetCombined), Spyral with a cross-check against the 3D
+ *    circle Brho, the tracks failing it re-added from AtHelix3D (AtTools::CombinePID).
  */
 class AtPIDTask : public FairTask {
 private:
@@ -38,6 +46,10 @@ private:
    AtTools::AtSpyralPID fSpyralEst;
    AtTools::AtHelix3D fHelix3DEst;
    Bool_t fRunHelix3D{kTRUE};
+
+   std::map<int, double> fPadGain; ///< pad -> relative gain (empty = no correction)
+   Bool_t fCombine{kFALSE};
+   AtTools::AtPIDCombineOpt fCombineOpt;
 
 public:
    AtPIDTask();
@@ -64,6 +76,19 @@ public:
    AtTools::AtHelix3D &GetHelix3D() { return fHelix3DEst; }
    /// 0 = exact-equality z-tie collapse (historical), which can make the arclength spline singular.
    void SetZTieTolerance(Double_t t) { fSpyralEst.SetZTieTolerance(t); }
+   /// Divide every hit charge by its pad's relative gain before the estimators run (all three). The map is read with
+   /// AtTools::AtPIDGainTable::LoadPadGains (`pad value...`, `column` = which value). Pads absent from the map are left
+   /// alone. Returns false (and leaves the correction off) if the file cannot be read. Combine with the per-run gain
+   /// (SetDedxGain): the pad map flattens the pad plane, the run factor follows the gain drift.
+   Bool_t SetPadGainMap(TString file, Int_t column = 1);
+   /// Fill AtPIDEvent::GetCombined: Spyral, unless its Brho fails the cross-check against the 3D circle, in which case
+   /// the AtHelix3D result is used (see AtTools::AtPIDCombineOpt for the rule and the a1975 values). Needs the 3D
+   /// estimator (SetRunHelix3D(true), the default); best with GetHelix3D().SetArcAngle(true) and SetHitRefit(true, true).
+   void SetCombine(Bool_t on, const AtTools::AtPIDCombineOpt &opt = AtTools::AtPIDCombineOpt())
+   {
+      fCombine = on;
+      fCombineOpt = opt;
+   }
    void SetPersistence(Bool_t v) { fIsPersistence = v; }
    void SetInputBranch(TString n) { fInputBranchName = n; }
    void SetOutputBranch(TString n) { fOutputBranchName = n; }
@@ -71,7 +96,7 @@ public:
    InitStatus Init() override;
    void Exec(Option_t *opt) override;
 
-   ClassDefOverride(AtPIDTask, 1);
+   ClassDefOverride(AtPIDTask, 2);
 };
 
 #endif // ATPIDTASK_H

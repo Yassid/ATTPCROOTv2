@@ -44,6 +44,19 @@ struct AtHelix3DResult {
    Double_t length{0};            ///< backbone length [mm]
    Bool_t guarded{false};         ///< vertex-end circle replaced by the whole-track circle
    Bool_t axisConstrained{false}; ///< vertex-end circle refitted through the beam axis
+
+   // --- arc-length angle (SetArcAngle, default off; 2026-11-02) ---
+   Double_t thetaArc{-1}; ///< polar angle from z_lab vs arc length round the vertex-end circle [rad]; -1 = not computed
+   Double_t brhoArc{0};   ///< B * radius / sin(thetaArc) [T m]; the recommended 3D Brho (unbiased angle)
+
+   // --- stopping / range quality (always computed when the backbone exists; 2026-11-02) ---
+   Bool_t contained{false};  ///< far (stopping) end inside the gas: see AtHelix3D::SetContainment
+   Double_t rStop{-1};       ///< radius of the far-end centroid [mm]
+   Double_t zLabStop{-1};    ///< lab z of the far-end centroid [mm]
+   Double_t peakFrac{-1};    ///< position of the charge-profile maximum / track length, from the vertex end
+   Double_t tailRatio{-1};   ///< mean charge after the peak (+20 mm) / peak charge
+   Bool_t midPeak{false};    ///< the charge peaks well before the end and the rest is weak: the particle stopped
+                             ///< and the candidate carries other hits (see AtHelix3D::SetMidPeak)
 };
 
 /// Direction-free 3D track estimator: vertex end, Brho, theta and dE/dx without sorting hits by z.
@@ -94,6 +107,18 @@ public:
    void SetHitRefit(bool b, bool alsoZ = false) { fHitRefit = b; fHitRefitZ = alsoZ; }
    void SetDedxGain(double g) { fDedxGain = g; }
    double GetDedxGain() const { return fDedxGain; }
+   /// ARC-LENGTH POLAR ANGLE (default off). theta from a straight-line fit of z_lab against the arc length round the
+   /// vertex-end circle, over the first `frac` of the vertex-end window hits (at least 6), and brhoArc = B R/sin(theta).
+   /// On a1975 simulation the angle is unbiased to 0.2-0.3 % in sin(theta), where the whole-window z vs phase angle
+   /// biases slow tracks. Best with SetHitRefit(true, true). Needs at least 12 window hits.
+   void SetArcAngle(bool on, double frac = 0.5) { fArcAngle = on; fArcFrac = frac; }
+   /// A track is `contained` (stops in the gas) when its far-end centroid has radius < rMax and zMin < z_lab < zMax.
+   /// The a1975 defaults: rMax 145 mm, z 10-955 mm -- tracks leaving the drift window end at z_lab ~964 mm otherwise
+   /// look contained. Re-measure for another geometry / drift window.
+   void SetContainment(double rMax, double zMin, double zMax) { fContRMax = rMax; fContZMin = zMin; fContZMax = zMax; }
+   /// midPeak: charge profile (10 mm bins along the backbone from the vertex end, 3-bin smoothed) peaks before
+   /// fpkMax of the track, more than minAfter mm before its end, and the mean after peak+20 mm is < tailMax x peak.
+   void SetMidPeak(double fpkMax, double minAfter, double tailMax) { fMpFpk = fpkMax; fMpAfter = minAfter; fMpTail = tailMax; }
 
 private:
    double fBField{2.85};
@@ -112,6 +137,10 @@ private:
    bool fHitRefit{false}, fHitRefitZ{false};
    double fBraggThr{0.2}, fRContained{150.0};
    double fDedxGain{1.0};
+   bool fArcAngle{false};
+   double fArcFrac{0.5};
+   double fContRMax{145.0}, fContZMin{10.0}, fContZMax{955.0};
+   double fMpFpk{0.75}, fMpAfter{30.0}, fMpTail{0.35};
 };
 
 } // namespace AtTools

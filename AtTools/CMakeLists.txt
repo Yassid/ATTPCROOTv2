@@ -47,6 +47,7 @@ set(SRCS
   AtPID/AtSpyralPID.cxx
   AtPID/AtHelix3D.cxx
   AtPID/AtPIDGainTable.cxx
+  AtPID/AtPIDCombine.cxx
 
   AtELossBetheBloch.cxx
   )

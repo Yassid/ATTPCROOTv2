@@ -22,6 +22,7 @@ Full developer documentation lives in `docs/`. See [docs/index.md](../docs/index
 | Event generators | [subsystems/generators.md](../docs/subsystems/generators.md) |
 | Pulse shape analysis | [subsystems/psa.md](../docs/subsystems/psa.md) |
 | Energy loss | [subsystems/energy-loss.md](../docs/subsystems/energy-loss.md) |
+| Particle identification | [subsystems/pid.md](../docs/subsystems/pid.md) |
 
 ## Environment Setup
 

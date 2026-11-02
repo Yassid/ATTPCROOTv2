@@ -16,6 +16,7 @@ Agent-facing docs for the current branch state of ATTPCROOT.
 - configure detector parameters: [reference/parameters.md](reference/parameters.md)
 - prepare detector geometry: [subsystems/geometry.md](subsystems/geometry.md)
 - browse data interactively: [subsystems/visualization.md](subsystems/visualization.md)
+- choose and configure particle identification: [subsystems/pid.md](subsystems/pid.md)
 
 ## Architecture
 
@@ -26,6 +27,7 @@ Agent-facing docs for the current branch state of ATTPCROOT.
 - generators: [subsystems/generators.md](subsystems/generators.md)
 - PSA: [subsystems/psa.md](subsystems/psa.md)
 - energy loss: [subsystems/energy-loss.md](subsystems/energy-loss.md)
+- particle identification: [subsystems/pid.md](subsystems/pid.md)
 - geometry: [subsystems/geometry.md](subsystems/geometry.md)
 - visualization: [subsystems/visualization.md](subsystems/visualization.md)
 - parameters: [reference/parameters.md](reference/parameters.md)

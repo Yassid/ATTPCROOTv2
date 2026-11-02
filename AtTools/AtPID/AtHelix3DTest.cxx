@@ -1,4 +1,5 @@
 #include "AtHelix3D.h"
+#include "AtPIDCombine.h"
 #include "AtPIDGainTable.h"
 
 #include "AtHit.h"
@@ -44,6 +45,23 @@ AtTrack makeHelix(double R, double thetaDeg, double zv, double sweep, unsigned s
       std::shuffle(hits.begin(), hits.end(), std::mt19937(seed));
    for (auto &h : hits)
       tr.AddHit(h);
+   return tr;
+}
+
+/// makeHelix with a chosen charge profile: q(f) for the fraction f of the sweep (0 = vertex end)
+AtTrack makeHelixQ(double R, double thetaDeg, double zv, double sweep, double (*qOf)(double))
+{
+   AtTrack tr;
+   const double th = thetaDeg * M_PI / 180, dzdphi = R / std::tan(th), ds = 3.0 / R;
+   int id = 0;
+   for (double dphi = 0; dphi <= sweep; dphi += ds) {
+      const double phi = M_PI + dphi;
+      for (double dr : {-2.0, 0.0, 2.0}) {
+         AtHit h(id++, XYZPoint(R + (R + dr) * std::cos(phi), (R + dr) * std::sin(phi), kZpad - (zv + dzdphi * dphi)),
+                 qOf(dphi / sweep));
+         tr.AddHit(h);
+      }
+   }
    return tr;
 }
 
@@ -161,4 +179,130 @@ TEST(AtPIDGainTableTest, RunFromName)
    EXPECT_EQ(AtTools::AtPIDGainTable::RunFromName("run_0016_multifit"), 16);
    EXPECT_EQ(AtTools::AtPIDGainTable::RunFromName("/mnt/f/a1975/reco_d2_dv1104/run_0097_multifit_reco.root"), 97);
    EXPECT_EQ(AtTools::AtPIDGainTable::RunFromName("calibration.root"), -1);
+}
+
+TEST(AtHelix3DTest, ArcAngleRecoversTheta)
+{
+   AtTools::AtHelix3D h3;
+   h3.SetBField(kB);
+   h3.SetHitRefit(true, true);
+   h3.SetArcAngle(true);
+   for (double thetaDeg : {50.0, 70.0, 85.0}) {
+      auto r = h3.Estimate(makeHelix(80, thetaDeg, 400, 1.5));
+      ASSERT_TRUE(r.valid) << "theta " << thetaDeg << " failCode " << r.failCode;
+      ASSERT_GT(r.thetaArc, 0) << "theta " << thetaDeg;
+      EXPECT_NEAR(r.thetaArc * 180 / M_PI, thetaDeg, 1.5) << "theta " << thetaDeg;
+      EXPECT_NEAR(r.brhoArc, expectedBrho(80, thetaDeg), 0.03 * expectedBrho(80, thetaDeg)) << "theta " << thetaDeg;
+   }
+}
+
+TEST(AtHelix3DTest, ArcAngleOffByDefault)
+{
+   AtTools::AtHelix3D h3;
+   h3.SetBField(kB);
+   auto r = h3.Estimate(makeHelix(80, 70, 400, 1.2));
+   ASSERT_TRUE(r.valid);
+   EXPECT_EQ(r.thetaArc, -1);
+   EXPECT_EQ(r.brhoArc, 0);
+}
+
+TEST(AtHelix3DTest, MidPeakFlag)
+{
+   AtTools::AtHelix3D h3;
+   h3.SetBField(kB);
+   // a stopping particle: charge rising to the end -> no mid-track peak
+   auto rise = h3.Estimate(makeHelixQ(80, 70, 400, 2.0, [](double f) { return 50 + 150 * f; }));
+   ASSERT_TRUE(rise.valid);
+   EXPECT_FALSE(rise.midPeak);
+   EXPECT_GT(rise.peakFrac, 0.8);
+   // a Bragg peak at 40 % of the candidate, then weak hits: the particle stopped and other hits were attached
+   auto mid = h3.Estimate(makeHelixQ(80, 70, 400, 2.0, [](double f) { return f < 0.35 ? 50 + 400 * f : (f < 0.45 ? 400.0 : 20.0); }));
+   ASSERT_TRUE(mid.valid);
+   EXPECT_TRUE(mid.midPeak) << "peakFrac " << mid.peakFrac << " tail " << mid.tailRatio;
+   EXPECT_LT(mid.peakFrac, 0.6);
+}
+
+TEST(AtHelix3DTest, Containment)
+{
+   AtTools::AtHelix3D h3;
+   h3.SetBField(kB);
+   auto tr = makeHelix(80, 70, 400, 1.2);
+   auto r = h3.Estimate(tr);
+   ASSERT_TRUE(r.valid);
+   EXPECT_TRUE(r.contained) << "rStop " << r.rStop << " zLabStop " << r.zLabStop;
+   EXPECT_GT(r.zLabStop, 400);
+   h3.SetContainment(145, 10, 401); // the drift window now ends before the stopping point
+   EXPECT_FALSE(h3.Estimate(tr).contained);
+   h3.SetContainment(20, 10, 955); // radius limit inside the track's reach
+   EXPECT_FALSE(h3.Estimate(tr).contained);
+}
+
+TEST(AtPIDCombineTest, SpyralKeptWhenItAgrees)
+{
+   AtTools::AtSpyralResult sp;
+   sp.valid = true; sp.brho = 0.30; sp.sqrtdEdx = 20; sp.trackID = 4;
+   AtTools::AtHelix3DResult h3;
+   h3.valid = true; h3.brho = 0.29; h3.brhoArc = 0.29; h3.sqrtdEdx = 21;
+   auto c = AtTools::CombinePID(sp, h3, AtTools::AtPIDCombineOpt());
+   EXPECT_EQ(c.source, 0);
+   EXPECT_FALSE(c.vetoed);
+   EXPECT_DOUBLE_EQ(c.brho, 0.30);
+   EXPECT_DOUBLE_EQ(c.sqrtdEdx, 20);
+   EXPECT_EQ(c.trackID, 4);
+}
+
+TEST(AtPIDCombineTest, SlowFlatTrackReaddedFrom3D)
+{
+   AtTools::AtSpyralResult sp;
+   sp.valid = true; sp.brho = 0.31; sp.sqrtdEdx = 37;
+   AtTools::AtHelix3DResult h3;
+   h3.valid = true; h3.brho = 0.13; h3.brhoArc = 0.14; h3.sqrtdEdx = 38;
+   AtTools::AtPIDCombineOpt opt;
+   opt.addBackScale = 0.965;
+   auto c = AtTools::CombinePID(sp, h3, opt);
+   EXPECT_TRUE(c.vetoed);
+   EXPECT_EQ(c.source, 1);
+   EXPECT_DOUBLE_EQ(c.brho, 0.14); // brhoArc preferred
+   EXPECT_DOUBLE_EQ(c.sqrtdEdx, 38 * 0.965);
+   opt.useArc = false;
+   EXPECT_DOUBLE_EQ(AtTools::CombinePID(sp, h3, opt).brho, 0.13);
+}
+
+TEST(AtPIDCombineTest, VetoOnlyBelowMaxBrhoOrAboveHighSq)
+{
+   AtTools::AtSpyralResult sp;
+   sp.valid = true; sp.brho = 0.60; sp.sqrtdEdx = 12;
+   AtTools::AtHelix3DResult h3;
+   h3.valid = true; h3.brhoArc = 0.40; h3.sqrtdEdx = 12;
+   AtTools::AtPIDCombineOpt opt; // maxBrho 0.45, highSq off
+   EXPECT_FALSE(AtTools::CombinePID(sp, h3, opt).vetoed); // high Brho, normal dE/dx: Spyral kept
+   sp.sqrtdEdx = 35;
+   opt.highSq = 30;
+   EXPECT_TRUE(AtTools::CombinePID(sp, h3, opt).vetoed); // the upper fake streak
+}
+
+TEST(AtPIDCombineTest, NoSpyral)
+{
+   AtTools::AtSpyralResult sp; // invalid
+   AtTools::AtHelix3DResult h3;
+   h3.valid = true; h3.brhoArc = 0.2; h3.sqrtdEdx = 30;
+   AtTools::AtPIDCombineOpt opt;
+   EXPECT_EQ(AtTools::CombinePID(sp, h3, opt).source, -1);
+   opt.fallback3D = true;
+   EXPECT_EQ(AtTools::CombinePID(sp, h3, opt).source, 1);
+}
+
+TEST(AtPIDGainTableTest, PadGainMap)
+{
+   std::istringstream in("# pad gain n\n27 1.0612 1507\n28 1.0166 1653\n\n29 0.95 10 # comment\n");
+   auto g = AtTools::AtPIDGainTable::LoadPadGains(in);
+   ASSERT_EQ(g.size(), 3u);
+   EXPECT_DOUBLE_EQ(g.at(27), 1.0612);
+   EXPECT_DOUBLE_EQ(g.at(29), 0.95);
+   std::istringstream in2("27 1.0612 1507\n");
+   EXPECT_DOUBLE_EQ(AtTools::AtPIDGainTable::LoadPadGains(in2, 2).at(27), 1507); // second value column
+   std::istringstream bad("27 -1.0 5\n");
+   EXPECT_TRUE(AtTools::AtPIDGainTable::LoadPadGains(bad).empty());
+   std::istringstream shortLine("27\n");
+   EXPECT_TRUE(AtTools::AtPIDGainTable::LoadPadGains(shortLine).empty());
 }

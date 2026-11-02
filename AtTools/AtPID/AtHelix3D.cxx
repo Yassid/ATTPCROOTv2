@@ -4,7 +4,10 @@
 #include "AtHit.h"
 #include "AtTrack.h"
 
+#include <algorithm>
 #include <cmath>
+#include <utility>
+#include <vector>
 
 using namespace AtTools;
 
@@ -72,6 +75,85 @@ AtHelix3DResult AtHelix3D::Estimate(const AtTrack &track, int spyralDirection) c
    res.vertex = ROOT::Math::XYZPoint(E.vx, E.vy, E.vz);
    res.guarded = E.guarded;
    res.axisConstrained = E.axisConstrained;
+
+   const int mC = r.cen.size();
+   // backbone coordinate of every ordered hit, measured from the VERTEX end
+   auto sFromVertex = [&](size_t i) { return V.end == 0 ? r.s[i] : r.length - r.s[i]; };
+
+   // --- stopping end and containment (centroids are in the internal = lab frame) ---
+   if (mC >= 2) {
+      const auto &cf = r.cen[V.end == 0 ? mC - 1 : 0];
+      res.rStop = std::hypot(cf.x, cf.y);
+      res.zLabStop = cf.z;
+      res.contained = res.rStop < fContRMax && cf.z > fContZMin && cf.z < fContZMax;
+   }
+
+   // --- charge profile along the track: where does the charge peak? (macro range_dp.C, 2026-11-01) ---
+   {
+      const int nb = std::max(1, (int)std::ceil(r.length / 10.0));
+      std::vector<double> prof(nb, 0), sm(nb, 0);
+      for (size_t i = 0; i < r.order.size(); ++i)
+         prof[std::min(nb - 1, std::max(0, (int)(sFromVertex(i) / 10.0)))] += h[r.order[i]].q;
+      for (int b = 0; b < nb; ++b) {
+         double sum = 0;
+         int c = 0;
+         for (int d = -1; d <= 1; ++d)
+            if (b + d >= 0 && b + d < nb) {
+               sum += prof[b + d];
+               ++c;
+            }
+         sm[b] = sum / c;
+      }
+      const int bp = std::max_element(sm.begin(), sm.end()) - sm.begin();
+      const double sPk = (bp + 0.5) * 10;
+      res.peakFrac = sPk / std::max(1.0, r.length);
+      double ta = 0;
+      int tc = 0;
+      for (int b = bp + 2; b < nb; ++b) {
+         ta += sm[b];
+         ++tc;
+      }
+      res.tailRatio = tc ? ta / tc / std::max(1e-9, sm[bp]) : 1;
+      res.midPeak = res.peakFrac < fMpFpk && r.length - sPk > fMpAfter && res.tailRatio < fMpTail;
+   }
+
+   // --- arc-length polar angle over the vertex-end window (macro pid_sbpid_dp.C, 2026-11-01) ---
+   if (fArcAngle && E.ok && E.nUsed >= 1 && E.R > 0) {
+      const double lim = (V.end == 0 ? r.sc[E.nUsed - 1] : r.length - r.sc[mC - E.nUsed]) + 2.0;
+      std::vector<std::pair<double, int>> win;
+      for (size_t i = 0; i < r.order.size(); ++i)
+         if (sFromVertex(i) <= lim)
+            win.push_back({sFromVertex(i), r.order[i]});
+      std::sort(win.begin(), win.end());
+      const int en = win.size();
+      if (en >= 12) {
+         const int n = std::max(6, (int)(fArcFrac * en));
+         double prev = std::atan2(h[win[0].second].y - E.yc, h[win[0].second].x - E.xc), ph = 0;
+         double sx = 0, sy = 0, sxx = 0, sxy = 0;
+         for (int i = 0; i < n && i < en; ++i) {
+            const auto &hp = h[win[i].second];
+            double a = std::atan2(hp.y - E.yc, hp.x - E.xc), d = a - prev;
+            while (d > M_PI)
+               d -= 2 * M_PI;
+            while (d < -M_PI)
+               d += 2 * M_PI;
+            if (i)
+               ph += d; // NET phase: summing |dphi| would inflate the arc with hit-order jitter
+            prev = a;
+            const double sl = E.R * std::abs(ph), zl = fZSign * hp.z + fZOffset;
+            sx += sl;
+            sy += zl;
+            sxx += sl * sl;
+            sxy += sl * zl;
+         }
+         const int m = std::min(n, en);
+         const double den = m * sxx - sx * sx;
+         if (std::abs(den) > 1e-9) {
+            res.thetaArc = std::atan2(1.0, (m * sxy - sx * sy) / den);
+            res.brhoArc = fBField * E.R / 1000.0 / std::sin(res.thetaArc);
+         }
+      }
+   }
    double brho, sq, th, path;
    if (!Helix3D::firstArcPID(r, V.end, fSmallPadRadius, brho, sq, th, path)) {
       res.failCode = 3;
