@@ -7,8 +7,10 @@
 ///                    species stops shorter than a triton, so this is species-blind. Triton range curve = sim median
 ///                    vs circle Brho, pol4 in ln-ln, valid 0.13-0.44 T m (cut applied only there).
 ///        Top: plane after the cuts, and the tracks the cuts remove. Bottom: ln-mass per slice after (blue) / before (grey).
+///        midpeakTritonOnly (default true, 2026-11-02): MIDPEAK only for tracks tLo-tHi above their slice's deuteron mode in
+///        ln-mass -- applied everywhere it also removed 17 % of the slow deuterons and a strip of protons.
 ///   root -l -b -q 'plot_pid_final_cuts_dp.C("plots/pid_final_cuts.png")'
-void plot_pid_final_cuts_dp(TString png, double shortCut = -0.4, double vetoLn = 0.25, double vetoMaxBrho = 0.45, double vetoHighSq = 30,
+void plot_pid_final_cuts_dp(TString png, double shortCut = -0.4, bool midpeakTritonOnly = true, double tLo = 0.20, double tHi = 0.60, double vetoLn = 0.25, double vetoMaxBrho = 0.45, double vetoHighSq = 30,
                             TString pv = "/mnt/f/a1975/pid3d_sbpid/pv_gainnorm.root", TString rr = "/mnt/f/a1975/pid_range/R_all.root",
                             TString sel = "va&&v3&&ok1&&sp3<6&&nh>=30&&sqp_g>0&&br>0&&bA>0&&s1_g>0")
 {
@@ -21,8 +23,6 @@ void plot_pid_final_cuts_dp(TString png, double shortCut = -0.4, double vetoLn =
    // ln of the sim triton median range at the circle Brho (pol4 in ln bA, fitted 2026-11-01 on range_dp.C sims)
    TString lrt = "(21.1479+39.9049*log(bA)+42.3467*pow(log(bA),2)+20.4999*pow(log(bA),3)+3.6219*pow(log(bA),4))";
    TString stop = "(r.ok&&r.cont&&r.zfar>10&&r.zfar<955)";
-   TString bad = Form("(%s&&(r.midpeak||(bA>0.13&&bA<0.44&&log(r.len)-%s<%g)))", stop.Data(), lrt.Data(), shortCut);
-   TString badMid = Form("(%s&&r.midpeak)", stop.Data()), badShort = Form("(%s&&!r.midpeak&&bA>0.13&&bA<0.44&&log(r.len)-%s<%g)", stop.Data(), lrt.Data(), shortCut);
    w->Draw("sqp_g/s1_g", sel + "&&!" + drop + "&&br>0.12&&br<0.25&&abs(log(br/bA))<0.1", "goff");
    std::vector<double> rs(w->GetV1(), w->GetV1() + w->GetSelectedRows());
    std::sort(rs.begin(), rs.end());
@@ -32,6 +32,37 @@ void plot_pid_final_cuts_dp(TString png, double shortCut = -0.4, double vetoLn =
    std::vector<double> x(w->GetV1(), w->GetV1() + w->GetSelectedRows());
    std::sort(x.begin(), x.end());
    const double md = x[x.size() / 2], xhi = x[x.size() * 995 / 1000] * 1.1;
+   // per-track flags computed in C++ (as a single TTree formula the per-slice deuteron mode exceeds TTreeFormula's
+   // operator limit): q.bad = stopping && ((MIDPEAK [&& in the triton region]) || too short); q.mid, q.shrt the parts.
+   // Triton region = tLo..tHi above the deuteron mode of the track's 0.05 T m slice of the plotted Brho, in ln-mass.
+   const Long64_t N = w->GetEntries();
+   w->SetEstimate(N + 1);
+   w->Draw(Form("%s:log(%s/%g*%s):(%s):r.midpeak:(bA>0.13&&bA<0.44&&log(r.len)-%s<%g):(%s)", B.Data(), SQ.Data(), md, B.Data(),
+               stop.Data(), lrt.Data(), shortCut, sel.Data()), "", "goff");
+   std::vector<double> vB(w->GetVal(0), w->GetVal(0) + N), vL(w->GetVal(1), w->GetVal(1) + N), vStop(w->GetVal(2), w->GetVal(2) + N),
+      vMid(w->GetVal(3), w->GetVal(3) + N), vShort(w->GetVal(4), w->GetVal(4) + N), vSel(w->GetVal(5), w->GetVal(5) + N);
+   std::vector<double> dmode(20, 0);
+   for (int b = 1; b < 20; ++b) {
+      TH1D hm("hm", "", 600, -4, 2);
+      for (Long64_t i = 0; i < N; ++i) if (vSel[i] && vB[i] > 0.05 * b && vB[i] <= 0.05 * (b + 1)) hm.Fill(vL[i]);
+      hm.Smooth(2);
+      if (hm.GetEntries() > 50) dmode[b] = hm.GetBinCenter(hm.GetMaximumBin());
+   }
+   auto *q = new TTree("q", "cut flags");
+   q->SetDirectory(nullptr);
+   int qbad, qmid, qshrt;
+   q->Branch("bad", &qbad); q->Branch("mid", &qmid); q->Branch("shrt", &qshrt);
+   for (Long64_t i = 0; i < N; ++i) {
+      const int b = std::min(19, std::max(0, (int)(vB[i] / 0.05)));
+      const double rel = vL[i] - dmode[b];
+      const bool inT = rel > tLo && rel < tHi;
+      qmid = vStop[i] && vMid[i] && (!midpeakTritonOnly || inT);
+      qshrt = vStop[i] && vShort[i] && !qmid;
+      qbad = qmid || qshrt;
+      q->Fill();
+   }
+   w->AddFriend(q);
+   TString bad = "q.bad", badMid = "q.mid", badShort = "q.shrt";
    const long nAll = w->GetEntries(sel);
    printf("tracks %ld; removed by MIDPEAK %lld, by TOO SHORT %lld (total %lld = %.1f %%)\n", nAll, w->GetEntries(sel + "&&" + badMid),
           w->GetEntries(sel + "&&" + badShort), w->GetEntries(sel + "&&" + bad), 100. * w->GetEntries(sel + "&&" + bad) / nAll);
@@ -39,7 +70,7 @@ void plot_pid_final_cuts_dp(TString png, double shortCut = -0.4, double vetoLn =
    auto *top = new TPad("top", "", 0, 0.45, 1, 1); top->Draw();
    auto *bot = new TPad("bot", "", 0, 0, 1, 0.45); bot->Draw();
    top->Divide(2, 1);
-   const char *ttl[2] = {"final PID after the quality cuts (MIDPEAK, too short)", "removed by the quality cuts"};
+   const char *ttl[2] = {midpeakTritonOnly ? "final PID after the cuts (MIDPEAK in the triton region, too short)" : "final PID after the quality cuts (MIDPEAK, too short)", "removed by the quality cuts"};
    TString cuts[2] = {sel + "&&!" + bad, sel + "&&" + bad};
    for (int p = 0; p < 2; ++p) {
       top->cd(p + 1); gPad->SetLogz(); gPad->SetRightMargin(0.12);
