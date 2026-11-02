@@ -48,6 +48,7 @@ protected:
    double fNoiseKeepThreshold = 0; //! Drop noise-only pads whose trace max < this (0 = keep all). Saves disk; no hit change if < PSA threshold.
    bool fSaveCharge = true;
    bool fDoConvolution{true}; //< Whether we should set the ADC by doing a convolution of the charge with the response
+   double fADCCeiling = 0;    //! Clip every trace sample at this ADC value (0 = off): the GET saturation
 
    std::vector<std::unique_ptr<TH1F>> fPadCharge; //!<
    std::set<int> fPadsWithCharge;                 //!<
@@ -68,6 +69,10 @@ public:
    void SetSaveCharge(bool val) { fSaveCharge = val; }
    void SetDoConvolution(bool val) { fDoConvolution = val; }
    void SetLowGain(double val) { fLowGainFactor = val; }
+   /// Saturate the electronics: clip every trace sample (after noise) at maxADC, in the same baseline-subtracted ADC
+   /// units the PSA reads. 0 (default) leaves the traces unclipped. Data from the GET electronics saturate, and a
+   /// simulation without the ceiling keeps the charge a saturated pulse loses -- its high-dE/dx tracks look too good.
+   void SetADCCeiling(double maxADC) { fADCCeiling = maxADC; }
 
    AtRawEvent GenerateEvent(std::vector<SimPointPtr> &vec);
    virtual AtRawEvent GenerateEvent(std::vector<AtSimulatedPoint *> &vec);

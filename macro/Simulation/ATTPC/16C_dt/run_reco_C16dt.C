@@ -45,7 +45,8 @@
 
 void run_reco_C16dt(TString mcFile = "./data/dt_test.root", TString outputFile = "./data/dt_sim_reco.root",
                     TString paramFile = "ATTPC.a1975_deuterium_dv1104.par", Double_t thr = 20, Int_t hdMcs = 20,
-                    Int_t hdMs = 8, Int_t nEvents = 0, Double_t holeR = 20.0, TString joinMethod = "mover")
+                    Int_t hdMs = 8, Int_t nEvents = 0, Double_t holeR = 20.0, TString joinMethod = "mover",
+                    Double_t adcCeiling = 0)
 {
    TString scriptfile = "Lookup20150611.xml";
    TString dir = getenv("VMCWORKDIR");
@@ -78,7 +79,14 @@ void run_reco_C16dt(TString mcFile = "./data/dt_test.root", TString outputFile =
    AtClusterizeTask *clusterizer = new AtClusterizeTask();
    clusterizer->SetPersistence(kFALSE);
 
-   AtPulseTask *pulse = new AtPulseTask(std::make_shared<AtPulse>(mapping));
+   // ADC CEILING (2026-11-02): the GET electronics saturate and the data lose the charge above it; without the clip
+   // the simulated high-dE/dx tracks keep charge the data never record. 0 = off (every existing production).
+   auto pulseModel = std::make_shared<AtPulse>(mapping);
+   if (adcCeiling > 0) {
+      pulseModel->SetADCCeiling(adcCeiling);
+      std::cout << "ADC ceiling: traces clipped at " << adcCeiling << " ADC" << std::endl;
+   }
+   AtPulseTask *pulse = new AtPulseTask(pulseModel);
    pulse->SetPersistence(kTRUE);
    // MC truth (A, Z, trackID) on every hit: without it the acceptance cannot tell the triton from
    // the beam or the recoil, and every downstream truth match becomes a guess.

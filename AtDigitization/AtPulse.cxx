@@ -39,7 +39,7 @@ AtPulse::AtPulse(const AtPulse &other)
      fTBEntrance(other.fTBEntrance), fTBPadPlane(other.fTBPadPlane), fResponse(other.fResponse),
      fUseFastGain(other.fUseFastGain), fNoiseSigma(other.fNoiseSigma), fNoiseAllPads(other.fNoiseAllPads),
      fNoiseKeepThreshold(other.fNoiseKeepThreshold), fSaveCharge(other.fSaveCharge),
-     fDoConvolution(other.fDoConvolution), fAvgGainDeviation(other.fAvgGainDeviation)
+     fDoConvolution(other.fDoConvolution), fADCCeiling(other.fADCCeiling), fAvgGainDeviation(other.fAvgGainDeviation)
 {
 
    // For reasons unknown, copying the historgam from other (calling copy constructor) causes a huge performance hit.
@@ -158,6 +158,8 @@ void AtPulse::ApplyNoise(AtPad &pad)
       double adc = pad.GetADC(i) * fGETGain;
       if (fNoiseSigma != 0)
          adc += gRandom->Gaus(0, fNoiseSigma);
+      if (fADCCeiling > 0 && adc > fADCCeiling)
+         adc = fADCCeiling;
       pad.SetADC(i, adc);
    }
 }
