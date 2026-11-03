@@ -24,9 +24,9 @@ REPO="$(cd "$HERE/../../.." && pwd)"
 
 species="${1:-deuteron}"
 # ★ SECOND ARGUMENT = THE PLANE. It used to be hardwired to pid/points_C15d.root, which is the
-# AtPSAMax + TriplClust reconstruction. There is now a second plane from the HDBSCAN re-reco
-# (pid/points_hdb_C15d.root, built by ../postreco_hdb_C15d.sh), and a gate drawn on one plane and
-# applied to the other selects the wrong tracks -- sqrt(dE/dx) is a per-track quantity and HDBSCAN
+# AtPSAMax + TriplClust reconstruction. There is now a second plane from the MultiFit re-reco
+# (pid/points_mf_C15d.root, built by ../postreco_mf_C15d.sh), and a gate drawn on one plane and
+# applied to the other selects the wrong tracks -- sqrt(dE/dx) is a per-track quantity and MultiFit
 # changes the hits each track carries. The drawer now PRINTS which plane it opened; read it.
 points="${2:-pid/points_C15d.root}"
 case "$species" in
@@ -64,7 +64,7 @@ set -u
 [[ -n "${DISPLAY:-}" ]] || { echo "ERROR: DISPLAY is unset -- the drawer needs an X display" >&2; exit 1; }
 
 cd "$HERE"
-[[ -s "$points" ]] || { echo "ERROR: plane '$points' missing (run pid/make_points_C15d.C or ../postreco_hdb_C15d.sh)" >&2; exit 1; }
+[[ -s "$points" ]] || { echo "ERROR: plane '$points' missing (run pid/make_points_C15d.C or ../postreco_mf_C15d.sh)" >&2; exit 1; }
 
 LOG="/home/yassid/C15d_logs/gate_draw_${species}.log"
 mkdir -p "$(dirname "$LOG")"
