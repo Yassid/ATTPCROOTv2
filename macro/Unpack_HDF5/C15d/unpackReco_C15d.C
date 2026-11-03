@@ -46,7 +46,16 @@ void unpackReco_C15d(TString fileName = "run_0017", Long64_t nEvents = 1000, Boo
                      /// cold one) -- but each worker normally takes a whole run, and only ~2 of
                      /// these 17-27 GB runs fit in 48 GB of cache at once. Chunking lets many
                      /// workers share ONE warm file.
-                     Long64_t firstEvent = 0)
+                     Long64_t firstEvent = 0,
+                     /// ★ ALGORITHM SWITCHES, added 2026-11-03 to test the C15p result here.
+                     /// The 2026-09-03 production used "max"/"tc" + space charge. On C15p,
+                     /// AtPSAMultiFit + HDBSCAN gave 1.64x more hits (156,578 vs 95,381 on 300
+                     /// events of run_0138) because MultiFit deconvolves pulses that share a pad.
+                     /// doSC defaults to the production value; the a1954 LUTs are a DIFFERENT
+                     /// experiment's field map, so it is worth testing with it off.
+                     TString psaType = "max",     // "max" | "multifit"
+                     TString praType = "tc",      // "tc"  | "hdbscan"
+                     Bool_t doSC = kTRUE)
 {
    gSystem->Load("libAtReconstruction.so");
 
@@ -126,8 +135,18 @@ void unpackReco_C15d(TString fileName = "run_0017", Long64_t nEvents = 1000, Boo
    unpackTask->SetPersistence(persistRaw);
 
    // --- PSA: pads -> 3D hits ---
-   auto psa = new AtPSAMax();
-   psa->SetThreshold(psaThreshold);
+   AtPSA *psa = nullptr;
+   if (psaType == "multifit") {
+      auto p = new AtPSAMultiFit();
+      p->SetThreshold(psaThreshold);
+      psa = p;
+      std::cout << "  PSA : AtPSAMultiFit (thr " << psaThreshold << ")\n";
+   } else {
+      auto p = new AtPSAMax();
+      p->SetThreshold(psaThreshold);
+      psa = p;
+      std::cout << "  PSA : AtPSAMax (thr " << psaThreshold << ")\n";
+   }
    AtPSAtask *psaTask = new AtPSAtask(psa);
    psaTask->SetPersistence(persistRaw);
    psaTask->SetOutputBranch("AtEventH");
@@ -139,11 +158,28 @@ void unpackReco_C15d(TString fileName = "run_0017", Long64_t nEvents = 1000, Boo
    SCTask->SetInputBranch("AtEventH");
 
    // --- PRA: AtEventCorrected -> AtPatternEvent ---
-   auto praAlgo = std::make_unique<AtPATTERN::AtTrackFinderTC>();
-   praAlgo->SetClusterRadius(clusterRadius);
-   praAlgo->SetClusterDistance(clusterDistance);
+   std::unique_ptr<AtPATTERN::AtPRA> praAlgo;
+   if (praType == "hdbscan") {
+      auto p = std::make_unique<AtPATTERN::AtTrackFinderHDBSCAN>();
+      p->SetMinClusterSize(20);
+      p->SetMinSamples(8);
+      p->SetClusterSelectionEpsilon(10.0);
+      p->SetJoinMethod("mover");
+      p->SetMinClusterSizeJoin(15);
+      p->SetCircleOverlapRatio(0.25);
+      p->SetMotionGapTol(40);
+      p->SetMotionAngleTol(35);
+      praAlgo = std::move(p);
+      std::cout << "  PRA : AtTrackFinderHDBSCAN (mover)\n";
+   } else {
+      auto p = std::make_unique<AtPATTERN::AtTrackFinderTC>();
+      p->SetClusterRadius(clusterRadius);
+      p->SetClusterDistance(clusterDistance);
+      praAlgo = std::move(p);
+      std::cout << "  PRA : AtTrackFinderTC (triplclust)\n";
+   }
    AtPRAtask *praTask = new AtPRAtask(std::move(praAlgo));
-   praTask->SetInputBranch("AtEventCorrected");
+   praTask->SetInputBranch(doSC ? "AtEventCorrected" : "AtEventH");
    praTask->SetOutputBranch("AtPatternEvent");
    praTask->SetPersistence(true);
 
@@ -171,7 +207,8 @@ void unpackReco_C15d(TString fileName = "run_0017", Long64_t nEvents = 1000, Boo
 
    run->AddTask(unpackTask);
    run->AddTask(psaTask);
-   run->AddTask(SCTask);
+   if (doSC)
+      run->AddTask(SCTask);
    run->AddTask(praTask);
 
    // --- PID: AtPatternEvent -> AtPIDEvent, then per-run gain matching of its dE/dx ---

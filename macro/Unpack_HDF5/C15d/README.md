@@ -1,9 +1,17 @@
 # C15d — 15C + d, D2 target at 300 torr
 
-**Beam is ¹⁵C** (confirmed 2026-08-28), so the channel is **¹⁵C(d,p)¹⁶C, Q = +2.026 MeV**. Note
-that `a1975/D2_UKF/README.md` describes the same run range as ¹⁶C(d,p)¹⁷C — that is a different
-reading of this dataset and is **not** what this workspace analyses. Do not "correct" the masses
-against it.
+## ★★★ THE DATASET IS a2091, NOT a1975
+
+Everything below the table was written when this workspace pointed at a1975. **a1975 is the 16C
+experiment**; commit `9742e18f` ("C15d: the dataset was wrong -- repoint 15C+d at a2091") moved the
+scripts, and the reconstruction on disk is a2091 — verified 2026-11-03 by run fingerprint: runs
+0045/0047/0076/0091/0093 exist in a1975 but NOT a2091, and none of them appear in the reco.
+The `runs_d2.txt` list (17–103) is the OLD a1975 set; use `runs_a2091_have.txt` (13–133).
+
+
+**Beam is ¹⁵C**, so the channels are **¹⁵C(d,p)¹⁶C (Q = +2.026 MeV)** and **¹⁵C(d,d')¹⁵C**.
+`a1975/D2_UKF/README.md` reads a similar run range as ¹⁶C(d,p)¹⁷C — that is a DIFFERENT
+EXPERIMENT (a1975), not a different reading of this one. Do not reconcile the masses against it.
 
 Self-contained workspace. It shares **no macro, no par file and no output directory** with
 any other analysis in this repo; the only framework additions it relies on are the new
@@ -19,8 +27,8 @@ source /home/yassid/fair_install/ATTPCROOTv2-OpenKF/build/config.sh
 
 | | |
 |---|---|
-| Raw HDF5 | `/media/yassid/Seagate Hub/ATTPC/Data/a1975/h5/run_XXXX.h5` |
-| Runs | **17–103, 75 runs** (`runs_d2.txt`) — the D2 target set |
+| Raw HDF5 | `/media/yassid/Seagate Hub/ATTPC/Data/a2091/run_XXXX.h5` |
+| Runs | **13–133, 104 runs** (`runs_a2091_have.txt`) — the a2091 D2 target set |
 | Format | legacy remerged (`/get` + `/frib` + `/meta`) — `AtHDFUnpacker` reads it directly; no merger-format reader needed |
 | Excluded | **runs ≥106 — HYDROGEN target, see below** (`runs_h2_EXCLUDED.txt`); runs 104–105 (thin changeover); **run_0090** (truncated HDF5); **run_0047** has no `/frib`, so no IC |
 | Outputs | `~/C15d_reco`, `~/C15d_ic`, `~/C15d_fit` — symlinks onto the Seagate, so no path here contains a space |
