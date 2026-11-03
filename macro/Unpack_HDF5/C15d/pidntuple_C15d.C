@@ -4,7 +4,12 @@
 /// Reads <run>_reco.root (which already carries a gain-matched AtPIDEvent, computed once by
 /// unpackReco_C15d.C) and writes <run>_pid.root holding one entry PER TRACK.
 ///
-///   root -b -q 'pidntuple_C15d.C("run_0017", "/home/yassid/C15d_reco/", "/home/yassid/C15d_ic/")'
+///   root -b -q 'pidntuple_C15d.C("run_0017", "/home/yassid/C15d_reco/", "/home/yassid/C15d_reco/")'
+///
+/// ⚠ THE THIRD ARGUMENT IS THE OUTPUT DIRECTORY, not the ion-chamber directory. The example
+/// here used to name ~/C15d_ic/ and reads as if the IC were an input, so the cache silently
+/// landed in the IC directory. This macro does not touch the IC at all -- the join happens
+/// later, in pid/make_points_C15d.C.
 ///
 /// Why cache at all: the plane is a few MB per run against a multi-GB reco, so once this exists
 /// every re-plot, re-binning and gate iteration is instant instead of a minutes-long re-read.

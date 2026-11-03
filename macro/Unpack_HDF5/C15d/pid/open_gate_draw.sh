@@ -23,6 +23,12 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPO="$(cd "$HERE/../../.." && pwd)"
 
 species="${1:-deuteron}"
+# ★ SECOND ARGUMENT = THE PLANE. It used to be hardwired to pid/points_C15d.root, which is the
+# AtPSAMax + TriplClust reconstruction. There is now a second plane from the HDBSCAN re-reco
+# (pid/points_hdb_C15d.root, built by ../postreco_hdb_C15d.sh), and a gate drawn on one plane and
+# applied to the other selects the wrong tracks -- sqrt(dE/dx) is a per-track quantity and HDBSCAN
+# changes the hits each track carries. The drawer now PRINTS which plane it opened; read it.
+points="${2:-pid/points_C15d.root}"
 case "$species" in
    proton)   Z=1; A=1 ;;
    deuteron) Z=1; A=2 ;;
@@ -58,16 +64,16 @@ set -u
 [[ -n "${DISPLAY:-}" ]] || { echo "ERROR: DISPLAY is unset -- the drawer needs an X display" >&2; exit 1; }
 
 cd "$HERE"
-[[ -s pid/points_C15d.root ]] || { echo "ERROR: pid/points_C15d.root missing (run pid/make_points_C15d.C)" >&2; exit 1; }
+[[ -s "$points" ]] || { echo "ERROR: plane '$points' missing (run pid/make_points_C15d.C or ../postreco_hdb_C15d.sh)" >&2; exit 1; }
 
 LOG="/home/yassid/C15d_logs/gate_draw_${species}.log"
 mkdir -p "$(dirname "$LOG")"
 
-ARGS="\"pid/${species}_C15d.json\",\"pid/points_C15d.root\",\"\",\"\",\
+ARGS="\"pid/${species}_C15d.json\",\"${points}\",\"\",\"\",\
 ${XMAX},${YMAX},${IC_LO},${IC_HI},false,${EBEAM},${FLIP_POLAR},${Z},${A}"
 
 echo "opening the ${species} gate drawer (Z=${Z} A=${A}) on DISPLAY=${DISPLAY}"
-echo "  plane : pid/points_C15d.root, IC [${IC_LO}, ${IC_HI}], single pulse"
+echo "  plane : ${points}, IC [${IC_LO}, ${IC_HI}], single pulse"
 echo "  out   : pid/${species}_C15d.json   (existing file is backed up to .bak on save)"
 echo "  log   : $LOG"
 
