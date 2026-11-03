@@ -333,7 +333,7 @@ Collapsed fits (ndf ≤ 0) are counted and dropped rather than passed through as
 - No IC gate and no PID gate yet. Build both from the persisted (gain-matched) `AtPIDEvent`.
 - `run_0047` has no FRIB data, so it cannot receive an IC gate.
 
-## ⚠ run_0098 is CORRUPT AT SOURCE — 103 usable runs, not 104
+## ⚠ run_0098 AND run_0125 ARE CORRUPT AT SOURCE — 102 usable runs, not 104
 
 `run_0098.h5` (78 GB, the largest file in the set) has a damaged `/get` group:
 
@@ -347,9 +347,21 @@ So the unpacker reads zero events and exits in ~4 s, writing a 23 kB stub. That 
 behaviour on bad input — do NOT retry it, and do not read a `FAILED` line for this run as a
 pipeline problem. The run also appears in Spyral's own `runs_to_skip`, so both analyses lose it.
 
+`run_0125.h5` (32 GB) is worse -- it cannot be opened at all:
+
+```
+run_0125: CANNOT OPEN RuntimeError: Unable to synchronously check link existence
+                      (bad symbol table node signature)
+```
+
 Of Spyral's skip list `[25 41 45 46 47 48 57 76 77 78 79 80 91 92 93 94 95 98 125]` only **98 and
-125** are in `runs_a2091_have.txt`; the rest are already absent from it. Check `/meta/meta` before
-spending a 30-80 GB copy on a suspect run:
+125** are in `runs_a2091_have.txt`; the rest are already absent from it. **Both of those are
+corrupt, so this dataset yields 102 runs** and any yield or normalisation must use 102.
+
+To make a worker skip a known-bad run instead of staging 30-80 GB for a 4 s failure, drop the
+marker the driver already honours: `touch $STAGE/run_XXXX.missing`.
+
+Check `/meta/meta` before spending a copy on a suspect run:
 
 ```bash
 python - <<'EOF'
