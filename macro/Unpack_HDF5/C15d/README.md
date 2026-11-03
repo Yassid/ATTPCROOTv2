@@ -332,3 +332,29 @@ Collapsed fits (ndf ≤ 0) are counted and dropped rather than passed through as
   checking. `fitGenfit_C15d.C` already defaults to a 5–178° θ window with `backwardSeedFix` on.
 - No IC gate and no PID gate yet. Build both from the persisted (gain-matched) `AtPIDEvent`.
 - `run_0047` has no FRIB data, so it cannot receive an IC gate.
+
+## ⚠ run_0098 is CORRUPT AT SOURCE — 103 usable runs, not 104
+
+`run_0098.h5` (78 GB, the largest file in the set) has a damaged `/get` group:
+
+```
+/get : RuntimeError: Unable to get group info (bad symbol table node signature)
+/meta: meta = [0 0 0 0]        <- event range 0-0
+/frib: opens fine (4 datasets)
+```
+
+So the unpacker reads zero events and exits in ~4 s, writing a 23 kB stub. That is correct
+behaviour on bad input — do NOT retry it, and do not read a `FAILED` line for this run as a
+pipeline problem. The run also appears in Spyral's own `runs_to_skip`, so both analyses lose it.
+
+Of Spyral's skip list `[25 41 45 46 47 48 57 76 77 78 79 80 91 92 93 94 95 98 125]` only **98 and
+125** are in `runs_a2091_have.txt`; the rest are already absent from it. Check `/meta/meta` before
+spending a 30-80 GB copy on a suspect run:
+
+```bash
+python - <<'EOF'
+import h5py
+with h5py.File("/media/.../run_0098.h5") as f:
+    print(list(f['get'].keys())[:3], f['meta']['meta'][:])
+EOF
+```
