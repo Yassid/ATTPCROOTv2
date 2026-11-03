@@ -191,3 +191,24 @@ tables is the next step.
 ⚠ One unit trap found while doing this: **Spyral's parquet stores the vertex in METRES**
 (`vertex_z` 0-1), while `spyral_kin.root` holds mm. A vz binning in mm applied to the parquet
 silently puts every track in the first bin.
+
+### A fifth hypothesis, also excluded: the space-charge correction
+
+ATTPCROOT's production reco (the one compared here) runs `AtSpaceChargeCorrectionTask`; Spyral has
+no space-charge correction at all, so if SC moved theta it would be the offset by construction.
+Tested on 3,000 events of run_0039 with the SAME PSA and the SAME pattern recognition, SC the only
+difference, matched track by track on (event, trackID) -- 711 matched:
+
+```
+dTheta (SC on - SC off)   mean -0.113 deg   rms 0.943   peak -0.050
+dVertexRho                mean +0.08 mm
+dVertexZ                  mean +3.49 mm
+```
+
+The shift is a quarter of the offset and **the wrong sign**, so SC is not the explanation.
+
+What SC *does* do is rescue tracks that otherwise fail PID validity -- 1,583 valid with it against
+973 without, on the same events -- while barely touching the ones that already pass. That matters
+for yield, not for the angle. (It also means the earlier conclusion in this workspace that space
+charge "measurably does nothing" was drawn from track and hit counts, which are blind to the
+vertex; see `rereco_hdb2_C15d.sh`.)

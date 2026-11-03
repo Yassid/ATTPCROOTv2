@@ -16,6 +16,23 @@
 #   the resume test, so a half-written .root from a killed worker is NOT mistaken for a finished
 #   one (a size check alone cannot tell them apart).
 #
+# ★★★ SPACE CHARGE IS BACK ON, AND THE EARLIER "IT DOES NOTHING" WAS A MEASUREMENT ERROR.
+#   It was judged inert from track and hit counts, which cannot see it. The correction moves hits
+#   radially, which is what sets the fitted VERTEX, and AtSpyralPID rejects any track whose vertex
+#   misses the beam axis by more than 25 mm. Measured on 500 events of run_0021:
+#
+#                   tracks  hits/trk  PID-valid  ON-AXIS (<25 mm)
+#     max + tc  + SC   407      82       149          130
+#     max + tc  no SC  407      80        81           71     <- removing SC nearly halves it
+#     MF + hdb  + SC   808     195       337          116
+#     MF + hdb  no SC  805     195       345          116     <- HDBSCAN insensitive to SC
+#
+#   Confirmed at 3,000 events of run_0039: 1,583 valid with SC against 973 without. SC rescues
+#   tracks that otherwise fail validity rather than shifting the good ones -- on tracks matched
+#   between the two, the vertex radius moves +0.08 mm and theta only -0.113 deg.
+#   Its LUTs are still a1954's field map, which remains theoretically unjustified, but it is doing
+#   real work on this data and must not be dropped on the strength of a count.
+#
 # ★ STAGES TO NVMe, continuously rather than per chunk.  Raw runs are 13-30 GB and the whole
 #   dataset is ~2 TB, which does not fit, so the stager runs ahead of the workers and blocks
 #   while staged bytes exceed CAP.  Workers delete their own .h5 when done.  A worker that holds
@@ -49,7 +66,7 @@ one(){ local i="$1"; local r; r=$(printf run_%04d "$i")
   done
   rm -f "$OUT/${r}_reco.root"                 # drop any partial from an earlier kill
   local t0=$SECONDS
-  root -b -q "$HERE/unpackReco_C15d.C(\"$r\",0,false,\"$OUT/\",\"$STAGE/\",\"ATTPC.C15d_a2091_D2.par\",\"ATTPC_D300torr_v2_geomanager.root\",20.0,15.0,7.5,true,false,\"\",30,0.0,2.85,0,\"multifit\",\"hdbscan\",false)" >"$LOG/${r}.log" 2>&1 || true
+  root -b -q "$HERE/unpackReco_C15d.C(\"$r\",0,false,\"$OUT/\",\"$STAGE/\",\"ATTPC.C15d_a2091_D2.par\",\"ATTPC_D300torr_v2_geomanager.root\",20.0,15.0,7.5,true,false,\"\",30,0.0,2.85,0,\"multifit\",\"hdbscan\",true)" >"$LOG/${r}.log" 2>&1 || true
   local n; n=$(grep -aoE 'Hit last event at: [0-9]+' "$LOG/${r}.log" | tail -1 | grep -oE '[0-9]+$')
   if [ -s "$OUT/${r}_reco.root" ] && [ -n "$n" ]; then
     echo "[$(date +%H:%M:%S)] $r OK  $(du -h "$OUT/${r}_reco.root"|cut -f1)  ${n} ev  $(( (SECONDS-t0)/60 )) min"

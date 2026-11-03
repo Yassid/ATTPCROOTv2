@@ -12,10 +12,13 @@
 #     MF +tc+SC    283 (+2%)    39,898 (+4%)           127         <- MultiFit alone: marginal
 #     max+hdb+SC   504 (+81%)  122,802 (+221%)         157         <- HDBSCAN alone: the whole gain
 #     MF +hdb+SC   525         131,970                 153
-#     MF +hdb noSC 530         131,557                 152         <- SC changes nothing
+#     MF +hdb noSC 530         131,557                 152         <- "SC changes nothing": WRONG,
+#                                                              counts cannot see it; see rereco_hdb2
 #
-# So HDBSCAN is the reason, not the pulse analysis. Space charge is dropped because it measurably
-# does nothing here AND its LUTs are the a1954 experiment's field map, not this one's.
+# So HDBSCAN is the reason, not the pulse analysis.
+# ⚠ The space-charge conclusion here is WRONG. Dropping it nearly halves the PID-valid tracks whose
+# vertex lands on the beam axis, which is the only track count the fitter consumes. Track and hit
+# counts are blind to the vertex. See the corrected table in rereco_hdb2_C15d.sh.
 #
 # ★ STAGES TO NVMe. Spyral on this same drive measured 656 kB/s with 8 workers because its reads
 # are small and random; ATTPCROOT streams better but still ran 122 s wall for 4.6 s CPU on a cold
