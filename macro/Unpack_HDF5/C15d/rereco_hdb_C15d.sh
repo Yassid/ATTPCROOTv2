@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ★ SUPERSEDED by rereco_hdb2_C15d.sh -- this version serialises on a chunk barrier (6 workers
+#   on a 32-core box, CPU 84 % idle, ~25 h for 104 runs) and its success check reads the
+#   2^64-1 end-of-run sentinel, so it prints FAILED for every run while writing good output.
+#   Kept only for provenance: the 2026-11-03 runs 0013-0024 were produced with it.
 # C15d RE-RECO with HDBSCAN. The 2026-09-03 production used AtPSAMax + AtTrackFinderTC + space
 # charge; measured on 300 events of run_0017 that configuration finds 278 tracks carrying 38,218
 # hits, against 530 / 131,557 with MultiFit + HDBSCAN.
