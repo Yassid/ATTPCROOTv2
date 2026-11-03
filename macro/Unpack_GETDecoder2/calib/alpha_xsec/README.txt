@@ -3,6 +3,22 @@ Dec 2014 AT-TPC  --  4He + 4He elastic cross section
 
 You start from the UNPACKED ROOT FILES and do the tracking yourself.
 
+WHERE THIS LIVES
+  Repository  https://github.com/Yassid/ATTPCROOTv2
+  BRANCH      FairRootv18.00-fairroot19-port          <-- NOT main, NOT develop
+  Path        macro/Unpack_GETDecoder2/calib/alpha_xsec/
+
+  These files exist ONLY on that branch.  A default clone lands on another branch and this
+  directory will not be there at all, which is the usual reason for "I cannot find it":
+
+      git clone https://github.com/Yassid/ATTPCROOTv2.git
+      cd ATTPCROOTv2
+      git checkout FairRootv18.00-fairroot19-port
+      cd macro/Unpack_GETDecoder2/calib/alpha_xsec
+
+  You do NOT need to build ATTPCROOT to run this analysis -- only plain ROOT, and only for
+  step 1.  Cloning the repository just to get this directory is perfectly reasonable.
+
 QUICK START
   1. edit config.py -> set DATA_ROOT to the data folder on this machine
      (or:  export DEC2014_DATA=/path/to/dec2014_data )
