@@ -1,0 +1,11 @@
+#!/bin/bash
+# (d,p) g.s. sim with gas to r 280 mm: same seed and arguments as gs_s4001, reco at gain 100000 and data settings, census, fit at -2.85 no gate with FIND, dump. Each stage read back. 2026-11-04.
+source /mnt/f/a1975/sim_rebuild/r280/env.sh; S=$HOME/fair_install/ATTPCROOTv2-OpenKF/macro/Simulation/ATTPC
+nent() { root -l -b -q -e "TFile f(\"$1\");auto*t=(TTree*)f.Get(\"cbmsim\");printf(\"NENT %lld\\n\",t?t->GetEntries():-1LL);" 2>/dev/null </dev/null | awk '/^NENT/{print $2}'; }
+SIM=$O/p_gs_sim.root RECO=$O/p_gs_reco.root
+if [ ! -e $SIM.done ]; then cd $S/16C_dp; root -b -l -q "C16_dp_sim_r280.C(20000,2.0,50.0,\"TGeant4\",-28.5,\"$SIM\",0.0,4001,184.25)" > $O/logs/sim.log 2>&1 </dev/null; n=$(nent $SIM); grep -q "RNG seed requested: 4001" $O/logs/sim.log && [ "$n" = 20000 ] && { touch $SIM.done; echo "SIM ok $n $(date +%T)"; } || { echo "FAIL sim n=$n"; exit 1; }; fi
+if [ ! -e $RECO.done ]; then cd $S/16C_dt; root -l -b -q "run_reco_C16dt.C(\"$SIM\",\"$RECO\",\"ATTPC.a1975_deuterium_dv1104_g100000.par\",40,0,3)" > $O/logs/reco.log 2>&1 </dev/null; n=$(nent $RECO); grep -q "par = ATTPC.a1975_deuterium_dv1104_g100000.par" $O/logs/reco.log && [ "$n" = 20000 ] && { touch $RECO.done; echo "RECO ok $n $(date +%T)"; } || { echo "FAIL reco n=$n"; exit 1; }; fi
+cd $D2; root -l -b -q "census_arc_dp.C(\"$RECO\",\"$O/p_gs_census.root\",1,4001)" </dev/null > $O/logs/census.log 2>&1; echo "CENSUS $(date +%T)"
+F=$O/p_gs_genfitter_p.root
+if [ ! -e $F.done ]; then root -l -b -q "fitGenfitter_a1975_deuterium.C(\"p_gs\",-1,\"$O/\",\"\",\"$O/\",-2.85,2,5,\"\",4.0,10.0,170.0,kTRUE,kTRUE,2212,1.00782503207,1,\"p\",\"_reco\",\"ATTPC_D300torr_r280_geomanager.root\",kTRUE,0,2,\"ATTPC.a1975_deuterium_dv1104.par\",kFALSE,kFALSE,kFALSE,\"proton_D2_300torr.txt\",kTRUE,kTRUE,kTRUE,kFALSE,0,kTRUE,0.1,kFALSE,5.0,5.0,1,80.0,8)" > $O/logs/fit.log 2>&1 </dev/null; vr=$(root -b -l -q "pid/root_ok.C(\"$F\")" 2>/dev/null | grep -E '^(VALID|INVALID)' | head -1); [[ "$vr" == VALID* ]] && { touch $F.done; echo "FIT ok $vr $(date +%T)"; } || { echo "FAIL fit ${vr:-unreadable}"; exit 1; }; fi
+cd $S/16C_dp; root -l -b -q "sim_dump_dp.C(\"$F\",\"$SIM\",\"$O/p_gs_dump.root\",true)" </dev/null 2>&1 | tail -1; echo SIM_ALLDONE

@@ -1,0 +1,14 @@
+/// @file band_tracks_dp.C
+/// Do the protons missing in the (d,p) band exist as pattern tracks? Hit-helix estimate of the census (no Spyral, no gate), data vs sim, per (vz, theta_cm); Spyral outcome of those tracks; their z extent.
+///   root -l -b -q band_tracks_dp.C
+namespace bt { const int NT = 5, NZ = 7; const double TB[NT + 1] = {10, 20, 25, 30, 35, 40}, ZB[NZ + 1] = {200, 300, 400, 500, 600, 700, 800, 900}; }
+void band_tracks_dp() { using namespace bt; gErrorIgnoreLevel = kError; TChain d("c"), s("c"); d.Add("/mnt/f/a1975/census_arc/data_*.root"); s.Add("/mnt/f/a1975/sim_rebuild/dp_census/p_gs_census.root");
+   TString H = "dirB&&d0<10&&rzmin<30&&thl>89&&thl<161&&ke>1.2&&ex>-1.5&&ex<1.5"; TChain *ch[2] = {&d, &s}; double N[2][NZ][NT], V[2][NZ][NT], Z[2][NZ][NT]; double q = 0.5;
+   for (int k = 0; k < 2; ++k) for (int z = 0; z < NZ; ++z) for (int t = 0; t < NT; ++t) { TString c = H + Form("&&vz>=%g&&vz<%g&&tcm>=%g&&tcm<%g", ZB[z], ZB[z + 1], TB[t], TB[t + 1]); N[k][z][t] = ch[k]->GetEntries(c); V[k][z][t] = ch[k]->GetEntries(c + "&&sv&&abs(svz-vz)<60&&abs(stcm-tcm)<6"); TH1D h(Form("hz%d%d%d", k, z, t), "", 100, 0, 1000); ch[k]->Draw(Form("zmax-zmin>>hz%d%d%d", k, z, t), c, "goff"); if (h.GetEntries() > 0) h.GetQuantiles(1, &Z[k][z][t], &q); else Z[k][z][t] = -1; }
+   double dn = 0, sn = 0; for (int z = 0; z < NZ; ++z) for (int t = 3; t < NT; ++t) { dn += N[0][z][t]; sn += N[1][z][t]; }
+   printf("hit-helix candidates, Ex -1.5..1.5, vertex-arc topology, ungated. norm data/sim on 30-40 = %.3f\n", dn / sn);
+   printf("\ndata counts (sim counts); ratio\n"); for (int z = 0; z < NZ; ++z) { printf(" %3.0f-%3.0f", ZB[z], ZB[z + 1]); for (int t = 0; t < NT; ++t) printf("  %4.0f(%4.0f) %5.2f", N[0][z][t], N[1][z][t], N[1][z][t] > 0 ? N[0][z][t] / (N[1][z][t] * dn / sn) : -1.); printf("\n"); }
+   printf("\nfraction with a matching valid Spyral result, data | sim\n"); for (int z = 0; z < NZ; ++z) { printf(" %3.0f-%3.0f", ZB[z], ZB[z + 1]); for (int t = 0; t < NT; ++t) printf("  %.2f|%.2f", N[0][z][t] > 0 ? V[0][z][t] / N[0][z][t] : -1., N[1][z][t] > 0 ? V[1][z][t] / N[1][z][t] : -1.); printf("\n"); }
+   printf("\nmedian z extent [mm], data | sim\n"); for (int z = 0; z < NZ; ++z) { printf(" %3.0f-%3.0f", ZB[z], ZB[z + 1]); for (int t = 0; t < NT; ++t) printf("  %4.0f|%4.0f", Z[0][z][t], Z[1][z][t]); printf("\n"); }
+   // all pattern tracks starting on the axis in the band, whatever their Ex: is there a population with the band's vertex at another KE?
+   printf("\nall vertex-arc tracks, data, vz 500-700, hit-helix Ex by theta_cm (counts per 1 MeV, -4..8):\n"); for (int t = 0; t < NT; ++t) { TH1D h(Form("he%d", t), "", 12, -4, 8); d.Draw(Form("ex>>he%d", t), Form("dirB&&d0<10&&rzmin<30&&thl>89&&thl<161&&ke>1.2&&vz>=500&&vz<700&&tcm>=%g&&tcm<%g", TB[t], TB[t + 1]), "goff"); printf(" %2.0f-%2.0f", TB[t], TB[t + 1]); for (int b = 1; b <= 12; ++b) printf(" %5.0f", h.GetBinContent(b)); printf("\n"); } }

@@ -1,0 +1,22 @@
+#include "/home/yassid/fair_install/ATTPCROOTv2-OpenKF/macro/Unpack_HDF5/a1975/D2_UKF/exsel_dp.C"
+/// @file spectra_dp.C  16C(d,p) data spectra from the adopted find805 production, with the cuts of angdist_bound_dp.C and the sim-anchored Ebeam (frame B).
+namespace sp { using namespace exsel; double Eb(double z) { return 183.873 - 0.011099 * z; } struct R { double ke, th, vz, c2; }; }
+void spectra_r280() { using namespace sp; gStyle->SetOptStat(0); gStyle->SetTitleSize(0.05, "t");
+   std::vector<R> dat, sim;
+   { TFile f("/mnt/f/a1975/caches/.explorer/exp_dp_find805_r280.root"); auto *t = (TTree *)f.Get("pk"); float ke, th, vz, c2; t->SetBranchAddress("ke", &ke); t->SetBranchAddress("theta", &th); t->SetBranchAddress("vertexz", &vz); t->SetBranchAddress("chi2ndf", &c2); for (Long64_t i = 0; i < t->GetEntries(); ++i) { t->GetEntry(i); dat.push_back({ke, th, vz, c2}); } }
+   { TFile f("/mnt/f/a1975/sim_rebuild/dp_eps/new_dedup.root"); auto *t = (TTree *)f.Get("r"); R s; t->SetBranchAddress("ke", &s.ke); t->SetBranchAddress("th", &s.th); t->SetBranchAddress("vz", &s.vz); t->SetBranchAddress("c2", &s.c2); for (Long64_t i = 0; i < t->GetEntries(); ++i) { t->GetEntry(i); sim.push_back(s); } }
+   auto hA = new TH1D("hA", "All vertices, vz 100-900 mm;E_{x} [MeV];counts / 100 keV", 120, -3, 9), hF = new TH1D("hF", "Adopted window, vz 200-400 mm;E_{x} [MeV];counts / 100 keV", 120, -3, 9), hS = new TH1D("hS", "", 120, -3, 9);
+   auto h2 = new TH2D("h2", "All vertices;#theta_{cm} [deg];E_{x} [MeV]", 45, 0, 90, 120, -3, 9), hk = new TH2D("hk", "Kinematics, vz 100-900 mm;#theta_{lab} [deg];KE [MeV]", 72, 89, 161, 100, 0, 12), hz = new TH2D("hz", "Bound window: vertex against angle;v_{z} [mm];#theta_{cm} [deg]", 40, 100, 900, 20, 0, 50);
+   const double T[5] = {20, 25, 30, 35}; TH1D *ha[4]; for (int i = 0; i < 4; ++i) { ha[i] = new TH1D(Form("ha%d", i), "", 60, -2, 4); }
+   long N = 0; for (auto &d : dat) { double ex, tc; if (d.vz < 100 || d.vz >= 900 || !(d.c2 <= 13.5) || d.th < 89 || d.th > 161 || d.ke < 1.2 || !kine2b(Eb(d.vz), d.th * TMath::DegToRad(), d.ke, ex, tc)) continue; ++N; hA->Fill(ex); h2->Fill(tc, ex); hk->Fill(d.th, d.ke); if (ex > -1.5 && ex < 0.729) hz->Fill(d.vz, tc); if (d.vz >= 200 && d.vz < 400) { hF->Fill(ex); for (int i = 0; i < 4; ++i) if (tc >= T[i] && tc < T[i] + 5) ha[i]->Fill(ex); } }
+   for (auto &s : sim) { double ex, tc; if (s.vz < 200 || s.vz >= 400 || !(s.c2 <= 13.5) || s.th < 89 || s.th > 161 || s.ke < 1.2 || !kine2b(Eb(s.vz), s.th * TMath::DegToRad(), s.ke, ex, tc)) continue; hS->Fill(ex); }
+   printf("selected %ld of %zu; bound window vz 200-400 %.0f; 0.729-3 %.0f\n", N, dat.size(), hF->Integral(hF->FindBin(-1.5), hF->FindBin(0.72)), hF->Integral(hF->FindBin(0.73), hF->FindBin(2.99)));
+   TLine l; l.SetLineStyle(2); l.SetLineColor(kGray + 2);
+   TCanvas c("c", "", 1600, 1000); c.Divide(3, 2);
+   c.cd(1); gPad->SetGrid(); hA->SetLineColor(kBlue + 1); hA->SetLineWidth(2); hA->Draw("hist"); l.DrawLine(0.729, 0, 0.729, hA->GetMaximum());
+   c.cd(2); gPad->SetGrid(); hF->SetLineColor(kBlue + 1); hF->SetLineWidth(2); hF->Draw("E"); double sc = hF->Integral(hF->FindBin(-1.5), hF->FindBin(0.72)) / std::max(1., hS->Integral(hS->FindBin(-1.5), hS->FindBin(0.72))); hS->Scale(sc); hS->SetLineColor(kRed + 1); hS->SetLineWidth(1); hF->SetMaximum(1.1 * std::max(hF->GetMaximum(), hS->GetMaximum())); hS->Draw("hist same"); l.DrawLine(0.729, 0, 0.729, hF->GetMaximum()); auto L = new TLegend(0.55, 0.72, 0.89, 0.88); L->AddEntry(hF, "data", "le"); L->AddEntry(hS, "g.s. sim, no smear, scaled", "l"); L->AddEntry((TObject *)nullptr, "dashed: S_{n} 0.729", ""); L->Draw();
+   c.cd(3); gPad->SetRightMargin(0.13); gPad->SetLogz(); h2->Draw("colz");
+   c.cd(4); gPad->SetRightMargin(0.13); gPad->SetLogz(); hk->Draw("colz");
+   c.cd(5); gPad->SetRightMargin(0.13); hz->Draw("colz");
+   c.cd(6); gPad->SetGrid(); int col[4] = {kRed + 1, kOrange + 7, kGreen + 2, kBlue + 1}; auto L2 = new TLegend(0.6, 0.6, 0.89, 0.88); double mx = 0; for (int i = 0; i < 4; ++i) mx = std::max(mx, ha[i]->GetMaximum()); for (int i = 0; i < 4; ++i) { ha[i]->SetLineColor(col[i]); ha[i]->SetLineWidth(2); ha[i]->SetMaximum(1.1 * mx); ha[i]->SetTitle("Bound peak by angle, vz 200-400;E_{x} [MeV];counts / 100 keV"); ha[i]->Draw(i ? "hist same" : "hist"); L2->AddEntry(ha[i], Form("#theta_{cm} %.0f-%.0f", T[i], T[i] + 5), "l"); } L2->Draw();
+   c.SaveAs("/mnt/f/a1975/sim_rebuild/r280/spectra_r280.png"); }
