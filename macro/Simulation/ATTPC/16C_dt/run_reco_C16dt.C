@@ -35,9 +35,8 @@
 /// z -> TB -> z cancels, so this cannot test whether 1.10424 is right. What it tests is whether
 /// the chain returns the state at the energy it was generated at.
 ///
-/// SIM z HANDEDNESS: the simulation reverses drift-z against the experiment, so a fit of this
-/// output needs bFieldSign = +1 where the data uses -1, and the reconstructed polar angle is
-/// 180 - true. Do not "fix" that here; it is a property of digitisation.
+/// FIELD SIGN: a sim generated at -28.5 kG fits at -2.85, the same as the data, and the fitted
+/// polar angle then compares directly with truth. Measured with sim_fit_sign_check.C.
 ///
 ///   root -l 'run_reco_C16dt.C("/mnt/f/a1975_C16_dt_sim/gs_s3001_sim.root","/mnt/f/a1975_C16_dt_sim/gs_s3001_reco.root")'
 

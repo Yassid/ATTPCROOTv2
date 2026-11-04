@@ -70,11 +70,13 @@ The wrong sign does not always fail loudly: a fit can converge to a wrong moment
 simulated track curls away from the data and no set of parameters brings it back. Check the sign first when fits look
 wrong. The cases measured so far are tabulated in Section~\ref{sec:fit-frames}.
 
-On the a1975 simulation, the reconstructed polar angle of Spyral came out as $180^\circ - \theta_\mathrm{true}$ and
-the field sign of the fitters had to be $+1$ for that simulation and $-1$ for the data; the sign belongs to the pair of
-simulation field and fitter, not to ``simulation'' as such. Matching reconstructed angles
-directly against truth without accounting for this gives zero acceptance, which is how the effect shows up. Measure
-the relation between reconstructed and true angles on the simulation of each new set-up before using it.
+The sign belongs to the pair of simulation field and fitter, not to ``simulation'' as such. The a1975 D$_2$
+simulations generated at $-28.5$~kG fit at $-2.85$~T, the same sign as the data, and the fitted polar angle then
+compares directly with the true one. An older a1975 simulation instead gave a raw Spyral polar angle of
+$180^\circ - \theta_\mathrm{true}$ and was fitted with sign $+1$; applying that rule to the $-28.5$~kG (d,p) simulation
+moved the reconstructed angles and produced a false structure in the efficiency against $\theta_\mathrm{cm}$, with no
+error at run time. Measure the relation between reconstructed and true angles on the simulation of each new set-up
+before using it.
 
 \section{Units}
 

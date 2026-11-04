@@ -818,10 +818,9 @@ PID-selected; it rejects 10000 and 150000 but does not fix 35000 to two digits.
   \item \textbf{z frame.} The PSA writes hit $z$ measured from the pad plane; the fitters convert
     with $z_\mathrm{lab} = \mathrm{ZPadPlane} - z_\mathrm{digi}$ (the comments in
     \url{AtReconstruction/AtPulseAnalyzer/AtPSA.cxx} and \url{AtParameter/AtDigiPar.h}). With
-    \code{ZPadPlane} = 1000~mm this is $z_\mathrm{lab} = 1000 - z_\mathrm{digi}$. The header of
-    \code{run\_reco\_C16dt.C} states that a fit of the simulation output needs \code{bFieldSign = +1}
-    where the data uses $-1$, and that the reconstructed polar angle is $180^\circ - \theta_\mathrm{true}$;
-    account for this when matching to truth.
+    \code{ZPadPlane} = 1000~mm this is $z_\mathrm{lab} = 1000 - z_\mathrm{digi}$. The fit sign and the
+    relation to the true polar angle depend on the generated field; measure them for each simulation
+    (Table~\ref{tab:fit-bsign}).
   \item \textbf{Gain must be matched to the data.} The digitized gain sets how many pads cross the
     PSA threshold and so the number of hits per track that pattern recognition and PID see. Match
     hits per track to the data before trusting an acceptance (see the scan above); do not inherit a

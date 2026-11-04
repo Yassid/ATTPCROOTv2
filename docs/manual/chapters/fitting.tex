@@ -126,10 +126,11 @@ default is $-1$, which disables the conversion, and all macros set 1000). The fi
 positions are returned in this lab frame. The vertex end of a beam-induced track is the end with the highest
 $z_\mathrm{digi}$, which is the lowest $z_\mathrm{lab}$.
 
-\paragraph{Simulation handedness.} The digitisation reverses the drift coordinate (\code{AtClusterize}), so a simulated
-track reconstructed by the same chain comes out mirrored in $z$ relative to Monte Carlo truth. The header of
-\url{macro/Simulation/ATTPC/16C_dt/run_reco_C16dt.C} records the consequence for analysis: the reconstructed polar angle
-of a simulated track is $180^\circ$ minus the true one.
+\paragraph{Simulated tracks.} A simulated track is reconstructed in the same digitisation frame as the data, so the
+conversion above applies to it unchanged. With a fit sign that matches the generated field, the fitted polar angle
+compares directly with the Monte Carlo angle (\url{macro/Simulation/ATTPC/16C_dt/sim_fit_sign_check.C} prints both
+$\theta-\theta_\mathrm{true}$ and $180^\circ-\theta-\theta_\mathrm{true}$, so that the relation can be measured for a new
+simulation). An earlier a1975 simulation gave a different result, described in Chapter~\ref{ch:conventions}.
 
 \paragraph{Field sign.} \code{AtDigiPar} carries only the magnitude of the field. Both fitters take a signed field, and
 the sign selects the helix handedness the fit can follow. With the wrong sign a fit does not fail loudly; it converges
@@ -152,6 +153,10 @@ script. \\
 \url{macro/Simulation/ATTPC/46Ar_3Hed/fitGenfitter_Ar46.C}: at $+2.85$\,T backward tracks at
 $\theta_\mathrm{lab}=110$--$125^\circ$ collapse to 1\,\% of the true energy and 94.1\,\% of truth tracks are fitted,
 against 98.2\,\% at $-2.85$\,T. That simulation is generated with a Geant4 field of $-28.5$\,kG. \\
+a1975 D$_2$ simulations, \code{AtGenfitter} & $-2.85$\,T & \url{macro/Simulation/ATTPC/16C_dt/sim_fit_sign_check.C}, 1500
+events at gain 100\,000: 97.7\,\% of tritons fitted at $-2.85$\,T against 88.3\,\% at $+2.85$\,T; proton
+$\ln(\mathrm{KE}/\mathrm{KE}_\mathrm{true})$ at the 16th and 84th percentiles $-0.015$ and $+0.010$ against $-0.089$ and
+$+0.040$. Generated with a Geant4 field of $-28.5$\,kG. \\
 \code{AtMCQMinimization}, a1975 run\_0106 & \code{SetBFieldSign(-1)} &
 \url{macro/tests/AT-TPC/MCQMinimizationOnData.C}. \\
 \bottomrule
@@ -1116,8 +1121,8 @@ Analysis macros then read \code{GetKinematicsXtr()} for GENFIT output (for examp
   frame: $z_\mathrm{fit} + z_\mathrm{cluster} = z_\mathrm{pad}$.
 \item \textbf{Field sign.} The sign is a property of the setup; forward tracks hide a wrong sign. See
   Table~\ref{tab:fit-bsign}.
-\item \textbf{Simulated polar angles.} After digitisation the reconstructed polar angle of a simulated track is
-  $180^\circ$ minus the true one.
+\item \textbf{Simulated polar angles.} With a fit sign that matches the generated field, the fitted polar angle of a
+  simulated track compares directly with the true one. Measure this for each simulation.
 \item \textbf{z sort near $90^\circ$.} Sorting clusters by $z$ scrambles tracks close to $90^\circ$;
   \code{SetUseClusterOrder} is the alternative but lost fits in the tests made so far and is not adopted.
 \item \textbf{Fallback mixes models.} With \code{SetMatEffectsFallback(kTRUE)} (the default) a material-effects
