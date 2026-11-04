@@ -53,7 +53,7 @@ echo "--- $NC PID caches present"
 
 # ---- stage 2: re-measure the per-run gain on THIS reco
 echo "--- stage 2: gain match -> $GAINCSV"
-root -b -q "measure_gain_C15d.C(0.30,0.60,\"$RECO/\",\"$GAINCSV\",200,200,0,0,0,0,-1,\"plots_hdb/\")" 2>&1 \
+root -b -q "measure_gain_C15d.C(0.30,0.60,\"$RECO/\",\"$GAINCSV\",200,200,0,0,0,0,-1,\"plots_mf/\")" 2>&1 \
   | grep -vE '^Warning|^Processing|libGL' | tail -25
 [ -s "$GAINCSV" ] || { echo "ERROR: $GAINCSV not written"; exit 1; }
 
@@ -77,5 +77,5 @@ then fit ONLY the gated tracks:
       ./fit_batch.sh <nparallel> pid/deuteron_C15d.json
 
 ⚠ open_gate_draw.sh DEFAULTS to pid/points_C15d.root (the OLD TriplClust plane). Pass the path above, or the
-  gate will be drawn on the TriplClust reconstruction and applied to the HDBSCAN one.
+  gate will be drawn on the AtPSAMax plane and applied to the MultiFit one.
 MSG
