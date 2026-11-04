@@ -52,7 +52,9 @@ IC_HI=1225
 # against a MIRRORED curve -- the drawer's own comment says "if the selection follows the DASHED
 # curve, the flipPolar argument is set the wrong way round", and it did.
 FLIP_POLAR=true
-EBEAM=206
+EBEAM=198   # ATTPCROOT/GENFIT scale, from the a2091 proton runs. 206 was inherited and is
+            # ~8 MeV high; the overlay is what identifies which band is which, so it matters.
+            # Spyral's 195 belongs to Spyral -- the gap is a fitter systematic, not a calibration.
 XMAX=45.0
 YMAX=1.6
 

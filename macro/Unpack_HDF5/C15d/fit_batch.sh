@@ -71,6 +71,13 @@ case "$SPECIES" in
 esac
 
 RECO_DIR="${C15D_RECO:-/home/yassid/C15d_reco}"
+C15D_IC_DIR="${C15D_IC:-/home/yassid/C15d_ic}"
+# ★ THE GATING STEP MUST USE THE SAME GAIN TABLE THE PLANE WAS DRAWN ON. gate_events_C15d.C
+# defaults to gainmatch_C15d.csv, measured on the AtPSAMax reco, and fit_batch used to pass no
+# table at all. The two tables agree to a median 0.996 but runs 13-16 differ by ~25 %
+# (0.544 -> 0.680), so those runs would be gated on a different dE/dx scale than the gate was
+# drawn on. Override with C15D_GAIN when gating a plane built from another reco.
+GAIN_TABLE="${C15D_GAIN:-gainmatch_mf_C15d.csv}"
 FIT_DIR="${C15D_FIT:-/home/yassid/C15d_fit}"
 LOG_DIR="${C15D_LOGS:-/home/yassid/C15d_logs}"
 MIN_FREE_GB="${MIN_FREE_GB:-40}"
@@ -121,7 +128,7 @@ do_fit() {
       local gated="$gdir/${run}_reco.root"
       if [[ ! -s "$gated" ]]; then
          mkdir -p "$gdir"
-         root -b -q "$HERE/pid/gate_events_C15d.C(\"$run\",\"$GATE\",\"$RECO_DIR/\",\"$gdir/\")" \
+         root -b -q "$HERE/pid/gate_events_C15d.C(\"$run\",\"$GATE\",\"$RECO_DIR/\",\"$gdir/\",\"$C15D_IC_DIR/\",1045,1225,\"$GAIN_TABLE\")" \
             >"$LOG_DIR/${run}_gate_${SPECIES}.log" 2>&1 || true
       fi
       if [[ ! -s "$gated" ]]; then
