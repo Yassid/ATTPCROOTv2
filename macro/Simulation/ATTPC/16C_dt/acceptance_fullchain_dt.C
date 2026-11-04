@@ -48,7 +48,7 @@ void acceptance_fullchain_dt(TString recoDir, TString fitDir, TString gateFile, 
          double ke = -1, th = 0, z = 0;
          for (int j = 0; j < mc->GetEntriesFast(); ++j) {
             auto *m = (AtMCTrack *)mc->At(j);
-            if (m && m->GetPdgCode() == 1000010030) { ke = (m->GetEnergy() - m->GetMass()) * 1000.; th = std::acos(m->GetPz() / m->GetP()); z = m->GetStartZ() * 10; break; }
+            if (m && m->GetPdgCode() == 1000010030) { const double pm = m->GetP() * 1000.; ke = std::sqrt(pm * pm + mt * mt) - mt; th = std::acos(m->GetPz() / m->GetP()); z = m->GetStartZ() * 10; break; }
          }
          if (ke < 0 || z + zOffset < vzLo || z + zOffset > vzHi) continue;
          const double cm = afc::thetaCm(mC, md, mt, Ebeam, th, ke);

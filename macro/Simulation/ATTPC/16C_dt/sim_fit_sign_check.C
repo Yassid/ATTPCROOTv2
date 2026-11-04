@@ -1,12 +1,12 @@
 /// @file sim_fit_sign_check.C
 /// @brief Compares genfit output on the a1975 D2 simulation with MC truth, one line per file: tracks fitted, median and spread of ln(KE/true) at the vertex,
-///        theta - true and (180 - theta) - true, vz - true z. Truth-matched by species on the hits. Used to settle the field sign the sim needs.
-///   root -l -b -q 'sim_fit_sign_check.C("fit.root","reco.root","sim.root",1000010030,3,1)'
+///        theta - true and (180 - theta) - true, vz - true z. Truth-matched by species on the hits. True KE comes from |p| and the mass argument, since AtMCTrack::GetMass does not know the ions. Used to settle the field sign the sim needs.
+///   root -l -b -q 'sim_fit_sign_check.C("fit.root","reco.root","sim.root",1000010030,3,1,2808.921)'
 namespace sfc {
 double pct(std::vector<double> &v, double f) { if (v.empty()) return 0; std::sort(v.begin(), v.end()); return v[std::min(v.size() - 1, size_t(f * v.size()))]; }
 void line(const char *n, std::vector<double> &v) { printf("   %-22s median %+8.3f   p16 %+8.3f   p84 %+8.3f\n", n, pct(v, .5), pct(v, .16), pct(v, .84)); }
 }
-void sim_fit_sign_check(TString fit, TString reco, TString sim, int pdg, int A, int Z)
+void sim_fit_sign_check(TString fit, TString reco, TString sim, int pdg, int A, int Z, double mass)
 {
    gSystem->Load("libAtReconstruction.so"); gSystem->Load("libAtSimulationData.so");
    FairLogger::GetLogger()->SetLogScreenLevel("ERROR"); gErrorIgnoreLevel = kFatal;
@@ -27,7 +27,7 @@ void sim_fit_sign_check(TString fit, TString reco, TString sim, int pdg, int A, 
       double tke = -1, tth = 0, tz = 0;
       for (int j = 0; j < mc->GetEntriesFast(); ++j) {
          auto *m = (AtMCTrack *)mc->At(j);
-         if (m && m->GetPdgCode() == pdg) { tke = m->GetEnergy() * 1000. - m->GetMass() * 1000.; tth = std::acos(m->GetPz() / m->GetP()) * 57.29578; tz = m->GetStartZ() * 10; break; }
+         if (m && m->GetPdgCode() == pdg) { const double pm = m->GetP() * 1000.; tke = std::sqrt(pm * pm + mass * mass) - mass; tth = std::acos(m->GetPz() / m->GetP()) * 57.29578; tz = m->GetStartZ() * 10; break; }
       }
       if (tke < 0 || !pa->GetEntries()) continue;
       std::set<int> truthIds;

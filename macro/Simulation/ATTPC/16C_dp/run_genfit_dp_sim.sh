@@ -2,18 +2,17 @@
 # genfit the a1975 16C(d,p)17C SIMULATION with the SAME fitter configuration as the adopted DATA
 # production (gf_dp_find805), so the resolution it yields describes that production.
 #
-# Every argument below is copied from prod_dp_findscan.sh's find805 invocation. THREE differ, and
-# only three:
+# Every argument below is copied from prod_dp_findscan.sh's find805 invocation. TWO differ, and
+# only two:
 #
-#   1. *** bField +2.85, NOT -2.85 ***
-#      The simulation reverses drift-z against the experiment, so the sense of rotation is
-#      opposite. Fitting sim with the data's sign makes anything that infers direction from
-#      curvature reject most tracks, and the result then measures the sign error rather than the
-#      detector. Consequence to expect downstream: the reconstructed polar angle comes back as
-#      180 - true. Do not "fix" that -- it is a property of digitisation.
+#   *** bField is -2.85, the same as the data. It was +2.85 until 2026-11-04, which was WRONG. ***
+#      The sim is generated at -28.5 kG, so the fit needs -2.85 (measured 2026-11-03, proton KE
+#      p16/p84 -0.015/+0.010 against -0.089/+0.040 at +2.85). Reconstructed theta follows the true
+#      angle directly. gs_s4001_genfitter_p.root ran at +2.85. Its .done marker makes this script
+#      skip it, so write a new reco or output name to refit.
 #      See reference_sim_z_handedness.
 #
-#   2. *** NO PID GATE ***
+#   1. *** NO PID GATE ***
 #      The data gate (pid/proton_d2_dv1104.json) is drawn on the DATA's Brho/dE-dx plane; the
 #      simulation has no ion chamber and its plane is not the same object. The sim is pure g.s.
 #      protons by construction, so the gate's job -- species selection -- is already done.
@@ -24,7 +23,7 @@
 #      fitGenfitter treats an empty gate as "fit everything" SILENTLY -- for data that is a trap
 #      (prod_dp_*.sh refuse to start without a gate); here it is the intent, stated out loud.
 #
-#   3. Input/output paths.
+#   2. Input/output paths.
 #
 # Unchanged from find805: matEffects ON, CATIMA eloss + MSC + straggling ON with
 # proton_D2_300torr.txt, measSigma 4.0, theta 10-170, backwardSeedFix ON, pdg 2212,
@@ -52,7 +51,7 @@ OUT="${IODIR}${TAG}_genfitter_p.root"
 LOG="${IODIR}${TAG}_genfit.log"
 
 # find805 settings
-BFIELD=2.85          # SIM SIGN -- see the header
+BFIELD=-2.85         # same as the data -- see the header
 PAR=ATTPC.a1975_deuterium_dv1104.par
 TAB=proton_D2_300torr.txt
 GEO=ATTPC_D300torr_v2_geomanager.root
@@ -62,7 +61,7 @@ C2MAX=0.1; STEP=5.0; MINPCT=5.0; MAXPCT=80.0; MINCL=8; FINDMODE=1
 
 if [ -f "${OUT}.done" ]; then echo "[$(date +%H:%M:%S)] already done: $OUT"; exit 0; fi
 
-echo "[$(date +%H:%M:%S)] genfit  $BASE   bField=+$BFIELD (SIM)  NO PID GATE  FIND ${MAXPCT}->${MINPCT}%"
+echo "[$(date +%H:%M:%S)] genfit  $BASE   bField=$BFIELD  NO PID GATE  FIND ${MAXPCT}->${MINPCT}%"
 echo "                 -> $OUT"
 cd "$D2"
 # ROOT's exit code is not a verdict -- judge on the readback. See run_gs_dp.sh.
