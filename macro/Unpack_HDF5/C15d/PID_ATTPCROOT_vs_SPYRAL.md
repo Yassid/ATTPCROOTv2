@@ -132,3 +132,88 @@ root -b -q $S/pid_plot_triton.C       # the triton zoom with loci
   trace integral narrowed the bands 3-7x; the robust IQR showed it changes nothing);
 - clipping a histogram range at 3 or 5 when sqrt_dEdx runs to 60 piles everything into overflow
   and makes the distribution look ten times smaller than it is.
+
+---
+
+# Overnight follow-up, 2026-11-04 night
+
+Built a **rail-guided ridge follower** (`~/Data/C15d_pidstudy/ridge.C`) because every earlier
+measurement was limited by per-slice peak finding. Free-running continuity DRIFTS -- seeded on the
+triton at 16.08 it slid onto the deuteron at 9.5-11.2 and happily reported 24 bins of the wrong
+band. The fix is to search near the band's own **Bethe locus**, whose normalisation is fixed once
+from the proton: the locus is a rail the search cannot leave, so a lost bin is dropped instead of
+dragging the chain onto a neighbour.
+
+## The planes are equivalent — now with an error bar
+
+```
+deuteron sigma/mu   ATTPCROOT 0.0683   Spyral 0.0801   difference -0.0118 +- 0.0092  (1.3 sigma)
+peak/background     p 4.18 / 3.00      d 3.64 / 3.84      t 1.08 / 1.09
+Brho distribution   medians 0.461 vs 0.403, quartiles within a few percent
+IC window           harmonising [1045,1225] vs [1000,1250] moves nothing material
+```
+
+The deuteron width difference is **1.3 sigma, i.e. not significant**, the intensity-independent
+S/B is equal band for band, and the two codes have the same Brho acceptance. Combined with the
+earlier results (gain matching equivalent, trace integral a pure rescale, 152 mm already the best
+integration radius), **there is no measurable PID-quality difference between the two planes.**
+The visual impression is 1.9x statistics plus a 1.726x scale and a 90-vs-45 axis range.
+
+## ★ THE FOURTH BAND IS 4He — and it is the strongest band in the plane
+
+Identified by asking which (A,z) rail each band follows, with the dE/dx scale calibrated once from
+the proton so every candidate locus is fully predicted:
+
+```
+ATTPCROOT   species  mu@Brho 0.60   bins   3-sigma   <S/B>
+            p             6.15        27      18      2.38
+            d            10.99        27      20      1.19
+            t            15.33        14       6      1.55
+            3He          17.28        18       5      0.64
+            4He          21.98        59      56      5.55    <- strongest of all
+```
+
+Confirmed by SHAPE, not just position -- t, 3He and 4He rails differ in Brho dependence, so
+following the band over 40 bins discriminates:
+
+```
+mean |residual| over 40 Brho bins:   t 35.2 %   3He 20.7 %   4He 5.7 %   6He 32.4 %
+```
+
+15C(d,alpha)13B is a real channel and alphas have high dE/dx, so this is physical. See
+`~/C15d_bands_identified.png`.
+
+## ★★★ THE SAVED DEUTERON GATE IS MORE TRITON THAN DEUTERON
+
+The consequence of having the bands identified. Counting tracks inside `pid/deuteron_C15d.json`
+within +-2 sigma of each rail (the d and t rails sit ~39 % apart in sqrt(dE/dx) at every Brho, so
+they cannot be confused -- only 0.1 % of tracks are ambiguous):
+
+```
+inside the saved gate (IC 1045-1225, single pulse): 450,931 tracks
+  deuteron rail only   169,948   37.7 %
+  TRITON   rail only   193,058   42.8 %   <-
+  alpha    rail only     5,315    1.2 %
+  proton   rail only       855    0.2 %
+  ambiguous                636    0.1 %
+  background            81,119   18.0 %
+  -> deuteron purity 46.0 %
+```
+
+`~/C15d_gate_vs_bands.png` shows the gate polygon enclosing both the deuteron and triton rails.
+**Every yield and spectrum drawn through this gate is a d+t mixture**, and the triton tracks are
+fitted under a deuteron mass hypothesis.
+
+A physics-based alternative following the deuteron rail at +-2.5 sigma is written to
+`pid/deuteron_rail_proposal.json` (the hand-drawn gate is untouched):
+
+```
+                      tracks    deuteron   triton   background
+saved gate           450,931     37.7 %    42.8 %     18.0 %
+rail proposal        175,095     76.8 %     0.8 %     22.5 %
+```
+
+Twice the purity, triton contamination essentially gone, at 39 % of the statistics (~134k real
+deuterons against ~170k, so most of the loss is contamination rather than signal). It is a
+PROPOSAL, not a replacement -- a hand-drawn gate can follow the band's real shape better than a
+constant-width rail, and the 22.5 % background inside it says the rail is not the last word.
