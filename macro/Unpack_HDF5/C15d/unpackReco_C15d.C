@@ -55,7 +55,12 @@ void unpackReco_C15d(TString fileName = "run_0017", Long64_t nEvents = 1000, Boo
                      /// experiment's field map, so it is worth testing with it off.
                      TString psaType = "max",     // "max" | "multifit"
                      TString praType = "tc",      // "tc"  | "hdbscan"
-                     Bool_t doSC = kTRUE)
+                     Bool_t doSC = kTRUE,
+                     /// ★ APPENDED LAST so every existing positional caller keeps working.
+                     /// Let MultiFit float the pulse peaking time. OFF reproduces the production.
+                     /// ON makes AtHit::GetTraceIntegral() an independent measurement -- with tau
+                     /// fixed it is exactly 2.9618x the amplitude (measured, rms/mean 0.0000).
+                     Bool_t psaFloatTau = kFALSE)
 {
    gSystem->Load("libAtReconstruction.so");
 
@@ -139,8 +144,17 @@ void unpackReco_C15d(TString fileName = "run_0017", Long64_t nEvents = 1000, Boo
    if (psaType == "multifit") {
       auto p = new AtPSAMultiFit();
       p->SetThreshold(psaThreshold);
+      /// ★ floatTau makes AtHit::GetTraceIntegral() a REAL measurement. With the peaking time
+      /// fixed (the default) MultiFit sets Q = A*fRespIntegral*tau and amp = A*fRespPeakVal, so
+      /// the "trace integral" is EXACTLY a constant multiple of the amplitude -- measured on
+      /// run_0016, 2.9618 for every one of 57,151 hits, rms/mean 0.0000. It therefore carries no
+      /// width information and AtSpyralPID::SetUseTraceIntegral cannot do anything. Spyral
+      /// integrates the real trace, which is why its dE/dx behaves differently at high ionisation.
+      if (psaFloatTau)
+         p->SetFloatPeakingTime(kTRUE);
       psa = p;
-      std::cout << "  PSA : AtPSAMultiFit (thr " << psaThreshold << ")\n";
+      std::cout << "  PSA : AtPSAMultiFit (thr " << psaThreshold
+                << (psaFloatTau ? ", peaking time FLOATED)\n" : ")\n");
    } else {
       auto p = new AtPSAMax();
       p->SetThreshold(psaThreshold);

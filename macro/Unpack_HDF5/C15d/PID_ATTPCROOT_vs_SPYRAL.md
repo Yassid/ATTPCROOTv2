@@ -217,3 +217,90 @@ Twice the purity, triton contamination essentially gone, at 39 % of the statisti
 deuterons against ~170k, so most of the loss is contamination rather than signal). It is a
 PROPOSAL, not a replacement -- a hand-drawn gate can follow the band's real shape better than a
 constant-width rail, and the 22.5 % background inside it says the rail is not the last word.
+
+---
+
+# You were right: Spyral DOES separate better. Here is why. (2026-11-05)
+
+My earlier "no measurable difference" was measured the wrong way -- per-Brho-slice fits, averaged.
+Redone with the **a1975 (d,p) projection** (`pid_width_plot.C`): plot
+
+    ln( sqrt(dE/dx) * Brho )
+
+For a particle of charge z, dE/dx ~ z^2/beta^2 ~ z^2 m^2/p^2 and p = z*Brho*c, so
+**dE/dx ~ m^2/Brho^2 and sqrt(dE/dx)*Brho ~ m with the charge cancelling exactly.** The whole
+plane collapses into one spectrum, every band becomes a peak, all the statistics are used at once,
+and the peak spacings are known constants. That is what my slice-averaging was washing out.
+
+## The measurement
+
+Local maxima, spacings quoted from the dominant (deuteron) peak:
+
+```
+                        p          t        3He       4He
+expected (full Bethe) -0.578     +0.330    +0.455    +0.693
+ATTPCROOT             -0.590     +0.410              +0.700
+Spyral                -0.560     +0.530              +0.900
+```
+
+**The 4He spacing is a parameter-free check**: in this variable it must be exactly
+ln(4/2) = +0.693 at EVERY Brho, because the charge and mass dependencies cancel. ATTPCROOT gives
++0.700 (1 % off). **Spyral gives +0.900 -- 30 % too wide.**
+
+So the bands really are further apart in Spyral, by 20-30 % in ln. Confirmed track by track on the
+433,453 tracks both codes reconstruct from the same events:
+
+```
+region        ln(ATTPCROOT)    ln(Spyral)     stretch
+p                 -0.605         -0.582        x0.96
+d                 -0.006         -0.010        x1.00
+t                 +0.402         +0.482        x1.20
+alpha             +0.698         +0.867        x1.24
+```
+
+Spyral's dE/dx is **non-linear**: flat at the deuteron, expanding above it. The deuteron peak WIDTH
+is identical on those same tracks (sigma 0.0946 vs 0.0948), so this is extra SEPARATION, not better
+resolution -- and it is why the plane looks better.
+
+## ★ The cause: ATTPCROOT's "trace integral" is not an integral
+
+`AtSpyralPID` can use `AtHit::GetTraceIntegral()` instead of the peak amplitude, and the comment
+says that matches Spyral's scale. It cannot, in this configuration. `AtPSAMultiFit` sets
+
+```cpp
+double amp = A * fRespPeakVal;            // peak amplitude
+double Q   = A * fRespIntegral * tauTB;   // "integral"
+hit->SetTraceIntegral(Q);
+```
+
+with `tauTB` the peaking time, which is **fixed** unless `fFloatTau` or `fFitChi2Cut` is set --
+and `AtPSAMultiFit{}` defaults `fFloatTau{false}`, which the C15d macro never changed. So Q is a
+constant multiple of amp. Measured on 57,151 hits of run_0016:
+
+```
+integral/peak :  min 2.9618   median 2.9618   max 2.9618   rms/mean 0.0000
+                 and 2.9618 in every charge quintile from <q> 87 to <q> 3225
+```
+
+**Exactly constant.** ATTPCROOT's dE/dx is therefore a pure AMPLITUDE measurement and
+`SetUseTraceIntegral` is a no-op up to an overall scale -- which is why switching it on changes
+nothing at all (the ln spectrum is byte-identical once normalised). Spyral integrates the real
+trace, so its dE/dx carries the pulse WIDTH as well, and the width grows with the deposit; that is
+the natural candidate for the non-linear expansion at high ionisation.
+
+`unpackReco_C15d.C` now takes **`psaFloatTau`** (appended LAST so every positional caller keeps
+working; default off = the production). With it on, `tauTB` floats per pulse and the trace integral
+becomes a genuine independent measurement.
+
+## Which code is right?
+
+On the 4He parameter-free check, **ATTPCROOT is linear in the true dE/dx and Spyral is not.**
+That has opposite implications depending on the use:
+
+- **for GATING, Spyral's stretch is an advantage** -- the bands are further apart at equal width,
+  so a gate is easier to draw and leaks less;
+- **for anything quantitative in dE/dx**, ATTPCROOT is the one on a linear scale, and Spyral's
+  high-ionisation response is compressed into a 30 % over-spread.
+
+Neither is "better" outright, and the choice should be made deliberately rather than by which plot
+looks nicer.
