@@ -304,3 +304,66 @@ That has opposite implications depending on the use:
 
 Neither is "better" outright, and the choice should be made deliberately rather than by which plot
 looks nicer.
+
+## ★★★ CONFIRMED: the cause is pulse integration, and our integral was broken
+
+`AtPSAMultiFit` computes the fitted peaking time and then does not use it for the charge:
+
+```cpp
+double tauUsed = (floatTau && good) ? tf.GetParameter(2 * n) : tauTB;   // fitted width
+double peakTB  = t0i + fRespPeakRedT * tauUsed;                         // uses it
+double amp     = A * fRespPeakVal;
+double Q       = A * fRespIntegral * tauTB;    // <-- NOMINAL tau, not tauUsed
+```
+
+The integral of the response scales with its WIDTH, so building Q from the nominal width while the
+fit measured another one makes Q exactly proportional to amp -- **2.9618 for every one of 57,151
+hits, rms/mean 0.0000, identical in every charge quintile, and unchanged by
+`SetFloatPeakingTime`.** Fixed to `tauUsed`; with `floatTau` off, `tauUsed == tauTB`, so the
+default path and the 102-run production are bit-identical.
+
+With the fix and the peaking time floated the integral becomes a real measurement
+(integral/peak median 3.57, q05 2.97, q95 6.73, rms/mean 0.385) -- and it reproduces Spyral:
+
+```
+region     ATTPCROOT peak -> real integral     Spyral vs ATTPCROOT
+p                   x0.92                            x0.96
+d                   (reference)                      x1.00
+t                   x1.27                            x1.20
+alpha               x1.25                            x1.24
+```
+
+**That closes the question: Spyral separates better because it integrates the pulse, where
+ATTPCROOT uses the peak amplitude.** Resolving power on the same tracks:
+
+```
+                   deuteron sigma   triton sigma   separation   R = sep/(s_d+s_t)
+PEAK (production)      0.1077          0.0644         0.428          2.49
+REAL INTEGRAL          0.1105          0.0229         0.576          4.31
+```
+
+The triton sigma of 0.0229 looks too small and may be a fit artefact; using the peak's triton width
+for both still gives R = 3.29. So **+32 % to +73 % in d-t resolving power**, deuteron width
+unchanged. The reconstruction itself barely moves (2,743 -> 2,732 tracks, 153.6 -> 156.1
+hits/track), so this is two charge definitions on the same tracks, not two reconstructions.
+Cost: **+31 % CPU** (1,478 s vs 1,132 s for 12,000 events of run_0016).
+
+### But the extra separation is not physical
+
+On the parameter-free 4He check (which must be exactly ln(4/2) = +0.693 at every Brho), the PEAK
+is the linear measure and the INTEGRAL over-spreads:
+
+```
+                 expected   peak        integral / Spyral
+4He - d           +0.693    +0.66..0.70    +0.83..0.90
+```
+
+So pulse integration is **non-linear in the true dE/dx at high ionisation**. The trade is explicit:
+
+- **gating** -- the integral is clearly better: 30-70 % more resolving power at the same width,
+  which is exactly what makes the Spyral plane look cleaner;
+- **quantitative dE/dx** -- the peak is the one on a linear scale.
+
+Recommended next step: re-reco with `psaFloatTau = kTRUE` and gate on the integral plane, keeping
+the peak plane for anything that uses dE/dx as a number. That is a 104-run pass at +31 % CPU, so
+~7 h; worth doing deliberately rather than by default.
