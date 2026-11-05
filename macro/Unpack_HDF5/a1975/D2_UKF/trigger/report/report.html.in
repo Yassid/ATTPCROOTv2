@@ -1,0 +1,108 @@
+<title>16C(d,p) Mesh Trigger</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Serif:wght@500&display=swap">
+<style>
+/* Layout: one reading column, figures on white plates so the plots stay legible in both themes. */
+:root { --bg:#f5f6f7; --fg:#15181c; --muted:#555c66; --line:#d5d9de; --plate:#ffffff; --accent:#1f62b5; --note:#fff4e8; --note-line:#c9601f;
+  --display:"IBM Plex Serif",Georgia,serif; --body:"IBM Plex Sans",system-ui,sans-serif; --data:"IBM Plex Mono",ui-monospace,monospace; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#15181c; --fg:#e9ebee; --muted:#a4acb6; --line:#333a43; --plate:#ffffff; --accent:#7db0f0; --note:#2c2219; --note-line:#e08a4c; color-scheme:dark } }
+:root[data-theme="dark"] { --bg:#15181c; --fg:#e9ebee; --muted:#a4acb6; --line:#333a43; --plate:#ffffff; --accent:#7db0f0; --note:#2c2219; --note-line:#e08a4c; color-scheme:dark }
+body { background:var(--bg); color:var(--fg); font:16px/1.55 var(--body); }
+main { max-width:860px; margin:0 auto; padding-block:40px 64px; padding-left:max(16px,env(safe-area-inset-left,0px)); padding-right:max(16px,env(safe-area-inset-right,0px)); display:grid; gap:28px; }
+main > * { min-width:0; }
+header { display:grid; gap:6px; }
+h1 { font:500 2.1rem/1.15 var(--display); margin:0; text-wrap:balance; }
+h2 { font:500 1.35rem/1.25 var(--display); margin:16px 0 0; text-wrap:balance; }
+p { margin:0; max-width:68ch; }
+section { display:grid; gap:12px; }
+section > * { min-width:0; }
+.meta { color:var(--muted); font-size:.92rem; }
+.lead { font-size:1.12rem; }
+ul { margin:0; padding-left:20px; display:grid; gap:6px; max-width:68ch; }
+figure { margin:0; display:grid; gap:8px; }
+figure img { display:block; width:100%; height:auto; background:var(--plate); border-radius:4px; }
+figcaption { color:var(--muted); font-size:.92rem; max-width:68ch; }
+.note { background:var(--note); padding:14px 16px; border-radius:4px; display:grid; gap:8px; }
+.note h2 { margin:0; font-size:1.1rem; color:var(--note-line); }
+.scroll { overflow-x:auto; }
+table { border-collapse:collapse; font-size:.93rem; width:100%; }
+th, td { text-align:left; padding:6px 12px 6px 0; border-bottom:1px solid var(--line); vertical-align:top; }
+th { color:var(--muted); font-weight:600; font-size:.85rem; white-space:nowrap; }
+td.n { font:.9rem var(--data); font-variant-numeric:tabular-nums; white-space:nowrap; }
+code { font:.88em var(--data); overflow-wrap:anywhere; }
+b.tag { font-weight:600; white-space:nowrap; }
+</style>
+<main>
+<header>
+<h1><sup>16</sup>C(d,p) Mesh Trigger</h1>
+<p class="meta">a1975, bound states of <sup>17</sup>C. 5 November 2026. Nothing here is adopted.</p>
+</header>
+
+<p class="lead">The mesh trigger explains the vertex band and much of the bound-state shape failure. Events whose residual leaves the beam hole give an angular distribution consistent with l=2 over θ<sub>cm</sub> 25-40°. That is three bins, the cut was chosen after seeing the fit, and the absolute scale is not settled.</p>
+
+<div class="scroll"><table>
+<tr><th>Status</th><th>Statement</th></tr>
+<tr><td><b class="tag">Measured</b></td><td>Every one of the 8222 gated backward tracks has a mesh crossing. The fraction firing right after the IC follows the predicted residual radius from .05 to .92 at vz &lt; 900 mm. Backward tracks show no large timing shift.</td></tr>
+<tr><td><b class="tag">Supported</b></td><td>At r_res ≥ 28 mm the l=2 fit has χ²/2 = 0.3 and l=0 has 37.5/2, over three bins with 21, 67 and 72 counts.</td></tr>
+<tr><td><b class="tag">Inferred</b></td><td>The trigger logic: a mesh threshold fired by the residual or by the proton alone, in a window opened by the IC. The DAQ configuration has not been checked.</td></tr>
+<tr><td><b class="tag">Open</b></td><td>Absolute efficiency, the 40-45° bin, the 22 % of triggers with no mesh pulse, and every other channel.</td></tr>
+</table></div>
+
+<div class="note">
+<h2>Two corrections to what I told you</h2>
+<p><b>The rise of the early-fire curve.</b> My table left out r_res 0-5 mm, where the fraction is .41. That bin holds two populations: .05 at vz &lt; 900 mm and .66 at vz ≥ 900 mm. Vertices that close to the pad plane drift within the 100-bin window (88 mm) whatever fires the mesh. With them excluded the curve rises steadily, as Figure 3 shows.</p>
+<p><b>The fit improvement.</b> I compared χ²/3 ≈ 84 with 0.3/2, which are different bins. On the same three bins the adopted distribution gives 21.9/2. Most of the 84 comes from the 20-25° bin, which the cut cannot reach, so removing that bin does more than the cut itself.</p>
+</div>
+
+<section>
+<h2>What the mesh does</h2>
+<p>The FRIB waveforms in the raw HDF5 files record the mesh for every event, in <code>frib/evt</code> column 1. ATTPCROOT never read them. The IC stays locked in the trace (bin 1145-1157, p16-p84) while the mesh time moves, so the IC sets the trace timing.</p>
+<figure><img src="{{fig1_traces}}" alt="IC and mesh waveforms for one front-vertex and one far-vertex bound event. The mesh rises right after the IC for the front vertex and about 320 bins later for the far vertex."><figcaption>Figure 1. Two bound events with θ<sub>cm</sub> 32-34°. At the front vertex the mesh rises right after the IC. At the far vertex it rises about 320 bins later and only just clears the edge.</figcaption></figure>
+<figure><img src="{{fig2_mesh_height}}" alt="Histogram of mesh peak height on a log scale: a noise peak below 60 ADC, almost nothing up to 300, and a sharp edge at 320 ADC."><figcaption>Figure 2. Mesh peak height for all 1,067,246 triggered events in 47 runs. The sharp edge near 320 ADC behaves like a threshold.</figcaption></figure>
+</section>
+
+<section>
+<h2>The residual fires it</h2>
+<p>r_res is the radius of the Z=6 residual at the pad plane, predicted from the proton's kinematics alone. When it clears the beam hole (r ≈ 20 mm), the mesh fires whatever the proton does. Otherwise the proton must fire it alone, which needs a tall pulse: near 90° or stopping in the gas.</p>
+<figure><img src="{{fig3_early_vs_rres}}" alt="Fraction of events with the mesh firing within 100 bins of the IC against predicted residual radius, rising from 0.05 at 2.5 mm to about 0.92 at 28 mm."><figcaption>Figure 3. 8222 gated backward tracks. The level stays near .9 above 26 mm and is .85(5) in the last bin. These are triggered events only, so this is not the trigger efficiency.</figcaption></figure>
+<figure><img src="{{fig4_timing_vs_vz}}" alt="Mesh crossing time relative to the GET track start against vertex position. Front vertices sit near the reaction-time line; vertices beyond 600 mm sit near zero."><figcaption>Figure 4. At the front the mesh fires at the reaction time, up to 900 bins before the proton's charge arrives. From vz 600 mm it fires with the proton, p16-p84 within about 44 bins (40 mm). Between 300 and 600 mm both populations are present, which is why the bars are so long.</figcaption></figure>
+<figure><img src="{{fig5_bound_cells}}" alt="Table of early-fire fraction for bound events by vertex range and centre-of-mass angle. Fractions are near 0.9 up to vz 500 mm and fall below 0.4 beyond it."><figcaption>Figure 5. Early-fire fraction for bound events (Ex -1.5 to 0.73 MeV), with counts. Beyond vz 600 mm hardly any event fires early, and very few bound events survive at 20-30°. Grey cells have fewer than 5 events.</figcaption></figure>
+</section>
+
+<section>
+<h2>Cross section without a trigger model</h2>
+<p>Cutting on r_res needs no model of the trigger. The cross section should stop changing once the residual is safely outside the hole.</p>
+<figure><img src="{{fig6_dsigma_vs_cut}}" alt="Cross section in four angle bins against the r_res cut. 35-40 degrees is flat near 3.1, 30-35 rises and levels near 5.8, 25-30 keeps rising to 9.2, 20-25 runs out of statistics by 22 mm."><figcaption>Figure 6. 35-40° is flat and 30-35° levels off near 5.8 mb/sr. <b>25-30° has not clearly levelled off</b>: it jumps from 5.94(1.01) to 9.24(2.15) between 26 and 28 mm. Points with fewer than 10 counts are not drawn.</figcaption></figure>
+<figure><img src="{{fig7_angdist}}" alt="Angular distribution on a log scale with the scaled l=2 curve, the adopted points, and the r_res 26 and 28 mm points. The 40-45 degree point lies about four times below the curve."><figcaption>Figure 7. Statistical errors. The curve is fitted only to the three filled r_res ≥ 28 mm points. The 40-45° point lies about 4× below it and I cannot explain that; if the same cause reaches 35-40°, this agreement is partly accidental.</figcaption></figure>
+<div class="scroll"><table>
+<tr><th>Same l=2 curve</th><th>25-30°</th><th>30-35°</th><th>35-40°</th><th>S</th><th>χ²/2, 25-40°</th></tr>
+<tr><td>Adopted, vz 200-400</td><td class="n">5.85(64)</td><td class="n">6.82(76)</td><td class="n">3.49(49)</td><td class="n">.194</td><td class="n">21.9</td></tr>
+<tr><td>Right sign + r280 gas, vz 200-400</td><td class="n">5.29(58)</td><td class="n">4.87(50)</td><td class="n">3.06(39)</td><td class="n">.174</td><td class="n">14.8</td></tr>
+<tr><td>r_res ≥ 26 mm</td><td class="n">5.94(1.01)</td><td class="n">5.21(58)</td><td class="n">3.01(35)</td><td class="n">.208</td><td class="n">6.4</td></tr>
+<tr><td>r_res ≥ 28 mm</td><td class="n">9.24(2.15)</td><td class="n">5.81(71)</td><td class="n">3.11(39)</td><td class="n">.251</td><td class="n">0.3</td></tr>
+</table></div>
+<p>The values are in mb/sr. At r_res ≥ 28 mm they barely change with beam frame, χ² cut, Ex window or smear (S .243-.254). The Spyral chain gives 25-30/35-40 = 2.70(78) and 30-35/35-40 = 2.45(45), against 3.02 and 1.72 from the curve. The two halves of the runs agree within errors.</p>
+<p>Pereira-Lopez factors on our curves, with no fit, predict 16.0, 9.2 and 5.3 mb/sr. Data over that is .58, .63 and .59: the same shape, with a scale near 0.6. The 22 % embedding loss is not applied.</p>
+</section>
+
+<section>
+<h2>What this does not establish</h2>
+<ul>
+<li><b>Absolute efficiency.</b> Reactions that failed to trigger are not recorded. I assume the efficiency is near 1 at large r_res; a lower plateau would raise the cross sections and could be part of the 0.6.</li>
+<li><b>Below 25°.</b> The cut cannot reach these angles. The two-path trigger model improves the fits (bound deviance 314 to 45 for 30 degrees of freedom), but vertex ranges still disagree at 53-82/18 where efficiency is near .1, so I would not quote modelled points there.</li>
+<li><b>The 22 % with no mesh pulse.</b> They are unexplained.</li>
+<li><b>Other channels.</b> (d,t), (p,d), (p,p) and (p,t) share this trigger and none of their acceptances include it. The unbound yields in <code>C17_dp_fits</code> are weighted by it too.</li>
+</ul>
+</section>
+
+<section>
+<h2>Questions for you</h2>
+<ul>
+<li>What was the trigger logic: mesh in coincidence with the IC, with what gate and threshold? Do the no-pulse triggers mean anything to you?</li>
+<li>Should (d,t) be checked next? A channel with a known cross section under the same D<sub>2</sub> trigger, such as (d,d) elastic, could also test the absolute efficiency.</li>
+<li>Should the r280 geometry and the fiducial cut become the (d,p) baseline? I would wait for the trigger logic first.</li>
+</ul>
+</section>
+
+<p class="meta">Tables: <code>/mnt/f/a1975/sim_rebuild/trig/</code>. Code: <code>macro/Unpack_HDF5/a1975/D2_UKF/trigger/</code> on <code>OpenKF-Claude</code>, with this report in <code>report/</code>. 1 FRIB bin = 80 ns = 0.88 mm of drift.</p>
+</main>
