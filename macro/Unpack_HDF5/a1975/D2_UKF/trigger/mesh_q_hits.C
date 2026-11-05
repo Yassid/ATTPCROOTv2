@@ -1,0 +1,10 @@
+/// @file mesh_q_hits.C
+/// Mesh pulse model from the pads. For listed events: all hits of AtEventH as charge against time bucket, convolved with a gaussian of several widths, peak height and its time. Output: tag ev peak(s10 s20 s30 s40 s60 s80) tpk(s40) sumq nhits.
+///   root -l -b -q 'mesh_q_hits.C("reco.root","events.txt","out.txt",tag)'
+void mesh_q_hits(TString reco, TString evs, TString out, int tag) { gSystem->Load("libAtReconstruction.so"); FairLogger::GetLogger()->SetLogScreenLevel("ERROR"); gErrorIgnoreLevel = kFatal;
+   TFile f(reco); auto *t = (TTree *)f.Get("cbmsim"); TClonesArray *he = nullptr; t->SetBranchStatus("*", 0); t->SetBranchStatus("AtEventH*", 1); t->SetBranchAddress("AtEventH", &he);
+   const int NS = 6; const double SG[NS] = {10, 20, 30, 40, 60, 80}; std::vector<std::vector<double>> K(NS); for (int s = 0; s < NS; ++s) { int w = int(4 * SG[s]); K[s].resize(2 * w + 1); double n = 0; for (int i = -w; i <= w; ++i) { K[s][i + w] = exp(-0.5 * i * i / (SG[s] * SG[s])); n += K[s][i + w]; } }
+   std::ifstream in(evs.Data()); long ev; FILE *o = fopen(out.Data(), "w"); const int NT = 700; std::vector<double> q(NT), c(NT);
+   while (in >> ev) { if (ev < 0 || ev >= t->GetEntries()) continue; t->GetEntry(ev); auto *a = he->GetEntriesFast() ? (AtEvent *)he->At(0) : nullptr; if (!a) continue; std::fill(q.begin(), q.end(), 0.); double sq = 0; long nh = 0; for (auto &h : a->GetHits()) { int b = int(h->GetTimeStamp()); if (b < 0 || b >= NT) continue; q[b] += h->GetCharge(); sq += h->GetCharge(); ++nh; }
+      fprintf(o, "%d %ld", tag, ev); double tp = -1; for (int s = 0; s < NS; ++s) { int w = (K[s].size() - 1) / 2; std::fill(c.begin(), c.end(), 0.); for (int b = 0; b < NT; ++b) if (q[b] > 0) for (int i = -w; i <= w; ++i) if (b + i >= 0 && b + i < NT) c[b + i] += q[b] * K[s][i + w]; int m = std::max_element(c.begin(), c.end()) - c.begin(); fprintf(o, " %.1f", c[m]); if (s == 3) tp = m; } fprintf(o, " %.0f %.0f %ld\n", tp, sq, nh); }
+   fclose(o); printf("done %s\n", out.Data()); }
