@@ -76,6 +76,13 @@ public:
    AtTools::AtHelix3D &GetHelix3D() { return fHelix3DEst; }
    /// 0 = exact-equality z-tie collapse (historical), which can make the arclength spline singular.
    void SetZTieTolerance(Double_t t) { fSpyralEst.SetZTieTolerance(t); }
+   /// Use the integrated pulse charge instead of the peak amplitude for dE/dx, as Spyral does.
+   /// ⚠ ONLY meaningful if the PSA actually measured the pulse width: AtPSAMultiFit must run with
+   /// SetFloatPeakingTime(true), else the "integral" is a fixed multiple of the amplitude and this
+   /// is a no-op up to an overall scale. The integral gives ~30-70 % more p/d/t/alpha separation
+   /// but is NON-LINEAR in true dE/dx at high ionisation -- good for gating, not for dE/dx as a
+   /// number. See macro/Unpack_HDF5/C15d/PID_ATTPCROOT_vs_SPYRAL.md.
+   void SetUseTraceIntegral(Bool_t u) { fSpyralEst.SetUseTraceIntegral(u); }
    /// Divide every hit charge by its pad's relative gain before the estimators run (all three). The map is read with
    /// AtTools::AtPIDGainTable::LoadPadGains (`pad value...`, `column` = which value). Pads absent from the map are left
    /// alone. Returns false (and leaves the correction off) if the file cannot be read. Combine with the per-run gain

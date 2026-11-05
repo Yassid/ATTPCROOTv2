@@ -60,7 +60,13 @@ void unpackReco_C15d(TString fileName = "run_0017", Long64_t nEvents = 1000, Boo
                      /// Let MultiFit float the pulse peaking time. OFF reproduces the production.
                      /// ON makes AtHit::GetTraceIntegral() an independent measurement -- with tau
                      /// fixed it is exactly 2.9618x the amplitude (measured, rms/mean 0.0000).
-                     Bool_t psaFloatTau = kFALSE)
+                     Bool_t psaFloatTau = kFALSE,
+                     /// Persist an INTEGRAL-based dE/dx in the PID (Spyral-like). Implies
+                     /// psaFloatTau, since without a fitted pulse width the integral is just a
+                     /// rescaled amplitude. Gives ~30-70 % more band separation for GATING; the
+                     /// scale is non-linear at high ionisation, so keep a peak-based plane for
+                     /// anything that uses dE/dx as a number.
+                     Bool_t pidUseIntegral = kFALSE)
 {
    gSystem->Load("libAtReconstruction.so");
 
@@ -150,11 +156,11 @@ void unpackReco_C15d(TString fileName = "run_0017", Long64_t nEvents = 1000, Boo
       /// run_0016, 2.9618 for every one of 57,151 hits, rms/mean 0.0000. It therefore carries no
       /// width information and AtSpyralPID::SetUseTraceIntegral cannot do anything. Spyral
       /// integrates the real trace, which is why its dE/dx behaves differently at high ionisation.
-      if (psaFloatTau)
+      if (psaFloatTau || pidUseIntegral) // the integral is meaningless without a fitted width
          p->SetFloatPeakingTime(kTRUE);
       psa = p;
       std::cout << "  PSA : AtPSAMultiFit (thr " << psaThreshold
-                << (psaFloatTau ? ", peaking time FLOATED)\n" : ")\n");
+                << ((psaFloatTau || pidUseIntegral) ? ", peaking time FLOATED)\n" : ")\n");
    } else {
       auto p = new AtPSAMax();
       p->SetThreshold(psaThreshold);
@@ -233,6 +239,10 @@ void unpackReco_C15d(TString fileName = "run_0017", Long64_t nEvents = 1000, Boo
       pidTask->SetBField(bField);
       pidTask->SetMinPoints(pidMinPoints);
       pidTask->SetZTieTolerance(pidZTieTol);
+      if (pidUseIntegral) {
+         pidTask->SetUseTraceIntegral(kTRUE);
+         std::cout << "  PID : dE/dx from the INTEGRATED pulse (Spyral-like); peaking time floated\n";
+      }
       pidTask->SetPersistence(kTRUE);
       run->AddTask(pidTask);
       std::cout << "  PID  : ON (minPoints=" << pidMinPoints << ", zTieTol=" << pidZTieTol << ", B=" << bField
