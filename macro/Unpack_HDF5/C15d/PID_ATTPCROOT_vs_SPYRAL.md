@@ -367,3 +367,47 @@ So pulse integration is **non-linear in the true dE/dx at high ionisation**. The
 Recommended next step: re-reco with `psaFloatTau = kTRUE` and gate on the integral plane, keeping
 the peak plane for anything that uses dE/dx as a number. That is a 104-run pass at +31 % CPU, so
 ~7 h; worth doing deliberately rather than by default.
+
+---
+
+# Integral production, verified at full statistics (2026-11-06)
+
+102/104 runs re-reconstructed with `pidUseIntegral` -> `/home/yassid/Data/C15d_reco_mfi`,
+**2,277,150 valid tracks** on `pid/points_mfi_C15d.root` (the peak plane has 2,268,873, so nothing
+was lost). Band spacings from the deuteron in ln(sqrt(dE/dx)*Brho):
+
+```
+                         p        t       4He
+ATTPCROOT peak        -0.584   +0.408   +0.712
+ATTPCROOT INTEGRAL    -0.512   +0.552   +0.872     <- now matches Spyral
+Spyral                -0.560   +0.512   +0.896
+expected (full Bethe) -0.578   +0.330   +0.693
+```
+
+The fix reproduces Spyral at full scale, confirming the mechanism on 870k tracks rather than the
+13k the hypothesis was formed on.
+
+```
+d-t resolving power     d sigma   t sigma   separation     R
+ATTPCROOT peak           0.0919    0.0722     0.328       2.15
+ATTPCROOT INTEGRAL       0.1035    0.0822     0.472       2.81    (+31 %)
+Spyral                   0.0850    0.0689     0.487       3.40
+```
+
+⚠ **+31 %, not the +73 % quoted from the 13k-track test** -- that figure came from an unstable
+triton fit (sigma pinned at 0.0229). The separation gain is real and matches Spyral; R lands
+between the two because our deuteron band stays slightly wider (0.1035 vs 0.0850).
+
+## ★ THE OLD GATE DOES NOT TRANSFER
+
+The integral puts dE/dx on a 1.86x larger scale, so the polygon drawn on the peak plane lands in
+the wrong place:
+
+```
+peak plane (where it was drawn)  450,931 inside : d 46.2 %  t 35.2 %  bkg 17.7 %
+INTEGRAL plane (same gate)       207,038 inside : d 29.3 %  t  0.0 %  bkg 70.7 %
+```
+
+**`pid/deuteron_C15d.json` must be redrawn on `pid/points_mfi_C15d.root`.** That is the right
+moment to fix the 43 % triton contamination, which is exactly what the extra separation makes
+easier.
