@@ -29,6 +29,10 @@ species="${1:-deuteron}"
 # applied to the other selects the wrong tracks -- sqrt(dE/dx) is a per-track quantity and MultiFit
 # changes the hits each track carries. The drawer now PRINTS which plane it opened; read it.
 points="${2:-pid/points_C15d.root}"
+# ★ THIRD ARGUMENT = THE OUTPUT GATE FILE. Without it every drawer writes pid/<species>_C15d.json,
+# so two drawers open on two different planes silently overwrite each other's gate -- and a gate is
+# only valid on the plane it was drawn on. Pass an explicit name when opening a second drawer.
+outjson="${3:-pid/${species}_C15d.json}"
 case "$species" in
    proton)   Z=1; A=1 ;;
    deuteron) Z=1; A=2 ;;
@@ -68,15 +72,15 @@ set -u
 cd "$HERE"
 [[ -s "$points" ]] || { echo "ERROR: plane '$points' missing (run pid/make_points_C15d.C or ../postreco_mf_C15d.sh)" >&2; exit 1; }
 
-LOG="/home/yassid/C15d_logs/gate_draw_${species}.log"
+LOG="/home/yassid/C15d_logs/gate_draw_${species}_$(basename "$outjson" .json).log"
 mkdir -p "$(dirname "$LOG")"
 
-ARGS="\"pid/${species}_C15d.json\",\"${points}\",\"\",\"\",\
+ARGS="\"${outjson}\",\"${points}\",\"\",\"\",\
 ${XMAX},${YMAX},${IC_LO},${IC_HI},false,${EBEAM},${FLIP_POLAR},${Z},${A}"
 
 echo "opening the ${species} gate drawer (Z=${Z} A=${A}) on DISPLAY=${DISPLAY}"
 echo "  plane : ${points}, IC [${IC_LO}, ${IC_HI}], single pulse"
-echo "  out   : pid/${species}_C15d.json   (existing file is backed up to .bak on save)"
+echo "  out   : ${outjson}   (existing file is backed up to .bak on save)"
 echo "  log   : $LOG"
 
 # Invoke as `root -l 'macro.C(args)'`, i.e. cling's .x, and hold stdin open with `tail -f`.

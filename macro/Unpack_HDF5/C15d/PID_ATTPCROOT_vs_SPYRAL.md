@@ -411,3 +411,24 @@ INTEGRAL plane (same gate)       207,038 inside : d 29.3 %  t  0.0 %  bkg 70.7 %
 **`pid/deuteron_C15d.json` must be redrawn on `pid/points_mfi_C15d.root`.** That is the right
 moment to fix the 43 % triton contamination, which is exactly what the extra separation makes
 easier.
+
+## Result: the gate drawn on the integral plane
+
+Drawn 2026-11-06 on `pid/points_mfi_C15d.root`, composition measured against the species rails
+(+-2 sigma, using the measured integral-plane deuteron width 0.1035):
+
+```
+inside the gate: 444,027 tracks, 51.0 % of the plane
+  deuteron   395,059   89.0 %
+  triton      34,647    7.8 %
+  proton       4,419    1.0 %
+  alpha           31    0.0 %
+  other/bkg    9,871    2.2 %
+```
+
+Against the previous gate on the peak plane (46.2 % deuteron, 35.2 % triton) that is **89 % purity
+for the same statistics** -- 444k tracks against 451k. The separation the pulse integral buys is
+what makes this possible: on the peak plane the triton band sits too close to the deuteron for a
+polygon to separate them.
+
+The previous gate is preserved as `pid/deuteron_C15d.json.preMF`.
