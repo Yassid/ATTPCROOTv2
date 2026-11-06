@@ -174,7 +174,10 @@ do_fit() {
    fi
 }
 export -f do_fit
-export HERE RECO_DIR FIT_DIR LOG_DIR MIN_FREE_GB NEVENTS SPECIES PDG MASS ZED BFIELD GATE BACKEXTRAP
+# ⚠ GAIN_TABLE and C15D_IC_DIR must be exported too: the workers run `one` through `bash -c`,
+# and an unexported value arrives EMPTY, so gate_events_C15d.C would be handed "" for the IC
+# directory and the gain table and would gate on the wrong dE/dx scale -- silently.
+export HERE RECO_DIR FIT_DIR LOG_DIR MIN_FREE_GB NEVENTS SPECIES PDG MASS ZED BFIELD GATE BACKEXTRAP GAIN_TABLE C15D_IC_DIR
 export TRUNC_PCT FIND_ON FIND_C2MAX FIND_STEP FIND_MIN FIND_MAX FIND_MODE
 
 printf '%s\n' "${RUNS[@]}" | xargs -P "$NPAR" -I{} bash -c 'do_fit "$@"' _ {}
