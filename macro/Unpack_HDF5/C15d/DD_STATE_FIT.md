@@ -106,3 +106,34 @@ Ex = 0, and in both codes it degrades with theta (and therefore with Ex). Subtra
 width in quadrature gives 1.61/0.47 (ATTPCROOT) against 1.38/1.03 (Spyral) -- the state-B numbers
 disagree by 2x, which is the signature of the assumption failing, not of a measurement.
 A natural width needs the resolution measured AT that excitation, e.g. from simulation.
+
+---
+
+## The ground state and the 5/2+ at 0.740
+
+The 5/2+ IS present in both datasets. It appears as a SHOULDER on the high-Ex side of the elastic
+peak, not a resolved second peak (FWHM 0.92 / 0.52 against a 0.740 spacing).
+
+```
+                 separation FREE     asym 1-peak -> +companion   dchi2 (1 dof)
+ATTPCROOT all     0.762 +- 0.019         5.02 -> 3.30               283
+ATTPCROOT 65-85   0.732 +- 0.016         4.67 -> 3.04               267
+Spyral all        0.727 +- 0.013         6.43 -> 1.42               807
+Spyral 65-85      0.689 +- 0.012         5.93 -> 1.32               738
+```
+
+Four independent measurements give **0.73 +- 0.04** against the known **0.740**.
+
+⚠ **The yield ratio is NOT trustworthy**: 0.106 +- 0.005 (ATTPCROOT) against 0.041 +- 0.001
+(Spyral), 2.6x apart for the same physical quantity. The shoulder's amplitude depends on how the
+main peak's tail is modelled, and the broader ATTPCROOT peak assigns more of it to the companion.
+A real resolution function from simulation is needed before quoting a ratio.
+
+### ⚠ Method: a second Gaussian always improves a non-Gaussian peak
+
+The first pass used a symmetric main peak and gave dchi2 = 750-1100 for 1 dof — overwhelming and
+nearly meaningless. Two checks are what make a shoulder credible, and both should be routine:
+**float the separation** (a real state lands at its known energy; an artefact lands wherever the
+tail is) and **let the main peak be asymmetric** (if the companion only absorbed a tail it loses
+significance). A third warning sign prompted them: the amplitude ratio jumped 5x between angular
+selections, which a real state cannot do.
