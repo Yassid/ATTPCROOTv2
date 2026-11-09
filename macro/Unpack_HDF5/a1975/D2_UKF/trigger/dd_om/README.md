@@ -9,6 +9,10 @@ Conventions tested against PtolemyCpp on the same potential:
 - Spin-orbit: FRESCO needs Vso/2 of the quoted value for the deuteron. Without it the curves differ by up to
   36 % at 40-50 deg; with it, or with Vso = 0, they agree to 0.4 %.
 
-Use for a scale test: spread of the three in-range potentials is below 7 % only at theta_cm 16-24 deg. Above
-that it is 12-90 %. The energy dependence is steep (about 4-15 % between 21.9 and 23.1 MeV in that window), so
+Use for a scale test: spread of the three in-range potentials is 3-6 % at theta_cm 18-24 deg and 8 % at 16 deg.
+At 26 deg and above it is 10-86 %. The energy dependence is steep (about 4-15 % between 21.9 and 23.1 MeV in that window), so
 the comparison has to be made per vz slice.
+
+The usable angles also have to pass the fiducial cut r_res >= 28 mm (`fiducial_window.txt`): theta_cm 18 deg needs
+vz <= 180 mm (below the 200 mm window start), so only about 20-24 deg survives, at vz 200-390 mm. The cross section
+falls by a factor 3 from 20 to 24 deg, so the result will be sensitive to the theta_cm calibration.
