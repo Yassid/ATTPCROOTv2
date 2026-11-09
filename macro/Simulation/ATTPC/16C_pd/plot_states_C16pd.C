@@ -6,14 +6,18 @@
 /// convention -- not a measurement error. That is the point: it isolates one effect.
 ///
 /// The effect is the beam losing energy before it reacts. The vertex is uniform along the metre
-/// of gas, the 16C loses about 28 MeV crossing all of it, and the excitation energy is
-/// reconstructed at the NOMINAL 192 MeV, which is what the data analysis does. So a reaction at
-/// the far end of the chamber is reconstructed with a beam energy nearly 28 MeV too high and its
-/// apparent Ex comes out too large. Since the vertex is uniform, that turns into a spread.
+/// of gas, the 16C loses about 11.6 MeV crossing all of it in this simulation (H2, 300 torr), and
+/// the excitation energy is reconstructed at the NOMINAL 192 MeV. So a reaction at the far end of
+/// the chamber is reconstructed with a beam energy about 11.6 MeV too high and its apparent Ex
+/// comes out too large. Since the vertex is uniform, that turns into a spread.
+///
+/// dEdrift was 28 MeV until 2026-11-09, a leftover from the sim with the wrong 1 bar gas. 11.6 is
+/// the value measured on these 300 torr files: it minimises the corrected width and centres the
+/// states (scan 10.4-11.6, g.s. 0.04+-0.041 to 0.01+-0.029 MeV). CATIMA gives 10.8 MeV at 192 MeV.
 ///
 /// The bottom row shows what correcting it costs: nothing but the vertex position. Replacing the
-/// constant 192 MeV with 192 - 28 z/1000 collapses the width from 0.84 MeV to 0.037 MeV and puts
-/// every state on the energy it was generated at.
+/// constant 192 MeV with 192 - 11.6 z/1000 collapses the g.s. RMS from 0.326 MeV to 0.029 MeV and
+/// puts every state within 0.01 MeV of the energy it was generated at.
 ///
 /// Note the correction here uses the TRUE vertex z. In data it would use the reconstructed one,
 /// so the gain realised depends on the vertex resolution -- which the digitised simulation, not
@@ -22,7 +26,7 @@
 ///   root -b -q 'plot_states_C16pd.C()'
 
 void plot_states_C16pd(TString dir = "/mnt/f/a1975_C16_pd_sim/", TString seed = "s1001",
-                       Double_t Ebeam = 192.0, Double_t dEdrift = 28.0, TString tag = "")
+                       Double_t Ebeam = 192.0, Double_t dEdrift = 11.6, TString tag = "")
 {
    gSystem->Load("libAtSimulationData.so");
    gStyle->SetOptStat(0);
