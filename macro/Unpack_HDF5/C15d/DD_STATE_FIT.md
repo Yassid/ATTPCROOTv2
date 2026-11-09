@@ -1,0 +1,108 @@
+# 15C(d,d'): fitting the states seen in 15C(p,p')
+
+Done 2026-11-09 on the user's saved explorer parameters
+(`~/Downloads/explorer_params_15C_d_d__2026-11-09-14-30-49_{atttpcroot,spyral}.json`).
+Figures: `~/C15d_dd_statefit.png`, `~/C15p_pp_inelastic.png`, `~/C15d_dd_ex_both.png`.
+Scripts: `~/Data/C15d_statefit/` (`exlib.h`, `ddbuild.C`, `statefit2.C`, `syst.C`).
+
+## The reference: what 15C(p,p') shows
+
+From `C15p/pp/plots_pgate/pp_kin_C15p.root` (proton-GATED, 131,532 tracks after the a2091 proton
+IC window, chi2 < 5) at Ebeam 198:
+
+```
+g.s.  mu +0.119   FWHM 0.511 MeV      <- three times better resolution than (d,d')
+inelastic structures, >5 sigma over a fitted background:
+   4.75 (19 sigma)   7.05 (53)   7.75 (14)   10.35 (46)   11.05 (49)
+```
+
+⚠ The 10.35 and 11.05 structures sit on the falling edge where the spectrum ends abruptly near
+12 MeV, so an acceptance origin is not excluded for them. 4.75 and 7.05 are well clear of it.
+
+## The user's parameters reproduce offline
+
+`exlib.h` re-implements the page's own transforms exactly (page lines 408-575):
+
+```
+theta_corr = theta - (360/kcDenom)*(KE + keOff - kcPivot)        [deg]
+Ebeam(vz)  = ebeam - (ebzSlope/1000)*(vz - ebzPivot)             [MeV, vz in mm]
+Ex         from the same kine2b expression, U = 931.49401
+```
+
+With the saved parameters this gives
+
+```
+              tracks    g.s. centroid   FWHM
+ATTPCROOT    129,450       +0.053       1.012      Ebeam 191.25, chi2<0.2, IC [1074,1201],
+                                                   kcDenom 3913, kcPivot -1.5, ebz 11 MeV/m
+Spyral        75,249       -0.253       0.548      Ebeam 195, chi2<5, no IC, vz<400,
+                                                   kcDenom 2535.2, kcPivot 14.5, ebz 11 MeV/m
+```
+
+**That settles the beam-energy question left open earlier.** A naive scan without the kc and ebz
+corrections suggested the ATTPCROOT g.s. could only be zeroed at 212 MeV and only by paying
+0.38 MeV of width. With the corrections, **191.25 puts it at +0.053 with FWHM 1.012** -- better
+than anything that scan reached. The earlier ambiguity was an artefact of fitting without them.
+
+## The fit
+
+Smooth continuum (`exp(a+bx) + c + dx`) plus two Gaussians, over 2.3-13.5 MeV.
+
+```
+                background only   +2 peaks   delta-chi2 (6 dof)
+ATTPCROOT     chi2/ndf  14.18       1.78         1350
+Spyral        chi2/ndf   8.45       1.80          729
+```
+
+With the positions left FREE, both datasets land on the same two structures:
+
+```
+              state A                    state B                 yields
+ATTPCROOT   4.657 +- 0.038 +- 0.031   6.879 +- 0.022 +- 0.005   3260 +- 128 / 2394 +- 97
+Spyral      4.500 +- 0.042 +- 0.019   6.643 +- 0.026 +- 0.005   1390 +-  85 / 1532 +- 86
+(p,p')           4.75                      7.05
+```
+
+(second error = spread over 12 fit ranges, 2.0-3.0 low edge x 12.0-15.0 high edge.)
+
+**Only these two of the five (p,p') structures are present.** Fixing all five and freeing the
+amplitudes returns yields consistent with zero for 7.75, 10.35 and 11.05 in both datasets --
+consistent with those being acceptance features in (p,p') rather than states, or simply not
+populated in (d,d').
+
+## ★ The cross-check that matters
+
+**ATTPCROOT's state A, 4.657 +- 0.038, lands exactly on the 4.657 MeV state the a1975
+16C(d,t)15C analysis extracts** (`macro/Simulation/ATTPC/16C_dt/run_states_dt.sh`: gs, 0.740,
+3.103, **4.657**, 6.358). Different reaction, different dataset, different experiment.
+
+**And Spyral's state B, 6.643 +- 0.026, matches the 6.648 that the same analysis records as
+"the feature the data puts at 6.648"** against a literature 6.358.
+
+## The ATTPCROOT - Spyral offset is the known fitter systematic
+
+```
+state A  4.657 vs 4.500   ->  +0.157
+state B  6.879 vs 6.643   ->  +0.236
+```
+
+Same sign and magnitude as the +0.45 deg polar-angle offset documented in
+`CROSSCHECK_vs_SPYRAL.md`, which was localised to the FITTERS (the hit clouds and geometry agree
+to +-0.25 deg). So the two codes disagree on these level energies by ~0.2 MeV for the same reason
+they disagree on the beam energy -- **do not average them, and do not quote one with the other's
+Ebeam.**
+
+## Widths: observed, not deconvolved
+
+```
+             g.s. FWHM    state A FWHM    state B FWHM
+ATTPCROOT      1.012         1.898           1.117
+Spyral         0.548         1.488           1.169
+```
+
+State A is clearly broad in both. State B is close to the ATTPCROOT resolution but not to Spyral's.
+⚠ **Deconvolving a natural width is NOT justified here**: the resolution is measured only at
+Ex = 0, and in both codes it degrades with theta (and therefore with Ex). Subtracting the g.s.
+width in quadrature gives 1.61/0.47 (ATTPCROOT) against 1.38/1.03 (Spyral) -- the state-B numbers
+disagree by 2x, which is the signature of the assumption failing, not of a measurement.
+A natural width needs the resolution measured AT that excitation, e.g. from simulation.
