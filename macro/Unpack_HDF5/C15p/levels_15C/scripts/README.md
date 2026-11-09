@@ -1,3 +1,6 @@
+# Scripts moved here from C15d/statefit on 2026-11-09 — these are 15C LEVELS, seen in both
+# 15C(p,p') and 15C(d,d'), so they live with the 15C+p analysis.
+
 # (d,d') state fit — scripts
 
 Reproduces `../DD_STATE_FIT.md`. `exlib.h` re-implements the explorer's transforms exactly, so
