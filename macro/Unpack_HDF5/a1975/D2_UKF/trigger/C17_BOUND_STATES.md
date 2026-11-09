@@ -83,6 +83,31 @@ Two corrections are included:
   event size. Re-weighted to the event sizes of real bound (d,p) events, survival is 0.84. This is a lower
   bound on survival, because the environment is slightly overestimated.
 
+## l=0 + l=2 mixture
+
+Fit of the four adopted points (`trigger/fit_lmix_dp.py`, table in `dp_bound_lmix_2026-11-09.txt`):
+
+| Model | Result | chi2/ndf |
+|---|---|---|
+| l=0 + l=2 sum, free | S0 = -0.13(3.15), S2 = 0.296(46), rho = -0.86 | 0.90/2 |
+| l=2 sum only | S2 = 0.294(24) | 0.90/3 |
+| PLB C2S mix with one free scale | scale 0.709(57) | 0.63/3 |
+| PLB without the l=0 state, one free scale | scale 0.723 | 0.62/3 |
+| d3/2 only / d5/2 only | S 0.812(65) / 0.460(37) | 1.65/3 / 0.60/3 |
+
+The data do not determine the l=0 strength. Over 25-45 deg the unit-S l=0 curve is 0.05-0.82 mb/sr against
+8.6-38.5 mb/sr for the unit-S l=2 sum, so a full l=0 state (S0 = 1) adds only 1-8 % to the fitted cross
+section in these bins, below the errors. The result S0 = -0.13(3.15) is consistent with zero and with the
+PLB value 0.64; the 90 % CL upper limit (S0 >= 0) is 3.9, which excludes nothing physical. An l=0 signal
+would show at forward angles, which the fiducial cut cannot reach. The l=0-only row (chi2 42/3) shows only
+that l=0 cannot supply the whole yield. Equally, d3/2 and d5/2 cannot be told apart: both describe the
+shape, and a free three-state fit gives unphysical values (1.96(3.85), -1.31(1.70), 1.16(92), chi2 0.01/1).
+S0 varies with the R cut (-4.9(2.2) at R 24, 1.4(7.0) at R 34), possibly from remaining trigger distortion
+of the 25-30 deg bin at small R (not tested); S2 stays at 0.26-0.32.
+
+What the data do establish is that the summed strength has an l=2 angular shape, with a normalisation of
+0.71(6) relative to the PLB C2S on our FRESCO curves (statistical only, absolute scale open).
+
 ## Stability
 
 The four-bin fit gives S 0.245-0.253 (no environment factor) and chi2 <= 1.8/3 at R 28 and R 30 for each of:
@@ -99,8 +124,7 @@ Inside the fiducial region data and simulation Spyral efficiencies agree at 25-4
 - **The absolute scale is open.** The mesh efficiency is measured only among triggered events, so its
   plateau is assumed to be about 1.
 - S is one number for an equal-weight sum of the state 1 and state 3 curves. It is not a spectroscopic
-  factor for any single state. An l=0 + l=2 mixture was not fitted on these points, so the 0.217 MeV
-  contribution is not constrained.
+  factor for any single state. These points do not constrain the 0.217 MeV l=0 state (see below).
 - PLB 811 (Pereira-Lopez et al.) is GANIL/TIARA at 17.2 MeV/u with a different reaction model. The ratio
   to its C2S (0.03, 0.64, 0.62) on our zero-range FRESCO curves is 0.69, 0.75, 0.70, 0.57. Part of that
   difference may be the model.
