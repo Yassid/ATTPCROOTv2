@@ -137,3 +137,75 @@ nearly meaningless. Two checks are what make a shoulder credible, and both shoul
 tail is) and **let the main peak be asymmetric** (if the companion only absorbed a tail it loses
 significance). A third warning sign prompted them: the amplitude ratio jumped 5x between angular
 selections, which a real state cannot do.
+
+---
+
+# The continuum under the states: phase space (2026-11-09 overnight)
+
+Figure `~/C15d_continuum_phasespace.png`. Scripts `scripts/psmodel.h`, `psmc.C`, `psalt.C`,
+`tmplfit.C`, `effcheck.C`.
+
+The states sit on a large continuum -- **12.1 % of the gated sample between Ex 8 and 22 MeV for
+ATTPCROOT, 17.0 % for Spyral** -- so what shape that continuum has is a systematic on every state
+energy. Two three-body hypotheses were simulated with `TGenPhaseSpace`, each reconstructed exactly
+as the analysis does (two-body missing mass, deuteron mass hypothesis, same KE and theta cuts):
+
+```
+(A)  15C + d -> d + 14C + n     target excitation above Sn, the DEUTERON detected
+(B)  15C + d -> p + n + 15C     deuteron BREAKUP, the PROTON detected and mis-assigned a
+                                deuteron mass -- what a breakup proton leaking the gate looks like
+```
+
+Sanity check on the model: Sn(15C) computed from the masses is **1.2180 MeV** against the
+literature 1.218, and the kinematic limit at Ebeam 191.25 is Ex = 22.61 MeV, where the data ends.
+
+## (A) is excluded by its shape
+
+Uniform d + 14C + n phase space RISES from its 2 MeV threshold to a maximum near 14-16 MeV. The
+data FALLS from 6 MeV onward. The ratio data/(A) drops 6x across the range.
+
+**That cannot be reconstruction efficiency**: within the acceptance the mean deuteron energy
+*increases* with Ex (7.1 MeV at Ex = 2 to 13.5 at Ex = 20), so the tracks are getting FASTER where
+the data is losing counts. A short-track efficiency loss would do the opposite.
+
+## (B) matches the shape, but NOT the yield
+
+The breakup template is nearly flat and follows the data from 8 to 22 MeV including the fall-off
+at the kinematic limit. As a fit template it beats (A) in both datasets:
+
+```
+                      chi2/ndf     state A           state B
+ATTPCROOT  tmpl B       2.23    4.559 +- 0.040    6.933 +- 0.023
+           tmpl A       3.39    4.705 +- 0.044    8.000 +- 0.098   <- railed at the bound
+           empirical    1.66    4.679 +- 0.037    6.874 +- 0.022
+Spyral     tmpl B       1.87    4.459 +- 0.043    6.654 +- 0.026
+           tmpl A       2.10    4.796 +- 0.073    6.690 +- 0.028
+           empirical    1.59    4.501 +- 0.042    6.644 +- 0.026
+```
+
+⚠ **But the yield rules it out as stated.** The continuum is 12-17 % of the gated sample while the
+gate contains **1.0 % protons** (+2.2 % unassigned), measured against the species rails. And a
+breakup proton cannot hide on the deuteron rail: the rails are a dE/dx separation ~1.78x apart,
+set by the particle, not by the reaction. A flat template matching a flat continuum is weak
+evidence on its own.
+
+## What the continuum most likely is
+
+Genuine DEUTERONS exciting the 15C continuum above Sn non-resonantly. That keeps the particle
+identity consistent with the gate, and explains why neither uniform phase space describes it: the
+shape of direct inelastic excitation into the continuum is set by the reaction dynamics, not by a
+uniform three-body final state. **Not established here** -- it would need a reaction model.
+
+## The useful outcome: a background systematic on the states
+
+The three background models give
+
+```
+             state A span            state B span
+ATTPCROOT    4.559 - 4.705  (0.15)   6.874 - 6.933  (0.06, excluding the railed A fit)
+Spyral       4.459 - 4.796  (0.34)   6.644 - 6.690  (0.05)
+```
+
+so **state B is robust against the background model and state A is not.** Quote state A with a
+background systematic of ~0.1 (ATTPCROOT) to 0.2 (Spyral) MeV, on top of the fit-range systematic
+already in the table above.
