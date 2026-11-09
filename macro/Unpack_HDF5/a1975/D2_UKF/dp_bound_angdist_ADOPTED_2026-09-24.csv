@@ -1,0 +1,10 @@
+# ADOPTED 2026-09-24 (Yassid): 16C(d,p)17C bound states (g.s.+0.217+0.331 unresolved), theta_cm 20-40 ONLY, from vz 200-400 mm.
+# Source dp_bound_angdist_vz200-400.csv (angdist_bound_dp.C(200,400,...)), L_W=65.240 mb^-1. theta_cm <20 EXCLUDED: forward protons from vz<850 exit the readout cut as short arcs that data (genfit AND Spyral) lose; >40 half background.
+thcm_lo,thcm_hi,thcm_mid,Y,bg,eps,eps_err,dsdo_mb_sr,err_mb_sr,use
+10,15,12.5,3,0.89,0.8842,0.0328,0.3081,0.2849,0
+15,20,17.5,15,0.00,0.8954,0.0247,1.5578,0.4045,0
+20,25,22.5,40,0.89,0.7763,0.0276,3.6812,0.6153,1
+25,30,27.5,88,0.89,0.9023,0.0182,5.8468,0.6434,1
+30,35,32.5,92,0.00,0.7021,0.0272,6.8195,0.7586,1
+35,40,37.5,62,3.57,0.7695,0.0230,3.4884,0.4932,1
+40,45,42.5,15,8.02,0.7116,0.0235,0.4058,0.2741,0
