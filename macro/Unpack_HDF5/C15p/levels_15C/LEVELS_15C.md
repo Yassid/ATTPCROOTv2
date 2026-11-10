@@ -209,3 +209,138 @@ Spyral       4.459 - 4.796  (0.34)   6.644 - 6.690  (0.05)
 so **state B is robust against the background model and state A is not.** Quote state A with a
 background systematic of ~0.1 (ATTPCROOT) to 0.2 (Spyral) MeV, on top of the fit-range systematic
 already in the table above.
+
+---
+
+# The complete spectrum in one fit (2026-11-10)
+
+`scripts/globalfit.C` + `scripts/plotglobal.C` -> `figures/global_ex_fit.png`
+
+Everything above fits pieces of the spectrum separately. This fits **all of it at once**: the
+15C ground state, the 0.740 MeV 5/2+, state A, state B and the background, for both codes.
+
+![global fit](figures/global_ex_fit.png)
+
+```
+                 g.s. mu          FWHM(L/R)     5/2+ amp/g.s.         state A              state B
+ATTPCROOT   +0.005 +- 0.005   0.906 / 0.906   0.100 +- 0.006     4.681 +- 0.037 +- 0.029   6.871 +- 0.022 +- 0.004
+                                                  +- 0.012(bkg)     FWHM 1.78                 FWHM 1.10
+Spyral      -0.286 +- 0.003   0.484 / 0.565   0.035 +- 0.001     4.500 +- 0.042 +- 0.005   6.640 +- 0.025 +- 0.001
+                                                  +- 0.009(bkg)     FWHM 1.52                 FWHM 1.08
+```
+(first error statistical, second the background systematic defined below; MeV throughout)
+
+## Two windows, not one minimisation -- and why
+
+The g.s. holds ~9000 counts in its peak bin, state A ~300 in total. In a **single** Poisson
+likelihood over the whole range the g.s. lineshape -- which is not Gaussian: sharp core, longer
+right tail -- dominates the gradient and drags the weak states. All three of these were tried and
+all three failed, on this data:
+
+| attempt | what happened |
+|---|---|
+| one fit, free widths | A collapsed to the width floor, B blew up to FWHM 3.06 (ATTPCROOT); both pinned at 0.283 (Spyral) |
+| one fit, widths bounded <= 1.8 FWHM | the background exponential slope railed at its bound for **both** codes |
+| `erf x (exp + const)` background | Spyral's A railed at 5.800, B at 8.000, background scale at its floor -- background and states swapped roles |
+
+The peak region and the state region are physically disjoint; the only thing linking them is the
+5/2+ on the g.s. right shoulder. So they are fitted in **two windows sharing one background**
+(split at 2.2 MeV), iterated to self-consistency -- the state window's background frozen into the
+peak window, the peak window's g.s. tail frozen into the state window, four passes -- and drawn as
+one curve. The per-region chi2/bin shows where the model is and is not adequate:
+
+```
+                g.s. core   1.5-3.5   state A   state B   bkg 8-20
+ATTPCROOT          9.33       5.25      1.27      1.13      1.39
+Spyral             2.91       2.51      1.15      1.08      1.58
+```
+
+**The states sit at chi2/bin ~1.1-1.3.** The large numbers are confined to the g.s. core, where a
+bifurcated Gaussian is simply not the true response, and to its right shoulder. That mismatch is a
+lineshape limitation, not a fit failure, and it does not propagate into A and B (next section).
+
+## The background is a systematic, not a choice
+
+Three forms were fitted independently, none of which can grow a Gaussian bump:
+
+* `LIN` &nbsp; `c0 + c1*Ex` -- empirical, monotonic, 2 parameters
+* `PS` &nbsp;&nbsp; `c + N*dens(Ex)*exp(-k*Ex)` -- flat floor + the three-body `15C+d -> d'+(14C+n)`
+  phase space of `psmodel.h`, threshold fixed at Sn, one acceptance factor, 3 parameters
+* `THR` &nbsp;`c + A*Phi((Ex-Sn)/sigma_res)*exp(-k*Ex)` -- flat floor + a continuum turning on at Sn
+  smeared by that code's **own measured** g.s. sigma_R (not refitted), 3 parameters
+
+```
+bkg   chi2/ndf   g.s. mu    5/2+ ratio      state A          state B
+                        -- ATTPCROOT --
+LIN      3.05    +0.0052   0.0997(58)   4.681(37) FWHM 1.78   6.871(22) FWHM 1.10
+PS       4.35    +0.0340   0.1228(45)   4.626(39) FWHM 1.97   6.878(21) FWHM 1.00
+THR      7.83    +0.0806   0.1221(39)   4.685(37) FWHM 1.76   6.871(22) FWHM 1.11
+                        --  Spyral   --
+LIN      2.68    -0.2872   0.0326(14)   4.510(43) FWHM 1.47   6.643(27) FWHM 1.15
+PS       1.86    -0.2856   0.0353(14)   4.500(42) FWHM 1.52   6.640(25) FWHM 1.08
+THR      3.15    -0.2662   0.0513(14)   4.510(43) FWHM 1.47   6.643(27) FWHM 1.15
+```
+
+**Spread across all three background forms:**
+
+```
+             state A    state B    5/2+ ratio
+ATTPCROOT    0.058      0.007       21 %
+Spyral       0.010      0.002       45 %
+```
+
+So **A and B are robust and the 5/2+ yield is not.** This tightens the earlier background
+systematic on state A (0.15-0.34 MeV, from fits to the state region alone) by roughly a factor
+three -- constraining the background over the full 20 MeV instead of a narrow window is what buys
+that. Adopted background: `LIN` for ATTPCROOT, `PS` for Spyral, each the lowest chi2/ndf.
+
+A real consistency check on the floor: the fitted flat floor is compared against each code's own
+measured counts/bin **below** threshold, which nothing in the fit is told about. The two codes
+differ by an order of magnitude there (ATTPCROOT ~70/bin at Ex = -1.9, Spyral ~7/bin, because
+Spyral cuts vz < 400 mm and vertexes better), so it is not a tautology. `PS` on ATTPCROOT fits
+66.7 +- 4.5 against a measured 69.5 -- it passes. `THR` drives the floor to zero in both codes and
+has the worst chi2 for ATTPCROOT, which is why it is not adopted.
+
+## ★ Referencing to each code's own g.s. removes most of the inter-code difference
+
+```
+                    state A    state B
+ATTPCROOT absolute   4.681      6.871
+Spyral    absolute   4.500      6.640
+difference          +0.181     +0.231
+
+ATTPCROOT rel. g.s.  4.676      6.866
+Spyral    rel. g.s.  4.786      6.926
+difference          -0.110     -0.060
+```
+
+Spyral's g.s. sits at -0.286 and ATTPCROOT's at +0.005, and that single offset accounts for most of
+the disagreement: quoted **relative to each code's own ground state**, A agrees to 0.11 MeV and B to
+0.06 MeV. This is the expected behaviour if the difference is the known fitter/beam-energy scale
+(see `c15d-attpcroot-vs-spyral`): a scale error moves the whole spectrum, so it cancels in a
+difference. **Quote level energies relative to the g.s. centroid, not on the absolute Ex axis.**
+
+## The 5/2+: visible, but its yield is not measurable here
+
+The bottom row of the figure plots **data minus (fitted g.s. + background)**. The 0.740 MeV state
+then appears as the bump it is, in both codes, with the 5/2+ Gaussian from the full fit drawn over
+it (not refitted to the residual).
+
+⚠ **The residual is not independent evidence.** The g.s. and the 5/2+ were fitted together, so
+subtracting the g.s. necessarily leaves something at 0.740. What the panel shows is that the
+leftover is a clean, centred, roughly Gaussian bump rather than a lineshape artefact -- and that it
+survives in Spyral, where the g.s. FWHM is 0.48 and the two states are 1.5 FWHM apart.
+
+The amplitude ratio differs by 3x between the codes (0.100 vs 0.035) and carries a 21-45 %
+background systematic, so **it is not a yield measurement.** The reason is resolution: at
+ATTPCROOT's FWHM 0.91 the two peaks are only 0.81 FWHM apart and the decomposition is strongly
+degenerate; at Spyral's FWHM 0.48 they are 1.54 FWHM apart and genuinely separated. Trust Spyral's
+number over ATTPCROOT's, and neither to better than a factor two until a simulated response
+function exists (see `Next` below).
+
+## What is still missing
+
+* A **simulated resolution function** at Ex ~ 0, 0.74, 4.6, 6.9. Without it the quoted FWHMs are
+  observed widths, not natural widths, and the 5/2+ ratio stays a factor-two quantity.
+* The g.s. **lineshape**: a bifurcated Gaussian leaves chi2/bin 9.3 in the ATTPCROOT core. This is
+  the single largest modelling deficiency left, and it is what limits the 5/2+.
