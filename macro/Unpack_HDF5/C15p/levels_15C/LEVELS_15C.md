@@ -2,7 +2,7 @@
 
 Done 2026-11-09 on the user's saved explorer parameters
 (`~/Downloads/explorer_params_15C_d_d__2026-11-09-14-30-49_{atttpcroot,spyral}.json`).
-Figures: `~/C15d_dd_statefit.png`, `~/C15p_pp_inelastic.png`, `~/C15d_dd_ex_both.png`.
+Figures: **`figures/`** (`dd_state_fit.png` is the main one; see `figures/README.md`).
 Scripts: `~/Data/C15d_statefit/` (`exlib.h`, `ddbuild.C`, `statefit2.C`, `syst.C`).
 
 ## The reference: what 15C(p,p') shows
