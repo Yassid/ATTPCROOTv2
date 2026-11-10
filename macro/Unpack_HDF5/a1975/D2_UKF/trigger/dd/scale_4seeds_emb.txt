@@ -1,0 +1,39 @@
+16C(d,d) scale with r280 acceptance. Data: 10 runs (0016,0017,0018,0019,0020,0021,0022,0026,0027,0031), L = 92.83 mb^-1, IC 1000-1350.
+Sim: 4 files, 9991 generated elastic events, 8995 reco rows, 8283 selected.
+Ex peak sigma per vz slice (100-900): data 0.245 0.217 0.216 0.229 0.231 0.242 0.236 0.243 | sim 0.065 0.060 0.060 0.060 0.061 0.060 0.064 0.062
+Ex peak median: data -0.077 -0.097 -0.129 -0.141 -0.141 -0.155 -0.152 -0.149 | sim +0.021 +0.018 +0.018 +0.015 +0.012 +0.012 +0.010 +0.007
+
+Acceptance x efficiency (sim, r280), rows vz, columns theta_cm (12-30 by 2):
+  100-200  0.91 0.91 0.83 0.86 1.07 1.09 0.73 1.10 0.91
+  200-300  1.25 1.04 0.90 1.09 1.11 0.92 0.86 0.97 0.89
+  300-400  1.15 0.97 1.02 1.24 0.92 1.03 0.85 0.99 0.87
+  400-500  1.00 1.06 1.06 0.89 1.12 0.87 0.97 1.11 0.75
+  500-600  0.97 0.95 1.14 1.02 1.23 0.89 0.91 0.99 0.89
+  600-700  1.06 1.00 1.08 0.93 1.25 0.86 0.97 0.96 0.93
+  700-800  0.96 1.02 0.98 1.13 0.97 0.94 0.97 0.94 0.97
+  800-900  0.96 1.02 1.05 1.04 1.10 0.88 1.09 0.97 1.09
+Embedding survival per vz slice (carbon hosts, theta_cm 14-24; /mnt/f/a1975/caches/dd_r280/embed/e_r*.root): 0.905(221) 0.929(294) 0.880(217) 0.821(336) 0.859(277) 0.785(335) 0.769(303) 0.695(344)  -> multiplied into eps
+
+Scale S = Y/(L eps sigma_ZPL dOmega), carbon; "-" = Y < 10 or eps < 0.3. Rows vz, columns theta_cm:
+  100-200  0.115( 13) 0.282( 26) 0.627( 54) 0.732( 60) 0.694( 50) 0.748( 63) 1.059(149) 0.473(116)     -     
+  200-300  0.389( 21) 0.708( 33) 1.080( 66) 0.901( 46) 0.784( 50) 0.791( 74) 0.663( 96) 0.434(129)     -     
+  300-400  0.600( 32) 1.019( 55) 1.000( 52) 0.787( 45) 0.970( 72) 0.837( 71) 0.751(107) 0.236(120)     -     
+  400-500  0.619( 35) 0.961( 46) 1.062( 53) 1.206( 86) 0.893( 58) 1.102(103) 0.899(112) 0.227(114)     -     
+  500-600  0.573( 33) 0.917( 54) 0.883( 45) 0.974( 54) 0.669( 46) 1.033( 93) 0.611(100) 0.417(134)     -     
+  600-700  0.479( 30) 0.961( 48) 0.933( 50) 1.106( 71) 0.754( 53) 1.029(101) 0.877(111) 0.415(142)     -     
+  700-800  0.496( 32) 0.907( 49) 1.123( 60) 0.883( 53) 0.983( 72) 1.185(102) 0.757(104) 0.647(170)     -     
+  800-900  0.512( 35) 0.882( 51) 0.965( 59) 1.147( 70) 0.775( 61) 1.263(121) 0.846(111) 0.685(176) 0.521(272)
+
+Scale per window and potential (stat incl. acceptance stat):
+  plateau vz 250-900, theta_cm 16-22 (18 cells):
+     ratio of sums: An-Cai 0.958(0.014)  Han-Shi-Shen 1.003(0.014)  Zhang-Pang-Lou 0.954(0.014)  Daehnick 0.949(0.013)
+     weighted mean (biased low): An-Cai 0.919  Han-Shi-Shen 0.960  Zhang-Pang-Lou 0.919  Daehnick 0.908   [ZPL chi2 108.1/17]
+  vz 200-900, theta_cm 14-24 (35 cells):
+     ratio of sums: An-Cai 0.949(0.010)  Han-Shi-Shen 0.999(0.010)  Zhang-Pang-Lou 0.942(0.010)  Daehnick 0.943(0.010)
+     weighted mean (biased low): An-Cai 0.912  Han-Shi-Shen 0.958  Zhang-Pang-Lou 0.908  Daehnick 0.903   [ZPL chi2 192.2/34]
+  vz 300-900, theta_cm 18-22 (12 cells):
+     ratio of sums: An-Cai 0.921(0.017)  Han-Shi-Shen 0.958(0.018)  Zhang-Pang-Lou 0.926(0.017)  Daehnick 0.906(0.017)
+     weighted mean (biased low): An-Cai 0.873  Han-Shi-Shen 0.906  Zhang-Pang-Lou 0.879  Daehnick 0.856   [ZPL chi2 79.8/11]
+  vz 200-900, theta_cm 22-28 (21 cells):
+     ratio of sums: An-Cai 0.815(0.022)  Han-Shi-Shen 0.823(0.023)  Zhang-Pang-Lou 0.861(0.024)  Daehnick 0.765(0.021)
+     weighted mean (biased low): An-Cai 0.734  Han-Shi-Shen 0.734  Zhang-Pang-Lou 0.786  Daehnick 0.677   [ZPL chi2 128.3/20]

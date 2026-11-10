@@ -113,3 +113,9 @@ D2 events, chain re-run; same method as embed_vz_dp.C, which gave .68-.91 for th
 - **Consequence, not applied:** every D2 channel's acceptance from clean simulation misses this environment loss
   ((d,p) knew it: "22 % embedding loss not applied"; (d,t) acceptance has none). Their cross sections are ~20 % low
   unless corrected. Decision for Yassid. (p,d)/(p,p) partly cancel (same environment, both from clean sims).
+
+### Final with 4 sim seeds (2026-11-10 12:50; scale_4seeds_emb.*): 9991 generated, 8283 selected
+- No embedding: S(plateau) 0.765(9) ZPL. **With the embedding survival: 0.954(14) ZPL** (An-Cai .958, Daehnick .949,
+  Han-Shi-Shen 1.003). **With the 4.8 % IC-missing loss: 1.002 (ZPL), 0.997-1.054 over the four potentials.**
+- The cells scatter beyond their errors (chi2 108/17): read ~10 % per cell as systematic; the plateau mean is not
+  affected by it at the stat level quoted.
