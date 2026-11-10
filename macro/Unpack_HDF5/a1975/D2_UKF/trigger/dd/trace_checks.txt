@@ -1,0 +1,60 @@
+Runs [16, 17, 18, 19, 20, 21, 26, 27, 31]; joined 108161 tracks. IC pulse at the trigger: mode of first IC pulse = bin 1130
+  join check run 16: corr(cache ic, trace IC at trigger) = 0.968  (n 15540)
+  join check run 17: corr(cache ic, trace IC at trigger) = 0.973  (n 10532)
+  join check run 18: corr(cache ic, trace IC at trigger) = 0.975  (n 7652)
+  join check run 19: corr(cache ic, trace IC at trigger) = 0.972  (n 11443)
+  join check run 20: corr(cache ic, trace IC at trigger) = 0.973  (n 10782)
+  join check run 21: corr(cache ic, trace IC at trigger) = 0.968  (n 11166)
+  join check run 26: corr(cache ic, trace IC at trigger) = 0.973  (n 10288)
+  join check run 27: corr(cache ic, trace IC at trigger) = 0.972  (n 9696)
+  join check run 31: corr(cache ic, trace IC at trigger) = 0.978  (n 10036)
+
+=== Check 1: mesh pulse time vs vertex, elastic deuterons (theta_lab 60-89.5, |Ex+0.1|<0.6) ===
+Expected drift for a vertex at vz: (ZPP - (vz - 19.1)) / 0.8834 mm per bin, ZPP 971.73
+vz bin    n_el  frac word1  frac no mesh pulse | median first-mesh - IC (bins)  expected  | median matched  p90 matched | last mesh bin in trace - IC
+  50-100      13   1.000      0.000        |      50      1016  |      50      527 | 917
+ 100-150     627   0.998      0.000        |      51       971  |      66      892 | 917
+ 150-200     791   0.997      0.000        |      50       923  |     827      901 | 917
+ 200-250    1141   1.000      0.000        |      58       860  |     821      856 | 917
+ 250-300    1605   0.998      0.000        |     765       810  |     786      827 | 917
+ 300-350    1623   1.000      0.000        |     714       754  |     728      770 | 917
+ 350-400    1511   0.999      0.000        |     661       698  |     672      712 | 917
+ 400-450    1555   0.999      0.000        |     613       641  |     616      656 | 917
+ 450-500    1516   0.999      0.000        |     553       585  |     557      598 | 917
+ 500-550    1449   0.999      0.000        |     498       527  |     501      542 | 917
+ 550-600    1400   0.999      0.000        |     446       472  |     448      488 | 917
+ 600-650    1373   0.999      0.000        |     387       415  |     388      431 | 917
+ 650-700    1323   0.998      0.000        |     333       357  |     333      373 | 917
+ 700-750    1369   0.999      0.000        |     275       301  |     276      315 | 917
+ 750-800    1265   0.999      0.000        |     214       245  |     215      258 | 917
+ 800-850    1261   0.997      0.000        |     157       188  |     157      200 | 917
+ 850-900    1189   0.998      0.000        |     102       130  |     102      144 | 917
+ 900-950    1071   0.999      0.000        |      49        76  |      49       86 | 917
+
+All joined tracks, word 1: distribution of (first mesh pulse - IC trigger) in bins of 50, and of the latest mesh onset:
+  -1200:0 -1150:179 -1100:29 -1050:30 -1000:27 -950:24 -900:27 -850:24 -800:21 -750:20 -700:22 -650:22 -600:19 -550:26 -500:18 -450:36 -400:27 -350:41 -300:26 -250:33 -200:43 -150:43 -100:42 -50:52 0:39051 50:19135 100:4856 150:4232 200:3882 250:3754 300:3749 350:3609 400:3381 450:3398 500:3204 550:2957 600:2835 650:2579 700:2361 750:2215 800:1775 850:206 900:0
+
+=== Check 2: elastic events with a low IC amplitude (pile-up candidates) ===
+elastic peak: carbon 22362, low-IC (<1000) 1728 (0.048 of the peak)
+  carbon : n  22362  IC pulse at trigger position 0.933  any IC pulse 1.000  median IC pulses 1  word1 0.999
+  low-IC : n   1728  IC pulse at trigger position 0.266  any IC pulse 0.848  median IC pulses 2  word1 0.999
+  low-IC with no pulse at the trigger: other IC pulses at (bin - trigger) p10/50/90 [-903.   96.  496.]; frac before trigger 0.48; amplitude median 1165
+  vz distribution (fraction per 100 mm), carbon vs low-IC-no-trigger-pulse:
+   carbon 0.001 0.063 0.123 0.140 0.137 0.127 0.121 0.118 0.110 0.060
+   low-IC 0.002 0.031 0.139 0.173 0.168 0.166 0.113 0.098 0.068 0.042
+   vz outside 0-1000: carbon 0.000, low-IC 0.000
+   Ex median/sigma: carbon -0.128/0.212, low-IC -0.070/0.225
+
+=== Check 3: downscaled-IC triggers (word 2) vs coincidence triggers (word 1), every recorded event ===
+run 16: w1 n 32301 noICatTrig 0.1077 noICanywhere 0.0048 noMesh 0.000 | w2 n  9279 noICatTrig 0.1154 noICanywhere 0.0110 noMesh 0.971 | w3 n    27 noICatTrig 0.0370 noICanywhere 0.0370 noMesh 0.000
+run 17: w1 n 21996 noICatTrig 0.1047 noICanywhere 0.0055 noMesh 0.000 | w2 n  6432 noICatTrig 0.1105 noICanywhere 0.0106 noMesh 0.973 | w3 n    14 noICatTrig 0.1429 noICanywhere 0.0714 noMesh 0.000
+run 18: w1 n 15936 noICatTrig 0.1053 noICanywhere 0.0049 noMesh 0.000 | w2 n  4626 noICatTrig 0.1055 noICanywhere 0.0134 noMesh 0.977 | w3 n    15 noICatTrig 0.1333 noICanywhere 0.0000 noMesh 0.000
+run 19: w1 n 24142 noICatTrig 0.1140 noICanywhere 0.0050 noMesh 0.000 | w2 n  6916 noICatTrig 0.1236 noICanywhere 0.0107 noMesh 0.972 | w3 n    27 noICatTrig 0.2222 noICanywhere 0.0000 noMesh 0.000
+run 20: w1 n 22664 noICatTrig 0.1190 noICanywhere 0.0046 noMesh 0.000 | w2 n  6485 noICatTrig 0.1229 noICanywhere 0.0131 noMesh 0.976 | w3 n    24 noICatTrig 0.0833 noICanywhere 0.0000 noMesh 0.000
+run 21: w1 n 23555 noICatTrig 0.1202 noICanywhere 0.0047 noMesh 0.000 | w2 n  6740 noICatTrig 0.1243 noICanywhere 0.0113 noMesh 0.975 | w3 n    27 noICatTrig 0.1111 noICanywhere 0.0000 noMesh 0.000
+run 26: w1 n 21601 noICatTrig 0.1158 noICanywhere 0.0057 noMesh 0.000 | w2 n  6245 noICatTrig 0.1169 noICanywhere 0.0136 noMesh 0.979 | w3 n    21 noICatTrig 0.1429 noICanywhere 0.0000 noMesh 0.000
+run 27: w1 n 20445 noICatTrig 0.1166 noICanywhere 0.0045 noMesh 0.000 | w2 n  5931 noICatTrig 0.1248 noICanywhere 0.0126 noMesh 0.980 | w3 n    15 noICatTrig 0.0667 noICanywhere 0.0000 noMesh 0.000
+run 31: w1 n 20952 noICatTrig 0.1142 noICanywhere 0.0045 noMesh 0.000 | w2 n  6142 noICatTrig 0.1200 noICanywhere 0.0135 noMesh 0.974 | w3 n    22 noICatTrig 0.0909 noICanywhere 0.0000 noMesh 0.000
+ALL word 1: n 203592  no IC pulse at trigger 23021 (0.1131)  no IC pulse anywhere 999 (0.0049)
+ALL word 2: n 58796  no IC pulse at trigger 6967 (0.1185)  no IC pulse anywhere 710 (0.0121)
+  word 2 with no pulse at trigger but a pulse elsewhere: 6257; pulse position - trigger p10/50/90 [-984.   59.  501.]

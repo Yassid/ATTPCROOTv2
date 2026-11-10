@@ -1,0 +1,59 @@
+16C(d,d) first pass: 10 runs (0016, 0017, 0018, 0019, 0020, 0021, 0022, 0026, 0027, 0031), 124502 tracks, L = 92.83 mb^-1 over 971.73 mm
+IC window 1000-1350; excluded runs [23].
+No acceptance applied. R = Y / (L_slice * sigma_OM * dOmega) = (acceptance x efficiency) x (luminosity scale).
+
+Ex peak per vz slice (theta_lab 60-89.5, all theta_cm): median and robust sigma of |Ex|<1.5
+  vz    0- 100: n     19  median +0.470  sigma 0.937 MeV
+  vz  100- 200: n   1812  median -0.077  sigma 0.245 MeV
+  vz  200- 300: n   3434  median -0.097  sigma 0.217 MeV
+  vz  300- 400: n   3857  median -0.129  sigma 0.216 MeV
+  vz  400- 500: n   3793  median -0.141  sigma 0.229 MeV
+  vz  500- 600: n   3561  median -0.141  sigma 0.231 MeV
+  vz  600- 700: n   3362  median -0.155  sigma 0.242 MeV
+  vz  700- 800: n   3273  median -0.152  sigma 0.236 MeV
+  vz  800- 900: n   3056  median -0.149  sigma 0.243 MeV
+Peak window +-2.5 sigma around the slice median; background from the Ex -4.5..-1.5 sideband scaled by width.
+
+=== all events (no trigger cut) ===
+R = Y/(L f sigma dOmega) with Zhang-Pang-Lou, f = kept fraction of the cell; "-" = fewer than 10 counts or f < 0.25. Rows vz slice, columns theta_cm.
+vz         12-14    14-16    16-18    18-20    20-22    22-24    24-26    26-28    28-30 
+  0-100    -        -        -        -        -        -        -        -        -       Ed 23.05
+100-200 0.095( 9) 0.232(16) 0.469(25) 0.568(33) 0.671(43) 0.738(59) 0.703(81)  0.47(11)    -       Ed 22.91
+200-300 0.451(21) 0.680(27) 0.899(35) 0.912(41) 0.806(48) 0.675(57) 0.528(72)  0.39(12)    -       Ed 22.77
+300-400 0.606(24) 0.869(31) 0.902(35) 0.861(40) 0.786(47) 0.758(61) 0.561(74)  0.21(10)    -       Ed 22.63
+400-500 0.509(22) 0.839(30) 0.925(35) 0.881(40) 0.822(48) 0.784(62) 0.715(86)  0.21(10)    -       Ed 22.49
+500-600 0.478(21) 0.747(28) 0.864(34) 0.854(39) 0.709(45) 0.787(61) 0.477(76)  0.35(11)    -       Ed 22.35
+600-700 0.397(19) 0.754(28) 0.791(33) 0.807(38) 0.743(46) 0.694(57) 0.669(81)  0.31(11)    -       Ed 22.21
+700-800 0.367(18) 0.712(28) 0.849(34) 0.768(37) 0.732(45) 0.855(62) 0.567(75)  0.47(12)    -       Ed 22.07
+800-900 0.342(18) 0.625(26) 0.704(31) 0.825(38) 0.591(40) 0.769(59) 0.643(81)  0.46(12)  0.39(20)   Ed 21.94
+
+=== r_res >= 28 mm (trigger-safe; theta_cm and vz coupled, see dd_om/fiducial_window.txt) ===
+R = Y/(L f sigma dOmega) with Zhang-Pang-Lou, f = kept fraction of the cell; "-" = fewer than 10 counts or f < 0.25. Rows vz slice, columns theta_cm.
+vz         12-14    14-16    16-18    18-20    20-22    22-24    24-26    26-28    28-30 
+  0-100    -        -        -        -        -        -        -        -        -       Ed 23.05
+100-200    -        -     0.453(39) 0.570(33) 0.671(43) 0.738(59) 0.703(81)  0.47(11)    -       Ed 22.91
+200-300    -        -        -     0.862(73) 0.835(51) 0.675(57) 0.528(72)  0.39(12)    -       Ed 22.77
+300-400    -        -        -        -        -     0.750(80) 0.567(75)  0.21(10)    -       Ed 22.63
+400-500    -        -        -        -        -        -        -      0.05(16)    -       Ed 22.49
+500-600    -        -        -        -        -        -        -        -        -       Ed 22.35
+600-700    -        -        -        -        -        -        -        -        -       Ed 22.21
+700-800    -        -        -        -        -        -        -        -        -       Ed 22.07
+800-900    -        -        -        -        -        -        -        -        -       Ed 21.94
+
+Yields Y (background B) in the trigger-safe region, r_res >= 28:
+  vz 100-200: 16-18 138(0.8)  18-20 309(4.1)  20-22 248(3.3)  22-24 167(3.7)  24-26 85(3.3)  26-28 27(4.1)
+  vz 200-300: 18-20 144(1.4)  20-22 287(5.1)  22-24 157(5.4)  24-26 68(5.4)  26-28 27(7.2)
+  vz 300-400: 22-24 109(7.9)  24-26 73(6.1)  26-28 20(9.4)
+  vz 400-500: 26-28 10(8.8)
+
+Potential dependence: R with each potential, r_res >= 28, cells with >= 10 counts, weighted mean over cells
+  An-Cai         : R = 0.595 +- 0.015
+  Han-Shi-Shen   : R = 0.618 +- 0.016
+  Zhang-Pang-Lou : R = 0.613 +- 0.015
+  Daehnick       : R = 0.571 +- 0.014
+
+Same, all events, theta_cm 18-24 only, vz 0-500:
+  An-Cai         : R = 0.754 +- 0.013
+  Han-Shi-Shen   : R = 0.788 +- 0.014
+  Zhang-Pang-Lou : R = 0.766 +- 0.013
+  Daehnick       : R = 0.736 +- 0.013
