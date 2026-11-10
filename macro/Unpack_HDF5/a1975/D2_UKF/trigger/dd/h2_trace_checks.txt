@@ -1,0 +1,117 @@
+H2 runs: 83. IC pulse at the trigger: bin 1150
+
+=== a. trigger-word pairing per run (frac of word-2 events with no mesh pulse, pairing word(i+s) with waveform(i)) ===
+  run 106: s=0 w2 noMesh 0.969 w1 noMesh 0.000 | s=1 w2 0.015 w1 0.234 -> pair +0
+  run 107: s=0 w2 noMesh 0.969 w1 noMesh 0.000 | s=1 w2 0.020 w1 0.236 -> pair +0
+  run 108: s=0 w2 noMesh 0.967 w1 noMesh 0.000 | s=1 w2 0.018 w1 0.241 -> pair +0
+  run 109: s=0 w2 noMesh 0.970 w1 noMesh 0.000 | s=1 w2 0.021 w1 0.237 -> pair +0
+  run 110: s=0 w2 noMesh 0.972 w1 noMesh 0.000 | s=1 w2 0.020 w1 0.242 -> pair +0
+  run 111: s=0 w2 noMesh 0.970 w1 noMesh 0.000 | s=1 w2 0.018 w1 0.243 -> pair +0
+  run 112: s=0 w2 noMesh 0.971 w1 noMesh 0.000 | s=1 w2 0.021 w1 0.242 -> pair +0
+  run 113: s=0 w2 noMesh 0.971 w1 noMesh 0.000 | s=1 w2 0.022 w1 0.245 -> pair +0
+  run 114: s=0 w2 noMesh 0.968 w1 noMesh 0.000 | s=1 w2 0.019 w1 0.247 -> pair +0
+  run 115: s=0 w2 noMesh 0.965 w1 noMesh 0.000 | s=1 w2 0.015 w1 0.245 -> pair +0
+  run 116: s=0 w2 noMesh 0.967 w1 noMesh 0.000 | s=1 w2 0.020 w1 0.244 -> pair +0
+  run 117: s=0 w2 noMesh 0.970 w1 noMesh 0.000 | s=1 w2 0.019 w1 0.246 -> pair +0
+  run 118: s=0 w2 noMesh 0.966 w1 noMesh 0.000 | s=1 w2 0.024 w1 0.243 -> pair +0
+  run 119: s=0 w2 noMesh 0.969 w1 noMesh 0.000 | s=1 w2 0.020 w1 0.249 -> pair +0
+  run 120: s=0 w2 noMesh 0.964 w1 noMesh 0.000 | s=1 w2 0.016 w1 0.235 -> pair +0
+  run 121: s=0 w2 noMesh 0.962 w1 noMesh 0.000 | s=1 w2 0.020 w1 0.241 -> pair +0
+  run 122: s=0 w2 noMesh 0.966 w1 noMesh 0.000 | s=1 w2 0.021 w1 0.242 -> pair +0
+  run 123: s=0 w2 noMesh 0.970 w1 noMesh 0.000 | s=1 w2 0.021 w1 0.243 -> pair +0
+  run 124: s=0 w2 noMesh 0.970 w1 noMesh 0.000 | s=1 w2 0.020 w1 0.245 -> pair +0
+  run 125: s=0 w2 noMesh 0.970 w1 noMesh 0.000 | s=1 w2 0.020 w1 0.247 -> pair +0
+  run 126: s=0 w2 noMesh 0.973 w1 noMesh 0.000 | s=1 w2 0.024 w1 0.250 -> pair +0
+  run 127: s=0 w2 noMesh 0.968 w1 noMesh 0.000 | s=1 w2 0.021 w1 0.249 -> pair +0
+  run 128: s=0 w2 noMesh 0.955 w1 noMesh 0.000 | s=1 w2 0.041 w1 0.244 -> pair +0
+  run 129: s=0 w2 noMesh 0.959 w1 noMesh 0.000 | s=1 w2 0.018 w1 0.239 -> pair +0
+  run 130: s=0 w2 noMesh 0.958 w1 noMesh 0.000 | s=1 w2 0.011 w1 0.231 -> pair +0
+  run 131: s=0 w2 noMesh 0.955 w1 noMesh 0.000 | s=1 w2 0.017 w1 0.230 -> pair +0
+  run 132: s=0 w2 noMesh 0.956 w1 noMesh 0.000 | s=1 w2 0.016 w1 0.231 -> pair +0
+  run 133: s=0 w2 noMesh 0.964 w1 noMesh 0.000 | s=1 w2 0.016 w1 0.234 -> pair +0
+  run 134: s=0 w2 noMesh 0.952 w1 noMesh 0.000 | s=1 w2 0.015 w1 0.231 -> pair +0
+  run 135: s=0 w2 noMesh 0.958 w1 noMesh 0.000 | s=1 w2 0.016 w1 0.233 -> pair +0
+  run 136: s=0 w2 noMesh 0.955 w1 noMesh 0.000 | s=1 w2 0.017 w1 0.231 -> pair +0
+  run 137: s=0 w2 noMesh 0.955 w1 noMesh 0.000 | s=1 w2 0.016 w1 0.231 -> pair +0
+  run 138: s=0 w2 noMesh 0.956 w1 noMesh 0.000 | s=1 w2 0.017 w1 0.234 -> pair +0
+  run 139: s=0 w2 noMesh 0.956 w1 noMesh 0.000 | s=1 w2 0.019 w1 0.234 -> pair +0
+  run 140: s=0 w2 noMesh 0.963 w1 noMesh 0.000 | s=1 w2 0.020 w1 0.233 -> pair +0
+  run 141: s=0 w2 noMesh 0.955 w1 noMesh 0.000 | s=1 w2 0.019 w1 0.234 -> pair +0
+  run 142: s=0 w2 noMesh 0.958 w1 noMesh 0.000 | s=1 w2 0.019 w1 0.237 -> pair +0
+  run 143: s=0 w2 noMesh 0.955 w1 noMesh 0.000 | s=1 w2 0.020 w1 0.237 -> pair +0
+  run 144: s=0 w2 noMesh 0.956 w1 noMesh 0.000 | s=1 w2 0.024 w1 0.237 -> pair +0
+  run 145: s=0 w2 noMesh 0.955 w1 noMesh 0.000 | s=1 w2 0.022 w1 0.237 -> pair +0
+  run 146: s=0 w2 noMesh 0.958 w1 noMesh 0.000 | s=1 w2 0.017 w1 0.238 -> pair +0
+  run 147: s=0 w2 noMesh 0.959 w1 noMesh 0.000 | s=1 w2 0.015 w1 0.226 -> pair +0
+  run 149: s=0 w2 noMesh 0.964 w1 noMesh 0.000 | s=1 w2 0.026 w1 0.237 -> pair +0
+  run 150: s=0 w2 noMesh 0.961 w1 noMesh 0.000 | s=1 w2 0.019 w1 0.239 -> pair +0
+  run 151: s=0 w2 noMesh 0.962 w1 noMesh 0.000 | s=1 w2 0.020 w1 0.241 -> pair +0
+  run 152: s=0 w2 noMesh 0.959 w1 noMesh 0.000 | s=1 w2 0.019 w1 0.240 -> pair +0
+  run 153: s=0 w2 noMesh 0.961 w1 noMesh 0.000 | s=1 w2 0.021 w1 0.240 -> pair +0
+  run 154: s=0 w2 noMesh 0.958 w1 noMesh 0.000 | s=1 w2 0.017 w1 0.239 -> pair +0
+  run 155: s=0 w2 noMesh 0.963 w1 noMesh 0.000 | s=1 w2 0.022 w1 0.243 -> pair +0
+  run 156: s=0 w2 noMesh 0.957 w1 noMesh 0.000 | s=1 w2 0.019 w1 0.244 -> pair +0
+  run 157: s=0 w2 noMesh 0.960 w1 noMesh 0.000 | s=1 w2 0.021 w1 0.244 -> pair +0
+  run 158: s=0 w2 noMesh 0.956 w1 noMesh 0.000 | s=1 w2 0.019 w1 0.245 -> pair +0
+  run 159: s=0 w2 noMesh 0.958 w1 noMesh 0.000 | s=1 w2 0.019 w1 0.241 -> pair +0
+  run 160: s=0 w2 noMesh 0.959 w1 noMesh 0.000 | s=1 w2 0.021 w1 0.242 -> pair +0
+  run 161: s=0 w2 noMesh 0.962 w1 noMesh 0.000 | s=1 w2 0.020 w1 0.244 -> pair +0
+  run 162: s=0 w2 noMesh 0.965 w1 noMesh 0.000 | s=1 w2 0.023 w1 0.246 -> pair +0
+  run 163: s=0 w2 noMesh 0.960 w1 noMesh 0.000 | s=1 w2 0.020 w1 0.246 -> pair +0
+  run 164: s=0 w2 noMesh 0.965 w1 noMesh 0.000 | s=1 w2 0.024 w1 0.250 -> pair +0
+  run 165: s=0 w2 noMesh 0.954 w1 noMesh 0.000 | s=1 w2 0.022 w1 0.250 -> pair +0
+  run 166: s=0 w2 noMesh 0.964 w1 noMesh 0.000 | s=1 w2 0.025 w1 0.248 -> pair +0
+  run 167: s=0 w2 noMesh 0.956 w1 noMesh 0.000 | s=1 w2 0.024 w1 0.244 -> pair +0
+  run 168: s=0 w2 noMesh 0.955 w1 noMesh 0.000 | s=1 w2 0.021 w1 0.246 -> pair +0
+  run 169: s=0 w2 noMesh 0.957 w1 noMesh 0.000 | s=1 w2 0.020 w1 0.247 -> pair +0
+  run 170: s=0 w2 noMesh 0.957 w1 noMesh 0.000 | s=1 w2 0.021 w1 0.244 -> pair +0
+  run 171: s=0 w2 noMesh 0.964 w1 noMesh 0.000 | s=1 w2 0.019 w1 0.246 -> pair +0
+  run 172: s=0 w2 noMesh 0.958 w1 noMesh 0.000 | s=1 w2 0.025 w1 0.246 -> pair +0
+  run 173: s=0 w2 noMesh 0.962 w1 noMesh 0.000 | s=1 w2 0.021 w1 0.250 -> pair +0
+  run 174: s=0 w2 noMesh 0.966 w1 noMesh 0.000 | s=1 w2 0.023 w1 0.251 -> pair +0
+  run 175: s=0 w2 noMesh 0.964 w1 noMesh 0.000 | s=1 w2 0.021 w1 0.249 -> pair +0
+  run 176: s=0 w2 noMesh 0.962 w1 noMesh 0.000 | s=1 w2 0.018 w1 0.246 -> pair +0
+  run 177: s=0 w2 noMesh 0.960 w1 noMesh 0.000 | s=1 w2 0.021 w1 0.250 -> pair +0
+  run 178: s=0 w2 noMesh 0.964 w1 noMesh 0.000 | s=1 w2 0.022 w1 0.252 -> pair +0
+  run 179: s=0 w2 noMesh 0.960 w1 noMesh 0.000 | s=1 w2 0.027 w1 0.246 -> pair +0
+  run 180: s=0 w2 noMesh 0.959 w1 noMesh 0.000 | s=1 w2 0.019 w1 0.250 -> pair +0
+  run 181: s=0 w2 noMesh 0.964 w1 noMesh 0.000 | s=1 w2 0.021 w1 0.255 -> pair +0
+  run 182: s=0 w2 noMesh 0.956 w1 noMesh 0.000 | s=1 w2 0.022 w1 0.249 -> pair +0
+  run 183: s=0 w2 noMesh 0.961 w1 noMesh 0.000 | s=1 w2 0.025 w1 0.250 -> pair +0
+  run 184: s=0 w2 noMesh 0.961 w1 noMesh 0.000 | s=1 w2 0.017 w1 0.248 -> pair +0
+  run 185: s=0 w2 noMesh 0.960 w1 noMesh 0.000 | s=1 w2 0.023 w1 0.252 -> pair +0
+  run 186: s=0 w2 noMesh 0.962 w1 noMesh 0.000 | s=1 w2 0.022 w1 0.252 -> pair +0
+  run 187: s=0 w2 noMesh 0.963 w1 noMesh 0.000 | s=1 w2 0.024 w1 0.254 -> pair +0
+  run 188: s=0 w2 noMesh 0.957 w1 noMesh 0.000 | s=1 w2 0.018 w1 0.248 -> pair +0
+  run 189: s=0 w2 noMesh 0.962 w1 noMesh 0.000 | s=1 w2 0.019 w1 0.245 -> pair +0
+pairing: +0 in 83 runs, +1 in 0, neither in 0 ([])
+
+=== b. coincidence ceiling: first mesh onset - IC trigger, word-1 events, bins of 50 ===
+  -1200:0 -1150:2969 -1100:498 -1050:414 -1000:409 -950:422 -900:432 -850:404 -800:420 -750:474 -700:708 -650:1110 -600:1733 -550:1997 -500:2320 -450:3034 -400:5151 -350:5134 -300:5070 -250:5081 -200:5069 -150:4807 -100:4801 -50:4810 0:548104 50:110397 100:62698 150:58656 200:57662 250:57999 300:61150 350:67904 400:80315 450:93590 500:87573 550:67438 600:51238 650:33926 700:26306 750:22114 800:11850 850:1 900:0
+  word 1: p99 / p99.9 / max of the first mesh onset after the IC: 792 / 833 / 856 bins; trace end 897
+
+=== c. IC pulse at the trigger position (+-30 bins, > 300 ADC) ===
+  word 1: n 1556216  no IC pulse at trigger 0.0808  none anywhere 0.0059  no mesh 0.0000
+  word 2: n 400539  no IC pulse at trigger 0.0872  none anywhere 0.0118  no mesh 0.9619
+
+=== d. (p,d) deuterons: mesh onset vs vz and r_res ===
+  joined 30756 of 30756 tracks; corr(cache IC, trace IC at trigger) = 0.832
+  word-1 fraction among (p,d) tracks: 0.9958
+  vz slice: n  early mesh (<150 bins) frac | median first onset (bins)
+     0-100   2341  0.938 |     36
+   100-200   2282  0.954 |     35
+   200-300   2238  0.959 |     35
+   300-400   1910  0.970 |     34
+   400-500   1506  0.977 |     34
+   500-600   1099  0.976 |     32
+   600-700    514  0.947 |     34
+   700-800     89  0.910 |     35
+   800-900     25  0.960 |     34
+  r_res slice: n early frac
+     0-15     559  0.880
+    15-20     706  0.949
+    20-25    1122  0.964
+    25-30    1506  0.966
+    30-35    1792  0.973
+    35-45    2904  0.970
+    45-200   3415  0.951

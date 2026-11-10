@@ -57,3 +57,15 @@ R = Y / (L f sigma_ZPL dOmega), f = fraction of the (vz, theta_cm) cell kept by 
   about half of them. Since the rate is the same for both trigger types, a "true pulse at the trigger time" classifier
   would flag ~11 % of pure-beam triggers too; the downscaled sample measures that false-positive rate.
 - Si amplitudes show two groups (~1140 and ~1860), apparently carbon and oxygen.
+
+## H2 (proton-target) trace checks (2026-11-10): `h2_trace_checks.py`
+`trace_pulses.py` on runs 106-189 (83 runs; run_0148 has no FRIB waveform group, the known broken run), then
+`python -I h2_trace_checks.py /mnt/f/a1975/caches/pd_trig/pulses h2_trace_checks`. Output `h2_trace_checks.{txt,png}`.
+- Trigger word pairs DIRECTLY (+0) with the waveform in all 83 runs (downscaled-IC events with no mesh 0.95-0.97).
+- Coincidence ceiling: first mesh onset at most 856 bins (68.5 us) after the IC pulse; p99 792 bins. Same as D2.
+- IC pulse missing at the trigger position: 8.1 % of coincidence triggers, 8.7 % of downscaled; none anywhere 0.6 % / 1.2 %.
+- (p,d) deuterons (adopted selection, joined entry i -> FRIB event i+1, IC correlation 0.83): 99.6 % are word 1, and
+  94-98 % have the mesh onset within 150 bins of the IC at every vz (median 32-36 bins): the mesh fires at the
+  start of the event, from the residual near the beam hole exit, not from the deuteron drift. The 0-15 mm r_res
+  slice is lowest (0.88). These are triggered events only, so this is the timing of the trigger, not its efficiency
+  (efficiency vs r_res: project note 2026-11-08).
