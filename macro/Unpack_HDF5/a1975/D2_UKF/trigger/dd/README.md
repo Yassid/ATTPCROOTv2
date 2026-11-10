@@ -98,3 +98,18 @@ D2 events, chain re-run; same method as embed_vz_dp.C, which gave .68-.91 for th
   start of the event, from the residual near the beam hole exit, not from the deuteron drift. The 0-15 mm r_res
   slice is lowest (0.88). These are triggered events only, so this is the timing of the trigger, not its efficiency
   (efficiency vs r_res: project note 2026-11-08).
+
+### Embedding result (2026-11-10 12:05; embed_dd.txt, scale_2seeds_emb.txt)
+4 data runs (16, 31, 79, 102) x sim seeds 6001/6002, 2 overlays each: 9678 sim deuterons, reference found alone for
+0.912, 17648 overlays.
+- **Survival on the plateau (theta_cm 16-22, vz 250-900): 0.794(9) all hosts, 0.814(11) carbon hosts.** The loss is
+  the event environment: 0.99 on hosts with < 50 hits, 0.86 at 50-150, 0.74 at 150-300, 0.42-0.50 above 300.
+- It falls along the drift: carbon hosts, theta_cm 14-24, vz 100..900 by 100: .905 .929 .880 .821 .859 .785 .769 .695.
+  theta_cm: .66 (12-14) rising to .84 (20-24), .74 at 26+.
+- `dd_scale.py ... 23 2.5 "/mnt/f/a1975/caches/dd_r280/embed/e_r*.root"` multiplies eps per vz slice by it:
+  **S(plateau) = 0.945(16) ZPL** (An-Cai .950, Daehnick .940, Han-Shi-Shen .994); chi2 72 -> 63 / 17.
+- With the IC-missing loss (4.8 % of carbon, low-IC events split C:O like the gated ones): **S ~ 0.99**, potential
+  spread 0.99-1.04. The D2 luminosity (316.98 scaled, f_beam 0.613) reproduces the 16C(d,d) elastic to a few %.
+- **Consequence, not applied:** every D2 channel's acceptance from clean simulation misses this environment loss
+  ((d,p) knew it: "22 % embedding loss not applied"; (d,t) acceptance has none). Their cross sections are ~20 % low
+  unless corrected. Decision for Yassid. (p,d)/(p,p) partly cancel (same environment, both from clean sims).

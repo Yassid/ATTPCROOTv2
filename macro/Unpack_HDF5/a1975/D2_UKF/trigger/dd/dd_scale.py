@@ -5,7 +5,7 @@
 # its own median and sigma), lower sideband subtraction for data. Acceptance per (vz, theta_cm) cell =
 # selected reco (reco vz, reco theta_cm) / generated (true z + 19.1 mm, true theta_cm = 180 - 2 theta_lab).
 # S = Y / (L dz/971.73 * eps * sigma_OM * dOmega): the data/theory scale per cell and per potential.
-# Usage: python -I dd_scale.py DATA_CACHE_DIR L_MB SIM_DUMP_GLOB OUT_PREFIX EXCLUDE_RUNS(comma or -) [NSIG=2.5]
+# Usage: python -I dd_scale.py DATA_CACHE_DIR L_MB SIM_DUMP_GLOB OUT_PREFIX EXCLUDE_RUNS(comma or -) [NSIG=2.5] [EMBED_GLOB]
 # Data Ex peak degrades beyond theta_cm 22 (shifts down, dissolves at 26+; sim does not): quote only theta_cm <= 22.
 import sys, glob
 import numpy as np, uproot
@@ -16,6 +16,7 @@ import matplotlib.pyplot as plt
 CDIR, LTOT, SGLOB, OUT = sys.argv[1], float(sys.argv[2]), sys.argv[3], sys.argv[4]
 EXCL = [int(x) for x in sys.argv[5].split(',')] if len(sys.argv) > 5 and sys.argv[5] != '-' else []
 NSIG = float(sys.argv[6]) if len(sys.argv) > 6 else 2.5   # Ex window half-width in units of each sample's slice sigma
+EMB = sys.argv[7] if len(sys.argv) > 7 and sys.argv[7] != '-' else ''   # embed_dd.C outputs (glob): environment survival
 LEN = 971.73; ZOFF = 19.1; ICLO, ICHI = 1000, 1350
 U = 931.49401; M1 = 16.0147013 * U; Md = 2.0135532 * U
 Eb = lambda z: 183.871 - 0.011071 * z
@@ -94,6 +95,19 @@ for j, (z0, z1) in enumerate(zip(ZB[:-1], ZB[1:])):
         nr = np.sum(pkS & (S['vz'] >= z0) & (S['vz'] < z1) & (cmS >= a) & (cmS < b))
         eps[j, i] = nr / ng if ng else np.nan; epe[j, i] = np.sqrt(max(eps[j, i] * (1 - eps[j, i]), 1 / ng) / ng) if ng else np.nan
     P(f'  {z0:3.0f}-{z1:<4.0f} ' + ' '.join(f'{x:4.2f}' for x in eps[j]))
+
+if EMB:
+    # track-finding survival in the real event environment (embed_dd.C): per vz slice, carbon hosts, theta_cm 14-24
+    # pooled (the theta dependence inside 16-22 is within 5 %); multiplies eps, its binomial error added
+    Ea = [uproot.open(f)['e'].arrays(library='np') for f in sorted(glob.glob(EMB))]
+    Em = {k: np.concatenate([a[k] for a in Ea]) for k in Ea[0]}
+    m2 = (Em['mode'] == 2) & (Em['icD'] >= 1000) & (Em['icD'] <= 1350) & (Em['tc0'] >= 14) & (Em['tc0'] < 24)
+    sv = []
+    for j, (z0, z1) in enumerate(zip(ZB[:-1], ZB[1:])):
+        m = m2 & (Em['vz0'] >= z0) & (Em['vz0'] < z1); n = m.sum(); f = np.mean(Em['found'][m] > 0) if n else np.nan
+        fe = np.sqrt(f * (1 - f) / n) if n else np.nan
+        epe[j] = eps[j] * f * np.hypot(epe[j] / eps[j], fe / f); eps[j] *= f; sv.append(f'{f:.3f}({n})')
+    P(f'Embedding survival per vz slice (carbon hosts, theta_cm 14-24; {EMB}): ' + ' '.join(sv) + '  -> multiplied into eps')
 
 P('\nScale S = Y/(L eps sigma_ZPL dOmega), carbon; "-" = Y < 10 or eps < 0.3. Rows vz, columns theta_cm:')
 for j, (z0, z1) in enumerate(zip(ZB[:-1], ZB[1:])):
