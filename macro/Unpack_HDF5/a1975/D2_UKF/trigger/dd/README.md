@@ -119,3 +119,16 @@ D2 events, chain re-run; same method as embed_vz_dp.C, which gave .68-.91 for th
   Han-Shi-Shen 1.003). **With the 4.8 % IC-missing loss: 1.002 (ZPL), 0.997-1.054 over the four potentials.**
 - The cells scatter beyond their errors (chi2 108/17): read ~10 % per cell as systematic; the plateau mean is not
   affected by it at the stat level quoted.
+
+### ALL 46 RUNS + truth theta_cm fix (2026-11-10 evening; scale_46runs_emb.*) -- SUPERSEDES the numbers above
+- Data: all 47 D2 runs refit (gf_dd_r280 47/47), run_0023 excluded. L = 316.98 x 289,408,099/289,561,503 x
+  0.9678/0.9676 = 316.88 mb^-1 (scaler list runs_all46.txt; frib_scalers_a1975.C gives the same counts).
+- **Bug fixed in dd_scale.py:** the generated theta_cm was 180 - 2 theta_lab, 0.25 deg above the relativistic
+  kinematics used for the reco (truth through the same kine gives Ex 0.000, cm - (180 - 2 th) = -0.252). It
+  inflated eps by ~3 % on the plateau (and caused eps > 1 at 16-22). Everything above used the old definition.
+- **S(plateau, theta_cm 16-22, vz 250-900) = 0.985(10) ZPL**, An-Cai .989, Daehnick .979, Han-Shi-Shen 1.035
+  (embedding applied). **With the 4.8 % IC-missing loss: 1.035; 1.03-1.09 over the four potentials.**
+  vz 200-900, 14-24: .972-1.031. Wide 16-22 bin gives the same plateau value (checked before the fix: .956 vs .955).
+- No double counting: 2 repeated (run, event) rows in 13290 selected (the sim: 0).
+- Sim reco theta_cm minus the OLD truth definition: -0.10 to -0.36 deg (median), i.e. ~0 against the relativistic
+  truth: the -0.25 offset was the definition itself. Resolution p16-p84 ~0.3 deg at 16-22.

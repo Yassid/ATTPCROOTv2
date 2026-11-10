@@ -3,7 +3,7 @@
 # Sim:  dump_dd_sim.C outputs of the elastic r280 simulation (run_dd_el.sh): "g" generated, "d" reconstructed.
 # Same selection on both: theta_lab 60-89.5, KE 0.3-10 MeV, Ex within +-2.5 sigma of the slice median (each sample
 # its own median and sigma), lower sideband subtraction for data. Acceptance per (vz, theta_cm) cell =
-# selected reco (reco vz, reco theta_cm) / generated (true z + 19.1 mm, true theta_cm = 180 - 2 theta_lab).
+# selected reco (reco vz, reco theta_cm) / generated (true z + 19.1 mm, true theta_cm from the true KE and theta_lab).
 # S = Y / (L dz/971.73 * eps * sigma_OM * dOmega): the data/theory scale per cell and per potential.
 # Usage: python -I dd_scale.py DATA_CACHE_DIR L_MB SIM_DUMP_GLOB OUT_PREFIX EXCLUDE_RUNS(comma or -) [NSIG=2.5] [EMBED_GLOB]
 # Data Ex peak degrades beyond theta_cm 22 (shifts down, dissolves at 26+; sim does not): quote only theta_cm <= 22.
@@ -45,6 +45,9 @@ def load(files, tree):
 
 
 ZB = np.arange(100, 901, 100.); TB = np.arange(12, 31, 2.)
+import os
+if os.environ.get('DD_TBINS'):   # e.g. DD_TBINS=10,16,22,28: wide theta_cm bins, migration across inner edges cancels
+    TB = np.array([float(x) for x in os.environ['DD_TBINS'].split(',')])
 dO = 2*np.pi*(np.cos(np.radians(TB[:-1])) - np.cos(np.radians(TB[1:])))
 
 
@@ -70,7 +73,10 @@ D = load(files, 'd'); exD, cmD, pkD, sbD, sgD, muD = select(D)
 sims = sorted(glob.glob(SGLOB))
 G = load(sims, 'g'); S = load(sims, 'd'); exS, cmS, pkS, _, sgS, muS = select(S)
 gok = G['tke'] > 0
-gvz = G['tvz'] + ZOFF; gcm = 180 - 2 * G['tth']
+gvz = G['tvz'] + ZOFF
+# truth theta_cm through the SAME relativistic kinematics as the reco (truth Ex then = 0.000); 180 - 2 theta_lab is
+# 0.25 deg higher and, on a falling generated distribution, inflated eps by ~6 % (fixed 2026-11-10)
+gcm = np.where(gok, kine(Eb(gvz), np.radians(G['tth']), np.maximum(G['tke'], 1e-6))[1], np.nan)
 P(f'16C(d,d) scale with r280 acceptance. Data: {len(files)} runs ({",".join(f.split("/")[-1][4:8] for f in files)}), L = {LTOT} mb^-1, IC {ICLO}-{ICHI}.')
 P(f'Sim: {len(sims)} files, {gok.sum()} generated elastic events, {len(S["ke"])} reco rows, {pkS.sum()} selected.')
 P('Ex peak sigma per vz slice (100-900): data ' + ' '.join(f'{x:.3f}' for x in sgD) + ' | sim ' + ' '.join(f'{x:.3f}' for x in sgS))
@@ -154,7 +160,7 @@ fig, ax = plt.subplots(1, 2, figsize=(13, 5))
 cmap = plt.get_cmap('viridis')
 for j, (z0, z1) in enumerate(zip(ZB[:-1], ZB[1:])):
     xm = .5 * (TB[:-1] + TB[1:]) + (j - 4) * .12
-    ok = np.isfinite(Se[j])
+    ok = np.isfinite(Se[j]) & (Se[j] > 0)   # background-dominated cells (Y - B <= 0) have no meaningful error
     ax[0].errorbar(xm[ok], Sc['Z'][j][ok], Se[j][ok], fmt='o', ms=4, capsize=2, color=cmap(j / 8), label=f'vz {z0:.0f}-{z1:.0f}')
     ax[1].plot(.5 * (TB[:-1] + TB[1:]), eps[j], 'o-', ms=3, color=cmap(j / 8), label=f'vz {z0:.0f}-{z1:.0f}')
 ax[0].axhline(1, color='k', ls=':', lw=.8); ax[0].set_xlabel(r'$\theta_{cm}$ [deg]'); ax[0].set_ylabel('data / Zhang-Pang-Lou')
