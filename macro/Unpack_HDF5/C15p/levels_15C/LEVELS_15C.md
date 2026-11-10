@@ -332,15 +332,79 @@ leftover is a clean, centred, roughly Gaussian bump rather than a lineshape arte
 survives in Spyral, where the g.s. FWHM is 0.48 and the two states are 1.5 FWHM apart.
 
 The amplitude ratio differs by 3x between the codes (0.100 vs 0.035) and carries a 21-45 %
-background systematic, so **it is not a yield measurement.** The reason is resolution: at
-ATTPCROOT's FWHM 0.91 the two peaks are only 0.81 FWHM apart and the decomposition is strongly
-degenerate; at Spyral's FWHM 0.48 they are 1.54 FWHM apart and genuinely separated. Trust Spyral's
-number over ATTPCROOT's, and neither to better than a factor two until a simulated response
-function exists (see `Next` below).
+background systematic, so **it is not a yield measurement.** What limits it is quantified in the
+next section -- and it is *not* an internal degeneracy of the fit, which was my first guess and is
+wrong.
+
+# What limits the 5/2+, and what does NOT (2026-11-10)
+
+Two hypotheses were tested directly. The first failed, the second is the answer.
+
+## ✗ REFUTED: the non-Gaussian g.s. is NOT a superposition over theta slices
+
+`scripts/thetaslice2.C`. Resolution is strongly theta-dependent in both codes, so the obvious guess
+is that the integrated g.s. is a sum of Gaussians of different width and is non-Gaussian only for
+that reason. If so, fitting *within* a narrow theta slice should give chi2/bin ~ 1. It does not:
+
+```
+theta slice   64-68  68-72  72-76  76-80  80-84  84-88   |  ALL
+ATTPCROOT      0.79   2.67   3.48   3.59  18.97   0.96   |  8.06
+Spyral         0.31   1.34   2.45   3.74   4.29   4.14   |  1.47
+```
+
+The slices carrying the statistics are **no better than the integral and often worse** (ATTPCROOT's
+dominant 80-84 slice is 18.97 against 8.06 for all angles). **The non-Gaussian response is
+intrinsic within a 4 degree slice**, not an artefact of summing. So a per-slice response model
+would not fix it, and that avenue is closed.
+
+⚠ Method note: a first pass fitted each slice with a plain `gaus+pol1` and got chi2/bin 10-49,
+which was meaningless -- the 5/2+ sits *inside* the fit window, so omitting it inflates chi2
+precisely where the statistics are. The table above uses the same bifurcated-Gaussian + 5/2+ +
+linear model as the global fit, so the comparison is like for like.
+
+Incidentally the forward slices (40-64 deg) peak at Ex = 4.6 to 11.6 MeV, not at the g.s. -- the
+elastic peak is simply not populated there. **69 % of all g.s. counts sit at theta = 76-88 deg.**
+
+## ★ The 5/2+ ratio is limited by the g.s. LINESHAPE, not by statistics
+
+`scripts/degen.C`, `scripts/degenfig.C` -> `figures/fivehalf_lineshape.png`
+
+![5/2+ lineshape sensitivity](figures/fivehalf_lineshape.png)
+
+Fix the g.s. right-hand width to a grid of values, refit everything else, and watch the 5/2+ ratio
+and the likelihood:
+
+```
+                    best FWHM_R   Delta(-2lnL)=1 band   ratio there   slope       10 % width error
+ATTPCROOT              0.906      0.894 - 0.917 (+-11 keV)  0.0997    -0.327/MeV  -> 30 % on the ratio
+Spyral                 0.565      0.570 - 0.576 (+- 3 keV)  0.0353    -0.099/MeV  -> 16 % on the ratio
+```
+
+**The likelihood is steep, so the width is pinned to a few keV and the ratio is NOT internally
+degenerate** -- my first explanation (that the two peaks overlap too much to separate) is refuted by
+this scan. Within its own model each code determines the ratio sharply.
+
+The problem is the *model*. The ratio slides fast with the assumed width, and the two codes are
+bridged by a change of only **+21 %** in the right-hand width: put ATTPCROOT at FWHM_R = 1.09
+instead of 0.906 and it reproduces Spyral's 0.0353 exactly. Given that the bifurcated Gaussian
+leaves chi2/bin 9.3 in the ATTPCROOT g.s. core, a 20 % error in the right-hand width is entirely
+plausible.
+
+⇒ **The quoted statistical error on the ratio (0.0058 / 0.0014) understates the truth by an order
+of magnitude.** The 5/2+ yield is a lineshape-limited quantity and cannot be improved by more
+statistics -- only by a correct response function. Trust Spyral's number over ATTPCROOT's (its
+peaks are 1.54 FWHM apart against 0.82, and its core chi2/bin is 2.9 against 9.3), and neither
+better than a factor two.
 
 ## What is still missing
 
 * A **simulated resolution function** at Ex ~ 0, 0.74, 4.6, 6.9. Without it the quoted FWHMs are
-  observed widths, not natural widths, and the 5/2+ ratio stays a factor-two quantity.
-* The g.s. **lineshape**: a bifurcated Gaussian leaves chi2/bin 9.3 in the ATTPCROOT core. This is
-  the single largest modelling deficiency left, and it is what limits the 5/2+.
+  observed widths, not natural widths, and the 5/2+ ratio stays a factor-two quantity. The scan
+  above makes this concrete: the response has to be right to ~5 % in the right-hand width before
+  the 5/2+ ratio is good to 15 %.
+* The g.s. **lineshape** itself: a bifurcated Gaussian leaves chi2/bin 9.3 in the ATTPCROOT core
+  and 2.9 in Spyral's. This is the single largest modelling deficiency left. It is NOT a theta
+  superposition (refuted above), so it must come from the fitter's own KE/theta response -- which
+  means a simulation is the only way to get at it.
+* State A and state B are unaffected by all of this: chi2/bin 1.1-1.3 in their regions, and
+  <= 0.06 MeV of movement across three background forms.

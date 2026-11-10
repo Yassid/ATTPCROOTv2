@@ -25,6 +25,15 @@ energies with a background systematic taken from the spread over three backgroun
 Its header documents the three single-minimisation attempts that FAILED first and why, so they are
 not retried.
 
+```bash
+root -b -q thetaslice2.C    # is the non-Gaussian g.s. a theta superposition?  (answer: NO)
+root -b -q degen.C          # what limits the 5/2+ ratio -- scan the fixed g.s. right-hand width
+root -b -q degenfig.C       # that scan as a figure -> fivehalf_lineshape.png
+```
+
+⚠ `thetaslice2.C` trap: a per-slice g.s. fit MUST include the 5/2+ term. Without it the chi2 is
+inflated precisely in the high-statistics slices (10-49 vs 1-4) and the comparison is meaningless.
+
 ⚠ `plotglobal.C` trap: **`TF1::Draw` is lazy** — the function is evaluated when the canvas is
 painted (at `SaveAs`), not when `Draw` is called. Any draw-only function that reads a global will
 be painted with whatever that global holds at the END of the macro, so the first panel silently
