@@ -28,17 +28,34 @@
 //  background systematic:
 //
 //    LIN    c0 + c1*Ex                                 empirical, monotonic, 2 parameters
-//    PS     c + N*dens(Ex)*exp(-k*Ex)                  flat floor + three-body 15C+d -> d'+(14C+n)
-//                                                      phase space (psmodel.h), threshold fixed
-//                                                      at Sn, one acceptance factor, 3 parameters
+//    PSATT  c + N*dens(Ex)*exp(-k*Ex)                  flat floor + three-body phase space TIMES a
+//                                                      free attenuation. ⚠ The attenuation is NOT
+//                                                      justified -- see the warning below. 3 par
 //    THR    c + A*Phi((Ex-Sn)/sigma_res)*exp(-k*Ex)    flat floor + a continuum turning on at Sn
 //                                                      smeared by that code's OWN measured g.s.
 //                                                      sigma_R (not refitted), 3 parameters
 //
-//  None of the three can grow a Gaussian bump, so none can swap roles with a state. The result
-//  (see the printout) is that state A and state B move by <= 0.06 MeV across all three forms in
-//  both codes, while the 5/2+ amplitude ratio moves by 20-60 % -- so the states are robust and
-//  the 5/2+ yield is NOT.
+//  Two more, added 2026-11-10, that contain NO phase space and NO threshold at all:
+//
+//    FLAT     c                                        1 parameter
+//    FLATEXP  c + A*exp(-k*Ex)                         3 parameters
+//
+//  None of them can grow a Gaussian bump, so none can swap roles with a state. The result is that
+//  state A and state B barely move across all of them, while the 5/2+ amplitude ratio moves by
+//  20-60 % -- so the states are robust and the 5/2+ yield is NOT.
+//
+//  ⚠⚠ PSATT IS NOT EVIDENCE FOR A PHASE-SPACE CONTINUUM, AND IS NOT ADOPTED.
+//  It wins the likelihood (-2lnL 204.6 vs 306.4 for FLATEXP on ATTPCROOT at equal parameter
+//  count), but the win comes from the free exp(-k*Ex) attached to it, not from the phase space.
+//  The fitted k is 0.0909 /MeV (ATTPCROOT) and 0.0662 (Spyral), i.e. a 5.1x and 3.3x suppression
+//  of Ex = 20 relative to Ex = 2. That is precisely the ~6x data/(phase space) discrepancy that
+//  the 2026-11-09 study measured and used to EXCLUDE uniform d + 14C + n phase space -- and that
+//  study showed it cannot be reconstruction efficiency, because the mean deuteron energy RISES
+//  with Ex (7.1 MeV at Ex = 2 to 13.5 at Ex = 20), so tracks get faster where counts are lost.
+//  PSATT therefore absorbs a known, unexplained discrepancy into a free parameter. It is kept
+//  ONLY as a shape systematic. See LEVELS_15C.md, "Why PSATT wins and still means nothing".
+//
+//  ADOPTED FOR BOTH CODES: LIN, the empirical straight line, which makes no physical claim.
 //
 //  Pure threshold shapes cannot be the whole story: ATTPCROOT has ~70 counts/bin BELOW
 //  Sn = 1.2180 MeV, which no 15C -> 14C+n shape produces, hence the flat floor in PS and THR.
@@ -51,16 +68,18 @@ static const double E52 = 0.740;     // 15C 5/2+ excitation energy, MeV
 static const double SNUC = 1.2180;   // 15C neutron separation energy, MeV -- FIXED everywhere
 static const double SPLIT = 2.2;     // boundary between the peak and the state window, MeV
 
-static int    MODE    = 0;           // 0 LIN, 1 PS, 2 THR
+static int    MODE    = 0;           // 0 LIN, 1 PSATT, 2 THR, 3 FLAT, 4 FLATEXP
 static double KB      = 191.25;      // beam KE feeding the phase-space shape, MeV
 static double SIG_RES = 0.30;        // threshold smearing for THR = measured g.s. sigma_R, FIXED
 static double P0, P1, P2;            // the shared background parameters
 
 double bkgOf(double X, double a, double b, double c)
 {
-   if (MODE == 0) return std::max(0.0, a + b * X);
-   if (MODE == 1) return std::max(0.0, a) + std::max(0.0, b) * PS::dens(X, KB) * std::exp(-c * X);
-   double thr = 0.5 * (1.0 + std::erf((X - SNUC) / (M_SQRT2 * SIG_RES)));
+   if (MODE == 0) return std::max(0.0, a + b * X);                                   // LIN
+   if (MODE == 1) return std::max(0.0, a) + std::max(0.0, b) * PS::dens(X, KB) * std::exp(-c * X); // PSATT
+   if (MODE == 3) return std::max(0.0, a);                                           // FLAT
+   if (MODE == 4) return std::max(0.0, a) + std::max(0.0, b) * std::exp(-c * X);     // FLATEXP
+   double thr = 0.5 * (1.0 + std::erf((X - SNUC) / (M_SQRT2 * SIG_RES)));            // THR
    return std::max(0.0, a) + std::max(0.0, b) * thr * std::exp(-c * X);
 }
 double bkg(double X) { return bkgOf(X, P0, P1, P2); }
@@ -100,12 +119,13 @@ double fAll(double* x, double* p)
 
 struct Out {
    double mu, dmu, fwL, fwR, r52, dr52, r52sys;
+   double nll;          // state-window -2lnL, for picking the best of several starts
    double Amu, dAmu, Afw, dAfw, Bmu, dBmu, Bfw, dBfw;
    double floorFit, floorMeas, chi2ndf, c2core, c2shoulder, c2A, c2B, c2bkg;
    double par[14];
 };
 
-Out one(const char* nm, double kb, double gsFWHM, double lo, int mode, bool save)
+Out one(const char* nm, double kb, double gsFWHM, double lo, int mode, bool save, int seed = 0)
 {
    MODE = mode; KB = kb; SIG_RES = gsFWHM / 2.355;
    TFile f("/home/yassid/Data/C15d_statefit/dd_ex.root");
@@ -117,13 +137,22 @@ Out one(const char* nm, double kb, double gsFWHM, double lo, int mode, bool save
          if (x > a && x < b) { s += h->GetBinContent(i); n++; } } return n ? s / n : 0.0; };
    double subThr = avg(-2.5, -1.5);               // measured, never given to the fit
    double yA = avg(8, 10), yB = avg(16, 20);
-   if (mode == 0) { P1 = (yB - yA) / 9.0; P0 = yA - P1 * 9.0; P2 = 0; }
-   else { P0 = std::max(0.0, subThr); P2 = (mode == 1) ? 0.15 : 0.04;
+   // Several starting points, because a single seed lands in a bad local minimum often enough to
+   // invert a nested-model comparison: FLATEXP once came out WORSE than FLAT, which is impossible
+   // (FLAT is FLATEXP with A -> 0) and was purely a failed minimisation.
+   const double FR[4] = {1.00, 0.50, 0.10, 0.90};   // fraction of the 8-10 MeV level put in the floor
+   const double KS[4] = {0.04, 0.15, 0.01, 0.30};   // acceptance-slope seeds
+   double fr = FR[seed % 4], ks = KS[(seed / 4) % 4];
+   if (mode == 0)      { P1 = (yB - yA) / 9.0; P0 = yA - P1 * 9.0; P2 = 0; }
+   else if (mode == 3) { P0 = yA * fr + yB * (1 - fr); P1 = 0; P2 = 0; }
+   else { P0 = std::min(fr * yA, std::max(0.0, subThr) + fr * yA);
+          P2 = ks;
           double sh = (mode == 1) ? PS::dens(9.0, kb) : 1.0;
           P1 = std::max(1.0, (yA - P0) / (sh * std::exp(-P2 * 9.0))); }
 
-   TF1* gp = new TF1(Form("P_%s_%d", nm, mode), fPeak, lo, SPLIT, 5);
-   TF1* gs = new TF1(Form("S_%s_%d", nm, mode), fStates, SPLIT, 20.0, 9);
+   double o_nll = 0;
+   TF1* gp = new TF1(Form("P_%s_%d_%d", nm, mode, seed), fPeak, lo, SPLIT, 5);
+   TF1* gs = new TF1(Form("S_%s_%d_%d", nm, mode, seed), fStates, SPLIT, 20.0, 9);
    gp->SetNpx(1000); gs->SetNpx(1000);
 
    for (int it = 0; it < 4; it++) {
@@ -136,21 +165,25 @@ Out one(const char* nm, double kb, double gsFWHM, double lo, int mode, bool save
       for (int i = 0; i < 5; i++) GST[i] = gp->GetParameter(i);
 
       gs->SetParameter(0, P0); gs->SetParLimits(0, 0, 1e4);
-      if (mode == 0) { gs->SetParameter(1, P1); gs->SetParLimits(1, -50, 5);
-                       gs->FixParameter(2, 0); }
-      else           { gs->SetParameter(1, P1); gs->SetParLimits(1, 0, 1e7);
-                       gs->SetParameter(2, P2); gs->SetParLimits(2, 0.0, 0.40); }
+      if (mode == 0)      { gs->SetParameter(1, P1); gs->SetParLimits(1, -50, 5);
+                            gs->FixParameter(2, 0); }
+      else if (mode == 3) { gs->FixParameter(1, 0); gs->FixParameter(2, 0); }
+      else                { gs->SetParameter(1, P1); gs->SetParLimits(1, 0, 1e7);
+                            gs->SetParameter(2, P2); gs->SetParLimits(2, 0.0, 0.40); }
+      double aS = 4.65 + 0.25 * ((seed % 3) - 1), bS = 6.88 + 0.20 * ((seed / 3 % 3) - 1);
+      double wS = 0.60 * (1.0 + 0.35 * ((seed / 2 % 3) - 1));
       gs->SetParameter(3, peak * 0.012); gs->SetParLimits(3, 0, 1e8);
-      gs->SetParameter(4, 4.65);         gs->SetParLimits(4, 3.6, 5.8);
-      gs->SetParameter(5, 0.60);         gs->SetParLimits(5, 0.10, 1.40);
+      gs->SetParameter(4, aS);           gs->SetParLimits(4, 3.6, 5.8);
+      gs->SetParameter(5, wS);           gs->SetParLimits(5, 0.10, 1.40);
       gs->SetParameter(6, peak * 0.012); gs->SetParLimits(6, 0, 1e8);
-      gs->SetParameter(7, 6.88);         gs->SetParLimits(7, 6.0, 7.8);
+      gs->SetParameter(7, bS);           gs->SetParLimits(7, 6.0, 7.8);
       gs->SetParameter(8, 0.50);         gs->SetParLimits(8, 0.10, 1.40);
-      h->Fit(gs, "RQ0NL");
+      TFitResultPtr rr = h->Fit(gs, "RQ0NLS");
+      o_nll = 2.0 * rr->MinFcnValue();
       P0 = gs->GetParameter(0); P1 = gs->GetParameter(1); P2 = gs->GetParameter(2);
    }
 
-   TF1* ga = new TF1(Form("A_%s_%d", nm, mode), fAll, lo, 20.0, 14);
+   TF1* ga = new TF1(Form("A_%s_%d_%d", nm, mode, seed), fAll, lo, 20.0, 14);
    for (int i = 0; i < 5; i++) ga->SetParameter(i, gp->GetParameter(i));
    for (int i = 0; i < 9; i++) ga->SetParameter(5 + i, gs->GetParameter(i));
    ga->SetNpx(2000);
@@ -164,7 +197,7 @@ Out one(const char* nm, double kb, double gsFWHM, double lo, int mode, bool save
    Out o{};
    o.mu = gp->GetParameter(1); o.dmu = gp->GetParError(1);
    o.fwL = 2.355 * gp->GetParameter(2); o.fwR = 2.355 * gp->GetParameter(3);
-   o.r52 = gp->GetParameter(4); o.dr52 = gp->GetParError(4); o.r52sys = 0;
+   o.r52 = gp->GetParameter(4); o.dr52 = gp->GetParError(4); o.r52sys = 0; o.nll = o_nll;
    o.Amu = gs->GetParameter(4); o.dAmu = gs->GetParError(4);
    o.Afw = 2.355 * gs->GetParameter(5); o.dAfw = 2.355 * gs->GetParError(5);
    o.Bmu = gs->GetParameter(7); o.dBmu = gs->GetParError(7);
@@ -187,35 +220,60 @@ Out one(const char* nm, double kb, double gsFWHM, double lo, int mode, bool save
    return o;
 }
 
+// Run several starts and keep the one with the best state-window likelihood. This is what makes
+// the background comparison trustworthy: without it a nested model can come out worse than the
+// model it contains.
+Out bestFit(const char* nm, double kb, double gsFWHM, double lo, int mode, bool save, int nseed = 12)
+{
+   Out bo; double bl = 1e30; int bs = 0;
+   for (int s = 0; s < nseed; s++) {
+      Out o = one(nm, kb, gsFWHM, lo, mode, false, s);
+      if (o.nll < bl) { bl = o.nll; bo = o; bs = s; }
+   }
+   if (save) bo = one(nm, kb, gsFWHM, lo, mode, true, bs);   // re-run the winner and store it
+   else      bo = one(nm, kb, gsFWHM, lo, mode, false, bs);  // restore its globals (P0,P1,P2)
+   return bo;
+}
+
 void globalfit()
 {
    { TFile o("/home/yassid/Data/C15d_statefit/globalfit.root", "RECREATE"); }
-   const char* MN[3] = {"LIN", "PS ", "THR"};
+   const char* MN[5] = {"LIN    ", "PSATT  ", "THR    ", "FLAT   ", "FLATEXP"};
+   const int   NB[5] = {2, 3, 3, 1, 3};
    struct { const char* nm; double kb, fw, lo; } C[2] =
       {{"ATTPCROOT", 191.25, 1.012, -1.6}, {"Spyral", 195.00, 0.548, -1.2}};
 
    for (int c = 0; c < 2; c++) {
       printf("\n================ %s ================\n", C[c].nm);
-      printf("bkg  chi2/ndf | g.s. mu        FWHM L/R   | 5/2+ ratio      | state A           FWHM"
-             "        | state B           FWHM        | floor fit/meas\n");
-      Out best{}; int bestm = 0; double bc = 1e30;
-      Out all3[3];
-      for (int m = 0; m < 3; m++) {
-         Out o = one(C[c].nm, C[c].kb, C[c].fw, C[c].lo, m, false);
+      printf("bkg         -2lnL chi2/ndf | g.s. mu        FWHM L/R   | 5/2+ ratio      | state A"
+             "           FWHM        | state B           FWHM\n");
+      Out best{}; int bestm = 0;
+      Out all3[5];
+      for (int m = 0; m < 5; m++) {
+         Out o = bestFit(C[c].nm, C[c].kb, C[c].fw, C[c].lo, m, false);
          all3[m] = o;
-         printf("%s  %7.2f  | %+.4f(%.4f) %.3f %.3f | %.4f(%.4f) | %.3f(%.3f) %.3f(%.3f)"
-                " | %.3f(%.3f) %.3f(%.3f) | %5.0f / %5.0f\n",
-                MN[m], o.chi2ndf, o.mu, o.dmu, o.fwL, o.fwR, o.r52, o.dr52,
-                o.Amu, o.dAmu, o.Afw, o.dAfw, o.Bmu, o.dBmu, o.Bfw, o.dBfw, o.floorFit, o.floorMeas);
-         if (o.chi2ndf < bc) { bc = o.chi2ndf; best = o; bestm = m; }
+         printf("%s %9.1f %7.2f | %+.4f(%.4f) %.3f %.3f | %.4f(%.4f) | %.3f(%.3f) %.3f(%.3f)"
+                " | %.3f(%.3f) %.3f(%.3f)\n",
+                MN[m], o.nll, o.chi2ndf, o.mu, o.dmu, o.fwL, o.fwR, o.r52, o.dr52,
+                o.Amu, o.dAmu, o.Afw, o.dAfw, o.Bmu, o.dBmu, o.Bfw, o.dBfw);
       }
+      bestm = 0; best = all3[0];                       // ADOPT LIN: empirical, no physical claim
+      // The systematic is the full spread over ALL FIVE backgrounds.
+      // ⚠ Do NOT filter them by a likelihood-ratio test. With 129k events every background form
+      // differs from every other at > 5 sigma, so an LR cut keeps exactly one model and reports a
+      // ZERO systematic -- which is the opposite error. None of these shapes is the truth; the
+      // spread between reasonable ones IS the uncertainty, and that is the number to quote.
       double amin = 1e9, amax = -1e9, bmin = 1e9, bmax = -1e9, rmin = 1e9, rmax = -1e9;
-      for (int m = 0; m < 3; m++) { amin = std::min(amin, all3[m].Amu); amax = std::max(amax, all3[m].Amu);
+      for (int m = 0; m < 5; m++) {
+         amin = std::min(amin, all3[m].Amu); amax = std::max(amax, all3[m].Amu);
          bmin = std::min(bmin, all3[m].Bmu); bmax = std::max(bmax, all3[m].Bmu);
-         rmin = std::min(rmin, all3[m].r52); rmax = std::max(rmax, all3[m].r52); }
-      printf("  spread over the three background forms:  A %.3f MeV   B %.3f MeV   5/2+ ratio %.1f %%\n",
+         rmin = std::min(rmin, all3[m].r52); rmax = std::max(rmax, all3[m].r52);
+      }
+      printf("  spread over ALL FIVE backgrounds:  A %.3f MeV   B %.3f MeV   5/2+ ratio %.1f %%\n",
              amax - amin, bmax - bmin, 100.0 * (rmax - rmin) / (0.5 * (rmax + rmin)));
-      printf("  ADOPTED: %s (lowest chi2/ndf %.2f)\n", MN[bestm], bc);
+      printf("  ADOPTED: %s -- empirical, makes no physical claim (PSATT fits better but its win\n"
+             "           comes from a free attenuation that is NOT justified; see LEVELS_15C.md)\n",
+             MN[bestm]);
       printf("    g.s. 1/2+  %+.3f +- %.3f (stat) +- ---      FWHM %.3f / %.3f\n",
              best.mu, best.dmu, best.fwL, best.fwR);
       printf("    0.740 5/2+ amp/g.s. %.4f +- %.4f (stat)  +- %.4f (bkg)\n",
@@ -226,6 +284,6 @@ void globalfit()
              best.Bmu, best.dBmu, 0.5 * (bmax - bmin), best.Bfw, best.dBfw);
       printf("    chi2/bin by region:  g.s.core %.2f  shoulder(1.5-3.5) %.2f  A %.2f  B %.2f  bkg %.2f\n",
              best.c2core, best.c2shoulder, best.c2A, best.c2B, best.c2bkg);
-      one(C[c].nm, C[c].kb, C[c].fw, C[c].lo, bestm, true);   // re-run the adopted one and store it
+      bestFit(C[c].nm, C[c].kb, C[c].fw, C[c].lo, bestm, true);  // re-run the adopted one and store it
    }
 }

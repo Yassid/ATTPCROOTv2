@@ -97,8 +97,8 @@ void wide(Kit& k, const char* nm, double lo, int mode)
    t.SetTextColor(kViolet + 1); t.DrawLatex(0.52, 0.811, Form("5/2^{+} (0.740)  amp/g.s. = %.3f", o.r52));
    t.SetTextColor(kGreen + 2);  t.DrawLatex(0.52, 0.774, Form("A  %.3f #pm %.3f  FWHM %.2f", o.Amu, o.dAmu, o.Afw));
    t.SetTextColor(kOrange + 7); t.DrawLatex(0.52, 0.737, Form("B  %.3f #pm %.3f  FWHM %.2f", o.Bmu, o.dBmu, o.Bfw));
-   t.SetTextColor(kGray + 2);   t.DrawLatex(0.52, 0.700, Form("bkg  %s", mode == 0 ? "c_{0} + c_{1}E_{x}"
-                                     : (mode == 1 ? "floor + 3-body phase space" : "floor + threshold")));
+   t.SetTextColor(kGray + 2);   t.DrawLatex(0.52, 0.700, Form("bkg  %s", mode == 0 ? "c_{0} + c_{1}E_{x}  (empirical)"
+                                     : (mode == 1 ? "floor + phase space #times free atten." : "floor + threshold")));
 }
 
 // The 5/2+ at 0.740 MeV is a SHOULDER on the g.s., not a separate peak -- on a linear axis next to
@@ -147,13 +147,16 @@ void zoom(Kit& k, const char* nm)
 void plotglobal()
 {
    gStyle->SetOptStat(0); gStyle->SetPadTickX(1); gStyle->SetPadTickY(1); gStyle->SetTitleSize(0.045, "t");
-   Kit ka = build("ATTPCROOT", 191.25, 1.012, -1.6, 0);   // LIN adopted
-   Kit ks = build("Spyral",    195.00, 0.548, -1.2, 1);   // PS  adopted
+   // LIN adopted for BOTH. PSATT fits better but its advantage comes from a free exp(-k*Ex)
+   // attenuation that the 2026-11-09 study showed cannot be efficiency -- it is a shape
+   // systematic, not the adopted model. See LEVELS_15C.md.
+   Kit ka = build("ATTPCROOT", 191.25, 1.012, -1.6, 0);
+   Kit ks = build("Spyral",    195.00, 0.548, -1.2, 0);
 
    TCanvas* c = new TCanvas("c", "", 1900, 1250);
    c->Divide(2, 2);
    c->cd(1); gPad->SetLogy(); gPad->SetLeftMargin(0.105); gPad->SetRightMargin(0.03); wide(ka, "ATTPCROOT", -1.6, 0);
-   c->cd(2); gPad->SetLogy(); gPad->SetLeftMargin(0.105); gPad->SetRightMargin(0.03); wide(ks, "Spyral", -1.2, 1);
+   c->cd(2); gPad->SetLogy(); gPad->SetLeftMargin(0.105); gPad->SetRightMargin(0.03); wide(ks, "Spyral", -1.2, 0);
    c->cd(3); gPad->SetLeftMargin(0.115); gPad->SetRightMargin(0.03); zoom(ka, "ATTPCROOT");
    c->cd(4); gPad->SetLeftMargin(0.115); gPad->SetRightMargin(0.03); zoom(ks, "Spyral");
    c->SaveAs("/home/yassid/Data/C15d_statefit/global_ex_fit.png");

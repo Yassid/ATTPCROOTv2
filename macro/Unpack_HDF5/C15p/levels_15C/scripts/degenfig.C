@@ -87,7 +87,7 @@ void degenfig()
    c->cd(1); gPad->SetLeftMargin(0.12); gPad->SetRightMargin(0.03); gPad->SetGridy();
    panel("ATTPCROOT", 191.25, 1.012, -1.6, 0, 0.0353, "Spyral");
    c->cd(2); gPad->SetLeftMargin(0.12); gPad->SetRightMargin(0.03); gPad->SetGridy();
-   panel("Spyral", 195.00, 0.548, -1.2, 1, 0.0997, "ATTPCROOT");
+   panel("Spyral", 195.00, 0.548, -1.2, 0, 0.0997, "ATTPCROOT");
    c->SaveAs("/home/yassid/Data/C15d_statefit/fivehalf_lineshape.png");
    printf("wrote fivehalf_lineshape.png\n");
 }

@@ -223,12 +223,13 @@ Everything above fits pieces of the spectrum separately. This fits **all of it a
 
 ```
                  g.s. mu          FWHM(L/R)     5/2+ amp/g.s.         state A              state B
-ATTPCROOT   +0.005 +- 0.005   0.906 / 0.906   0.100 +- 0.006     4.681 +- 0.037 +- 0.029   6.871 +- 0.022 +- 0.004
+ATTPCROOT   +0.005 +- 0.005   0.906 / 0.906   0.100 +- 0.006     4.681 +- 0.037 +- 0.065   6.871 +- 0.022 +- 0.021
                                                   +- 0.012(bkg)     FWHM 1.78                 FWHM 1.10
-Spyral      -0.286 +- 0.003   0.484 / 0.565   0.035 +- 0.001     4.500 +- 0.042 +- 0.005   6.640 +- 0.025 +- 0.001
-                                                  +- 0.009(bkg)     FWHM 1.52                 FWHM 1.08
+Spyral      -0.287 +- 0.003   0.479 / 0.567   0.033 +- 0.001     4.510 +- 0.043 +- 0.009   6.643 +- 0.027 +- 0.004
+                                                  +- 0.009(bkg)     FWHM 1.47                 FWHM 1.15
 ```
-(first error statistical, second the background systematic defined below; MeV throughout)
+(first error statistical, second the background systematic defined below; MeV throughout.
+Background adopted: the **empirical straight line for BOTH codes** -- see the warning below.)
 
 ## Two windows, not one minimisation -- and why
 
@@ -268,31 +269,56 @@ Three forms were fitted independently, none of which can grow a Gaussian bump:
   phase space of `psmodel.h`, threshold fixed at Sn, one acceptance factor, 3 parameters
 * `THR` &nbsp;`c + A*Phi((Ex-Sn)/sigma_res)*exp(-k*Ex)` -- flat floor + a continuum turning on at Sn
   smeared by that code's **own measured** g.s. sigma_R (not refitted), 3 parameters
+* `FLAT` &nbsp;`c` -- a constant, 1 parameter. No threshold, no phase space.
+* `FLATEXP` &nbsp;`c + A*exp(-k*Ex)` -- 3 parameters. No threshold, no phase space.
 
 ```
-bkg   chi2/ndf   g.s. mu    5/2+ ratio      state A          state B
+bkg        -2lnL   chi2/ndf   g.s. mu    5/2+ ratio      state A          state B
                         -- ATTPCROOT --
-LIN      3.05    +0.0052   0.0997(58)   4.681(37) FWHM 1.78   6.871(22) FWHM 1.10
-PS       4.35    +0.0340   0.1228(45)   4.626(39) FWHM 1.97   6.878(21) FWHM 1.00
-THR      7.83    +0.0806   0.1221(39)   4.685(37) FWHM 1.76   6.871(22) FWHM 1.11
+LIN        281.2     3.05     +0.0052   0.0997(58)   4.681(37) FWHM 1.78   6.871(22) FWHM 1.10
+PSATT      204.6     4.35     +0.0340   0.1228(45)   4.626(39) FWHM 1.97   6.878(21) FWHM 1.00
+THR        305.0     7.83     +0.0806   0.1221(39)   4.685(37) FWHM 1.76   6.871(22) FWHM 1.11
+FLAT       602.4     5.14     +0.0156   0.1118(49)   4.555(41) FWHM 2.19   6.913(26) FWHM 1.40
+FLATEXP    306.4     3.22     +0.0038   0.0984(59)   4.684(37) FWHM 1.76   6.871(22) FWHM 1.12
                         --  Spyral   --
-LIN      2.68    -0.2872   0.0326(14)   4.510(43) FWHM 1.47   6.643(27) FWHM 1.15
-PS       1.86    -0.2856   0.0353(14)   4.500(42) FWHM 1.52   6.640(25) FWHM 1.08
-THR      3.15    -0.2662   0.0513(14)   4.510(43) FWHM 1.47   6.643(27) FWHM 1.15
+LIN        272.4     2.68     -0.2872   0.0326(14)   4.510(43) FWHM 1.47   6.643(27) FWHM 1.15
+PSATT      255.7     1.86     -0.2854   0.0356(14)   4.500(42) FWHM 1.52   6.640(25) FWHM 1.08
+THR        272.6     3.15     -0.2662   0.0513(14)   4.510(43) FWHM 1.47   6.643(27) FWHM 1.15
+FLAT       279.8     2.31     -0.2865   0.0338(14)   4.492(42) FWHM 1.55   6.649(27) FWHM 1.20
+FLATEXP    272.6     2.68     -0.2872   0.0326(14)   4.510(43) FWHM 1.47   6.643(27) FWHM 1.15
 ```
 
-**Spread across all three background forms:**
+`-2lnL` is the state-window likelihood, which is what the fit actually minimises; lower is better.
+
+**Spread across all five background forms:**
 
 ```
              state A    state B    5/2+ ratio
-ATTPCROOT    0.058      0.007       21 %
-Spyral       0.010      0.002       45 %
+ATTPCROOT    0.130      0.043       22 %
+Spyral       0.018      0.009       45 %
 ```
 
-So **A and B are robust and the 5/2+ yield is not.** This tightens the earlier background
-systematic on state A (0.15-0.34 MeV, from fits to the state region alone) by roughly a factor
-three -- constraining the background over the full 20 MeV instead of a narrow window is what buys
-that. Adopted background: `LIN` for ATTPCROOT, `PS` for Spyral, each the lowest chi2/ndf.
+So **A and B are robust and the 5/2+ yield is not.** This still improves on the earlier background
+systematic for state A (0.15-0.34 MeV, from fits to the state region alone) -- constraining the
+background over the full 20 MeV instead of a narrow window is what buys that -- though less
+dramatically than the three-form version suggested, because `FLAT` is an outlier for ATTPCROOT.
+
+**Adopted background: `LIN` for BOTH codes.** It is empirical and makes no physical claim. `PSATT`
+fits better in both codes but is *not* adopted, for the reason in the next section.
+
+⚠ **Two statistics traps, both of which produced a wrong answer here first:**
+
+1. **Do not compare these models by a Pearson chi2 restricted to bins with n >= 10.** The fits
+   minimise a Poisson likelihood over *all* bins, so the two are inconsistent, and `FLATEXP` came
+   out WORSE than the `FLAT` model nested inside it (chi2/ndf 2.68 vs 2.31) -- impossible. Compare
+   by `-2lnL`.
+2. **Do not filter the systematic by a likelihood-ratio test.** With 129k events every background
+   form differs from every other at far beyond 5 sigma, so an LR cut keeps exactly one model and
+   reports a systematic of **zero**. None of these shapes is the truth; the spread between
+   reasonable ones *is* the uncertainty.
+
+A third: a single starting point lands in a bad local minimum often enough to invert a nested
+comparison, so `globalfit.C` now runs 12 starts per model and keeps the best likelihood.
 
 A real consistency check on the floor: the fitted flat floor is compared against each code's own
 measured counts/bin **below** threshold, which nothing in the fit is told about. The two codes
@@ -300,6 +326,55 @@ differ by an order of magnitude there (ATTPCROOT ~70/bin at Ex = -1.9, Spyral ~7
 Spyral cuts vz < 400 mm and vertexes better), so it is not a tautology. `PS` on ATTPCROOT fits
 66.7 +- 4.5 against a measured 69.5 -- it passes. `THR` drives the floor to zero in both codes and
 has the worst chi2 for ATTPCROOT, which is why it is not adopted.
+
+## ⚠⚠ Why `PSATT` wins the fit and still means nothing
+
+`PSATT` has the best likelihood in both codes -- and at *equal parameter count* it beats a plain
+exponential decisively:
+
+```
+                FLAT     LIN     FLATEXP   PSATT    THR      (state-window -2lnL, lower is better)
+ATTPCROOT      602.4    281.2     306.4    204.6    305.0
+Spyral         279.8    272.4     272.6    255.7    272.6
+```
+
+`PSATT` vs `FLATEXP` is 3 parameters against 3, so the phase-space *shape* is worth
+Delta(-2lnL) = 102 (ATTPCROOT) and 17 (Spyral). It is tempting to read that as evidence that the
+continuum **is** three-body 14C+n phase space. **It is not, and it directly contradicts the
+2026-11-09 result above only if you ignore where the win comes from.**
+
+The model is `c + N*dens(Ex)*exp(-k*Ex)`. The fitted attenuation is
+
+```
+ATTPCROOT  k = 0.0909 /MeV  ->  Ex = 20 suppressed 5.1x relative to Ex = 2
+Spyral     k = 0.0662 /MeV  ->                     3.3x
+```
+
+That **is** the discrepancy the earlier study measured: *"Uniform d + 14C + n phase space RISES
+from its 2 MeV threshold to a maximum near 14-16 MeV. The data FALLS from 6 MeV onward. The ratio
+data/(A) drops 6x across the range."* And that study showed the 6x **cannot be reconstruction
+efficiency**, because within the acceptance the mean deuteron energy *rises* with Ex (7.1 MeV at
+Ex = 2 to 13.5 at Ex = 20) -- the tracks get faster exactly where the counts are lost.
+
+So `PSATT` does not describe the continuum with phase space. It takes a shape that is known to be
+wrong by ~6x and multiplies it by a free parameter that absorbs exactly that factor. What it
+actually buys over `FLATEXP` is a *threshold at Sn with an extended sqrt-like rise* rather than no
+threshold at all -- a real shape statement about the data, but not a phase-space interpretation.
+
+**Conclusion: the 2026-11-09 exclusion of uniform d + 14C + n phase space STANDS.** `PSATT` is
+retained only as a shape systematic, and the adopted background is the empirical straight line.
+Had I adopted `PSATT` on its likelihood -- which is what I did first, labelling it "floor + 3-body
+phase space" -- the figure would have asserted a continuum mechanism this analysis has excluded.
+
+For the record, how much of the background the phase-space term even carries when it is used:
+
+```
+                floor   phase-space term   PS share of the background (Sn to 20 MeV)
+ATTPCROOT        66.7      N = 0.0077                50 %
+Spyral           78.0      N = 0.0015                17 %
+```
+
+For Spyral the "phase space" background is 83 % flat floor.
 
 ## ★ Referencing to each code's own g.s. removes most of the inter-code difference
 

@@ -31,6 +31,19 @@ root -b -q degen.C          # what limits the 5/2+ ratio -- scan the fixed g.s. 
 root -b -q degenfig.C       # that scan as a figure -> fivehalf_lineshape.png
 ```
 
+```bash
+root -b -q bkgcmp.C         # all five backgrounds side by side
+root -b -q lrtest.C         # likelihood-ratio test of each against FLAT
+```
+
+⚠ `bkgcmp.C` / `lrtest.C` traps, each of which gave a wrong answer first:
+  - compare backgrounds by `-2lnL`, NOT by a chi2 over bins with n >= 10: the fit minimises a
+    Poisson likelihood over all bins, and the mismatched statistic made FLATEXP score worse than
+    the FLAT model nested inside it;
+  - do NOT filter the systematic by a likelihood-ratio test — at 129k events every form is
+    excluded against every other, leaving one model and a ZERO systematic;
+  - one starting point is not enough; `globalfit.C` runs 12 starts per model and keeps the best.
+
 ⚠ `thetaslice2.C` trap: a per-slice g.s. fit MUST include the 5/2+ term. Without it the chi2 is
 inflated precisely in the high-statistics slices (10-49 vs 1-4) and the comparison is meaningless.
 
