@@ -25,11 +25,40 @@ R = Y / (L f sigma_ZPL dOmega), f = fraction of the (vz, theta_cm) cell kept by 
 - vz 100-200 is low at all angles: elastic recoils start at vz ~100 (none below 75 mm), cause not known.
 - Trigger-safe cells only: 0.45-0.86, dominated by the vz 100-200 slice.
 
-## Needed before a scale can be quoted
+## Needed before a scale can be quoted (as of the first pass; see the next section)
 - r280 acceptance x efficiency for the elastic (the sim in /mnt/f/a1975_C16_dd_sim is v2 geometry, gain 35000, no
   genfit). If it is ~0.85-0.9 on the plateau, the scale is ~1 within ~10 %.
 - The IC-gate efficiency relative to f_beam (5 % of the peak has IC < 1000).
 - theta_cm calibration, and the remaining 36 runs.
+
+## Scale with the r280 acceptance (2026-11-10, interim: 2 sim seeds, 10 data runs)
+Sim: `macro/Simulation/ATTPC/16C_dt/C16_dd_el_sim_r280.C` through `/mnt/f/a1975/sim_rebuild/r280/run_dd_el.sh`
+(gen theta_cm 8-40, Ebeam 184.25 -> reco gain 100000 -> genfit with the run_prod_dd.sh arguments), then
+`dump_dd_sim.C` (trees g: generated, d: dump_dd.C columns + truth) and
+`python -I dd_scale.py /mnt/f/a1975/caches/dd_r280 92.83 "<dumps>" OUT 23 [NSIG]`.
+- Acceptance x efficiency of the sim is ~1 (0.9-1.1 per cell, noise of ~60 generated per cell) at every vz, theta_cm.
+- **S = data / (L eps sigma) on the plateau (theta_cm 16-22, vz 250-900): 0.758(12) ZPL; An-Cai .762, Daehnick .754,
+  Han-Shi-Shen .797.** Ratio of sums; the error-weighted mean of the cells is biased LOW (a cell whose eps
+  fluctuates up gets a low S and a small error: 0.728). Ex window 2.5 / 3.5 / 4.5 sigma moves S by +-2 %.
+- theta_cm 12-14 is low at vz < 300: the trigger (deuteron-only events need vz > ~220).
+- **Above theta_cm 22 the DATA Ex peak degrades, the sim's does not** (data median -0.12 -> -0.27 MeV and sigma .21 ->
+  .30 at 24-26, dissolved, sigma ~1 MeV, at 26+; sim +0.01 +- 0.05 everywhere). The helix there reaches
+  r = 2 rho sin(theta_lab) > ~24 cm (KE > 3 MeV): the same class as the (d,t) rmax > 255 KE shifts. Not an
+  acceptance; use theta_cm <= 22 only.
+- Data resolution is 4x the sim's (Ex sigma .21-.25 vs .05-.06 MeV).
+
+What S is NOT (each measured on the data):
+- Spyral validity on the locus (`dump_dd_valid.C`, `dd_valid_frac.py` -> valid_frac.*): data .97-.98 vs sim .97-1.0,
+  ratio .98-1.01 for theta_cm 14-28.
+- Genfit fit efficiency (`dd_fit_eff.py`, locus from Spyral brho/polar alone; theta_lab = 180 - polar) -> fit_eff.txt:
+  data .976-.999, sim 1.000.
+- The carbon IC window: 0.1 % of the carbon peak lies at 900-1000 or 1350-1600.
+- The IC gate DOES lose the elastic events whose IC pulse is missing: IC < 900 is 4.8 % of all (C+O) locus events,
+  i.e. ~5 % of carbon (missing pulses hit both species). Correction x 1/0.95 -> S ~0.80.
+- Beam fraction: L uses f_beam 0.613 (measured on H2); the D2 per-track value 0.659 would lower S by 7 %.
+Remaining stage: track finding in the real event environment -> `embed_dd.C` (sim deuteron hits overlaid on real
+D2 events, chain re-run; same method as embed_vz_dp.C, which gave .68-.91 for the (d,p) protons) and
+`embed_dd_ana.py`. Runner `/mnt/f/a1975/caches/dd_r280/embed/run.sh` (runs 16, 31, 79, 102).
 
 ## Trace checks (2026-11-10): trigger timing, pile-up, downscaled IC
 `trace_pulses.py RUN OUTDIR` (every IC and mesh pulse per event + trigger word) and `trace_checks.py`, runs 16-21, 26, 27,

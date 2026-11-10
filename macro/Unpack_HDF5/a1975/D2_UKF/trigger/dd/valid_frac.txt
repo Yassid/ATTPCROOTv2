@@ -1,0 +1,25 @@
+Spyral validity on the elastic locus from the genfit kinematics (dd_valid_frac.py)
+data: 9 runs, fitted tracks 185486; locus Ex -0.128 +- 2.5x0.252: 22130
+sim : 2 seeds, fitted tracks 4837; locus Ex +0.016 +- 2.5x0.064: 4053
+
+Valid fraction (data sideband-subtracted, sideband Ex -4.5..-1.5 scaled by width) | sim | data/sim
+  theta_cm 12-14 data 0.929 (n  3316, bg      0) | sim 1.000 (n  149) | 0.929
+  theta_cm 14-16 data 0.971 (n  4558, bg      0) | sim 0.995 (n  191) | 0.976
+  theta_cm 16-18 data 0.978 (n  4267, bg     15) | sim 0.972 (n  213) | 1.006
+  theta_cm 18-20 data 0.977 (n  3259, bg     47) | sim 0.981 (n  215) | 0.995
+  theta_cm 20-22 data 0.984 (n  2011, bg     81) | sim 1.000 (n  243) | 0.984
+  theta_cm 22-24 data 0.984 (n  1330, bg     81) | sim 0.986 (n  278) | 0.999
+  theta_cm 24-26 data 1.014 (n   607, bg     91) | sim 1.000 (n  263) | 1.014
+  theta_cm 26-28 data 0.988 (n   211, bg     82) | sim 1.000 (n  289) | 0.988
+  theta_cm 28-30 data nan (n    47, bg     52) | sim 1.000 (n  312) | nan
+  theta_cm 30-32 data nan (n    27, bg     27) | sim 1.000 (n  322) | nan
+
+By vz, theta_cm 16-22:
+  vz 100-200: data 0.837 (n 943) | sim 0.875 (n 80) | 0.956
+  vz 200-300: data 0.989 (n 1280) | sim 1.000 (n 79) | 0.989
+  vz 300-400: data 0.993 (n 1272) | sim 1.000 (n 61) | 0.993
+  vz 400-500: data 0.987 (n 1335) | sim 1.000 (n 95) | 0.987
+  vz 500-600: data 0.993 (n 1212) | sim 1.000 (n 85) | 0.993
+  vz 600-700: data 0.995 (n 1184) | sim 1.000 (n 87) | 0.995
+  vz 700-800: data 0.987 (n 1195) | sim 1.000 (n 94) | 0.987
+  vz 800-900: data 0.978 (n 1116) | sim 1.000 (n 90) | 0.978
