@@ -742,3 +742,51 @@ efficiency and no theta-dependent efficiency. Finishing it is the same blocker a
 function, and it is now clearly the single most valuable next step -- it would let the continuum
 be MODELLED rather than absorbed into an empirical shape, and would turn the state yields into
 cross sections.
+
+## ★ The refit with the corrected continuum
+
+`scripts/ddfinal.C`, `scripts/plotfinal.C` -> `figures/dd_final_seqps.png`
+
+![final fit](figures/dd_final_seqps.png)
+
+```
+continuum(Ex) = floor + N * dens(Ex) * acc(Ex)
+   dens(Ex)  two-body / invariant-mass phase space, p3*(M) q(M), threshold fixed at Sn
+   acc(Ex)   fraction of CM solid angle whose deuteron lands in this code's own (theta, KE)
+             window -- pure kinematics, computed, NO free parameter
+   floor     FIXED to that code's MEASURED counts/bin below Sn (69.5 ATTPCROOT, 6.9 Spyral)
+```
+
+**The phase space is no longer thrown away.** Its scale comes out 0.00767 (ATTPCROOT) and 0.0117
+(Spyral) instead of zero, and the continuum carries real strength. That is the whole point of the
+correction: the earlier "the data refuses phase space" was an artefact of the uniform three-body
+template.
+
+```
+BW   l   E_x(ATT)  sigma  |  E_x(Spy)  sigma        and the resonances are stable against it:
+BW1  1    4.48      26    |   4.18      19          wrong template + floor gave 21 / 13
+BW2  1    4.98       7    |   4.68      15                                     8 / 12
+BW3  2    6.03       8    |   5.73      11                                     6 /  7
+BW4  2    6.73      17    |   6.43      17                                    17 / 16
+BW5  2    7.43       4    |   7.13      10                                     3 /  9
+BW6  2    8.33       6    |   8.03       2                                     6 /  3
+```
+
+⚠ **But the fit is worse, not better**: chi2/ndf 9.25 and 7.81, against 3.05 / 2.68 for the
+two-Gaussian fit on an empirical line. That is expected and honest -- the empirical line had free
+parameters to absorb whatever the continuum does, and this model has none in its shape. The
+shortfall is concentrated at **Ex = 1.5 to 4 MeV**, where `dens ~ sqrt(Ex - Sn)` rises too slowly
+to match the data just above threshold.
+
+Three candidates for that shortfall, not yet separated:
+1. the **g.s. lineshape** -- the bifurcated Gaussian already leaves chi2/bin 9.3 in the ATTPCROOT
+   core, and a 1 % non-Gaussian tail on a 9000-count peak is ~90 counts/bin at Ex = 2, which is
+   the size of the discrepancy;
+2. **reconstruction efficiency**, which varies with Ex and is NOT in `acc(Ex)` (that is pure
+   kinematics);
+3. genuine low-lying strength between Sn and 4 MeV, where the (p,p') analysis has no resonance.
+
+Candidate 1 is the most likely and is testable only with a simulated response; candidate 2 needs
+the same simulation. **Both point at the acceptance/efficiency simulation as the next step** -- it
+is now the blocker for the continuum normalisation, the resolution function, the 5/2+ yield and
+the conversion of state yields into cross sections.
