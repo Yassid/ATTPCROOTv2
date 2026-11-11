@@ -483,3 +483,63 @@ better than a factor two.
   means a simulation is the only way to get at it.
 * State A and state B are unaffected by all of this: chi2/bin 1.1-1.3 in their regions, and
   <= 0.06 MeV of movement across three background forms.
+
+---
+
+# Why we do not see the phase space (2026-11-11)
+
+`scripts/whynops.C`, `scripts/vzcut.C`. Model-free -- no fit in the way. Counts per 100 keV bin,
+both curves normalised to the data at Ex 8-10:
+
+```
+Ex window     ATTPCROOT   Spyral  | uniform PS | PS x halo form factor
+  2.0-3.4        158        92    |     82     |       969
+  8.0-10.0       160       108    |    160     |       160
+ 10.0-12.0       138        95    |    166     |       110
+ 14.0-16.0       113        87    |    159     |        57
+ 18.0-20.0        93        92    |    125     |        28
+```
+
+**1. The data is flat; uniform phase space rises ~2x from threshold to 11 MeV.** That is the
+original exclusion, now shown bin by bin rather than as a single ratio.
+
+**2. Uniform phase space was never the right expectation.** It counts available final states and
+ignores the transition amplitude. In a direct reaction the amplitude is the overlap of the 15C
+ground state with the final 14C+n continuum, and its momentum scale is
+
+```
+kappa = sqrt(2*mu*Sn) = 46.2 MeV/c      (mu = 876.4 MeV, Sn = 1.2180 MeV)
+```
+
+a relative-energy scale of only 1.22 MeV. The honest expectation for direct breakup therefore
+**peaks just above threshold and falls** -- it does not rise to 14-16 MeV. A statistical
+(phase-space) distribution would be right for compound decay, not for this.
+
+**3. But direct halo breakup fails too, in the opposite direction.** `PS x q/(q^2+kappa^2)^2`,
+with the shape fixed entirely by Sn and no free shape parameter, overshoots by **6x** at
+Ex = 2-3 and undershoots by **3x** at Ex = 18-20. The data sits between the two extremes.
+
+## ★ The real answer: the continuum shape is not a measured quantity yet
+
+Ex < Sn is kinematically forbidden for any 15C decay, so counts there measure mis-reconstruction
+directly:
+
+```
+                 floor (Ex -2.5..-1.5)   8-10    18-20   floor-subtracted fall 8-10 -> 18-20
+ATTPCROOT vz<1100        69.5            159.8    93.3            3.79x
+ATTPCROOT vz<400         26.9            121.2    71.5            2.11x
+Spyral    vz<400          6.9            107.9    91.6            1.19x
+Spyral    vz<1100        20.8            146.7   117.6            1.30x
+```
+
+* **A large part of the continuum is instrumental**, and it lives at large vertex z -- the floor
+  drops 2.6-3x when vz < 400 mm is imposed, in **both** codes.
+* **The two codes disagree on the shape even at the same vz cut**: at vz < 400 ATTPCROOT's
+  floor-subtracted continuum falls 2.11x from 8-10 to 18-20 while Spyral's falls 1.19x. The
+  residual is the other cuts (chi2 < 0.2 vs < 5, IC gate on vs off) and the fitter.
+
+**A factor ~2 of reconstruction-dependent shape means no continuum model can be tested yet.**
+Comparing a raw yield against a cross-section shape without an acceptance x efficiency calculation
+is the error underneath this whole question. That simulation is the blocker -- and it is the *same*
+one needed for the resolution function. Until it exists, use an empirical background and quote the
+spread as a systematic, which is what `globalfit.C` does.
