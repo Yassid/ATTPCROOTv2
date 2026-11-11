@@ -644,3 +644,101 @@ intrinsic shape rather than the missing efficiency -- but that argument is not a
 the efficiency need not be the same for the two (different particle, different kinematics).
 **Settling it needs the acceptance simulation**, which is the same blocker as the resolution
 function.
+
+---
+
+# Why the phase space was "missing": the template had the WRONG KINEMATICS (2026-11-11)
+
+`scripts/acccheck.C`, `seqps.C`, `thmax.C`, `edgetest.C`, `statetest.C` -> `figures/kinematic_edge.png`
+
+Every fit above threw the phase-space continuum away (scale -> 0). That was **not** the data
+rejecting a 14C+n continuum. It was my template being built from the wrong process.
+
+## The template was uniform three-body; the physics is sequential two-body
+
+`psalt.C` made `d + 14C + n` with `TGenPhaseSpace`, i.e. all three particles produced at once and
+uncorrelated. That throws the deuteron FORWARD. The real process is **sequential**,
+`15C + d -> d' + 15C*(M)` followed by `15C* -> 14C + n`, so the deuteron recoils against a single
+body of mass M and goes BACKWARD -- into exactly the region the data occupies:
+
+```
+theta        0-10 10-20 20-30 30-40 40-50 50-60 60-70 70-80 80-90
+uniform 3b    7.8  20.3  25.4  22.6  14.9   6.9   1.9   0.1   0.0   %
+real data     0.0   1.5   2.8   3.4   4.3   6.5   7.2  35.4  38.8   %
+```
+
+**Disjoint.** Uniform three-body phase space puts 0.1 % of its weight where 74 % of the data sits.
+The fit was right to discard it -- it was the wrong shape for the wrong process. Nothing in the
+earlier "phase space is excluded" conclusion survives as a statement about the physical continuum.
+
+## The kinematic ceiling
+
+![kinematic edge](figures/kinematic_edge.png)
+
+In inverse kinematics the scattered deuteron has a maximum lab angle,
+`theta_max = arcsin(beta_d_cm / beta_cm)`, equal to 90 deg at Ex = 0 (the classic elastic-recoil
+result) and closing as Ex grows:
+
+```
+Ex      0     1     2     3     5    10    15    20
+th_max 90    78    73    69    62    49    36    20   deg
+```
+
+So **at theta > 70 deg, where 74 % of the tracks are, only Ex < 2.7 MeV is reachable.** The whole
+Ex > 3 MeV spectrum is produced by the 18 % of tracks at theta = 40-68 deg.
+
+And at fixed theta, `dEx/dKE -> 0` at the turnaround, so a broad KE range compresses into a narrow
+Ex range: **every theta slice piles up at its own kinematic edge**, exactly as observed --
+
+```
+ slice   peak Ex   Ex at the kinematic edge (slice lo/hi)
+ 40-44    11.90          11.79 - 13.36
+ 48-52     8.70           8.66 - 10.22
+ 52-56     7.10           7.15 -  8.66
+ 60-64     4.50           4.40 -  5.72
+ 64-68     3.50           3.22 -  4.40
+```
+
+## ★ Do the states survive this?  YES -- the pile-up is generic
+
+This looked alarming: if every slice peaks at its edge, the "states" could be edges. The
+non-circular test is to take a narrow Ex window and look at the theta distribution inside it. A
+real state is populated over a RANGE of theta (each paired with the KE that gives that Ex); an
+edge artefact sits AT theta_max.
+
+```
+Ex window            N      theta_max   fraction within +-2 deg of theta_max
+state A  4.4-5.0   1817       63.1 deg            56 %
+off-peak 5.4-6.0   1453       60.1 deg            44 %
+state B  6.6-7.2   2101       56.7 deg            60 %
+off-peak 8.0-8.6    938       52.9 deg            55 %
+```
+
+**The concentration is the same in the state windows and the off-peak windows.** The Jacobian
+pile-up is a property of the kinematics at every Ex, not something that manufactures peaks at 4.6
+and 6.9. The states are genuine excesses ON TOP of it. The state energies reported above stand.
+
+## ★★★ What the "continuum" actually is
+
+It is not a reaction continuum at all. It is **the kinematic locus swept by the (theta, KE)
+acceptance** -- each accepted theta contributing a Jacobian-peaked band in Ex, the bands tiling
+Ex ~ 3 to 13 MeV. That single fact explains everything that was puzzling:
+
+* why it is flat -- the bands tile the axis with a slowly falling density;
+* why uniform phase space fails -- wrong process, wrong angles;
+* why the halo form factor fails -- it is not a breakup spectrum;
+* why ATTPCROOT and Spyral disagree on its shape by a factor ~2 -- they have different theta and
+  vz acceptance, so they sweep the locus differently;
+* why an empirical flat background worked so well in the first place.
+
+**The acceptance-folded sequential template is the right continuum model.** `seqps.C` computes
+`acceptance(Ex)` from the two-body kinematics (fraction of CM solid angle landing in theta 40-90
+and KE 0.5-18): it is ~0.23-0.26 up to Ex ~ 12 and falls to zero by ~13, because beyond that the
+deuteron can no longer reach 40 deg at all. Folding that with `dens(Ex)` gives a continuum that
+rises to ~10 MeV and cuts off -- qualitatively unlike either template tried before.
+
+⚠ Not yet done: that acceptance is pure kinematics (theta and KE windows), with no reconstruction
+efficiency and no theta-dependent efficiency. Finishing it is the same blocker as the resolution
+function, and it is now clearly the single most valuable next step -- it would let the continuum
+be MODELLED rather than absorbed into an empirical shape, and would turn the state yields into
+cross sections.
