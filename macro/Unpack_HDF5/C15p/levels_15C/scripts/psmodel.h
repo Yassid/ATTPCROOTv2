@@ -1,3 +1,4 @@
+#pragma once
 // Three-body phase space for  15C + d -> d' + (14C + n).
 //
 // We detect the deuteron and reconstruct the missing mass M of the recoil system; Ex = M - m(15C).

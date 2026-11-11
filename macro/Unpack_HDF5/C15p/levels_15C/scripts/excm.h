@@ -1,3 +1,4 @@
+#pragma once
 #include "exlib.h"
 // theta_CM of the detected ejectile, by boosting its lab 4-vector into the CM frame.
 // For elastic recoil off a target at rest this reduces to theta_cm = 180 - 2*theta_lab, so the

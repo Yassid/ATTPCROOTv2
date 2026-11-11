@@ -827,3 +827,89 @@ A residual drift of ~0.6 MeV remains across bins 1-4 (6.75 -> 7.35), not yet exp
 
 **Consequence for everything above: the angular variable should be theta_CM.** Per-bin fits,
 acceptance and any future angular distribution all belong in theta_CM.
+
+## Per-theta_CM-bin fits, and the response function
+
+`scripts/binacc.h`, `lineshape.C`, `binfit.C`, `binfig.C` -> `figures/dd_cmbin_fits.png`
+
+![per-bin fits](figures/dd_cmbin_fits.png)
+
+### 1. The acceptance inside a theta_CM bin is ~1, computed exactly
+
+For two-body kinematics theta_CM and Ex fix theta_lab and KE completely, so the acceptance of a
+theta_CM bin at a given Ex is just the fraction of that bin landing in the detector window -- no
+solid-angle integral, no simulation, no free parameter (`binacc.h`). It comes out **1.000 over
+Ex = 0-16** in every bin for both codes, falling only at the kinematic limit.
+
+**So acceptance cannot be blamed for the continuum shape, and no acceptance correction is needed
+inside a bin.** What differs between bins is the continuum SHAPE itself -- steeply falling at
+theta_CM 10-20, flat at 40-50 -- which is a cross-section angular dependence. **The inclusive
+spectrum mixes bins with different shapes, and that is why no single continuum shape ever fitted
+it.** Per bin, `dens(Ex)` matches the measured continuum well from Ex ~ 6 upward:
+
+```
+Ex              2     4     6     8    10    12    14    16    18    20
+bin 3 data    1.08  0.50  0.83  1.00  1.00  0.96  0.96  0.96  0.83  0.67
+dens(Ex)      0.40  0.69  0.85  0.97  1.00  1.02  1.01  0.95  0.87  0.67
+```
+
+### 2. ★ The response function was the worst defect in every fit so far
+
+`lineshape.C` fits the g.s. peak alone with three shapes:
+
+```
+                 G1 (Gaussian)   G2 (bifurcated)   GT (bifurcated + exponential tails)
+ATTPCROOT            32.20            21.88                  2.18
+Spyral               47.07            33.18                  7.00        chi2/ndf
+```
+
+GT is a Gaussian core with exponential tails, continuous and smooth at |t| = alpha:
+`f(t) = exp(-t^2/2)` for `|t| <= alpha`, `exp(alpha^2/2 - alpha|t|)` beyond. **A factor of ten
+better than the bifurcated Gaussian for ATTPCROOT.** Fitted alpha_L 1.19, alpha_R 1.50,
+FWHM 0.752/1.142. This is adopted everywhere from now on.
+
+⚠ The tail is worth only ~10 counts/bin at Ex = 2.5 and nothing by Ex = 4, so it does **not**
+explain the low-Ex continuum excess noted earlier -- that remains open.
+
+### 3. Excitation-energy range
+
+Scanned `{-2..12, 2.5..12, 2.5..14, 3..12, 2.5..10, 2.5..16}`, median chi2/ndf over bins 0-4:
+
+```
+                     -2..12   2.5..12  2.5..14  3..12   2.5..10  2.5..16
+ATTPCROOT  (GT)       2.77     10.17    11.80   10.72     2.51    17.63
+Spyral     (GT)       2.02     10.04     2.96   10.33     3.17     1.95
+```
+
+**[-2, 12] adopted.** Once the g.s. tail is modelled the FULL window wins: cutting the g.s. out
+removes the very constraint that pins its tail under the resonances. (Before the tailed response
+the truncated windows looked competitive -- that was the Gaussian failing, not the range.)
+
+### 4. Per-bin results
+
+Amplitudes are seeded and bounded from the inclusive pass scaled by each bin's count fraction, as
+in the (p,p') analysis. Without that several bins drove all six amplitudes to zero and let the
+continuum swallow the resonances. Significances per bin (* = above 5 sigma):
+
+```
+ATTPCROOT  bin  theta_CM     N     chi2   BW1    BW2    BW3    BW4    BW5    BW6
+            0    10-20    66074   6.93   37.3*   0.0   14.5*   6.4*   0.0    0.0
+            1    20-30    42920   3.90    5.2*   1.4    0.0   13.7*   2.5    0.0
+            2    30-40     6672   1.47    2.7    1.2    0.0   13.5*   1.7    4.5
+            3    40-50     6499   1.32    0.0    0.0    0.0    2.5    2.5    0.2
+            4    50-60     4823   2.72    0.0    0.0    0.0    3.7    0.8   12.5*
+Spyral      0    10-20    44598   9.31   15.1*  10.3*   9.1*   6.9*   0.0    0.0
+            1    20-30    15114   3.79    9.7*  10.3*  28.8*  65.8*   3.7    1.8
+            2    30-40     4644   1.98    0.3    0.7    0.0    3.5    2.0    1.1
+            3    40-50     4383   1.27    0.0    0.0    0.0    0.4    2.8    0.0
+            4    50-60     3603   1.96    0.0    0.0    0.0    4.1   11.4*   9.8*
+```
+
+**BW1 (4.43) and BW4 (6.68) dominate, concentrated at theta_CM 10-40 deg** and falling away
+beyond -- forward-peaked, as expected for direct inelastic scattering. **The sequential
+phase-space continuum is used in every bin** (scale 0.0002-0.0014, never zero), which is the
+point: with the right kinematics and per-bin fitting it is no longer rejected.
+
+⚠ Not to be over-read: Spyral bin 1 BW4 at 66 sigma is an artefact of the tight amplitude bound,
+and the bins beyond 40 deg have little statistics and unstable amplitudes. The angular
+distributions are not yet a measurement -- that needs the efficiency, still missing.

@@ -1,3 +1,4 @@
+#pragma once
 // Reproduces the explorer's physics EXACTLY (page lines 408-575):
 //   U = 931.49401 ; M_i = amu_i * U
 //   theta_corr = theta - (360/kcDenom)*(KE + keOff - kcPivot)      [deg]
