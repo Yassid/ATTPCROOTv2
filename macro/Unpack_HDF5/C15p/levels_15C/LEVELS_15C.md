@@ -790,3 +790,40 @@ Candidate 1 is the most likely and is testable only with a simulated response; c
 the same simulation. **Both point at the acceptance/efficiency simulation as the next step** -- it
 is now the blocker for the continuum normalisation, the resolution function, the 5/2+ yield and
 the conversion of state yields into cross sections.
+
+---
+
+# Binning in theta_CM, not theta_lab (2026-11-11, overnight)
+
+`scripts/excm.h`, `binbuild.C`, `cmfig.C` -> `figures/dd_cmbins.png`
+
+The 15C(p,p') analysis bins in **theta_CM** (`C15_pp_ana_AngBins_*`, 10 deg bins from 10 to 100).
+Doing the same for (d,d') settles the question the theta_lab slices could not.
+
+`excm.h` adds `thcmProj()`: boost the detected deuteron into the CM frame and take the
+supplement, since the (p,p') convention is the CM angle of the PROJECTILE while the deuteron is
+the recoil. The AT-TPC's backward lab angles (40-86 deg) map onto theta_CM ~ 10-70 deg, inside the
+same domain (p,p') uses.
+
+## ★★★ In theta_CM the states STAY PUT -- they are not kinematic edges
+
+```
+                 theta_CM:  10-20  20-30  30-40  40-50  50-60
+ATTPCROOT  Ex of maximum:    3.95   6.75   6.95   7.15   7.35
+Spyral     Ex of maximum:    4.25   6.55   6.65   6.85   7.15
+```
+
+against the theta_LAB slices, where the peak swept **11.90 -> 10.50 -> 8.70 -> 7.10 -> 5.70 ->
+4.50 -> 3.50** and tracked the kinematic edge exactly.
+
+**The Jacobian pile-up is a theta_lab artefact.** theta_CM is the physical scattering angle, and
+in it the structure sits at one Ex across four independent angular bins in both codes. The 4.6 and
+6.9 structures also appear together across bins 0-4 (counts at 4.6: 138, 97, 28, 16, 12; at 6.9:
+76, 127, 89, 38, 39 for ATTPCROOT). **The states are real.** This is a much stronger statement
+than the earlier "the pile-up is generic" argument, which only showed the edge did not manufacture
+them.
+
+A residual drift of ~0.6 MeV remains across bins 1-4 (6.75 -> 7.35), not yet explained.
+
+**Consequence for everything above: the angular variable should be theta_CM.** Per-bin fits,
+acceptance and any future angular distribution all belong in theta_CM.

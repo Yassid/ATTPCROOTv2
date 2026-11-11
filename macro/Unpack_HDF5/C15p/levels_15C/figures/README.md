@@ -8,6 +8,7 @@
 | `pp_reference_states.png` | the 15C(p,p') spectrum and its structures — the reference list | `../scripts/ppfind2.C` |
 | `dd_ex_both_codes.png` | both (d,d') Ex spectra, no fit, state positions marked | — |
 | `fivehalf_lineshape.png` | **why the 5/2+ yield is not measurable** — the 5/2+ ratio against the assumed g.s. right-hand width, with the Δ(-2lnL)=1 band; the width is pinned to a few keV but a 10 % width error moves the ratio by 16-30 % | `../scripts/degenfig.C` |
+| `dd_cmbins.png` | **the states stay at fixed Ex across θ_CM bins** — the proof they are not kinematic edges; compare the θ_lab slices which swept 11.9 → 3.5 | `../scripts/cmfig.C` |
 | `dd_final_seqps.png` | **the current best fit** — six (p,p') resonances as barrier BWs on the CORRECTED sequential continuum (`floor + N·dens·acc`), both codes | `../scripts/plotfinal.C` |
 | `kinematic_edge.png` | the deuteron's kinematic ceiling θ_max(Ex), and each θ slice peaking on it | `../scripts/edgefig.C` |
 | `dd_bw_ppscheme.png` | ⚠ superseded — same resonances but on the WRONG (uniform three-body) continuum template | **the (d,d') spectrum fitted like (p,p')** — six barrier-corrected Breit-Wigners with Lane-Thomas penetrability on a phase-space continuum, both codes | `../scripts/plotbw.C` |
