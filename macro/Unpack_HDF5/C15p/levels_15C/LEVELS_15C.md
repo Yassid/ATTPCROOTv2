@@ -913,3 +913,41 @@ point: with the right kinematics and per-bin fitting it is no longer rejected.
 ⚠ Not to be over-read: Spyral bin 1 BW4 at 66 sigma is an artefact of the tight amplitude bound,
 and the bins beyond 40 deg have little statistics and unstable amplitudes. The angular
 distributions are not yet a measurement -- that needs the efficiency, still missing.
+
+### 5. ★ Missing strength at Ex ~ 3.4 MeV, in BOTH codes
+
+`scripts/extrabw.C` adds ONE extra barrier BW and scans its energy from 1.6 to 11 MeV, recording
+the likelihood gain in theta_CM bins 0 and 1 (where the statistics are):
+
+```
+   Ex_extra    1.6   2.0   2.4   2.8   3.0   3.2   3.4   3.6   4.0   4.2   4.4   >4.6
+   ATTPCROOT    89   144   384   741   888   970   983   935   716   491    12     ~0     d(-2lnL)
+   Spyral      160   197   311   515   608   683   724   705   454   321    37     ~0
+```
+
+**Both codes peak at exactly Ex = 3.40 MeV**, with d(-2lnL) = 983 and 724, and **nothing above
+4.4 MeV** -- the six (p,p') resonances account for everything higher, which is a good check on
+that list. This is the quantitative form of the "low-Ex excess" flagged earlier.
+
+ENSDF has 15C levels at **3.103** (1/2-) and **4.220**, neither of which is in the (p,p')
+six-resonance list. The 3.103 level is the obvious candidate.
+
+⚠ **But whether it is a LEVEL or extra CONTINUUM is NOT resolved, and the two codes disagree.**
+`scripts/missing.C` compares, in the same bins and window, a BW at 3.40 with free width against a
+smooth extra threshold term:
+
+```
+                   (A) BW, Gamma free      (B) BW, Gamma = 0.2   (C) smooth continuum
+ATTPCROOT bin 0   d 1005  (Gamma 0.80)        d  973                  d  664
+Spyral    bin 0   d  960  (Gamma 2.50)        d  648                  d  919
+Spyral    bin 1   d  187  (Gamma 4.00)        d   76                  d  192
+```
+
+ATTPCROOT marginally prefers a level (Gamma ~ 0.8, beating the smooth term by 341); Spyral prefers
+a width of 2.5-4 MeV, which is not a level but continuum, and the smooth term matches or beats the
+BW there. Given that ATTPCROOT's resolution is the worse of the two (FWHM 0.75/1.14 against
+0.50/0.52), its "Gamma = 0.8 level" is comfortably consistent with resolution-broadened continuum.
+
+**Claim only what is supported: there is highly significant strength at Ex ~ 2-4 MeV that the
+(p,p') six-resonance list plus the sequential continuum do not account for.** Identifying it needs
+better resolution or the efficiency model -- do not quote a new level from this.
