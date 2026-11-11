@@ -543,3 +543,104 @@ Comparing a raw yield against a cross-section shape without an acceptance x effi
 is the error underneath this whole question. That simulation is the blocker -- and it is the *same*
 one needed for the resolution function. Until it exists, use an empirical background and quote the
 spread as a systematic, which is what `globalfit.C` does.
+
+---
+
+# (d,d') fitted the way (p,p') is fitted: BW + penetrability (2026-11-11)
+
+`scripts/ddbw.C`, `scripts/plotbw.C` -> `figures/dd_bw_ppscheme.png`
+
+Everything above fitted the (d,d') spectrum with two free Gaussians on an empirical background.
+That was wrong twice over: **the level scheme is not two states**, and **a straight line is not a
+continuum**. This redoes it with the model used in the 15C(p,p') analysis
+(`Yassid/a2091-15Cpp-analysis`, `macros/C15_pp_ana_AngBins_Barrier_6BW.C`), term for term.
+
+![BW fit](figures/dd_bw_ppscheme.png)
+
+## The model
+
+* **g.s. and the 0.740 MeV 5/2+** as Gaussians (both bound, below S_n).
+* **Six barrier-corrected Breit-Wigners**, convolved with the detector Gaussian. Lane-Thomas
+  penetrability for neutron decay `15C -> 14C + n`, identical to their `BarrierPhys`:
+
+```
+rho  = kR,  k = sqrt(2 mu E_dec)/hbar_c,  R = 1.4*15^(1/3) = 3.45 fm,  mu = 931.494*14/15
+F_l  =  rho*j_l(rho),   G_l = -rho*y_l(rho),   P_l = rho/(F^2+G^2)
+Gamma(E) = Gamma_r * P_l(E)/P_l(E_r)
+BW(E)    = (Gamma(E)/2pi) / [(E-E_r)^2 + (Gamma(E)/2)^2]
+```
+
+* **A phase-space continuum template**, simulated and reconstructed exactly as the analysis does
+  (`psalt.C`), which is the analogue of their `SmoothPS`. **No empirical straight line.**
+
+Resonances and l-values are theirs: `BW1 4.55 l=1 | BW2 5.05 l=1 | BW3 6.10 l=2 | BW4 6.80 l=2 |
+BW5 7.50 l=2 | BW6 8.40 l=2`, quoted in the (p,p') Ex scale whose g.s. sits at +0.119, and placed
+here at `E = (E_pp - 0.119) + this code's own g.s. centroid`.
+
+**Energies and widths are FIXED, only amplitudes float.** (d,d') resolution is FWHM 0.91
+(ATTPCROOT) and 0.52 (Spyral) against 0.51 for (p,p'), while BW1 and BW2 are 0.5 MeV apart -- six
+free E_r and six free Gamma cannot be determined here. Fixing them turns the fit into the question
+worth asking: *is each (p,p') resonance present in (d,d'), and how strong?*
+
+## ★ The (p,p') level scheme describes (d,d')
+
+```
+BW   l   E_pp    E here (ATT)  sigma  |  E here (Spy)  sigma
+BW1  1   4.55       4.478      22     |     4.178      13
+BW2  1   5.05       4.978       7     |     4.678      12
+BW3  2   6.10       6.028       6     |     5.728       7
+BW4  2   6.80       6.728      17     |     6.428      16
+BW5  2   7.50       7.428       3     |     7.128       9
+BW6  2   8.40       8.328       6     |     8.028       3
+```
+
+Five of six are above 5 sigma in each code. **And the two broad "states" of the old fit were the
+unresolved doublets**, which is why state A was always so much wider than state B:
+
+```
+                 BW1+BW2 centroid   old "state A"      BW4+BW5 centroid   old "state B"
+ATTPCROOT             4.615             4.681               6.809             6.871
+Spyral                4.416             4.510               6.658             6.643
+```
+
+## ⚠ But the energy SCALE is not determinable from this fit
+
+Scanning a global offset, and separately a global scale, on the whole scheme: **both run to the
+edge of their range and simply reshuffle the amplitudes** -- at scale 0.90 BW4 drops to zero and
+BW5 slides into its place to take the strength. With six overlapping resonances and this
+resolution the amplitudes can always compensate for a shift. So the fit above (energies at the
+(p,p') values) is the reference, and **(d,d') cannot independently confirm the level energies** --
+only their consistency.
+
+## ★★★ The phase-space continuum is REFUSED by the data, even in this model
+
+This was the point of redoing it, so it is worth stating plainly. Four combinations, same six
+resonances throughout:
+
+```
+code        continuum                      -2lnL  chi2/ndf   PS scale   floor
+ATTPCROOT   A (d+14C+n) ONLY              6367.8     21.85      1.004     0.0
+ATTPCROOT   A (d+14C+n) + flat floor      1320.2      6.48          0    125.3
+ATTPCROOT   B (breakup) ONLY              1526.8      7.08      1.081     0.0
+Spyral      A (d+14C+n) ONLY              4684.0     11.97     0.7961     0.0
+Spyral      A (d+14C+n) + flat floor       451.0      2.33     0.0626     84.0
+Spyral      B (breakup) ONLY               508.7      2.54     0.7886     0.0
+```
+
+* **Phase space alone is catastrophic**: chi2/ndf 21.9 and 12.0.
+* Given a flat floor as well, **the phase-space scale goes to ZERO for ATTPCROOT** and to 6 % for
+  Spyral. The fit throws the phase space away.
+* Template **B**, the deuteron-breakup shape, is nearly flat and works -- Delta(-2lnL) of 4841
+  (ATTPCROOT) and 4175 (Spyral) better than A. What the data wants is a **flat** continuum.
+
+So the 2026-11-09 exclusion of `d + 14C + n` phase space is confirmed inside the (p,p')
+methodology, not just against an empirical background. The continuum is flat, and that is a
+property of the data.
+
+⚠ **The honest caveat**: template A carries the analysis KE/theta cuts but **no reconstruction
+efficiency**. A real efficiency could in principle bend a rising phase space into a flat
+observable. Template B was built the same way and does fit, so the difference between them is
+intrinsic shape rather than the missing efficiency -- but that argument is not airtight, because
+the efficiency need not be the same for the two (different particle, different kinematics).
+**Settling it needs the acceptance simulation**, which is the same blocker as the resolution
+function.

@@ -36,6 +36,21 @@ root -b -q bkgcmp.C         # all five backgrounds side by side
 root -b -q lrtest.C         # likelihood-ratio test of each against FLAT
 ```
 
+```bash
+root -b -q ddbw.C           # the (p,p')-style fit: 6 barrier BW + penetrability + phase space
+root -b -q plotbw.C         # its figure -> dd_bw_ppscheme.png
+```
+
+`ddbw.C` mirrors `Yassid/a2091-15Cpp-analysis` `macros/C15_pp_ana_AngBins_Barrier_6BW.C`.
+⚠ Traps in it:
+  - the BW⊛Gaussian convolution must be sampled finely against **Γ**, not σ. BW1/BW2 have
+    Γ = 20 keV while σ_det = 385 keV; sampling the kernel at σ/50 under-samples a 20 keV
+    Lorentzian and gives a jagged template and inflated χ². Cache the BW on a 2 keV grid instead.
+  - resonance energies and Γ must be FIXED: six free E_r cannot be determined at (d,d')
+    resolution, and a global offset or scale just reshuffles which BW sits on which peak.
+  - `plotbw.C` builds TGraphs, not TF1s, because the templates are globals rebuilt per fit and
+    TF1::Draw is lazy.
+
 ⚠ `bkgcmp.C` / `lrtest.C` traps, each of which gave a wrong answer first:
   - compare backgrounds by `-2lnL`, NOT by a chi2 over bins with n >= 10: the fit minimises a
     Poisson likelihood over all bins, and the mismatched statistic made FLATEXP score worse than
