@@ -63,18 +63,31 @@ static double  FL = 0, SIGD = 0.4, GSMU = 0;
 // against 33.18 on Spyral. The plain Gaussian response was the single worst defect in every
 // fit so far.
 static double SGL = 0.4, SGR = 0.4, ALF_L = 1.5, ALF_R = 1.5;
-//  p0 gsAmp  p1 5/2+ amp  p2 continuum scale  p3..p8 BW amps
+// A LOW-ENERGY BACKGROUND, fitted ALONGSIDE the phase space rather than instead of it.
+//   bkgLE(Ex) = B * erf((Ex - Sn)/(sqrt2 w)) * exp(-kappa * Ex)
+// turning on at the neutron threshold and dying away, so it cannot touch the bound states and
+// cannot masquerade as a resonance. Its origin is not established: part of it is a background
+// localised at vz ~ 90-180 mm (an extra ~21 % of the events in that vz slice, in BOTH codes),
+// but removing that by a vz cut leaves most of the excess, so there is more to it.
+// p9 amplitude, p10 turn-on width, p11 decay constant.
+static bool USE_LEBKG = false;
+//  p0 gsAmp  p1 5/2+ amp  p2 continuum scale  p3..p8 BW amps  p9..p11 low-energy background
 double fBin(double* x, double* p)
 {
    double X = x[0];
    double v = FL + std::max(0.0, p[2]) * (GC ? std::max(0.0, GC->Eval(X)) : 0.0);
+   if (USE_LEBKG) {
+      double thr = 0.5 * (1 + std::erf((X - B2::SN) / (M_SQRT2 * std::max(0.05, p[10]))));
+      v += std::max(0.0, p[9]) * thr * std::exp(-std::max(0.0, p[11]) * X);
+   }
    v += p[0] * shapeGT(X, GSMU, SGL, SGR, ALF_L, ALF_R);
    v += p[1] * shapeGT(X, GSMU + E52d, SGL, SGR, ALF_L, ALF_R);
    for (int i = 0; i < NB; i++) v += std::max(0.0, p[3 + i]) * TT[i].Eval(X);
    return v;
 }
 
-struct BR { int bin; double cmLo, cmHi, N, nll, chi2ndf, cs, floor;
+static double BEST_NLL = -1;
+struct BR { int bin; double cmLo, cmHi, N, nll, chi2ndf, cs, floor, bgB, bgW, bgK;
             double amp[NB], err[NB], gsA, e5A; TH1D* h; double A[NB]; };
 
 // Reference amplitudes from the INCLUSIVE spectrum, used to seed and bound every bin.
@@ -120,6 +133,7 @@ BR fitBin(const Cfg& k, int ib, double exLo, double exHi, bool talk, bool useRef
    for (int i = 0; i <= 460; i++) { double X = i * 0.05;
       GC->SetPoint(i, X, PS::dens(X, k.eb) * accBin(A, k.eb, X, cmLo, cmHi, w)); }
 
+   BEST_NLL = -1;
    double pk = h->GetBinContent(h->GetMaximumBin());
    double c9 = GC->Eval(9.0);
    double lvl = 0; int nl = 0;
@@ -127,7 +141,7 @@ BR fitBin(const Cfg& k, int ib, double exLo, double exHi, bool talk, bool useRef
       if (x > 8 && x < 10) { lvl += h->GetBinContent(i); nl++; } }
    lvl = nl ? lvl / nl : 1;
 
-   TF1* g = new TF1(Form("b_%s_%d_%d", k.nm, ib, (int)(exLo * 10)), fBin, exLo, exHi, 9);
+   TF1* g = new TF1(Form("b_%s_%d_%d_%d", k.nm, ib, (int)(exLo * 10), (int)USE_LEBKG), fBin, exLo, exHi, 12);
    // If the window starts above the bound states, drop them: the g.s. lineshape is NOT Gaussian
    // (chi2/bin ~ 9 in its core) and letting it sit inside the window poisons the resonances.
    bool gsIn = true;   // the g.s. is ALWAYS in the model now -- its tail is what matters
@@ -147,16 +161,48 @@ BR fitBin(const Cfg& k, int ib, double exLo, double exHi, bool talk, bool useRef
          g->SetParLimits(3 + i, 0, 1e9);
       }
    }
+   if (!USE_LEBKG) { g->FixParameter(9, 0); g->FixParameter(10, 1); g->FixParameter(11, 0); }
    g->SetNpx(1500);
-   TFitResultPtr r = h->Fit(g, "RQ0NLS"); r = h->Fit(g, "RQ0NLS");
+   TFitResultPtr r;
+   if (!USE_LEBKG) { r = h->Fit(g, "RQ0NLS"); r = h->Fit(g, "RQ0NLS"); }
+   else {
+      // MULTI-START on the background: one seed put Spyral bin 1 in a minimum WORSE than the
+      // model nested inside it (d(-2lnL) = -805, impossible). Try several, remember which SEED
+      // won, then re-run from it -- restoring the parameters and re-fitting let the minimiser
+      // wander back off, and fixing them instead zeroed every error.
+      double best = 1e30; int bs = 0, is = 0;
+      const double BS[3] = {0.05, 0.3, 1.0}, KS[3] = {0.10, 0.35, 0.9};
+      auto seedBkg = [&](int idx) {
+         // seed EVERY parameter, not just the background ones: p0/p1/p2 carried over from the
+         // previous loop iteration, so re-running from the winning seed did not reproduce its
+         // minimum and reported a likelihood that disagreed with the chi2.
+         g->SetParameter(0, pk);        g->SetParLimits(0, 0, 1e9);
+         g->SetParameter(1, pk * 0.08); g->SetParLimits(1, 0, 1e9);
+         g->SetParameter(2, c9 > 0 ? std::max(0.0, lvl - FL) / c9 : 1.0); g->SetParLimits(2, 0, 1e7);
+         g->SetParameter(9, BS[idx / 3] * lvl); g->SetParLimits(9, 0, 1e6);
+         g->SetParameter(10, 1.0);              g->SetParLimits(10, 0.05, 3.0);
+         g->SetParameter(11, KS[idx % 3]);      g->SetParLimits(11, 0.0, 2.0);
+         for (int i = 0; i < NB; i++) if (useRef && REFTOT > 0 && REF[i] > 0)
+            g->SetParameter(3 + i, REF[i] * o.N / REFTOT); };
+      for (is = 0; is < 9; is++) {
+         seedBkg(is);
+         TFitResultPtr rr = h->Fit(g, "RQ0NLS");
+         double v = 2 * rr->MinFcnValue();
+         if (v < best) { best = v; bs = is; } }
+      seedBkg(bs);
+      r = h->Fit(g, "RQ0NLS");
+      BEST_NLL = best;
+   }
 
    double c2 = 0; int nd = 0;
    for (int i = 1; i <= h->GetNbinsX(); i++) { double x = h->GetBinCenter(i), n = h->GetBinContent(i);
       if (x < exLo || x > exHi || n < 10) continue;
       double m = g->Eval(x); c2 += (n - m) * (n - m) / n; nd++; }
-   int npar = gsIn ? 9 : 7;
-   o.nll = 2 * r->MinFcnValue(); o.chi2ndf = c2 / std::max(1, nd - npar);
+   int npar = (gsIn ? 9 : 7) + (USE_LEBKG ? 3 : 0);
+   o.nll = (USE_LEBKG && BEST_NLL > 0) ? BEST_NLL : 2 * r->MinFcnValue();
+   o.chi2ndf = c2 / std::max(1, nd - npar);
    o.cs = g->GetParameter(2); o.gsA = g->GetParameter(0); o.e5A = g->GetParameter(1);
+   o.bgB = g->GetParameter(9); o.bgW = g->GetParameter(10); o.bgK = g->GetParameter(11);
    for (int i = 0; i < NB; i++) { o.A[i] = g->GetParameter(3 + i);
       double t = TT[i].Eval((EPP[i] - PPGS) + GSMU);
       o.amp[i] = o.A[i] * t; o.err[i] = g->GetParError(3 + i) * t; }
@@ -176,6 +222,21 @@ BR fitBin(const Cfg& k, int ib, double exLo, double exHi, bool talk, bool useRef
 void binfit()
 {
    for (auto& k : CFG) {
+      printf("\n######## %s : low-energy background ON vs OFF ########\n", k.nm);
+      printf("  bin      N     chi2 OFF   chi2 ON    d(-2lnL)   B      w     kappa |  BW significances ON\n");
+      for (int ib = 0; ib < 4; ib++) {
+         USE_LEBKG = false;
+         REFTOT = 0; for (int i = 0; i < NB; i++) REF[i] = 0;
+         BR a = fitBin(k, ib, -2.0, 12.0, false, false);
+         if (a.N < 400) continue;
+         USE_LEBKG = true;
+         BR b = fitBin(k, ib, -2.0, 12.0, false, false);
+         printf("  %2d %7.0f %10.2f %9.2f %10.1f", ib, a.N, a.chi2ndf, b.chi2ndf, a.nll - b.nll);
+         printf("  %6.1f %5.2f %6.3f |", b.bgB, b.bgW, b.bgK);
+         for (int i = 0; i < NB; i++) printf(" %5.1f", b.err[i] > 0 ? b.amp[i] / b.err[i] : 0.0);
+         printf("\n");
+      }
+      USE_LEBKG = false;
       // 1) inclusive reference: fit the sum of all theta_CM bins, free amplitudes
       REFTOT = 0; for (int i = 0; i < NB; i++) REF[i] = 0;
       {

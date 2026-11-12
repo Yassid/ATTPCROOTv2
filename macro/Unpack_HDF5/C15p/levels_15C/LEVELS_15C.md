@@ -951,3 +951,87 @@ BW there. Given that ATTPCROOT's resolution is the worse of the two (FWHM 0.75/1
 **Claim only what is supported: there is highly significant strength at Ex ~ 2-4 MeV that the
 (p,p') six-resonance list plus the sequential continuum do not account for.** Identifying it needs
 better resolution or the efficiency model -- do not quote a new level from this.
+
+---
+
+# The low-energy background, fitted WITH the phase space (2026-11-12)
+
+`scripts/resid2.C`, `keorigin.C`, `origin.C`, `vztest.C`, `vzbkg.C`, `binfit.C`, `binfig2.C`
+-> `figures/dd_cmbin_fits_bkg.png`
+
+![per-bin fits with background](figures/dd_cmbin_fits_bkg.png)
+
+## What is missing, measured from the residual
+
+Fitting as before (tailed response + 6 BW + sequential phase space) and looking at data - model:
+
+```
+ATTPCROOT bin 0  pull:  Ex 2.5-3.5 -> +4.0 +6.5 +6.9   |  Ex 8.5-10  -> -2.4 -2.8 -2.8
+Spyral    bin 0  pull:  Ex 1.5-3.5 -> +2.8 +3.0 +4.1 +4.7 +6.3  |  Ex 9.5-11 -> -3.3 -5.4 -5.9
+```
+
+Missing strength at Ex ~ 2-4 **and** over-prediction above 8.5, both strongest in theta_CM bin 0.
+
+## The model: background AND phase space together
+
+```
+continuum(Ex) = floor + N * dens(Ex) * acc(Ex)  +  B * erf((Ex-Sn)/(sqrt2 w)) * exp(-kappa Ex)
+```
+
+The background turns on at the neutron threshold and dies away, so it cannot touch the bound
+states and cannot masquerade as a resonance. Fitted per theta_CM bin:
+
+```
+                  chi2 OFF -> ON   d(-2lnL)     B      w     kappa
+ATTPCROOT bin 0     6.93 -> 4.15      664     90.1   1.36   0.201
+Spyral    bin 0    13.90 -> 3.33     1153     65.7   1.40   0.139
+Spyral    bin 1     3.80 -> 2.18      193     26.4   1.13   0.093
+bins 2+             no change          ~0      0      -       -
+```
+
+**It is needed only in the forward theta_CM bins, and its shape agrees between the two codes**
+(turn-on width 1.36 vs 1.40, decay 0.20 vs 0.14). Above theta_CM ~ 30 deg it fits to zero.
+
+## On its origin -- partly identified, not settled
+
+**1. It lives at low deuteron energy.** At fixed theta_CM the deuteron KE is nearly independent of
+Ex (theta_CM 15 deg -> KE ~ 1.4 MeV, 25 -> 3.7, 35 -> 6.8, 45 -> 10.5), so **binning in theta_CM
+is almost the same as binning in deuteron KE**, and the background sits in the 1.4 MeV bin -- the
+shortest tracks. ⚠ That also means "low-KE instrumental" and "forward-angle physics" are
+DEGENERATE here and cannot be separated by angle alone.
+
+**2. It is NOT poor reconstruction.** Within bin 0, comparing the excess window (Ex 2.5-4) against
+the g.s. window at the same KE:
+
+```
+                     N       <KE>    <vz> +- rms     <chi2>   <npulse>
+g.s.   Ex -0.5..0.5  45127   1.75    538 +- 237      0.0617     1.0
+EXCESS Ex  2.5..4.0   1572   1.61    498 +- 240      0.0475     1.0
+```
+
+Same KE, same npulse, and the excess has a BETTER chi2 than the g.s. These are well-fitted tracks.
+
+**3. Part of it is localised in vz, in BOTH codes.** The g.s. centroid is flat in vz (so the
+Ebeam(vz) correction is sound) but the excess fraction spikes in one vz slice:
+
+```
+ATTPCROOT vz  92-183 -> 19.7 %   (baseline ~3.5 %)
+Spyral    vz 100-167 -> 15-20 %  (baseline ~2.2 %)
+```
+
+Subtracting a vz-scaled bulk spectrum from that slice leaves an extra component carrying **~21 %
+of the events there in both codes** (365 and 311 events), broad over Ex 1.5-9 rather than peaked.
+That is a real, identified background near the entrance.
+
+**But it is not the whole story.** Cutting it away moves the excess fraction only from 3.7 to
+3.4 % (ATTPCROOT) and 3.0 to 2.4 % (Spyral), and the vz cut helps Spyral's fits substantially
+(bin 0 chi2 13.90 -> 4.36 at vzLo 300) while making ATTPCROOT's worse. So **model it rather than
+cut it**, which is what the fit above does.
+
+⚠ Fit-technical traps, each of which gave a wrong answer first:
+  - the background needs a MULTI-START: one seed put Spyral bin 1 in a minimum WORSE than the
+    model nested inside it (d(-2lnL) = -805, impossible);
+  - restoring the best parameters and re-fitting lets the minimiser wander back off; fixing them
+    instead zeroes every error. Re-run from the winning SEED;
+  - seed EVERY parameter, not just the background ones -- p0/p1/p2 carried over from the previous
+    loop iteration and the re-run did not reproduce its own minimum.

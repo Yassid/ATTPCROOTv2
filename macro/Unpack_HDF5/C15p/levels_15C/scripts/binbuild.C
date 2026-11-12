@@ -1,3 +1,4 @@
+#pragma once
 #include "excm.h"
 // Build Ex spectra in theta_CM bins (projectile convention, as in the 15C(p,p') analysis),
 // for both codes.  Writes dd_cmbins.root.
@@ -7,13 +8,18 @@ Cfg CFG[2]={
   191.25,0.2,0.5,18,1100,1074,1201,3913.0,-1.5,1.012},
  {"Spyral","/home/yassid/Data/spyral/C15d_a2091/spyral_kin.root",
   195.0,5.0,0.0,20,400,-1,99999,2535.2,14.5,0.548}};
+// Low-vz cut. Both codes show an excess spike at vz ~ 90-180 mm (19.7 % and 15-20 % of events
+// in the Ex 2.5-4 window against a 2-3.5 % baseline), carrying an extra ~21 % of the events in
+// that vz slice spread broadly over Ex 1.5-9. Set VZLO > 0 to remove it.
+double VZLO = 0;
 Pars parsOf(const Cfg&k){
   Pars A; A.ebeam=k.eb; A.chi2=k.chi2; A.thLo=0; A.thHi=180; A.keLo=k.keLo; A.keHi=k.keHi;
-  A.vzLo=0; A.vzHi=k.vzHi; A.icLo=k.icLo; A.icHi=k.icHi;
+  A.vzLo=VZLO; A.vzHi=k.vzHi; A.icLo=k.icLo; A.icHi=k.icHi;
   A.kcDenom=k.kcD; A.kcPivot=k.kcP; A.keOff=0; A.kcOn=true;
   A.ebzSlope=11.0; A.ebzPivot=500; A.ebzOn=true; return A; }
 // theta_CM binning, matching the (p,p') analysis
 const double TCM0=10, TCMSTEP=10, TCM1=80; const int NCM=(int)((TCM1-TCM0)/TCMSTEP);
+bool BB_QUIET=false;
 void binbuild(){
   TFile o("dd_cmbins.root","RECREATE");
   for(auto&k:CFG){
@@ -33,7 +39,7 @@ void binbuild(){
     auto* hall=new TH1D(Form("%s_all",k.nm),"",280,-5,23); hall->SetDirectory(nullptr);
     for(Long64_t i=0;i<t->GetEntries();i++){ t->GetEntry(i);
       double icv=icF?icf:icd;
-      if(c2>A.chi2||ke<A.keLo||ke>A.keHi||vz<0||vz>A.vzHi||icv<A.icLo||icv>A.icHi) continue;
+      if(c2>A.chi2||ke<A.keLo||ke>A.keHi||vz<A.vzLo||vz>A.vzHi||icv<A.icLo||icv>A.icHi) continue;
       double thf=std::fabs(th); if(thf>90) thf=180-thf;
       double thc=thCorr(A,thf,ke); double eb=ebAt(A,vz,true);
       double e=exOf(A,eb,thc,ke); if(!std::isfinite(e)) continue;
@@ -42,6 +48,7 @@ void binbuild(){
       int b=(int)((tcm-TCM0)/TCMSTEP); if(b>=0&&b<NCM) h[b]->Fill(e); }
     f->Close();
     o.cd(); hall->Write(); for(int i=0;i<NCM;i++) h[i]->Write();
+    if(BB_QUIET) continue;
     printf("\n== %s\n   bin  theta_CM      N     Ex of max   counts at 4.6 / 6.9\n",k.nm);
     for(int i=0;i<NCM;i++){
       if(h[i]->GetEntries()<300){ printf("   %2d   %2.0f-%2.0f   %7.0f   (too few)\n",
@@ -53,5 +60,5 @@ void binbuild(){
         i,TCM0+i*TCMSTEP,TCM0+(i+1)*TCMSTEP,h[i]->GetEntries(),h[i]->GetBinCenter(bm),
         h[i]->GetBinContent(h[i]->FindBin(4.6)),h[i]->GetBinContent(h[i]->FindBin(6.9))); }
   }
-  o.Close(); printf("\nwrote dd_cmbins.root\n");
+  o.Close(); if(!BB_QUIET) printf("\nwrote dd_cmbins.root\n");
 }
