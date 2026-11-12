@@ -71,16 +71,26 @@ static double SGL = 0.4, SGR = 0.4, ALF_L = 1.5, ALF_R = 1.5;
 // but removing that by a vz cut leaves most of the excess, so there is more to it.
 // p9 amplitude, p10 turn-on width, p11 decay constant.
 static bool USE_LEBKG = false;
+// Alternative to the erf background: give the ELASTIC PEAK a second, much longer exponential
+// tail, amplitude tied to the g.s.  If this describes the data as well, the "low-energy
+// background" is part of the RESPONSE FUNCTION, not a separate process.
+static bool USE_LONGTAIL = false;
+static bool FREE_TURNON = false; static double TURNON = 1.218;
 //  p0 gsAmp  p1 5/2+ amp  p2 continuum scale  p3..p8 BW amps  p9..p11 low-energy background
 double fBin(double* x, double* p)
 {
    double X = x[0];
    double v = FL + std::max(0.0, p[2]) * (GC ? std::max(0.0, GC->Eval(X)) : 0.0);
    if (USE_LEBKG) {
-      double thr = 0.5 * (1 + std::erf((X - B2::SN) / (M_SQRT2 * std::max(0.05, p[10]))));
+      // FREE_TURNON lets the turn-on centre float instead of sitting at Sn.  If it comes out at
+      // Sn the background is threshold physics; if it tracks the g.s. centroid it is response.
+      double c0 = FREE_TURNON ? TURNON : B2::SN;
+      double thr = 0.5 * (1 + std::erf((X - c0) / (M_SQRT2 * std::max(0.05, p[10]))));
       v += std::max(0.0, p[9]) * thr * std::exp(-std::max(0.0, p[11]) * X);
    }
    v += p[0] * shapeGT(X, GSMU, SGL, SGR, ALF_L, ALF_R);
+   if (USE_LONGTAIL && X > GSMU)                       // p9 tail fraction, p10 decay length (MeV)
+      v += p[0] * std::max(0.0, p[9]) * std::exp(-(X - GSMU) / std::max(0.05, p[10]));
    v += p[1] * shapeGT(X, GSMU + E52d, SGL, SGR, ALF_L, ALF_R);
    for (int i = 0; i < NB; i++) v += std::max(0.0, p[3 + i]) * TT[i].Eval(X);
    return v;
@@ -161,7 +171,11 @@ BR fitBin(const Cfg& k, int ib, double exLo, double exHi, bool talk, bool useRef
          g->SetParLimits(3 + i, 0, 1e9);
       }
    }
-   if (!USE_LEBKG) { g->FixParameter(9, 0); g->FixParameter(10, 1); g->FixParameter(11, 0); }
+   if (USE_LONGTAIL) {
+      g->SetParameter(9, 0.01); g->SetParLimits(9, 0, 0.5);     // tail fraction of the g.s.
+      g->SetParameter(10, 1.5); g->SetParLimits(10, 0.2, 6.0);  // decay length
+      g->FixParameter(11, 0);
+   } else if (!USE_LEBKG) { g->FixParameter(9, 0); g->FixParameter(10, 1); g->FixParameter(11, 0); }
    g->SetNpx(1500);
    TFitResultPtr r;
    if (!USE_LEBKG) { r = h->Fit(g, "RQ0NLS"); r = h->Fit(g, "RQ0NLS"); }
@@ -198,7 +212,7 @@ BR fitBin(const Cfg& k, int ib, double exLo, double exHi, bool talk, bool useRef
    for (int i = 1; i <= h->GetNbinsX(); i++) { double x = h->GetBinCenter(i), n = h->GetBinContent(i);
       if (x < exLo || x > exHi || n < 10) continue;
       double m = g->Eval(x); c2 += (n - m) * (n - m) / n; nd++; }
-   int npar = (gsIn ? 9 : 7) + (USE_LEBKG ? 3 : 0);
+   int npar = (gsIn ? 9 : 7) + (USE_LEBKG ? 3 : 0) + (USE_LONGTAIL ? 2 : 0);
    o.nll = (USE_LEBKG && BEST_NLL > 0) ? BEST_NLL : 2 * r->MinFcnValue();
    o.chi2ndf = c2 / std::max(1, nd - npar);
    o.cs = g->GetParameter(2); o.gsA = g->GetParameter(0); o.e5A = g->GetParameter(1);

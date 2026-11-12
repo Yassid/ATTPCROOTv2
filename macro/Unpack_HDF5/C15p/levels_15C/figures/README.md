@@ -8,6 +8,7 @@
 | `pp_reference_states.png` | the 15C(p,p') spectrum and its structures — the reference list | `../scripts/ppfind2.C` |
 | `dd_ex_both_codes.png` | both (d,d') Ex spectra, no fit, state positions marked | — |
 | `fivehalf_lineshape.png` | **why the 5/2+ yield is not measurable** — the 5/2+ ratio against the assumed g.s. right-hand width, with the Δ(-2lnL)=1 band; the width is pinned to a few keV but a 10 % width error moves the ratio by 16-30 % | `../scripts/degenfig.C` |
+| `bkg_systematic.png` | **how much the background model costs the resonances** — BW peak heights across 7 background choices; BW4 flat, BW1-BW3 move 50-60 % | `../scripts/bkgfig.C` |
 | `dd_cmbin_fits_bkg.png` | **current best** — per-θ_CM-bin fits with the low-energy background fitted alongside the phase space; blue dotted = phase space + floor alone, grey = with background | `../scripts/binfig2.C` |
 | `dd_cmbin_fits.png` | **per-θ_CM-bin fits** — tailed response + six (p,p') barrier BWs + sequential phase-space continuum, 5 bins × both codes | `../scripts/binfig.C` |
 | `dd_cmbins.png` | **the states stay at fixed Ex across θ_CM bins** — the proof they are not kinematic edges; compare the θ_lab slices which swept 11.9 → 3.5 | `../scripts/cmfig.C` |

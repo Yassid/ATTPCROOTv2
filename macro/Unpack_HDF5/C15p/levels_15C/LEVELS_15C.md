@@ -1035,3 +1035,72 @@ cut it**, which is what the fit above does.
     instead zeroes every error. Re-run from the winning SEED;
   - seed EVERY parameter, not just the background ones -- p0/p1/p2 carried over from the previous
     loop iteration and the re-run did not reproduce its own minimum.
+
+## What the background is -- and the price it puts on the resonances
+
+### The excess events are DEUTERONS, with normal tracks
+
+`scripts/pidcheck.C` joins `dd_kin_C15d.root` to `pid/points_mfi_C15d.root` on (run, event,
+trackID) and compares `ln(sqrt(dE/dx) * Brho)`, which is proportional to ln(mass):
+
+```
+window                  N      <ln(sqrt(dEdx)*Brho)>   <arclen>   <nclus>
+g.s.   Ex -0.5..0.5   45127      2.4527 +- 0.0962         165       32.1
+EXCESS Ex  2.5..4.0    1572      2.4434 +- 0.0967         173       34.6
+```
+
+A difference of 0.009 against ln(2) = 0.693 for proton/deuteron. **Not PID contamination**, and
+the track length and cluster count match the g.s. too. Combined with the earlier chi2 and npulse
+comparison, the excess is made of ordinary, well-reconstructed deuterons.
+
+### It behaves like a ~1 % pedestal belonging to the elastic peak
+
+Replacing the erf background with a second, long exponential tail on the g.s. captures most of
+the effect -- d(-2lnL) 539 of 664 (ATTPCROOT), 705 of 919 (Spyral) -- with a tail fraction of
+**0.6-1.1 %**, consistent between codes. But its decay length rails at the 6 MeV bound: the fit
+wants something flat, not exponential. And `B/gsAmp` is 0.0155 (ATTPCROOT bin 0), 0.0093 and
+0.0122 (Spyral bins 0, 1) -- the same order in the low-KE bins of both codes.
+
+### ⚠ But the turn-on is NOT at S_n, and that matters
+
+Scanning the turn-on centre (`scripts/turnon.C`), the likelihood improves monotonically as it
+moves ABOVE S_n -- and as it does, B explodes (56 -> 214 -> 2546) and the component degenerates
+into a narrow bump at 3.5 MeV that eats BW1 (21.4 sigma -> 4.4). **Putting the turn-on at S_n was
+an arbitrary choice.** There is no nuclear threshold at 2-2.5 MeV in 15C; the fit simply wants the
+background to start wherever the g.s. response stops being adequate.
+
+### ★★ The systematic this puts on the resonance strengths
+
+![background systematic](figures/bkg_systematic.png)
+
+Peak heights in theta_CM bin 0 across seven background models (none, erf at S_n, erf at 0/1/2/2.5,
+long elastic tail), keeping only configurations where the fit is stable:
+
+```
+                           BW1     BW2    BW3    BW4    BW5    BW6
+                          4.43    4.93   5.98   6.68   7.38   8.28  MeV
+ATTPCROOT  spread/mean     60 %   200 %   48 %   10 %   (~0)   (~0)
+Spyral     spread/mean     64 %    45 %   54 %   24 %   (~0)   (~0)
+```
+
+**Only BW4 (6.68 MeV) is robust against the background model** -- 10 % in ATTPCROOT, 24 % in
+Spyral. BW1, BW2 and BW3 move by half their value or more, so their strengths in the forward bin
+are not measurements until the background is understood. BW5 and BW6 are consistent with zero in
+this bin regardless.
+
+This supersedes the per-bin significances quoted earlier, which assumed the erf-at-S_n background
+and therefore understate the uncertainty on BW1-BW3.
+
+### The Ex ~ 3.4 strength, re-checked with the background in
+
+```
+             Ex_extra:   2.8    3.2    3.6    4.0    4.4
+ATTPCROOT  bkg OFF       741    970    935    716     12
+           bkg ON         97    310    329    256     75
+Spyral     bkg OFF       515    683    705    454     37
+           bkg ON          6     62    132     95     38
+```
+
+The background absorbs most of it, but a residual survives in both codes, now peaking at
+**Ex ~ 3.6** (d(-2lnL) 329 and 132). Given the degeneracy just demonstrated, this is *not*
+evidence for a level -- it is the same unexplained strength seen from a different angle.
