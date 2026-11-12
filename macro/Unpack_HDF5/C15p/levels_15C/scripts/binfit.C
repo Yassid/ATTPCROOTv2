@@ -76,6 +76,12 @@ static bool USE_LEBKG = false;
 // background" is part of the RESPONSE FUNCTION, not a separate process.
 static bool USE_LONGTAIL = false;
 static bool FREE_TURNON = false; static double TURNON = 1.218;
+// Which resonances lie inside the current fit window.  Fitting BW6 at 8.28 with a window that
+// ends at 8.0 is meaningless -- its amplitude is then determined by a tail alone and it soaks up
+// whatever the continuum cannot describe.  A resonance is kept only if its centroid is at least
+// one detector sigma inside the upper edge.
+static bool BW_IN[6] = {true, true, true, true, true, true};
+static int  NBW_IN = 6;
 //  p0 gsAmp  p1 5/2+ amp  p2 continuum scale  p3..p8 BW amps  p9..p11 low-energy background
 double fBin(double* x, double* p)
 {
@@ -92,7 +98,7 @@ double fBin(double* x, double* p)
    if (USE_LONGTAIL && X > GSMU)                       // p9 tail fraction, p10 decay length (MeV)
       v += p[0] * std::max(0.0, p[9]) * std::exp(-(X - GSMU) / std::max(0.05, p[10]));
    v += p[1] * shapeGT(X, GSMU + E52d, SGL, SGR, ALF_L, ALF_R);
-   for (int i = 0; i < NB; i++) v += std::max(0.0, p[3 + i]) * TT[i].Eval(X);
+   for (int i = 0; i < NB; i++) if (BW_IN[i]) v += std::max(0.0, p[3 + i]) * TT[i].Eval(X);
    return v;
 }
 
@@ -138,7 +144,13 @@ BR fitBin(const Cfg& k, int ib, double exLo, double exHi, bool talk, bool useRef
       if (x > -2.5 && x < -1.5) { fl += h->GetBinContent(i); nf++; } }
    FL = nf ? fl / nf : 0; o.floor = FL;
 
-   for (int i = 0; i < NB; i++) TT[i].build((EPP[i] - PPGS) + GSMU, GPP[i], LPP[i], SIGD, exLo - 1.0, 23.0);
+   NBW_IN = 0;
+   for (int i = 0; i < NB; i++) {
+      double mu = (EPP[i] - PPGS) + GSMU;
+      BW_IN[i] = (mu > exLo + SGR) && (mu < exHi - SGR);
+      if (BW_IN[i]) NBW_IN++;
+      TT[i].build(mu, GPP[i], LPP[i], SIGD, exLo - 1.0, 23.0);
+   }
    GC = new TGraph();
    for (int i = 0; i <= 460; i++) { double X = i * 0.05;
       GC->SetPoint(i, X, PS::dens(X, k.eb) * accBin(A, k.eb, X, cmLo, cmHi, w)); }
@@ -161,6 +173,7 @@ BR fitBin(const Cfg& k, int ib, double exLo, double exHi, bool talk, bool useRef
    g->SetParameter(2, c9 > 0 ? std::max(0.0, lvl - FL) / c9 : 1.0); g->SetParLimits(2, 0, 1e7);
    double ampScale = (useRef && REFTOT > 0) ? o.N / REFTOT : 0;
    for (int i = 0; i < NB; i++) {
+      if (!BW_IN[i]) { g->FixParameter(3 + i, 0); continue; }
       double sc = TT[i].Eval((EPP[i] - PPGS) + GSMU);
       if (useRef && REFTOT > 0 && REF[i] > 0) {
          double seed = REF[i] * ampScale;
@@ -212,7 +225,7 @@ BR fitBin(const Cfg& k, int ib, double exLo, double exHi, bool talk, bool useRef
    for (int i = 1; i <= h->GetNbinsX(); i++) { double x = h->GetBinCenter(i), n = h->GetBinContent(i);
       if (x < exLo || x > exHi || n < 10) continue;
       double m = g->Eval(x); c2 += (n - m) * (n - m) / n; nd++; }
-   int npar = (gsIn ? 9 : 7) + (USE_LEBKG ? 3 : 0) + (USE_LONGTAIL ? 2 : 0);
+   int npar = 3 + NBW_IN + (USE_LEBKG ? 3 : 0) + (USE_LONGTAIL ? 2 : 0);
    o.nll = (USE_LEBKG && BEST_NLL > 0) ? BEST_NLL : 2 * r->MinFcnValue();
    o.chi2ndf = c2 / std::max(1, nd - npar);
    o.cs = g->GetParameter(2); o.gsA = g->GetParameter(0); o.e5A = g->GetParameter(1);

@@ -1104,3 +1104,110 @@ Spyral     bkg OFF       515    683    705    454     37
 The background absorbs most of it, but a residual survives in both codes, now peaking at
 **Ex ~ 3.6** (d(-2lnL) 329 and 132). Given the degeneracy just demonstrated, this is *not*
 evidence for a level -- it is the same unexplained strength seen from a different angle.
+
+---
+
+# Restricting the Ex window, and why the per-angle fits were bad (2026-11-13)
+
+`scripts/exhi.C`, `exhi2.C`, `combo.C`, `final9.C`, `syst9.C`, `binfig3.C`
+-> `figures/dd_cmbin_fits_ex9.png`
+
+## What was fixed and what was free
+
+For the record, in the per-bin fit: **fixed** = resonance energies and widths (the (p,p') values),
+the floor (measured below Sn), and the response shape sigma_L, sigma_R, alpha_L, alpha_R (fitted
+on each bin's own g.s. peak, then frozen). **Free** = the g.s. and 5/2+ amplitudes, the continuum
+scale, all six BW amplitudes (bounded, seeded from the inclusive pass), and the three background
+parameters. Nine free parameters per bin.
+
+## ⚠ A resonance must be DROPPED when the window no longer contains it
+
+Fitting BW6 at 8.28 MeV in a window ending at 8.0 is meaningless: its amplitude is then set by a
+tail alone and it absorbs whatever the continuum cannot describe. `binfit.C` now keeps a
+resonance only if its centroid is at least one detector sigma inside the upper edge.
+
+## The upper-limit scan
+
+```
+window      nBW    chi2/ndf, theta_CM bins 0..3                median
+                        -- ATTPCROOT --
+[-2,  7]     3      3.63   4.36   3.26   1.46                   3.63
+[-2,  8]     4      6.20   2.94   1.35   1.24                   2.94
+[-2,  9]     6      7.43   2.60   1.31   1.20                   2.60
+[-2, 12]     6      6.93   3.90   1.47   1.32                   3.90
+                        --  Spyral   --
+[-2,  7]     4      3.64   2.46   2.83   1.56                   2.83
+[-2,  8]     5      7.41   2.49   2.00   0.98                   2.49
+[-2,  9]     6     10.56   3.52   2.33   1.31                   3.52
+```
+
+Restricting the upper limit helps bins 1-3 substantially, exactly as expected -- but **bin 0 gets
+worse**, which is the opposite. Splitting each bin's chi2 at Ex = 2 explains it:
+
+```
+ATTPCROOT bin 0, background OFF:   Ex<2  3.15 -> 1.27      Ex>2  3.58 -> 8.56   (hi 7 -> 12)
+ATTPCROOT bin 0, background ON :   Ex<2  3.16 -> 5.38      Ex>2  3.58 -> 3.16
+```
+
+**The background was being forced to choose between the two regions.** With its turn-on at Sn its
+rising edge sits under the g.s. tail, so every improvement above Ex = 2 was paid for below it.
+
+## ★ The fix: restrict the window AND move the turn-on above the g.s.
+
+```
+ATTPCROOT bin 0, Ex [-2,9]:   turn-on Sn -> chi2/ndf 4.88    turn-on 2.5 -> 1.56
+Spyral    bin 0, Ex [-2,9]:   turn-on Sn -> chi2/ndf 4.74    turn-on 2.5 -> 1.71
+```
+
+**ADOPTED: Ex window [-2, 9] with the background turn-on at 2.5 MeV.** The window keeps all six
+resonances inside while stopping before the high-Ex region where the continuum model is poor and
+nothing is known; the turn-on above the peak lets the background fit the resonance region without
+destroying the g.s. Per-bin chi2/ndf is then **1.25-2.6 across bins 0-4 in both codes**, against
+1.5-14 before.
+
+![per-bin fits, Ex window 9](figures/dd_cmbin_fits_ex9.png)
+
+```
+ bin  cm      N    chi2  |  BW1(4.43) BW2(4.93) BW3(5.98) BW4(6.68) BW5(7.38) BW6(8.28)
+                        -- ATTPCROOT --
+  0  10-20  66074  1.56  |   13.3*     1.5      7.2*      5.5*      0.0       0.0
+  1  20-30  42920  2.60  |    2.9      8.2*     0.0      12.6*      2.9       0.0
+  2  30-40   6672  1.36  |    5.2*     3.5      3.1      13.9*      4.7      17.8*
+  3  40-50   6499  1.25  |    2.1      2.5      0.0       7.0*      2.6       6.7*
+  4  50-60   4823  2.31  |    0.0      3.2      0.0      21.3*      0.0       0.0
+                        --  Spyral   --
+  0  10-20  44598  1.71  |    4.9      4.5      1.0       6.4*      0.0       0.0
+  1  20-30  15114  2.56  |    5.4*    18.1*     0.6      15.4*      0.0       0.0
+  2  30-40   4644  2.45  |    2.0      4.9      4.3       5.6*      3.1       6.8*
+  3  40-50   4383  1.38  |    5.2*     4.4      0.5       5.5*      6.8*      4.8
+```
+
+## ★★ But bin 0 is DEGENERATE -- do not use it for strengths
+
+Re-running the background systematic in the adopted window, bin 0 and bin 1 behave completely
+differently:
+
+```
+ATTPCROOT bin 0   model          chi2   BW1    BW2    BW3    BW4
+                  none           7.43  141.0    0.0   45.2    0.0
+                  erf @ 1.22     4.88  125.7    1.0   44.4   18.7
+                  erf @ 2.50     1.56   91.8    9.1   35.3   24.0
+                  erf @ 3.00     1.10   54.7   11.8   24.8   26.6
+ATTPCROOT bin 1   none           2.60   26.8   41.8    0.0   64.8
+                  erf @ 1.22     2.68   26.8   41.8    0.0   64.8
+                  erf @ 2.50     2.60   18.1   46.6    0.0   63.1
+                  long tail      2.50   26.1   39.1    0.0   70.5
+```
+
+**In bin 0 the background and BW1 trade directly** -- BW1 falls 141 -> 55 while BW4 rises 0 -> 27,
+and chi2 improves monotonically all the way. Its excellent chi2 is bought, not earned.
+**In bin 1 BW4 is stable at 63-70 (10 %)** across every background model.
+
+⇒ **Use theta_CM >= 20 deg for resonance strengths. Bin 0 (10-20 deg) is background-dominated and
+its amplitudes are not measurements**, whatever its chi2 says. That is the real reason the
+per-angle fits looked bad: bin 0 carries two thirds of the statistics and is the one bin that
+cannot be fitted without a background that then eats the resonances.
+
+The background itself remains unexplained -- it is made of ordinary deuterons (same PID, same
+track quality as the g.s.), it is NOT the three-body phase space, and its turn-on sits at
+2-3 MeV where 15C has no threshold.
