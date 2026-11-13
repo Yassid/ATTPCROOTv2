@@ -103,11 +103,27 @@ comparable: the simulation has exactly one deuteron per event, the data has beam
 other reactions too. The 0.47 is the quantity being measured (the reconstruction efficiency at
 Ex = 0 integrated over theta_CM 2-80), not a discrepancy.
 
+### ✓ Field sign agrees with the data (`fieldsign.C`)
+
+The simulation generates at -28.5 kG while the C15d fit is given +2.85 T, so the sense of rotation
+had to be checked: if it disagreed, anything inferring direction from curvature would reject most
+simulated tracks and the acceptance would measure the sign error. Ordering each track's hits by z
+and summing the signed area `x_i*y_{i+1} - x_{i+1}*y_i`:
+
+```
+DATA run_0017            3697 tracks    83.7 % clockwise    <signed area> -9.94e+03
+DATA run_0021             437 tracks    70.9 % clockwise    <signed area> -5.24e+03
+SIM  (field -28.5 kG)      71 tracks   100.0 % clockwise    <signed area> -1.35e+04
+```
+
+**Same sense.** The simulation is 100 % because it contains one species from one reaction; the
+data is 71-84 % because it is a mixture. The sign is correct as generated.
+
 ### Still to do
 
-1. Make the efficiency **differential in theta_CM and Ex** — the acceptance the fits need.
+1. Make the efficiency **differential in theta_CM and Ex** (`acceptance_C15dd.C`, written; waiting
+   on the production reconstruction at gain 150000).
 2. Extract the **response function** `Ex_reco - Ex_true` per (theta_CM, Ex) and compare with the
    bifurcated-Gaussian-plus-tails shape fitted to the data.
-3. **Verify the field sign** (sim -28.5 kG against the fit's +2.85 T); if the sense of rotation
-   disagrees the acceptance measures the sign error.
-4. Run the fit stage so the acceptance covers the genfit losses as well, not just the PRA.
+3. Run the fit stage so the acceptance covers the genfit losses as well, not just the PRA — the
+   PRA-level number is an UPPER bound on what the yields actually see.
