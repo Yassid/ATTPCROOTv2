@@ -1211,3 +1211,70 @@ cannot be fitted without a background that then eats the resonances.
 The background itself remains unexplained -- it is made of ordinary deuterons (same PID, same
 track quality as the g.s.), it is NOT the three-body phase space, and its turn-on sits at
 2-3 MeV where 15C has no threshold.
+
+---
+
+# The angle-to-angle disagreement: diagnosed (2026-11-14)
+
+`scripts/simfit.C`, `angdiag.C`, `sumtest.C`, `angfig.C` -> `figures/angular_decomposition.png`
+
+The per-bin amplitudes do not form an angular distribution. ATTPCROOT peak heights:
+
+```
+ bin  theta_CM    BW1(4.43) BW2(4.93) BW3(5.98) BW4(6.68) BW5(7.38) BW6(8.28)
+  0    10-20        91.8      9.1      35.3      24.0      0.0       0.0
+  1    20-30        18.1     46.6       0.0      63.1     12.0       0.0
+  2    30-40        13.5      9.0       7.7      53.0     12.4      15.2
+  3    40-50         5.0      5.8       0.0      16.4      5.9       9.1
+  4    50-60         0.0      3.4       0.0      29.0      0.4       0.4
+```
+
+**35.3, 0, 7.7, 0, 0 is not a physical angular distribution**, and the zeros sit exactly ON the
+lower bound. Bin-to-bin jumps are factors of 3-7.
+
+## What did not fix it
+
+**A simultaneous fit over all bins with a shared background** (`simfit.C`). The background's
+turn-on width and decay were being refitted in every bin -- 15 free parameters describing one
+detector effect. Sharing them helps the chi2 (Spyral bin 0 1.71 -> 1.54, bin 1 2.56 -> 2.30) but
+the amplitudes stay erratic.
+
+**Forcing smooth angular distributions**, `A_i(theta) = exp(c0 + c1 u + c2 u^2)` with
+`u = cos(theta_CM)` -- strictly positive, so the zero-boundary pathology cannot occur, and 3
+parameters per resonance instead of 5. It costs **d(-2lnL) = +222 (ATTPCROOT) and +182 (Spyral)
+for 12 fewer parameters**: far too much to be over-fitting. The data genuinely resists a smooth
+decomposition.
+
+## ★★★ What the data DOES measure: the total, not the decomposition
+
+![angular decomposition](figures/angular_decomposition.png)
+
+Integrating the fitted resonances over Ex 3.5-9 and comparing with the data minus
+(continuum + background + g.s.) directly:
+
+```
+          bin 0   bin 1   bin 2   bin 3   bin 4
+ATTPCROOT  0.98    1.02    0.97    1.00    1.00     (sum of BW areas) / (data - baseline)
+Spyral     0.96    0.98    0.99    0.99    0.99
+```
+
+The fit accounts for the total strength to **2-4 % in every bin of both codes**. And that total,
+divided by sin(theta) so it is proportional to dsigma/dOmega, is smooth and forward-peaked:
+
+```
+ theta_CM      15      25      35      45      55
+ ATTPCROOT   7507    5130    1913    1035    1243
+ Spyral      2287    2527     776     563     695
+```
+
+falling 7.3x and 4.1x from 15 to 45 deg with the **same shape in both codes**, flattening with a
+hint of a minimum near 45 deg -- exactly what a direct inelastic angular distribution looks like.
+
+⇒ **The total inelastic angular distribution is measured; the decomposition into six resonances is
+not.** The six are so overlapping that the data constrains their SUM tightly and their individual
+amplitudes hardly at all, which is the same thing seen three other ways already: the background
+systematic (BW1-BW3 move 50-60 %), the free-energy migration (BW3, BW5, BW6 all slide to 6.6-6.9),
+and now the bin-to-bin jumps.
+
+**Quote the total angular distribution, and BW4 individually. Do not quote per-resonance angular
+distributions for BW1, BW2, BW3, BW5 or BW6 from this data.**
