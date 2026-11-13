@@ -27,6 +27,15 @@
 ///     from curvature rejects most simulated tracks and the acceptance measures the sign error
 ///     instead of the detector. VERIFY before trusting any number from this.
 ///
+/// ⚠⚠ DO NOT COMBINE doPID = kTRUE WITH nEvents > 0.  `fRun->Run(0, nEvents)` together with
+///     AtPIDTask writes an EMPTY AtPatternEvent -- zero tracks, silently, with the job exiting 0
+///     and a well-formed file.  Measured on the same 200 events of ex00.00:
+///         nEvents = 200, doPID = kFALSE  ->  96 tracks
+///         nEvents = 200, doPID = kTRUE   ->   0 tracks
+///         nEvents =   0, doPID = kTRUE   ->  96 tracks   (the production; 97 % valid PID)
+///     So the full production is correct and only TRUNCATED test runs are affected. For a quick
+///     test either pass doPID = kFALSE or run the whole file.
+///
 ///   root -l -b -q 'run_reco_C15dd.C("/home/yassid/Data/C15dd_sim/ex00.00_sim.root","/home/yassid/Data/C15dd_sim/ex00.00_reco.root")'
 
 #include "../AtBeamHole.h"
@@ -77,6 +86,11 @@ void run_reco_C15dd(TString mcFile = "./data/C15dd_sim.root", TString outputFile
       std::cout << "ADC ceiling: traces clipped at " << adcCeiling << " ADC" << std::endl;
    }
    AtPulseTask *pulse = new AtPulseTask(pulseModel);
+   // ⚠ BOTH this and psaTask MUST stay kTRUE.  The reco files are ~7 GB per 20k-event point
+   // because AtRawEvent and AtEventH are persisted, and it is tempting to switch them off since
+   // nothing downstream reads them back -- but the chain passes data through the persisted
+   // branches, and with either one kFALSE the PRA produces ZERO tracks.  Silently: the job exits
+   // 0 and writes a well-formed file with an empty AtPatternEvent.  Tested both ways.
    pulse->SetPersistence(kTRUE);
    // MC truth (A, Z, trackID) on every hit: without it the acceptance cannot tell the triton from
    // the beam or the recoil, and every downstream truth match becomes a guess.
@@ -95,6 +109,8 @@ void run_reco_C15dd(TString mcFile = "./data/C15dd_sim.root", TString outputFile
    // (see the AtPSAMultiFit trace-integral fix, commit 9eef5aad).
    p->SetFloatPeakingTime(kTRUE);
    AtPSAtask *psaTask = new AtPSAtask(p);
+   // ⚠ MUST stay kTRUE.  With it kFALSE the PRA reads an empty AtEventH and produces ZERO
+   // tracks -- silently, with the job exiting 0 and a well-formed output file.  Tested.
    psaTask->SetPersistence(kTRUE);
    psaTask->SetOutputBranch("AtEventH");
 

@@ -46,6 +46,10 @@ void acceptance_C15dd(TString simDir = "/home/yassid/Data/C15dd_sim",
       auto *tm = (TTree *)fm.Get("cbmsim"); auto *tr = (TTree *)fr.Get("cbmsim");
       if (!tm || !tr) { printf("  %-8s (no tree)\n", tag.Data()); continue; }
       TClonesArray *mc = nullptr, *pa = nullptr;
+      // The reco files carry AtRawEvent and AtEventH too and are ~7 GB each; reading every
+      // branch makes this macro I/O bound for no reason.  Enable only what is used.
+      tm->SetBranchStatus("*", 0); tm->SetBranchStatus("MCTrack*", 1);
+      tr->SetBranchStatus("*", 0); tr->SetBranchStatus("AtPatternEvent*", 1);
       tm->SetBranchAddress("MCTrack", &mc);
       tr->SetBranchAddress("AtPatternEvent", &pa);
       double exTrue = TString(tag(2, tag.Length() - 2)).Atof();

@@ -45,8 +45,11 @@ void response_C15dd(TString simDir = "/home/yassid/Data/C15dd_sim",
       auto *tm = (TTree *)fm.Get("cbmsim"); auto *tr = (TTree *)fr.Get("cbmsim");
       if (!tm || !tr) continue;
       TClonesArray *mc = nullptr, *pi = nullptr;
-      tm->SetBranchAddress("MCTrack", &mc);
       if (!tr->GetBranch("AtPIDEvent")) { printf("  %-8s no AtPIDEvent\n", tag.Data()); continue; }
+      // ~7 GB per reco file (AtRawEvent and AtEventH are persisted); read only what is used.
+      tm->SetBranchStatus("*", 0); tm->SetBranchStatus("MCTrack*", 1);
+      tr->SetBranchStatus("*", 0); tr->SetBranchStatus("AtPIDEvent*", 1);
+      tm->SetBranchAddress("MCTrack", &mc);
       tr->SetBranchAddress("AtPIDEvent", &pi);
       double exTrue = TString(tag(2, tag.Length() - 2)).Atof();
 
