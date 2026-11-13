@@ -32,9 +32,11 @@
 #include "../AtBeamHole.h"
 
 void run_reco_C15dd(TString mcFile = "./data/C15dd_sim.root", TString outputFile = "./data/C15dd_reco.root",
-                    TString paramFile = "ATTPC.C15d_a2091_D2.par", Double_t thr = 20,
+                    TString paramFile = "ATTPC.C15d_sim_g150000.par", Double_t thr = 20,
                     Double_t clusterRadius = 15.0, Double_t clusterDistance = 7.5,
-                    Int_t nEvents = 0, Double_t holeR = 20.0, Double_t adcCeiling = 0)
+                    Int_t nEvents = 0, Double_t holeR = 20.0, Double_t adcCeiling = 0,
+                    Bool_t doPID = kTRUE, Double_t bField = 2.85, Int_t pidMinPoints = 30,
+                    Double_t pidZTieTol = 0.0, Bool_t pidUseIntegral = kTRUE)
 {
    TString scriptfile = "Lookup20150611.xml";
    TString dir = getenv("VMCWORKDIR");
@@ -107,10 +109,30 @@ void run_reco_C15dd(TString mcFile = "./data/C15dd_sim.root", TString outputFile
    praTask->SetOutputBranch("AtPatternEvent");
    praTask->SetPersistence(kTRUE);
 
+   // ---- PID : same as the data -------------------------------------------
+   // AtGenfitter gates on AtSpyralResult::valid, so without AtPIDTask the fit stage has nothing
+   // to select on and the acceptance would stop at the pattern-recognition level.  The data's
+   // kinematics tree (dd/kin_dd_C15d.C) takes ke and theta from the FITTED sample, so the
+   // response function needs this branch to exist.
+   AtPIDTask *pidTask = nullptr;
+   if (doPID) {
+      pidTask = new AtPIDTask();
+      pidTask->SetInputBranch("AtPatternEvent");
+      pidTask->SetOutputBranch("AtPIDEvent");
+      pidTask->SetBField(bField);
+      pidTask->SetMinPoints(pidMinPoints);
+      pidTask->SetZTieTolerance(pidZTieTol);
+      if (pidUseIntegral)
+         pidTask->SetUseTraceIntegral(kTRUE);
+      pidTask->SetPersistence(kTRUE);
+   }
+
    fRun->AddTask(clusterizer);
    fRun->AddTask(pulse);
    fRun->AddTask(psaTask);
    fRun->AddTask(praTask);
+   if (pidTask)
+      fRun->AddTask(pidTask);
 
    fRun->Init();
    timer.Start();
