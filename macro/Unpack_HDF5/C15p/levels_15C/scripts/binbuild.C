@@ -18,7 +18,12 @@ Pars parsOf(const Cfg&k){
   A.kcDenom=k.kcD; A.kcPivot=k.kcP; A.keOff=0; A.kcOn=true;
   A.ebzSlope=11.0; A.ebzPivot=500; A.ebzOn=true; return A; }
 // theta_CM binning, matching the (p,p') analysis
-const double TCM0=10, TCMSTEP=10, TCM1=80; const int NCM=(int)((TCM1-TCM0)/TCMSTEP);
+// theta_CM binning. NOT const: the 5 deg binning (10 points out to 60 deg) is what the
+// resonance-region statistics actually support -- 84 % of the data sits in 10-30 deg and was
+// being squashed into two coarse bins, while the channel closes near 65 deg so there is nothing
+// to gain beyond it.
+double TCM0=10, TCMSTEP=10, TCM1=80; int NCM=(int)((TCM1-TCM0)/TCMSTEP);
+void setCM(double lo,double step,double hi){ TCM0=lo; TCMSTEP=step; TCM1=hi; NCM=(int)((hi-lo)/step); }
 bool BB_QUIET=false;
 void binbuild(){
   TFile o("dd_cmbins.root","RECREATE");
@@ -32,7 +37,7 @@ void binbuild(){
     bool icF=TString(t->GetBranch("ic")->GetLeaf("ic")->GetTypeName())=="Float_t";
     if(icF) t->SetBranchAddress("ic",&icf); else t->SetBranchAddress("ic",&icd);
     t->SetBranchAddress("npulse",&np);
-    std::vector<TH1D*> h(NCM); 
+    std::vector<TH1D*> h(NCM);
     for(int i=0;i<NCM;i++){ h[i]=new TH1D(Form("%s_cm%d",k.nm,i),
       Form("%s  #theta_{CM} [%.0f,%.0f);E_{x} (MeV);counts / 100 keV",k.nm,TCM0+i*TCMSTEP,TCM0+(i+1)*TCMSTEP),
       280,-5,23); h[i]->SetDirectory(nullptr); }

@@ -1353,3 +1353,72 @@ CM momentum k = 1.389 fm^-1, q(45 deg) = 1.063 fm^-1, so a first diffraction min
 give R = 4.23 fm for L = 1 or 5.42 fm for L = 2 -- both reasonable for 15C against the 3.45 fm
 channel radius used in the penetrability. **Five points and a shallow dip: suggestive, not a
 measurement.**
+
+---
+
+# Resonance-region fit: Ex 3-9, 5 deg bins, only the populated resonances (2026-11-15)
+
+`scripts/resfit.C`, `rsel.C`, `res4.C`, `finalfig.C` -> `figures/angdist_final.png`
+
+Three changes, all simplifications, and together they make the angular distributions reproducible.
+
+**1. Ex restricted to 3-9 MeV.** The g.s., the 0.740 MeV 5/2+, the continuum turn-on at Sn and the
+low-energy background turn-on at 2.5 are all BELOW the window -- so the entire low-Ex
+complication, which is where the background/BW1 degeneracy lived, is simply out of the fit.
+
+**2. 5 deg bins out to 60 deg: 10 angular points instead of 5.** 84 % of the data sits in
+theta_CM 10-30 and was being squashed into two coarse bins; the channel closes near 65 deg
+(ATTPCROOT has 0 counts in Ex 3-9 above 65), so there is nothing beyond.
+
+**3. Only the resonances (d,d') populates.** A state seen in (p,p') need not be populated here.
+
+## ★ Forward selection now gives the SAME order in both codes
+
+```
+ATTPCROOT                        Spyral
+ 1  6.68   1795.2                1  6.68   1607.6
+ 2  4.93   1390.7  +404.5        2  4.93   1496.8  +110.8
+ 3  4.43   1301.2   +89.5        3  4.43   1434.6   +62.2
+ 4  5.98   1249.0   +52.2        4  5.98   1390.4   +44.1
+ 5  7.38   1209.2   +39.8        5  7.38   1359.6   +30.8
+ 6  8.28   1184.3   +24.9        6  8.28   1344.1   +15.5  <- below the ~18 threshold
+```
+
+With 10 deg bins over the full Ex range the orders diverged after the first two; here they are
+**identical**. The populated set is the five from 4.43 to 7.38; **8.28 is not populated in (d,d')**
+on Spyral's reckoning and marginal on ATTPCROOT's.
+
+## ⚠ A silent failure that was costing two bins
+
+The response is fitted on each bin's own g.s. peak -- but the elastic peak is only populated at
+FORWARD theta_CM. In the large-angle bins there is essentially no ground state, the fit over
+[-2, 2.4] has nothing to latch onto, and it returns a huge low shape: **ATTPCROOT bin 8 gave
+FWHM_R = 4.69 MeV and Spyral bin 9 4.71**, whose "tail" then contributed 22 and 26 counts at
+Ex = 3 where the data has 6 and 1. That alone produced chi2/ndf of 9.35 and 6.47.
+
+`resfit.C` now rejects a response fit with FWHM > 2 MeV or a negligible amplitude, drops the g.s.
+term in that bin and borrows the response from the richest bin. **ATTPCROOT bin 8: 9.35 -> 1.34**,
+and every bin is now 0.80-2.17.
+
+## ★★ The result
+
+![final angular distributions](figures/angdist_final.png)
+
+With the unresolvable 4.43/4.93 doublet tied (they visibly trade otherwise -- ATTPCROOT gave
+1.000/0.443 at 18 deg and 0.016/1.000 at 22), normalised to each maximum:
+
+```
+   theta_CM        12     18     22     28     32     38     42     48     52     58
+D12  ATTPCROOT   0.112  1.000  0.458  0.117  0.057  0.005  0.026  0.015  0.000  0.006
+     Spyral      0.192  1.000  0.727  0.157  0.067  0.014  0.022  0.016  0.000  0.010
+6.68 ATTPCROOT   0.566  0.827  1.000  0.511  0.564  0.235  0.160  0.060  0.024  0.006
+     Spyral      0.315  0.559  1.000  0.623  0.314  0.071  0.033  0.005  0.000  0.000
+```
+
+**The 4.4+4.9 doublet peaks at 18 deg and 6.68 at 22 deg, in BOTH codes, and the two shapes differ
+clearly** -- D12 falls an order of magnitude by 28 deg while 6.68 is still at half its maximum.
+Different shapes mean a different angular-momentum transfer.
+
+This is the first per-structure angular information from this analysis that survives changing the
+reconstruction. 5.98 peaks at 18-22 in both but collapses immediately after; 7.38 stays erratic
+and rises again at large angle, where the statistics are thinnest -- neither is usable yet.
