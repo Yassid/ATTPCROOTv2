@@ -51,3 +51,63 @@ variance — real, but not the dominant term.
 - The residual 15C is transported as a **stable ion** even above Sn = 1.218 MeV. Correct for the
   deuteron kinematics, which is all the acceptance is measured on, but this simulation must not be
   used for the neutron or any coincidence.
+
+---
+
+## Reconstruction: `run_reco_C15dd.C`
+
+The chain is copied from the **data**, not from the a1975 simulation: `AtPSAMultiFit` +
+`AtTrackFinderTC` (radius 15, distance 7.5), threshold 20, floated peaking time, **no cleaning
+task** (the data's PRA reads `AtEventH` directly), par `ATTPC.C15d_a2091_D2.par`. The a1975 macro
+this was adapted from uses HDBSCAN, a cleaner, and explicit `SetPeakingTime/MaxPeaks/MinSeparation`
+— keeping any of those would measure a different reconstruction's losses.
+
+### ★ The a2091 beam hole is 20 mm — measured, not assumed (`holeR.C`)
+
+`AtBeamHole.h` records that **15C and 16C had never been checked**. Measured its way — hit radius
+in data and simulation, each normalised to its own total, take where the ratio goes flat:
+
+```
+   r (mm)     data frac    sim frac     sim/data
+    2-  4      0.00022     0.14545       670
+    4-  6      0.00023     0.13212       562
+    6-  8      0.00049     0.04727        96
+   10- 20         ...         ...       5-15
+   20- 22      0.00145     0.00121      0.84     <- flat from here
+   22- 42         ...         ...      0.5-0.9
+```
+
+**holeR = 20 mm**, the same as a1975. This also explains why 87 % of electrons are skipped with
+the hole on and 12 % with it off: it is the BEAM being inhibited, which is correct.
+
+### ★★ Gain: the par's 10000 is 15x too low (`gainval.C`)
+
+The validation the macro header demands — hits per track against the data production:
+
+```
+                         events with a track   tracks/event   hits/track mean / median
+DATA run_0017 (mfi)            76.7 %              0.93            148.3 / 130
+SIM gain      10000            20.0 %              0.20             56.4 /  46
+SIM gain      50000            47.3 %              0.47            103.0 /  81
+SIM gain     150000            47.3 %              0.47            139.1 / 128   <- adopted
+SIM gain     400000            47.3 %              0.47            171.0 / 167
+SIM gain    1000000            47.3 %              0.47            198.5 / 191
+```
+
+**Gain = 150000 reproduces the data's hits per track** (139 vs 148 mean, 128 vs 130 median), and
+is the same value the (p,d) simulation needed. `ATTPC.C15d_sim_g150000.par` is the file to use;
+the data par's 10000 deletes more than half the hits on every track.
+
+⚠ `tracks/event` saturates at 0.47 above gain 5e4 while the data shows 0.93 — these are **not**
+comparable: the simulation has exactly one deuteron per event, the data has beam fragments and
+other reactions too. The 0.47 is the quantity being measured (the reconstruction efficiency at
+Ex = 0 integrated over theta_CM 2-80), not a discrepancy.
+
+### Still to do
+
+1. Make the efficiency **differential in theta_CM and Ex** — the acceptance the fits need.
+2. Extract the **response function** `Ex_reco - Ex_true` per (theta_CM, Ex) and compare with the
+   bifurcated-Gaussian-plus-tails shape fitted to the data.
+3. **Verify the field sign** (sim -28.5 kG against the fit's +2.85 T); if the sense of rotation
+   disagrees the acceptance measures the sign error.
+4. Run the fit stage so the acceptance covers the genfit losses as well, not just the PRA.
