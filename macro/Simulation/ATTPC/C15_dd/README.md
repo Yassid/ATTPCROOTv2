@@ -119,10 +119,41 @@ SIM  (field -28.5 kG)      71 tracks   100.0 % clockwise    <signed area> -1.35e
 **Same sense.** The simulation is 100 % because it contains one species from one reaction; the
 data is 71-84 % because it is a mixture. The sign is correct as generated.
 
-### Still to do
+### ★★★ THE EFFICIENCY IS FLAT — it does not shape the Ex spectrum
 
-1. Make the efficiency **differential in theta_CM and Ex** (`acceptance_C15dd.C`, written; waiting
-   on the production reconstruction at gain 150000).
+![efficiency](figures/efficiency_C15dd.png)
+
+11 Ex points x 20k events, reconstructed with the data chain at the validated gain, binned in
+TRUE theta_CM:
+
+```
+  Ex     N gen   N reco   eff   |   efficiency per theta_CM bin (10-20 ... 60-70)
+  0.00    9951    9632   0.968  |  0.998  0.991  0.990  0.987  0.981  0.976
+  4.43    9952    9602   0.965  |  0.970  0.954  0.984  0.982  0.977  0.969
+  6.68    9956    9553   0.960  |  0.961  0.942  0.970  0.968  0.974  0.961
+ 10.00    9957    9458   0.950  |  0.935  0.943  0.952  0.956  0.960  0.950
+ 12.00    2018    1873   0.928  |  0.952  0.929  0.936  0.958  0.934  0.940
+```
+
+**0.93 to 1.00 over the whole plane — a 7 % total variation, with no structure.**
+
+⚠ `N gen` is ~9950 of 20000 because **half the generated events never react**: `AtTPCIonGenerator`
+samples a threshold uniformly in `[0, maxELoss]` and the beam often leaves before reaching it
+(`denom.C`: 10049 of 20000 have no primary deuteron, while theta_CM is valid and vz is inside the
+window for *every* event that does). The vertex is flat along the drift length (241-277 per
+200 mm slice), which is this generator's own validity requirement. So the denominator is right,
+and the earlier "47 % of events have a track" was that 50 % no-reaction fraction times this 96 %.
+
+**Consequences for `levels_15C`, all negative and all useful:**
+
+* the reconstruction efficiency **cannot** explain the continuum shape, the low-energy background,
+  or the theta_CM bin 0 degeneracy — it is flat where all three vary strongly;
+* combined with the exact kinematic acceptance (`levels_15C/scripts/binacc.h`, also ~1 inside a
+  theta_CM bin), **there is essentially no acceptance correction to apply** to the (d,d') spectra;
+* so the background really is a property of the data, not of the detector response to it. The
+  question of what it *is* stays open, but "it is an efficiency effect" is now excluded.
+
+### Still to do
 2. Extract the **response function** `Ex_reco - Ex_true` per (theta_CM, Ex) and compare with the
    bifurcated-Gaussian-plus-tails shape fitted to the data.
 3. Run the fit stage so the acceptance covers the genfit losses as well, not just the PRA — the
