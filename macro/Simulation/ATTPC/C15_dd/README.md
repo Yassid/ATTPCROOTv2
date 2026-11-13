@@ -153,8 +153,50 @@ and the earlier "47 % of events have a track" was that 50 % no-reaction fraction
 * so the background really is a property of the data, not of the detector response to it. The
   question of what it *is* stays open, but "it is an efficiency effect" is now excluded.
 
+### ★★ THE RESPONSE: the simulation is ~2x TOO GOOD, and that is itself the result
+
+`response_C15dd.C` forms `Ex_reco - Ex_true` from the AtPIDTask output (the Spyral-like
+estimator) and fits it with the same tailed shape used on the data:
+
+```
+  Ex      N      bias     FWHM_L  FWHM_R   alpha_L alpha_R
+   0.00   9357   +0.379    0.234   0.279     0.30    0.30
+   4.43   9390   +0.417    0.615   0.623     0.84    0.82
+   6.68   9306   +0.582    0.998   0.308     1.56    0.45
+  10.00   9217   +0.748    1.181   0.248     5.60    0.44
+  12.00   2153   +0.774    1.206   0.554     3.59    0.87
+       DATA:  ATTPCROOT  FWHM 0.752 / 1.142      Spyral  FWHM 0.497 / 0.523
+```
+
+At Ex = 0 the simulation gives **sigma = 0.109 MeV against 0.217 measured (Spyral) and 0.402
+(ATTPCROOT)** — a factor of two to four too good. The response also becomes strongly asymmetric
+with Ex, growing a long LEFT tail (FWHM_L 0.23 -> 1.21 while FWHM_R stays 0.25-0.55).
+
+**What the missing width is NOT**: a beam-energy spread. Ex is insensitive to Ebeam
+(`dEx/dEbeam = 0.0155` at theta_lab 75), so supplying it that way would need a spread of
+**12-25 MeV, i.e. 6-13 % of 191 MeV** — impossible for a real beam (`missingres.C`).
+
+**What it would be** (`sensit.C`), added in quadrature:
+
+```
+ th_lab   dEx/dtheta   dEx/dKE  |  sigma(theta) needed:  ATTPCROOT   Spyral
+   65      -0.604      -0.572   |                        0.641 deg   0.310 deg
+   75      -0.393      -0.573   |                        0.984 deg   0.475 deg
+   85      -0.137      -0.573   |                        2.836 deg   1.370 deg
+ or entirely in KE:  sigma(KE) = 12.8 % (ATTPCROOT), 6.2 % (Spyral)
+```
+
+sigma(theta) of a few tenths of a degree, or a KE (i.e. Brho) resolution of ~6 %, are ordinary
+real-detector numbers — and this simulation has **no electronic noise, no gain non-uniformity and
+no calibration error**, which is where that resolution comes from.
+
+⇒ **The simulated response must NOT be used to deconvolve the data.** The response fitted to the
+data itself (`levels_15C/scripts/lineshape.C`) remains the right one; the simulation does not
+supersede it, and the natural widths stay unmeasured. Closing this needs detector imperfections
+in the digitisation, not more statistics.
+
 ### Still to do
-2. Extract the **response function** `Ex_reco - Ex_true` per (theta_CM, Ex) and compare with the
-   bifurcated-Gaussian-plus-tails shape fitted to the data.
+2. Add detector imperfections (noise, gain spread, calibration error) until the simulated
+   resolution matches the measured one — until then the response is not usable.
 3. Run the fit stage so the acceptance covers the genfit losses as well, not just the PRA — the
    PRA-level number is an UPPER bound on what the yields actually see.
