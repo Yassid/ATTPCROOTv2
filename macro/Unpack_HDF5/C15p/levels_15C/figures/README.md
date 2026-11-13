@@ -8,6 +8,7 @@
 | `pp_reference_states.png` | the 15C(p,p') spectrum and its structures — the reference list | `../scripts/ppfind2.C` |
 | `dd_ex_both_codes.png` | both (d,d') Ex spectra, no fit, state positions marked | — |
 | `fivehalf_lineshape.png` | **why the 5/2+ yield is not measurable** — the 5/2+ ratio against the assumed g.s. right-hand width, with the Δ(-2lnL)=1 band; the width is pinned to a few keV but a 10 % width error moves the ratio by 16-30 % | `../scripts/degenfig.C` |
+| `tied_angdist.png` | **the fix** — angular distributions of the tied-doublet structures; E1 peaks at the most forward angle, E3 one bin out, in both codes | `../scripts/tiedfig.C` |
 | `angular_decomposition.png` | **why the angles disagree** — the TOTAL inelastic strength is smooth and consistent between codes (left); the six-resonance decomposition is not determined (right) | `../scripts/angfig.C` |
 | `dd_cmbin_fits_ex9.png` | **current best** — per-θ_CM-bin fits in the adopted window Ex [-2,9] with the background turn-on at 2.5; χ²/ndf 1.25–2.6 across bins 0–4 | `../scripts/binfig3.C` |
 | `bkg_systematic.png` | **how much the background model costs the resonances** — BW peak heights across 7 background choices; BW4 flat, BW1-BW3 move 50-60 % | `../scripts/bkgfig.C` |

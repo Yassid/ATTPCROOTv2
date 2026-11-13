@@ -51,6 +51,23 @@ namespace SF {
    // distribution is a smooth function of theta_CM, so this is a physical constraint, not a
    // numerical trick.
    bool SMOOTH = false;
+   bool USEBW[6] = {true,true,true,true,true,true};   // which resonances are in the model
+   // ---- TIED DOUBLETS ------------------------------------------------------------------------
+   // Forward selection picks BW4 first in BOTH codes, then the 4.43/4.93 pair -- but with the
+   // ORDER SWAPPED (ATTPCROOT takes BW1 then BW2, Spyral BW2 then BW1), which is the signature of
+   // an unresolvable doublet. After that the orders diverge entirely. So the data needs ~5
+   // components but cannot say which resonance each one is.
+   //
+   // TIED mode fits RESOLVABLE STRUCTURES instead: the two doublets are each one amplitude per
+   // bin with a shared internal ratio, so what is fitted is a quantity the data can actually
+   // determine.
+   //      E1 = BW1 + r1 * BW2   (4.43 + 4.93)
+   //      E2 = BW3              (5.98)
+   //      E3 = BW4 + r2 * BW5   (6.68 + 7.38)
+   //      E4 = BW6              (8.28)
+   // 4 amplitudes per bin + 2 shared ratios = 22 free, against 30 for six free amplitudes.
+   bool TIED = false;
+   const int EMAP[4][2] = {{0,1},{2,-1},{3,4},{5,-1}};   // {primary, partner or -1}
    std::vector<double> UCM;                 // cos(theta_CM) at each bin centre
    double ampOf(int b, int i, const double *p)
    {
@@ -64,15 +81,27 @@ namespace SF {
    double model(int b, double X, const double *p)
    {
       const BinData &d = B[b];
-      const double *q = p + 2 + b * (SMOOTH ? 4 : NPB);
+      const double *q = p + 2 + b * (TIED ? 8 : (SMOOTH ? 4 : NPB));
       double w = std::max(0.05, p[0]), kap = std::max(0.0, p[1]);
       double v = d.floor + std::max(0.0, q[2]) * (d.gc ? std::max(0.0, d.gc->Eval(X)) : 0.0);
       double thr = 0.5 * (1 + std::erf((X - turnOn) / (M_SQRT2 * w)));
       v += std::max(0.0, q[3]) * thr * std::exp(-kap * X);
       v += q[0] * shapeGT(X, d.gsMu, d.sgL, d.sgR, d.alL, d.alR);
       v += q[1] * shapeGT(X, d.gsMu + E52d, d.sgL, d.sgR, d.alL, d.alR);
-      for (int i = 0; i < 6; i++)
-         if (d.in[i]) v += ampOf(b, i, p) * d.T[i].Eval(X);
+      if (TIED) {
+         // [0] w [1] kappa | per bin: gs,e52,cont,bkgB,E1..E4 (8) | then r1, r2
+         const double *r = p + 2 + NBIN * 8;
+         for (int e = 0; e < 4; e++) {
+            int a = EMAP[e][0], c = EMAP[e][1];
+            double amp = std::max(0.0, q[4 + e]);
+            if (amp <= 0) continue;
+            if (d.in[a]) v += amp * d.T[a].Eval(X);
+            if (c >= 0 && d.in[c]) v += amp * std::max(0.0, r[e == 0 ? 0 : 1]) * d.T[c].Eval(X);
+         }
+      } else {
+         for (int i = 0; i < 6; i++)
+            if (d.in[i] && USEBW[i]) v += ampOf(b, i, p) * d.T[i].Eval(X);
+      }
       return v;
    }
    double fcn(const double *p)
@@ -169,7 +198,7 @@ double sfRun(const Cfg &k, bool smooth, bool talk)
          for (int i = 0; i < 6; i++) {
             double sc = d.in[i] ? d.T[i].Eval((EPP[i] - PPGS) + d.gsMu) : 0;
             double seed = (sc > 0) ? 0.2 * lvl / sc : 0;
-            if (!d.in[i]) { m->SetFixedVariable(o + 4 + i, Form("bw%d_%d", i + 1, b), 0); continue; }
+            if (!d.in[i] || !SF::USEBW[i]) { m->SetFixedVariable(o + 4 + i, Form("bw%d_%d", i + 1, b), 0); continue; }
             m->SetLimitedVariable(o + 4 + i, Form("bw%d_%d", i + 1, b), seed,
                                   std::max(1e-6, seed * 1e-2), 0, seed * 200 + 1e3);
          }
@@ -205,7 +234,7 @@ double sfRun(const Cfg &k, bool smooth, bool talk)
          printf("   %2d  %2.0f-%2.0f %6.0f  %6.2f  |", b, TCM0 + b * TCMSTEP, TCM0 + (b + 1) * TCMSTEP,
                 d.N, c2 / std::max(1, nd - nper));
          for (int i = 0; i < 6; i++) {
-            double ph = d.in[i] ? SF::ampOf(b, i, p) * d.T[i].Eval((EPP[i] - PPGS) + d.gsMu) : 0;
+            double ph = (d.in[i] && SF::USEBW[i]) ? SF::ampOf(b, i, p) * d.T[i].Eval((EPP[i] - PPGS) + d.gsMu) : 0;
             printf(" %9.1f", ph); }
          printf("\n");
       }

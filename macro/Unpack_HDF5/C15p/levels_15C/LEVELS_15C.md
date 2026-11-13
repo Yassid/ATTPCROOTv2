@@ -1278,3 +1278,78 @@ and now the bin-to-bin jumps.
 
 **Quote the total angular distribution, and BW4 individually. Do not quote per-resonance angular
 distributions for BW1, BW2, BW3, BW5 or BW6 from this data.**
+
+## ★ What fixes it: fit RESOLVABLE STRUCTURES, not individual resonances
+
+### How many components does the data support? (`scripts/nres.C`)
+
+Forward selection on the simultaneous fit -- start with none, add whichever resonance lowers
+-2lnL most. Each costs 5 parameters, so a gain below ~11 is not worth having:
+
+```
+ATTPCROOT                            Spyral
+ 1  BW4 (6.68)   1685.7               1  BW4 (6.68)   1236.7
+ 2  BW1 (4.43)   1161.0   +524.7      2  BW2 (4.93)   1128.3   +108.4
+ 3  BW2 (4.93)   1068.8    +92.2      3  BW1 (4.43)   1072.4    +55.9
+ 4  BW6 (8.28)    985.5    +83.3      4  BW5 (7.38)   1035.7    +36.7
+ 5  BW3 (5.98)    925.0    +60.5      5  BW3 (5.98)   1011.3    +24.4
+ 6  BW5 (7.38)    901.9    +23.1      6  BW6 (8.28)   1003.1     +8.2
+```
+
+**BW4 is selected FIRST by both codes**, then the 4.43/4.93 pair -- but with the ORDER SWAPPED,
+which is the signature of an unresolvable doublet. After that the orders diverge entirely
+(ATTPCROOT BW6 -> BW3 -> BW5, Spyral BW5 -> BW3 -> BW6). So the data needs ~5 components to
+describe the shape but cannot say which resonance each one is.
+
+### Tied doublets
+
+Fit the structures the resolution can actually separate, each with one amplitude per bin and a
+shared internal ratio:
+
+```
+E1 = BW1 + r1*BW2  (4.43 + 4.93)      E3 = BW4 + r2*BW5  (6.68 + 7.38)
+E2 = BW3           (5.98)             E4 = BW6           (8.28)
+```
+
+22 free amplitudes/ratios instead of 30, and it costs only **d(-2lnL) = +43 (ATTPCROOT) and +12
+(Spyral) for 8 fewer parameters** -- against +222 and +182 for the smooth parametrisation. The
+data accepts this constraint and rejects that one.
+
+![tied angular distributions](figures/tied_angdist.png)
+
+```
+                       theta_CM:   15     25     35     45     55
+ATTPCROOT  E1 (4.4+4.9)           72.8   43.8   15.8    7.8    0.9
+           E3 (6.7+7.4)           23.6   62.0   55.4   19.0   25.9
+Spyral     E1                     23.5   25.5    2.8    2.9    0.0
+           E3                     21.1   65.4   16.4   10.3   18.3
+```
+
+Divided by sin(theta) and each normalised to its own maximum:
+
+```
+   theta_CM            15      25      35      45      55
+ATTPCROOT  E1        1.00    0.37    0.10    0.04    0.00
+           E3        0.62    1.00    0.66    0.18    0.22
+Spyral     E1        1.00    0.66    0.05    0.05    0.00
+           E3        0.53    1.00    0.18    0.09    0.14
+```
+
+**E1 peaks at the most forward angle and E3 one bin out, in BOTH codes** -- two different angular
+shapes, which means a different angular-momentum transfer for the 4.4-4.9 and 6.7-7.4 structures.
+That is the first angular information this analysis has produced that both codes agree on.
+
+⚠ E2 (5.98) and E4 (8.28) stay erratic -- they are the weak components and remain undetermined.
+The internal ratios are not well determined either (r1 = 0.43 vs 1.07, r2 = 0.19 vs 0.10 between
+codes), which is expected for unresolvable doublets; they are nuisance parameters here.
+
+⚠ Five angular points, and E1's shape differs in detail between codes (0.37 vs 0.66 at 25 deg).
+The qualitative ordering is consistent; the shapes are not yet a measurement.
+
+### A possible diffraction minimum (`scripts/diffmin.C`)
+
+The TOTAL distribution dips near theta_CM 45 deg in both codes and rises at 55. At the entrance
+CM momentum k = 1.389 fm^-1, q(45 deg) = 1.063 fm^-1, so a first diffraction minimum there would
+give R = 4.23 fm for L = 1 or 5.42 fm for L = 2 -- both reasonable for 15C against the 3.45 fm
+channel radius used in the penetrability. **Five points and a shallow dip: suggestive, not a
+measurement.**
