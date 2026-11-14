@@ -58,12 +58,18 @@
 /// Brho(theta_lab) for any two-body channel on the 14C beam. m3Amu/m4Amu default to the (p,t)
 /// triton and 12C; passing the deuteron and 13C draws the 14C(p,d)13C band instead, which is the
 /// contaminant sitting next to the tritons on this plane.
+/// TARGET and RESIDUAL overrides (2026-11-11) so the same drawer serves the H2 block: set them after .L, e.g.
+///   gDpTargetAmu = 1.00727646688; gDpM4Override = 15.0105993;   // 16C(p,d)15C on H2 (nuclear p, atomic 15C)
+/// Defaults reproduce the D2 behaviour exactly (nuclear deuteron, residual from dpChannelMasses).
+static double gDpTargetAmu = 2.0135532;
+static double gDpM4Override = 0.0;
+static TString gDpTitleTag = ""; // appended to the window title, to tell two open drawers apart
 static double dpBrho16Cdp(double thlab, double Eb = 184.25, double exStar = 0.0,
                           double m3Amu = 1.00782503207, double m4Amu = 17.022579)
 {
    const double u = 931.49401;
    const double m1 = 16.0147013 * u;  // 16C beam
-   const double m2 = 2.0135532 * u;   // DEUTERIUM target, NUCLEAR deuteron mass (NOT the atomic
+   const double m2 = gDpTargetAmu * u; // DEUTERIUM target by default (gDpTargetAmu), NUCLEAR deuteron mass (NOT the atomic
                                       // 2.01410178). THE CONVENTION IN THIS FILE, and it is not a
                                       // free choice: m1 and m4 are ATOMIC (6 electrons each side
                                       // for a carbon), so the light m2/m3 must be NUCLEAR for the
@@ -182,6 +188,9 @@ public:
         fEbeam(eBeam), fFlip(flipPolar), fZ(Z), fA(A)
    {
       dpChannelMasses(fZ, fA, fM3, fM4);
+      if (gDpM4Override > 0)
+         fM4 = gDpM4Override;
+      printf("target m2 %.6f u\n", gDpTargetAmu);
       printf("channel: ejectile Z=%d A=%d (m3 %.6f u), residual m4 %.6f u\n", fZ, fA, fM3, fM4);
 
       fH = new TH2F("hpt",
@@ -681,13 +690,13 @@ private:
       // fixed "14C(p,t)12C -- triton gate" text survived the port from a1954 and said triton
       // whatever Z/A was passed, which is the same class of mislabelling that already caused a
       // proton gate to be saved under the deuteron name.
-      main->SetWindowName(Form("a1975 (d,p) PID  --  draw the %s gate (Z=%d A=%d)",
+      main->SetWindowName(Form("a1975 (d,p) PID  --  draw the %s gate (Z=%d A=%d)%s",
                                (fZ == 1 && fA == 1)   ? "proton"
                                : (fZ == 1 && fA == 2) ? "deuteron"
                                : (fZ == 1 && fA == 3) ? "triton"
                                : (fZ == 2 && fA == 4) ? "alpha"
                                                       : "selected",
-                               fZ, fA));
+                               fZ, fA, gDpTitleTag.Data()));
       auto *bar = new TGHorizontalFrame(main);
       const char *lbl[] = {"Draw new gate", "Evaluate", "Locus check", "Locus dots on/off",
                            "(d,d) band on/off", "Save JSON", "Save PNG", "Redraw", "Quit"};
