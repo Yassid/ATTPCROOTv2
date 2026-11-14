@@ -26,6 +26,11 @@
 ///   root -b -q 'acceptance_split_C14.C("/mnt/f/a1954_C14_acc_gf/gs_s1001_sim.root",
 ///                                      "/mnt/f/a1954_C14_acc_gf/gs_s1001_genfit.root",
 ///                                      "gs",0.0,161.0,5.0,36,180.0,10.0,0.5,2.0,kTRUE,"gf_s1001")'
+///
+/// NEEDS ATTPCROOT (AtTrackingEvent, AtMCTrack) and the simulation + fit files on /mnt/f. Its
+/// per-seed outputs are what merge_split_C14.C draws; the a1954_C14_absnorm repo vendors the g.s.
+/// ones as data/acc_split/ so that step runs on plain ROOT. diagnostics/acc_finish_level.sh is the
+/// driver; to refresh the vendored copies, pass outDir = <absnorm>/data/acc_split.
 
 #include <tuple>
 

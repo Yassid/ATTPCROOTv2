@@ -1,9 +1,9 @@
 /// @file pid_gate_C14.C
 /// @brief a1954 14C PID gate: the PID plane ALONE, with the drawn proton_14C gate overlaid.
-///        This is the left panel of the two-panel figure the write-up ships as
-///        figures/pid_gate_C14.png (identical to pid/plots/gate_drawn_check.png, produced
-///        one-off on 2026-07-26 by no macro in the tree -- hence this one). The right panel
-///        of that figure, polar angle all vs in-gate, is NOT reproduced here.
+///        Right panel: the laboratory polar angle of all track candidates vs those in the gate.
+///        This reproduces the two-panel figure the write-up ships as figures/pid_gate_C14.png,
+///        which was first made one-off on 2026-07-26 (pid/plots/gate_drawn_check.png) by no
+///        macro in the tree -- hence this one. PLAIN ROOT: both inputs are vendored.
 ///
 ///        Plane = the persisted PID data pid_C14_data.csv written by pid_C14.C
 ///        (columns sqrtdedx, brho, dedx, polar, arclen, npts, ic), gate = the hand-drawn
@@ -84,16 +84,36 @@ void pid_gate_C14(TString gateJson = "proton_14C.json", double icLo = -1, double
    double nSel = t->GetEntries(sel);
    double nIn = t->GetEntries(sel + " && CUTG");
 
-   TCanvas *c = new TCanvas("cPidGate", "PID gate", 800, 700);
-   c->SetLogz();
-   c->SetRightMargin(0.13);
-   c->SetTicks(1, 1);
+   TCanvas *c = new TCanvas("cPidGate", "PID gate", 1400, 575);
+   c->Divide(2, 1);
+   c->cd(1);
+   gPad->SetLogz();
+   gPad->SetRightMargin(0.13);
+   gPad->SetTicks(1, 1);
    h->Draw("colz");
    cut->Draw("L");
    auto *tx = new TLatex();
    tx->SetNDC();
    tx->SetTextSize(0.032);
    tx->DrawLatex(0.42, 0.86, TString::Format("in gate: %.0f / %.0f = %.1f %%", nIn, nSel, nSel > 0 ? 100. * nIn / nSel : 0.));
+
+   // --- right: what the gate does to the polar-angle distribution
+   c->cd(2);
+   gPad->SetTicks(1, 1);
+   auto *hAll = new TH1F("hPolAll", "all tracks;lab polar angle [deg];tracks / 2 deg", 90, 0, 180);
+   auto *hIn = new TH1F("hPolIn", "", 90, 0, 180);
+   t->Draw("polar>>hPolAll", sel, "goff");
+   t->Draw("polar>>hPolIn", sel + " && CUTG", "goff");
+   hAll->SetLineColor(kGray + 2);
+   hIn->SetLineColor(kRed);
+   hIn->SetLineWidth(2);
+   hAll->GetYaxis()->SetTitleOffset(1.3);
+   hAll->Draw("hist");
+   hIn->Draw("hist same");
+   auto *lg = new TLegend(0.15, 0.76, 0.48, 0.88);
+   lg->AddEntry(hAll, "all tracks", "l");
+   lg->AddEntry(hIn, "inside proton gate", "l");
+   lg->Draw();
 
    TString plotDir = dir + "/plots/";
    gSystem->mkdir(plotDir.Data(), kTRUE); // the absnorm copy has no plots/ dir; SaveAs fails mutely without this

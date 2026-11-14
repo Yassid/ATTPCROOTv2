@@ -8,6 +8,10 @@
 /// Same GENFIT+CATIMA caches and vertex slab as the kinematics plane (kine_plane_genfit_C14.C), so
 /// the two figures describe the same tracks. exWin <= 0 draws no window.
 ///
+/// PLAIN ROOT. The caches resolve beside the macro first (plots/ in the ATTPCROOT tree), then as
+/// ../data/<basename> -- the a1954_C14_absnorm repo vendors both proton_kin_cat5.root (before)
+/// and proton_kin_cat5_s013.root (after, carrying the theta_corr label).
+///
 ///   root -l -b -q 'gs_correction_panels_C14.C()'
 
 void gs_correction_panels_C14(TString rawCache = "plots/proton_kin_cat5.root",
@@ -21,10 +25,22 @@ void gs_correction_panels_C14(TString rawCache = "plots/proton_kin_cat5.root",
    gStyle->SetNumberContours(255);
    TString here = gSystem->DirName(gInterpreter->GetCurrentMacroName());
 
-   TFile *fr_ = TFile::Open(here + "/" + rawCache);
-   TFile *fc_ = TFile::Open(here + "/" + corrCache);
+   auto resolve = [&here](TString f) {
+      if (f.BeginsWith("/"))
+         return f;
+      TString beside = here + "/" + f;
+      return gSystem->AccessPathName(beside) ? TString(here + "/../data/" + gSystem->BaseName(f)) : beside;
+   };
+   TString rawPath = resolve(rawCache), corrPath = resolve(corrCache);
+   for (TString p : {rawPath, corrPath})
+      if (gSystem->AccessPathName(p)) {
+         printf("\033[1;31mmissing: %s\033[0m\n", p.Data());
+         return;
+      }
+   TFile *fr_ = TFile::Open(rawPath);
+   TFile *fc_ = TFile::Open(corrPath);
    if (!fr_ || fr_->IsZombie() || !fc_ || fc_->IsZombie()) {
-      printf("\033[1;31mmissing an input\033[0m\n");
+      printf("\033[1;31mcannot open an input\033[0m\n");
       return;
    }
    TTree *tr = (TTree *)fr_->Get("pk");
@@ -35,10 +51,11 @@ void gs_correction_panels_C14(TString rawCache = "plots/proton_kin_cat5.root",
       corrLabel = n->GetTitle();
       corrLabel.ReplaceAll("(KE-0.00)", " #times K_{p}"); // zero pivot: write it as a product
    }
-   printf("raw  %s : %lld of %lld tracks pass \"%s\"\n", rawCache.Data(), tr->GetEntries(cut), tr->GetEntries(),
+   printf("raw  %s : %lld of %lld tracks pass \"%s\"\n", rawPath.Data(), tr->GetEntries(cut), tr->GetEntries(),
           cut.Data());
-   printf("corr %s : %lld tracks, correction \"%s\"\n", corrCache.Data(), tc->GetEntries(cut), corrLabel.Data());
+   printf("corr %s : %lld tracks, correction \"%s\"\n", corrPath.Data(), tc->GetEntries(cut), corrLabel.Data());
 
+   gSystem->mkdir(gSystem->DirName(here + "/" + outStem), kTRUE); // absnorm has no plots/; SaveAs fails mutely
    auto save = [&](TCanvas *c, const char *suffix) {
       TString png = here + "/" + outStem + suffix + ".png";
       c->SaveAs(png);

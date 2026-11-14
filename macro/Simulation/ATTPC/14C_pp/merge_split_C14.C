@@ -5,6 +5,16 @@
 /// ratios) is what keeps the binomial errors honest at small bin populations.
 ///
 ///   root -b -q 'merge_split_C14.C("diagnostics/split","gs")'
+///
+/// INPUTS. acc_split_<tag>_{ukf,gf}_s<seed>.root, one per fitter and seed, written by
+/// acceptance_split_C14.C in the EARLIER configuration: GENFIT with material effects OFF and
+/// Ebeam 161.0 (/mnt/f/a1954_C14_acc_gf) and the UKF (/mnt/f/a1954_C14_acc), chi2/ndf < 5,
+/// |dtheta| <= 10 deg, KE ratio 0.5-2 (see diagnostics/acc_finish_level.sh). NOT the adopted
+/// GENFIT+CATIMA acceptance.
+///
+/// PLAIN ROOT. dir resolves beside the macro first (diagnostics/split in the ATTPCROOT tree, where
+/// the png is written back into dir), then as ../data/acc_split -- the a1954_C14_absnorm repo
+/// vendors the ten g.s. files there, and the png then goes to plots/ beside the macro.
 
 void merge_split_C14(TString dir = "diagnostics/split", TString tag = "gs", Int_t s0 = 1001, Int_t s1 = 1005)
 {
@@ -17,10 +27,25 @@ void merge_split_C14(TString dir = "diagnostics/split", TString tag = "gs", Int_
    const char *cfName[5] = {"hNoDth_", "hNoRat_", "hNoMatch_", "hNoChi2_", "hAny_"};
    const char *cfLbl[5] = {"noDth", "noRatio", "noMatch", "noChi2", "anyFit"};
 
+   TString here = gSystem->DirName(gInterpreter->GetCurrentMacroName());
+   TString inDir = here + "/" + dir, outDir = inDir;
+   if (dir.BeginsWith("/"))
+      inDir = outDir = dir;
+   else if (gSystem->AccessPathName(inDir)) {
+      inDir = here + "/../data/acc_split";
+      outDir = here + "/plots";
+   }
+   if (gSystem->AccessPathName(inDir)) {
+      printf("\033[1;31mno input directory: %s nor ../data/acc_split\033[0m\n", dir.Data());
+      return;
+   }
+   gSystem->mkdir(outDir, kTRUE);
+   printf("inputs from %s\n", inDir.Data());
+
    TH1D *gen[2] = {nullptr, nullptr}, *cat[2][NCAT] = {}, *cf[2][5] = {};
    for (int f = 0; f < 2; ++f)
       for (int s = s0; s <= s1; ++s) {
-         TFile *fi = TFile::Open(TString::Format("%s/acc_split_%s_%s_s%d.root", dir.Data(), tag.Data(), fitName[f], s));
+         TFile *fi = TFile::Open(TString::Format("%s/acc_split_%s_%s_s%d.root", inDir.Data(), tag.Data(), fitName[f], s));
          if (!fi || fi->IsZombie()) {
             printf("\033[1;31mmissing %s seed %d\033[0m\n", fitName[f], s);
             continue;
@@ -166,8 +191,7 @@ void merge_split_C14(TString dir = "diagnostics/split", TString tag = "gs", Int_
    lg4->AddEntry(fg, "GENFIT", "lp");
    lg4->Draw();
 
-   TString here = gSystem->DirName(gInterpreter->GetCurrentMacroName());
-   TString png = here + "/" + dir + "/acc_split_merged_" + tag + ".png";
+   TString png = outDir + "/acc_split_merged_" + tag + ".png";
    c1->SaveAs(png);
    printf("\nwrote %s\n\n", png.Data());
 }
