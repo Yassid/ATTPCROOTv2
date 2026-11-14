@@ -106,6 +106,12 @@ public:
    /// Apply the PID gate (SetPIDGate) to AtHelix3D's (sqrtdEdx, Brho) instead of AtSpyralPID's. The gate
    /// must have been DRAWN on the 3D plane: the two dE/dx scales differ. Default off.
    void SetPIDGateFrom3D(Bool_t on) { fGateFrom3D = on; }
+   /// Gate on the WIDTH-CORRECTED ("trace integral") Spyral dE/dx: the gate's sqrtdEdx comes from
+   /// AtSpyralPID::Estimate on a copy of the track whose hit charges are scaled by tau_fit/tauNomTB
+   /// (tau_fit = AtHit::GetTimeStampCorrInter(), needs a float-tau reco); Brho still comes from the
+   /// unscaled estimate. Exactly the definition of pid_width_dp.C (sqw, br) and of the H2 integral
+   /// cache the gate is drawn on (make_h2_pid_caches.C). 0 = off (default, production unchanged).
+   void SetPIDGateTauScaled(Double_t tauNomTB) { fGateTauNom = tauNomTB; }
    /// Per-run dE/dx gain correction for the internal PID estimates (gate, seed, direction votes):
    /// sqrtdEdx multiplied by gSpyral / g3D (AtTools::AtPIDGainTable). Must match the gain the gate
    /// was DRAWN with. Default 1 (off).
@@ -408,6 +414,7 @@ private:
    Bool_t fDirFromSpyral{kFALSE};      // backward call from the Spyral estimate, not GeoTheta (see setter)
    Bool_t fDirFrom3D{kFALSE};          // backward call from AtHelix3D's majority vote (see setter)
    Bool_t fGateFrom3D{kFALSE};         // PID gate on AtHelix3D's plane (see setter)
+   Double_t fGateTauNom{0};             // >0: gate on tau-scaled Spyral dE/dx (see SetPIDGateTauScaled)
    Double_t fGainSpyral{1.0}, fGain3D{1.0}; // per-run dE/dx gain correction (see SetDedxGain)
    /// Keep the cluster array order from the pattern recognition instead of re-sorting the
    /// measurements by the drift coordinate z. The z sort assumes the helix advances monotonically

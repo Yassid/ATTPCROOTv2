@@ -46,7 +46,12 @@ void fitGenfitter_a1975(TString fileName = "run_0106", Long64_t nEvents = -1, TS
                         // Expect little effect on (p,d): these deuterons are ~20 MeV and only
                         // touch the table region near the endpoint. It is (d,t), whose low branch
                         // is 0.8-6 MeV against a 3.5 MeV threshold, that sits inside it.
-                        Bool_t catimaELoss = kFALSE, Bool_t catimaELossFull = kFALSE)
+                        Bool_t catimaELoss = kFALSE, Bool_t catimaELossFull = kFALSE,
+                        // >0: apply pidGate to the WIDTH-CORRECTED Spyral dE/dx (hit charge x
+                        // tau_fit/gateTauNomTB), the "trace integral" plane of make_h2_pid_caches.C
+                        // (pid_width_dp.C uses 4.5). Needs a float-tau reco (reco_h2_tau). 0 = the
+                        // peak-amplitude gate, i.e. every existing call is unchanged. (2026-11-13)
+                        Double_t gateTauNomTB = 0)
 {
    gSystem->Load("libAtReconstruction.so");
    FairLogger::GetLogger()->SetLogScreenLevel("WARNING");
@@ -153,6 +158,11 @@ void fitGenfitter_a1975(TString fileName = "run_0106", Long64_t nEvents = -1, TS
       else {
          fitter->SetPIDGate(pidGate.Data());
          std::cout << "  PID gate: " << pidGate << "\n";
+         if (gateTauNomTB > 0) {
+            fitter->SetPIDGateTauScaled(gateTauNomTB);
+            std::cout << "  \033[1;32mPID gate on the TRACE-INTEGRAL plane (charge x tau_fit/" << gateTauNomTB
+                      << " TB)\033[0m\n";
+         }
       }
    }
 

@@ -20,6 +20,7 @@
 #include <TDatabasePDG.h>
 #include <TGeoManager.h>
 #include <TMatrixDSym.h>
+#include <TString.h>
 #include <TVector3.h>
 
 #include "ConstField.h"
@@ -188,7 +189,8 @@ void AtGenfitter::Init()
 
    fInit = kTRUE;
    LOG(info) << "AtGenfitter init: B=" << fBField << " T, pdg=" << fPDG << ", iter " << fMinIter << "-" << fMaxIter
-             << ", PIDgate=" << (fUsePIDGate ? "on" : "off");
+             << ", PIDgate=" << (fUsePIDGate ? "on" : "off")
+             << (fUsePIDGate && fGateTauNom > 0 ? Form(" (tau-scaled dE/dx, tauNom %.2f TB)", fGateTauNom) : "");
 }
 
 AtFittedTrack *AtGenfitter::GetFittedTrack(AtTrack *track, AtFitMetadata * /*fitMetadata*/, AtRawEvent * /*rawEvent*/,
@@ -220,8 +222,23 @@ AtFittedTrack *AtGenfitter::GetFittedTrack(AtTrack *track, AtFitMetadata * /*fit
       h3 = fHelix3D->Estimate(*track, pidRes.valid ? pidRes.direction : -1);
    }
    if (fUsePIDGate && fPidGate) {
+      double gateDedx = pidRes.sqrtdEdx;
+      bool gateValid = pidRes.valid;
+      if (!fGateFrom3D && fGateTauNom > 0 && pidRes.valid) {
+         // width-corrected charge copy, same as pid_width_dp.C: charge * tau_fit / tau_nominal
+         AtTrack tw;
+         tw.SetTrackID(track->GetTrackID());
+         for (auto &h : track->GetHitArray()) {
+            AtHit c(*h);
+            c.SetCharge(h->GetCharge() * h->GetTimeStampCorrInter() / fGateTauNom);
+            tw.AddHit(c);
+         }
+         auto rw = fSpyralPID->Estimate(tw);
+         gateValid = rw.valid;
+         gateDedx = rw.sqrtdEdx;
+      }
       bool in = fGateFrom3D ? (h3.valid && fPidGate->IsInside(h3.sqrtdEdx, h3.brho))
-                            : (pidRes.valid && fPidGate->IsInside(pidRes.sqrtdEdx, pidRes.brho));
+                            : (gateValid && fPidGate->IsInside(gateDedx, pidRes.brho));
       if (!in)
          return nullptr;
    }
