@@ -13,8 +13,11 @@
 /// at the first measurement point. Pointing two slots at the same cache with different columns is
 /// how the two are compared without deriving a second file.
 void mkexp_pp(TString in, TString out, double chi2max = 1e9, double icMin = 950, double icMax = 1350,
-              TString keCol = "ke", TString thCol = "theta")
+              TString keCol = "ke", TString thCol = "theta", bool keepIcRun = false)
 {
+   // keepIcRun (2026-11-15): also write `ic` and `run` as FLOAT columns, for the a1954_Be12
+   // generator, whose page has live IC/run controls and reads every column as float. Pass
+   // icMin <= 0 with it so the slider sees the ungated beam. Default false = old output exactly.
    TFile *f = TFile::Open(in);
    if (!f || f->IsZombie()) { printf("cannot open %s\n", in.Data()); return; }
    TTree *t = (TTree *)f->Get("pk");
@@ -39,6 +42,11 @@ void mkexp_pp(TString in, TString out, double chi2max = 1e9, double icMin = 950,
    TTree *pk = new TTree("pk", "16C(p,p') kinematics for the browser explorer");
    pk->Branch("ke",&oke); pk->Branch("theta",&oth);
    pk->Branch("vertexz",&ovz); pk->Branch("chi2ndf",&oc2);
+   float oic = -1, orun = 0; int irun = 0;
+   const bool hasRun = t->GetBranch("run") != nullptr;
+   if (keepIcRun && hasRun) t->SetBranchAddress("run",&irun);   // int in the pd/pp caches
+   if (keepIcRun && hasIC) pk->Branch("ic",&oic);
+   if (keepIcRun && hasRun) pk->Branch("run",&orun);
 
    // COLLAPSED FITS ARE DROPPED UNCONDITIONALLY, and this cannot be left to chi2max.
    // ex_dt_a1975 writes chi2ndf = 1e9 EXACTLY when ndf <= 0, i.e. when the Kalman filter kept
@@ -58,7 +66,7 @@ void mkexp_pp(TString in, TString out, double chi2max = 1e9, double icMin = 950,
       if (chi2ndf >= kCollapsed) { ++nCollapsed; continue; }
       if (ke <= 0 || chi2ndf > chi2max) continue;
       if (icMin > 0 && (ic < icMin || ic > icMax)) continue;
-      oke = ke; oth = theta; ovz = vz; oc2 = chi2ndf;
+      oke = ke; oth = theta; ovz = vz; oc2 = chi2ndf; oic = ic; orun = irun;
       pk->Fill(); ++n;
    }
    o.cd(); pk->Write(); o.Close(); f->Close();

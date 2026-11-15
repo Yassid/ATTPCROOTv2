@@ -34,7 +34,8 @@
 
 void run_reco_C16pd(TString mcFile = "./data/attpcsim.root", TString outputFile = "./data/sim_reco.root",
                   TString paramFile = "ATTPC.a1975_C16_sim.par", Double_t thr = 20, Int_t hdMcs = 20, Int_t hdMs = 8,
-                  Int_t nEvents = 0, Double_t holeR = 20.0, TString joinMethod = "mover")
+                  Int_t nEvents = 0, Double_t holeR = 20.0, TString joinMethod = "mover",
+                  TString praType = "hdbscan", Bool_t floatTau = kFALSE, Double_t relErr = 0.1)
 {
    TString scriptfile = "Lookup20150611.xml";
    TString dir = getenv("VMCWORKDIR");
@@ -87,6 +88,13 @@ void run_reco_C16pd(TString mcFile = "./data/attpcsim.root", TString outputFile 
    p->SetMaxPeaks(4);
    p->SetMinSeparation(4);
    p->SetProminenceOnPrimary(false);
+   // floatTau (2026-11-15): the H2 TC-tau data production (D2_UKF/full_tctau.sh -> unpackReco_multifit.C
+   // fitChi2 = -1, relErr 0.1) fits the peaking time per pulse and applies no chi2 gate. Same here.
+   if (floatTau) {
+      p->SetFloatPeakingTime(true);
+      p->SetFitRelErr(relErr);
+      std::cout << "PSA   : float-tau (no chi2 gate), relErr " << relErr << std::endl;
+   }
    AtPSAtask *psaTask = new AtPSAtask(p);
    psaTask->SetPersistence(kTRUE);
    psaTask->SetOutputBranch("AtEventH");
@@ -99,17 +107,28 @@ void run_reco_C16pd(TString mcFile = "./data/attpcsim.root", TString outputFile 
    cleanTask->SetPersistence(kFALSE);
 
    // ---- pattern recognition : same as the data ---------------------------
-   auto hdb = std::make_unique<AtPATTERN::AtTrackFinderHDBSCAN>();
-   hdb->SetMinClusterSize(hdMcs);
-   hdb->SetMinSamples(hdMs);
-   hdb->SetClusterSelectionEpsilon(10.0);
-   hdb->SetJoinMethod(joinMethod.Data()); // "mover" (default) | "overlap" | "motion" | "both" | "none"
-   hdb->SetMinClusterSizeJoin(15);
-   hdb->SetCircleOverlapRatio(0.25);
-   hdb->SetMotionGapTol(40);
-   hdb->SetMotionAngleTol(35);
+   // praType "tc" (2026-11-15) = the data's AtTrackFinderTC, radius 15 / distance 7.5 (unpackReco_multifit.C)
+   std::unique_ptr<AtPATTERN::AtPRA> praAlgo;
+   if (praType == "tc") {
+      auto tc = std::make_unique<AtPATTERN::AtTrackFinderTC>();
+      tc->SetClusterRadius(15.0);
+      tc->SetClusterDistance(7.5);
+      praAlgo = std::move(tc);
+      std::cout << "PRA   : AtTrackFinderTC (radius 15, distance 7.5)" << std::endl;
+   } else {
+      auto hdb = std::make_unique<AtPATTERN::AtTrackFinderHDBSCAN>();
+      hdb->SetMinClusterSize(hdMcs);
+      hdb->SetMinSamples(hdMs);
+      hdb->SetClusterSelectionEpsilon(10.0);
+      hdb->SetJoinMethod(joinMethod.Data()); // "mover" (default) | "overlap" | "motion" | "both" | "none"
+      hdb->SetMinClusterSizeJoin(15);
+      hdb->SetCircleOverlapRatio(0.25);
+      hdb->SetMotionGapTol(40);
+      hdb->SetMotionAngleTol(35);
+      praAlgo = std::move(hdb);
+   }
 
-   AtPRAtask *praTask = new AtPRAtask(std::move(hdb));
+   AtPRAtask *praTask = new AtPRAtask(std::move(praAlgo));
    praTask->SetInputBranch("AtEventClean");
    praTask->SetOutputBranch("AtPatternEvent");
    praTask->SetPersistence(kTRUE);

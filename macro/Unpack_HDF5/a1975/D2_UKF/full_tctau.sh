@@ -9,7 +9,7 @@ exec 9>/home/yassid/h2stage/full_tctau.lock
 flock -n 9 || { echo "full_tctau.sh: another instance (or its orphaned workers) holds the lock -- abort"; exit 1; }
 mkdir -p /mnt/f/a1975/logs_h2_tctau
 cd $D/D2_UKF
-NPAR=6 MAXSTAGED=4 ./reco_tctau_h2_local.sh &
+NPAR=6 MAXSTAGED=6 ./reco_tctau_h2_local.sh &
 sleep 5; ./guard_cfree_tc.sh &
 wait
 cd $D/UKF/pd
