@@ -1,7 +1,7 @@
 # 16C(d,p)17C bound states: writes the fiducial result adopted 2026-11-09.
 # r_res >= 28 mm, vz 200-900, theta_cm 25-45, acceptance x Spyral validity, environment loss 0.84.
 # Usage: python -I adopt_fid_dp.py OUT_PREFIX    (writes OUT_PREFIX.csv and OUT_PREFIX.png)
-import sys, io, contextlib, runpy
+import sys, os, io, contextlib, runpy
 import numpy as np, uproot
 import matplotlib
 matplotlib.use('Agg')
@@ -9,12 +9,12 @@ import matplotlib.pyplot as plt
 
 OUT = sys.argv[1]
 R, ENV = 28, 0.84
-TRIG = '/mnt/f/a1975/sim_rebuild/trig/'
+TRIG = os.environ.get('TRIG', '/mnt/f/a1975/sim_rebuild/trig/')   # 2026-11-16: TRIG/CENSUS overridable (HDBSCAN+tau redo)
 with contextlib.redirect_stdout(io.StringIO()):
     G = runpy.run_path(TRIG + 'dsigma_fid.py')
 run, L2, L0, TH, TB, rres = G['run'], G['L2'], G['L0'], G['TH'], G['TB'], G['rres']
 mid = .5 * (TB[:-1] + TB[1:])
-X = uproot.open('/mnt/f/a1975/sim_rebuild/r280/p_gs_census.root')['c'].arrays(['thl', 'vz', 'ke', 'ex', 'tcm', 'sv'], library='np')
+X = uproot.open(os.environ.get('CENSUS', '/mnt/f/a1975/sim_rebuild/r280/p_gs_census.root'))['c'].arrays(['thl', 'vz', 'ke', 'ex', 'tcm', 'sv'], library='np')
 
 
 def fit1(x, er, m, u):
