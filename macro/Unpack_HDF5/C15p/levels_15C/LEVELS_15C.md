@@ -1490,8 +1490,121 @@ The background is: real deuterons (PID identical to the g.s.), normal track qual
 backward lab angles, falling in Ex, about 1 % of the elastic peak and scaling with it
 (B/gsAmp = 0.0093-0.0155 in the low-KE bins of both codes), partly localised at vz 90-180 mm.
 
-Excluded so far: PID contamination, poor reconstruction, reconstruction efficiency, three-body
-phase space, halo breakup, and now fusion evaporation. **The surviving candidate is an
-instrumental tail of the elastic peak** -- consistent with the ~1 % scaling and with the vz
-localisation -- but the simulation cannot test it, because its resolution is 2-4x too good and
-therefore has no such tail to produce.
+### Inside a theta_CM bin, the Ex axis is an ANGLE axis
+
+Profiling the events of theta_CM 10-20 deg by Ex window (ATTPCROOT; Spyral is the same to within
+its own resolution):
+
+```
+  window                   N    <theta_lab>         <KE>    <vz>   <chi2>  <Brho>  <arclen>  <nclus>
+  g.s.  Ex -0.5..0.5   45127   81.3 +- 1.3   1.75 +- 0.38    538   0.0617  0.2470       165     32.1
+  bkg   Ex  3.0..5.0    2674   62.6 +- 3.0   1.67 +- 0.39    479   0.0483  0.2380       182     36.7
+  bkg   Ex  7.0..9.0     705   44.7 +- 4.5   2.02 +- 0.44    336   0.0508  0.2781       225     58.5
+```
+
+The kinetic energy barely moves (1.7-2.0 MeV) while theta_lab sweeps 81 -> 45 deg. So within one
+theta_CM bin the Ex axis is mostly an **angle** axis, and this bin is the locus of the lowest-energy
+tracks in the dataset.
+
+The track lengths are consistent with those energies: range goes as E^1.8, so
+(2.02/1.75)^1.8 = 1.29 against a measured 225/165 = 1.36. **These are not mis-measured elastic
+tracks** -- they are genuine ~2 MeV deuterons at 45-65 deg, where the elastic line demands far
+more energy, and every observable about them is internally consistent.
+
+### Double scattering -- EXCLUDED by the vertex
+
+A genuine low-energy deuteron at mid-angle, at ~1 % of the elastic rate and scaling with it, is
+what double scattering looks like: an elastic deuteron that scatters a second time off a target
+deuteron on its way out. That has a sharp signature. An elastic deuteron starts ON the beam axis;
+a second scatter happens tens of cm down the first deuteron's path, so it starts far off it.
+
+Joining the gated events back to the upstream per-run fit trees (which carry `vx`, `vy`) and
+taking the beam axis as the median of the elastic vertices, (-0.2, 0.0) mm:
+
+```
+  ATTPCROOT, theta_CM 10-20     N      med    68%    90%    95%   f(r>30)  f(r>60)
+  g.s.  Ex -0.5..0.5        13277      4.1    6.8   37.6   46.6    12.8%     2.6%
+        Ex  1.0..3.0          656      3.8    6.1   28.3   40.2     9.5%     3.0%
+  bkg   Ex  3.0..5.0         1097      3.3    4.8    9.0   12.4     1.5%     0.3%
+  bkg   Ex  7.0..9.0          326      3.4    4.9    8.9   11.0     0.3%     0.0%
+```
+
+The result goes the opposite way from the hypothesis, and decisively: the background vertices sit
+**tighter on the beam axis than the elastic peak does** (95 % within 11 mm against 47 mm).
+
+**⇒ Double scattering is excluded.** And the same number excludes something else that had been the
+leading candidate: **an instrumental tail of the elastic peak is also excluded**, because a
+mis-measured elastic event keeps its own vertex, including that 12.8 % wide tail. The background
+does not inherit it. It is a genuine, distinct, beam-spot reaction channel.
+
+See `figures/background_vertex_radius.png`.
+
+### Direct halo breakup -- TESTED, NOT SUPPORTED
+
+The phase-space test that failed earlier used *uniform* `TGenPhaseSpace`, which is the wrong model
+for a halo. 15C is an s-wave one-neutron halo (Sn = 1.218 MeV) and *direct* breakup has a standard
+shape, peaked just above threshold and falling steeply:
+
+```
+   s-wave   dsigma/dEx ~ sqrt(Ex-Sb)/Ex^2        p-wave   dsigma/dEx ~ (Ex-Sb)^1.5/Ex^3
+```
+
+Compared against the *fitted* exponential background this looks excellent (1.42/1.00/0.75/0.58/
+0.47/0.39/0.33 against 1.34/1.00/0.75/0.56/0.42/0.31/0.24 at Ex = 3..9). That comparison is
+misleading. Letting the forms compete in the full fit instead -- all four carry exactly one shared
+shape parameter, so -2lnL compares directly:
+
+```
+  ATTPCROOT                     -2lnL   shape par        Spyral                  -2lnL   shape par
+   EXP   Bg*exp(-k*Ex)          768.9      0.2913  <-     EXP                    732.6      0.2400
+   SWAVE Bg*sqrt(Ex-Sb)/Ex^2    779.9      0.0621         SWAVE                  738.2      2.0283
+   PWAVE Bg*(Ex-Sb)^1.5/Ex^3   1442.9      2.9000 railed  PWAVE                 1248.6      2.9000 railed
+   LIN   Bg*(1-k*Ex)           1451.3      0.3299 railed  LIN                    723.3      0.1274  <-
+   SWAVE with Sb = Sn = 1.218   782.0              +13.1  SWAVE with Sb = Sn     742.3              +19.0
+```
+
+The breakup form loses in both codes, and the decisive test fails: floating the binding energy
+returns **0.062 MeV in one code and 2.028 in the other**, a 2 MeV disagreement with neither value
+near Sn = 1.218. Pinning Sb at the true Sn costs +13.1 and +19.0 in -2lnL *for one fewer
+parameter*.
+
+**⇒ Direct halo breakup, in its standard s- or p-wave form, is not supported.** The background is
+a smooth monotonic fall that the empirical exponential describes adequately, and its shape carries
+no information identifying it with breakup.
+
+### Status of the background
+
+Established: real deuterons, genuine ~2 MeV at theta_lab 45-65 deg with track lengths matching
+that energy, originating from the beam spot more tightly than the elastic peak does, ~1 % of the
+elastic yield and scaling with it, falling smoothly in Ex.
+
+Excluded: PID contamination, poor reconstruction, reconstruction efficiency, uniform three-body
+phase space, breakup protons (by yield), fusion evaporation (angular distribution *and* Ex shape,
+at every temperature), double scattering (vertex radius), an instrumental tail of the elastic peak
+(vertex radius), and direct s-/p-wave halo breakup (shape, and the binding energy is not recovered).
+
+**A reaction on a different target nucleus is also excluded**, and cheaply: the target is pure D2.
+`media.geo` defines `TargetD2_300` as a single-element medium (`TargetD2_300 2 2.0141 2.0141 1. 1.
+0.065643e-3`), and the fitters are configured to match (`mat.push_back(std::make_tuple(2,1,1))` in
+`fitUKF_C15d.C`). There is no quencher and no carbon in the gas, so the only target nucleus is
+deuterium and the only reactions available are 15C + d.
+
+### Conclusion: the background is the non-resonant continuum
+
+Enumerating what 15C + d can produce and what survives the deuteron PID gate, the detected-deuteron
+channels are elastic scattering, inelastic scattering to 15C levels, and inelastic scattering into
+the 15C **continuum** above Sn (i.e. d + 14C + n). Everything else makes a proton, a triton or a
+neutron and is gated out. The first two are explicitly in the fit. **By elimination the background
+is the non-resonant part of the third** -- which is physically what a smooth component under the
+resonances should be, and is consistent with every measured property: real deuterons, from the beam
+spot, scaling with the elastic yield, falling smoothly in Ex.
+
+What we do *not* have is a predictive shape for it. Both candidate models fail: uniform three-body
+phase space (wrong shape, tested earlier) and the standard s-/p-wave direct-breakup form (loses in
+-2lnL, and the binding energy is not recovered). That is not surprising -- above Sn the 15C
+continuum involves 14C core excitation and n-14C final-state interaction, and neither model carries
+either.
+
+**So the background shape stays empirical, and the price is the systematic we already quantified:
+0.15-0.34 MeV on the 4.6 MeV state from the choice of background form.** Reducing it needs a real
+three-body continuum calculation, not another functional guess.
