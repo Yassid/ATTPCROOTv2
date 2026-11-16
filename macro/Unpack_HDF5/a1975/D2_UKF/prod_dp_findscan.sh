@@ -57,7 +57,7 @@ set -uo pipefail
 NPAR="${1:-6}"; shift || true
 RUNS="${*:-0016 0017 0018 0019 0020 0021 0022 0023 0026 0027 0031 0032 0034 0036 0037 0038 0039 0040 0041 0042 0043 0044 0046 0048 0057 0058 0076 0077 0078 0079 0080 0082 0083 0084 0085 0086 0087 0088 0089 0091 0092 0095 0096 0097 0098 0102 0103}"
 
-export REC=/mnt/f/a1975/reco_d2_dv1104/
+export REC="${REC:-/mnt/f/a1975/reco_d2_dv1104/}"   # 2026-11-15: overridable (TC-tau reco)
 export GF="${GF:-/mnt/f/a1975/gf_dp_findscan/}"
 export LOG="${LOG:-/mnt/f/a1975/logs_dp_findscan/}"
 export PAR=ATTPC.a1975_deuterium_dv1104.par
@@ -83,6 +83,9 @@ export MAXPCT="${MAXPCT:-95.0}"   # where the LADDER starts; full length is alwa
 # at 8 %, so for most tracks THIS is the limit and the percentage never bites.  8 reproduces every
 # earlier production exactly.
 export MINCL="${MINCL:-8}"
+# 2026-11-16: fit geometry overridable. v2 has steel at r 250-260 and data tracks reach 275 mm; the r280 refit
+# (gf_dp_find805_r280, sim_rebuild/r280/run_prod.sh) is the one the trigger/fiducial (d,p) work used.
+export GEO="${GEO:-ATTPC_D300torr_v2_geomanager.root}"
 
 # A missing gate would NOT stop the fitter -- fitGenfitter treats an empty/absent pidGate as
 # "no gate" and happily fits every track in the file, which is a 47-run production of garbage
@@ -112,7 +115,7 @@ one() {
   fi
   root -l -b -q "fitGenfitter_a1975_deuterium.C(\"${r}_multifit\",-1,\"$REC\",\"\",\"$GF\",\
 -2.85,2,5,\"$GATE\",4.0,10.0,170.0,kTRUE,kTRUE,2212,1.00782503207,1,\"p\",\"_reco\",\
-\"ATTPC_D300torr_v2_geomanager.root\",kTRUE,0,2,\"$PAR\",kFALSE,kFALSE,kFALSE,\"$TAB\",kTRUE,kTRUE,${CEL},${CFULL},0,kTRUE,${C2MAX},kFALSE,${STEP},${MINPCT},1,${MAXPCT},${MINCL})" \
+\"${GEO}\",kTRUE,0,2,\"$PAR\",kFALSE,kFALSE,kFALSE,\"$TAB\",kTRUE,kTRUE,${CEL},${CFULL},0,kTRUE,${C2MAX},kFALSE,${STEP},${MINPCT},1,${MAXPCT},${MINCL})" \
     > "${LOG}gf_${r}.log" 2>&1
   if grep -qi 'segmentation violation' "${LOG}gf_${r}.log" || [ ! -s "$fo" ]; then
     echo "[FAIL] $r  (see ${LOG}gf_${r}.log)"; rm -f "$fo"
