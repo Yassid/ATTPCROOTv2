@@ -2,7 +2,7 @@
 # Errors: Fisher matrix of the per-bin linear Poisson model (shared offset/sigma/tilt held). dsdo = Y / (dOmega Leff env 0.84), Y acceptance-corrected.
 import numpy as np
 exec(open('/mnt/f/a1975/sim_rebuild/unb_hdbtau/unb_bw_force.py').read().split("\nif __name__ == '__main__':")[0])
-keep = np.load(U + 'unb_bw_force32_keep.npy', allow_pickle=True).item()
+keep = np.load(U + f'unb_bw_force32{SUF}_keep.npy', allow_pickle=True).item()
 F = '/home/yassid/C17_dp_fits/fresco/outputs/dp17C_L%d_state%d.dat'
 TPL = [(1, 1, '1/2-', .0684, .0372), (2, 2, '3/2+', .2043, .2029), (3, 2, 'new', None, None), (4, 2, '3/2+', .4407, .4909), (5, 0, '1/2+', .0178, .0198), (6, 2, '3/2+', .1401, .1227)]
 VAR = [('all 6 free, offset fixed -0.32', 'FREE'), ('2.980 tied at YSOX ratio, offset -0.32', 'TIED-YSOX')]
@@ -44,6 +44,6 @@ for vz0 in (100, 500):
       print('   ratios S/S(4.231):  ' + '  '.join(f'{ST[s][3].split()[0]} {Sres[s][0] / S4[0]:.2f}({abs(Sres[s][0] / S4[0]) * np.hypot(Sres[s][1] / max(Sres[s][0], 1e-9), S4[1] / S4[0]):.2f})'
                                          + (f' [YSOX {TPL[s][3] / .4407:.2f} WBP {TPL[s][4] / .4909:.2f}]' if TPL[s][3] else '') for s in (0, 1, 2)))
 hdr = 'vzLo,variant,state,' + ','.join(f'dsdo{b}' for b in range(NB)) + ',' + ','.join(f'err{b}' for b in range(NB)) + ',chi2L0,chi2L1,chi2L2,chi2L3,S_smL,eS_smL'
-with open(U + 'unb_ad32.csv', 'w') as fo:
-   fo.write('# NOT ADOPTED, NO TRIGGER TERM. BW offset -0.32, theta_cm bins 22-26 26-30 30-34 34-38, env 0.84; unb_ad32.py\n' + hdr + '\n')
+with open(U + f'unb_ad32{SUF}.csv', 'w') as fo:
+   fo.write(f'# NOT ADOPTED, NO TRIGGER TERM. BW offset -0.32, theta_cm bin edges {list(TB)}, env 0.84; unb_ad32.py\n' + hdr + '\n')
    for r in rows: fo.write(','.join(str(v) if isinstance(v, str) else f'{v:.5g}' for v in r) + '\n')

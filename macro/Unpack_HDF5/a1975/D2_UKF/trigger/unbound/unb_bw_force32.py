@@ -10,4 +10,4 @@ for vz0 in (100, 500):
       L, ndf, g, Y, H, A, qs = run(vz0, mode, fo, c); Ys = Y.sum(0)
       print(f'  {lab:42s} -2lnL {L:6.1f}/{ndf}  sigma {g[1]:.3f} tilt {g[2]:+.3f} | ' + '  '.join(f'{v:6.0f}' for v in Ys[:5]))
       keep[(vz0, lab)] = (L, g, Y, H, A, qs, mode, fo, c)
-np.save(U + 'unb_bw_force32_keep.npy', keep, allow_pickle=True)
+np.save(U + f'unb_bw_force32{SUF}_keep.npy', keep, allow_pickle=True)

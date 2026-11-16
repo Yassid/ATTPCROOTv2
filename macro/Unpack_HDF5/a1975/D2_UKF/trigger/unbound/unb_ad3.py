@@ -4,11 +4,12 @@
 # acceptance-corrected; (2) peak positions: diagnostic fit with free positions per bin, production fit with one common shift per bin;
 # (3) fit range Ex 1.3-5.0. The bins are fitted SIMULTANEOUSLY: shared sigma, tilt, three positions; per bin phase-space scale, 3 amplitudes, shift.
 #   ~/Spyral/venv/bin/python -I unb_ad3.py [vzLo ...]      (default: 100 300 500 for the table; figure at 100 and 500)
-import sys, numpy as np, uproot
+import sys, os, numpy as np, uproot
 from scipy.optimize import minimize
 exec(open('/mnt/f/a1975/sim_rebuild/unb_hdbtau/unb_ad2.py').read().split("if MODE == 'val':")[0].replace("MODE = sys.argv[1] if len(sys.argv) > 1 else 'scan'", "MODE = 'lib'"))
 U = '/mnt/f/a1975/sim_rebuild/unb_hdbtau/'
-TB = np.array([22, 26, 30, 34, 38.]); NB = len(TB) - 1; dO = 2 * np.pi * (np.cos(np.radians(TB[:-1])) - np.cos(np.radians(TB[1:])))
+TB = np.arange(22, 38.001, float(os.environ.get('TBSTEP', 4))); NB = len(TB) - 1; SUF = os.environ.get('SUF', '');   # 2026-11-17: TBSTEP=2 -> 2 deg bins
+dO = 2 * np.pi * (np.cos(np.radians(TB[:-1])) - np.cos(np.radians(TB[1:])))
 EXLO, EXHI, BW = 1.3, 5.0, 0.1; edges = np.arange(EXLO, EXHI + 1e-9, BW); cen = .5 * (edges[1:] + edges[:-1])
 d = np.loadtxt(T + 'gf_data.txt'); ke, th, vz, c2 = d.T.copy()
 ke = ke + CAL[4]; th = th - CAL[2] * (ke - CAL[3]); dx, dc = kine(CAL[0] - CAL[1] / 1000 * (vz - 500), np.radians(th), ke); dx = dx + CAL[5]

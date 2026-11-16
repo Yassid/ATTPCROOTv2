@@ -18,3 +18,4 @@ Live copies run from `/mnt/f/a1975/sim_rebuild/unb_hdbtau/` (outputs there: `unb
   -0.32 = minus the bound-blend centroid (5/2+ carries 93-96 % of the bound peak for YSOX, WBP and PLB 811 C2S).
 - `unb_ad32.py` ADs, L=0-3 fits and shell-model S at offset -0.32 -> unb_ad32.csv; `fig_*.py` the figures. `unb_sm.py` S vs shell model.
 - Shell-model inputs (YSOX, WBP C2S; from Yassid) are NOT in the repo: /mnt/f/a1975/sim_rebuild/unb_hdbtau/shellmodel/.
+- 2026-11-17: TBSTEP=2 SUF=_2deg gives 2-deg bins (outputs *_2deg*); fig_ad32b.py sums 2.763+2.980 with the Fisher covariance (split unstable at 2 deg).

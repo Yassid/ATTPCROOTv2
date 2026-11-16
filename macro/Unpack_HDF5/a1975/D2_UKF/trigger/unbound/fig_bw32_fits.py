@@ -2,11 +2,11 @@
 import numpy as np, matplotlib
 matplotlib.use('Agg'); import matplotlib.pyplot as plt
 exec(open('/mnt/f/a1975/sim_rebuild/unb_hdbtau/unb_bw_force.py').read().split("\nif __name__ == '__main__':")[0])
-keep = np.load(U + 'unb_bw_force32_keep.npy', allow_pickle=True).item()
+keep = np.load(U + f'unb_bw_force32{SUF}_keep.npy', allow_pickle=True).item()
 cols = ['tab:green', 'tab:olive', 'tab:orange', 'tab:purple', 'tab:cyan', 'tab:brown']
 VAR = ['all 6 free, offset fixed -0.32', '2.980 tied at YSOX ratio, offset -0.32']
 for vz0 in (100, 500):
-   fig = plt.figure(figsize=(20, 11.5)); gs = fig.add_gridspec(4, NB, height_ratios=[3, 1, 3, 1], hspace=.12, wspace=.18)
+   fig = plt.figure(figsize=(5 * NB, 11.5)); gs = fig.add_gridspec(4, NB, height_ratios=[3, 1, 3, 1], hspace=.12, wspace=.18)
    for r, lab in enumerate(VAR):
       L, g, Y, H, A, qs, mode, fo, c = keep[(vz0, lab)]; S = shapes(g[0], g[1], 1.0)
       for i in range(NB):
@@ -29,4 +29,4 @@ for vz0 in (100, 500):
    fig.suptitle(f'vz >= {vz0} mm, BW offset FIXED -0.32 MeV (bound-blend centroid +0.32 from YSOX/WBP/PLB C2S). Top: all 6 states free, -2lnL {La:.1f}, '
                 f'sigma {gA[1]:.3f}, tilt {gA[2]:+.2f}. Bottom: Y(2.980) = YSOX ratio x Y(2.763), -2lnL {Lb:.1f} (+{Lb - La:.1f}, 4 fewer pars), sigma {gB[1]:.3f}. '
                 'Dotted = acceptance.', fontsize=10, y=0.995)
-   fig.savefig(U + f'unb_bw32_fits_vz{vz0}_2026-11-17.png', dpi=100, bbox_inches='tight'); print('saved', vz0)
+   fig.savefig(U + f'unb_bw32_fits{SUF}_vz{vz0}_2026-11-17.png', dpi=100, bbox_inches='tight'); print('saved', vz0)
