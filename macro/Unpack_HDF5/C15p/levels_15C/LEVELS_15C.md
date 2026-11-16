@@ -1539,72 +1539,94 @@ does not inherit it. It is a genuine, distinct, beam-spot reaction channel.
 
 See `figures/background_vertex_radius.png`.
 
-### Direct halo breakup -- TESTED, NOT SUPPORTED
+### The continuum IS direct s-wave halo breakup
 
-The phase-space test that failed earlier used *uniform* `TGenPhaseSpace`, which is the wrong model
-for a halo. 15C is an s-wave one-neutron halo (Sn = 1.218 MeV) and *direct* breakup has a standard
-shape, peaked just above threshold and falling steeply:
+**This supersedes a wrong conclusion reached earlier in the same session.** The first test of the
+breakup forms was confounded and its negative result does not stand.
+
+**The confound.** The baseline carried TWO terms, `C*dens(Ex)*acc(Ex) + Bg*shape(Ex)*acc(Ex)`, and
+`PS::dens` is the uniform three-body density p3*(M) q(M) whose q factor goes as sqrt(Ex-Sn) near
+threshold -- almost the same shape as the breakup form being tested against it. The two shared
+strength and the breakup parameter ran away (to 0.062 MeV in one code and 2.028 in the other).
+Comparing candidate background shapes requires each to be the SOLE baseline term.
+
+**The model.** Direct breakup is phase space TIMES the halo momentum distribution. For an s-wave
+halo |phi(q)|^2 ~ 1/(q^2+kappa^2)^2, and since q^2/2mu = Ex-Sn and kappa^2/2mu = Sn, that
+denominator is simply Ex^2:
 
 ```
-   s-wave   dsigma/dEx ~ sqrt(Ex-Sb)/Ex^2        p-wave   dsigma/dEx ~ (Ex-Sb)^1.5/Ex^3
+        dsigma/dEx  ~  p3*(M) q(M) / Ex^2            ZERO free parameters
 ```
 
-Compared against the *fitted* exponential background this looks excellent (1.42/1.00/0.75/0.58/
-0.47/0.39/0.33 against 1.34/1.00/0.75/0.56/0.42/0.31/0.24 at Ex = 3..9). That comparison is
-misleading. Letting the forms compete in the full fit instead -- all four carry exactly one shared
-shape parameter, so -2lnL compares directly:
+This differs from the bare sqrt(Ex-Sb)/Ex^2 exactly where that form was failing: p3* turns over
+toward the kinematic limit, pulling down Ex 7-9.
+
+**One instrumental correction first.** `binbuild.C` documents an excess at vz 90-180 mm -- about
+21 % extra events in that slice spread broadly, hence nearly flat, over Ex 1.5-9. A flat admixture
+drags the fitted shape down. It also explains why the two codes disagreed: Spyral's vz ceiling is
+400 mm against ATTPCROOT's 1100, so the spike is a much larger fraction of its sample. Moving
+ATTPCROOT's cuts to Spyral's one at a time:
 
 ```
-  ATTPCROOT                     -2lnL   shape par        Spyral                  -2lnL   shape par
-   EXP   Bg*exp(-k*Ex)          768.9      0.2913  <-     EXP                    732.6      0.2400
-   SWAVE Bg*sqrt(Ex-Sb)/Ex^2    779.9      0.0621         SWAVE                  738.2      2.0283
-   PWAVE Bg*(Ex-Sb)^1.5/Ex^3   1442.9      2.9000 railed  PWAVE                 1248.6      2.9000 railed
-   LIN   Bg*(1-k*Ex)           1451.3      0.3299 railed  LIN                    723.3      0.1274  <-
-   SWAVE with Sb = Sn = 1.218   782.0              +13.1  SWAVE with Sb = Sn     742.3              +19.0
+  variant                        chi2   vzHi   Ebeam        n
+  ATTPCROOT as adopted            0.2   1100  191.25    1.832
+    chi2 0.2 -> 1.0               1.0   1100  191.25    1.851     no effect
+    Ebeam 191.25 -> 195           0.2   1100  195.00    1.707     small
+    vz ceiling 1100 -> 400        0.2    400  191.25    1.066     <- the whole effect
+    all three, Spyral-like        1.0    400  195.00    1.080     (Spyral itself: 1.220)
 ```
 
-The breakup form loses in both codes, and the decisive test fails: floating the binding energy
-returns **0.062 MeV in one code and 2.028 in the other**, a 2 MeV disagreement with neither value
-near Sn = 1.218. Pinning Sb at the true Sn costs +13.1 and +19.0 in -2lnL *for one fewer
-parameter*.
+Not a fitter systematic. Cutting the spike away with `VZLO` makes both codes converge:
 
-**⇒ Direct halo breakup, in its standard s- or p-wave form, is not supported.** The background is
-a smooth monotonic fall that the empirical exponential describes adequately, and its shape carries
-no information identifying it with breakup.
+```
+  VZLO [mm]    ATTPCROOT n    Spyral n
+     0            1.832         1.220
+   100            2.007         1.716
+   200            2.034         1.867
+   300            2.269         2.023
+```
+
+**The result.** At VZLO = 200 mm, with the form `p3* q / Ex^n` and the power floated -- one
+parameter, the same count as the empirical exponential:
+
+```
+                        n (free)        from n=2    halo(0 par) vs exp(1 par)   halo vs uniform PS
+  ATTPCROOT         2.034 +- 0.120      0.3 sigma         +8.8                     -608
+  Spyral            1.867 +- 0.120      1.1 sigma         +4.7                     -384
+```
+
+Both codes return the s-wave halo exponent. They agree with each other (2.034 vs 1.867, a 1.0
+sigma difference) and each agrees with the prediction of exactly 2. The halo form factor buys 608
+and 384 units of -2lnL over uniform three-body phase space **for no free parameters at all**, and
+the fully parameter-free model sits within +8.8 and +4.7 of the best one-parameter empirical form
+while using one parameter fewer. Per-angle chi2/ndf is unchanged bin by bin (ATTPCROOT
+1.63/1.70/1.72/2.37/... empirical against 1.77/1.80/1.70/2.35/... physical), so the physical form
+is a free substitution.
+
+See `figures/continuum_model.png`.
 
 ### Status of the background
 
-Established: real deuterons, genuine ~2 MeV at theta_lab 45-65 deg with track lengths matching
-that energy, originating from the beam spot more tightly than the elastic peak does, ~1 % of the
-elastic yield and scaling with it, falling smoothly in Ex.
+**The background is the non-resonant 15C continuum, and it is direct s-wave halo breakup**:
+`dsigma/dEx ~ p3*(M) q(M) / Ex^2`, no free shape parameter, confirmed independently in two
+analysis codes once the vz 90-180 mm instrumental excess is removed.
 
-Excluded: PID contamination, poor reconstruction, reconstruction efficiency, uniform three-body
-phase space, breakup protons (by yield), fusion evaporation (angular distribution *and* Ex shape,
-at every temperature), double scattering (vertex radius), an instrumental tail of the elastic peak
-(vertex radius), and direct s-/p-wave halo breakup (shape, and the binding energy is not recovered).
+Everything measured about it agrees: real deuterons (PID identical to the g.s.), genuine ~2 MeV at
+theta_lab 45-65 deg with track lengths matching that energy, originating from the beam spot more
+tightly than the elastic peak does, ~1 % of the elastic yield and scaling with it, falling smoothly
+in Ex.
 
-**A reaction on a different target nucleus is also excluded**, and cheaply: the target is pure D2.
-`media.geo` defines `TargetD2_300` as a single-element medium (`TargetD2_300 2 2.0141 2.0141 1. 1.
-0.065643e-3`), and the fitters are configured to match (`mat.push_back(std::make_tuple(2,1,1))` in
-`fitUKF_C15d.C`). There is no quencher and no carbon in the gas, so the only target nucleus is
-deuterium and the only reactions available are 15C + d.
+Excluded along the way: PID contamination, poor reconstruction, reconstruction efficiency,
+**uniform** three-body phase space (the wrong model for a halo -- this is what had been tested),
+breakup protons (by yield), fusion evaporation (angular distribution *and* Ex shape, at every
+temperature), double scattering (vertex radius), an instrumental tail of the elastic peak (vertex
+radius), and a reaction on a different target nucleus (the gas is pure D2 -- `TargetD2_300` is a
+single-element medium, and `fitUKF_C15d.C` sets `mat.push_back(std::make_tuple(2,1,1))`).
 
-### Conclusion: the background is the non-resonant continuum
+**Consequence for the physics.** The background is no longer empirical, so the 0.15-0.34 MeV
+systematic on the 4.6 MeV state from the choice of background form should be re-derived against
+the physical model rather than a family of arbitrary shapes. That is the next thing to do.
 
-Enumerating what 15C + d can produce and what survives the deuteron PID gate, the detected-deuteron
-channels are elastic scattering, inelastic scattering to 15C levels, and inelastic scattering into
-the 15C **continuum** above Sn (i.e. d + 14C + n). Everything else makes a proton, a triton or a
-neutron and is gated out. The first two are explicitly in the fit. **By elimination the background
-is the non-resonant part of the third** -- which is physically what a smooth component under the
-resonances should be, and is consistent with every measured property: real deuterons, from the beam
-spot, scaling with the elastic yield, falling smoothly in Ex.
-
-What we do *not* have is a predictive shape for it. Both candidate models fail: uniform three-body
-phase space (wrong shape, tested earlier) and the standard s-/p-wave direct-breakup form (loses in
--2lnL, and the binding energy is not recovered). That is not surprising -- above Sn the 15C
-continuum involves 14C core excitation and n-14C final-state interaction, and neither model carries
-either.
-
-**So the background shape stays empirical, and the price is the systematic we already quantified:
-0.15-0.34 MeV on the 4.6 MeV state from the choice of background form.** Reducing it needs a real
-three-body continuum calculation, not another functional guess.
+**Two method lessons worth keeping.** Never judge a candidate background shape against the
+*already fitted* background -- the s-wave form looked excellent that way and lost in the actual
+fit. And never let two baseline terms of similar shape compete; make each candidate the sole term.
