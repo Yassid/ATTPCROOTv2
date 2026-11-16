@@ -121,9 +121,16 @@ namespace RH {
    {
       const Bin& d = B[b];
       const double* q = p + 1 + b*nper();   // p[0] = shared kappa
-      double v = (ONETERM ? 0.0 : std::max(0.0,q[0]) * (d.gc ? std::max(0.0,d.gc->Eval(X)) : 0.0))
-               + std::max(0.0,q[1]) * bshape(X,p[0])
-                                      * (d.ga ? std::max(0.0,d.ga->Eval(X)) : 1.0);
+      // ⚠ The continuum model is ABSOLUTE in Ex: its denominator is Ex = E_rel + Sn, referenced
+      // to the 15C ground state.  The resonance templates below are already placed relative to
+      // this bin's MEASURED g.s. centroid (mu = EPP6 - PPGS6 + gsMu), but the continuum was being
+      // evaluated at the raw X.  ATTPCROOT's g.s. sits at +0.027 and Spyral's at -0.287, so the
+      // model was evaluated 0.31 MeV apart in the two codes -- which for 1/Ex^n over Ex 3-9
+      // mimics a change in n and is why they disagreed by 3.5 sigma on the exponent.
+      const double Xt = X - d.gsMu;          // true excitation energy
+      double v = (ONETERM ? 0.0 : std::max(0.0,q[0]) * (d.gc ? std::max(0.0,d.gc->Eval(Xt)) : 0.0))
+               + std::max(0.0,q[1]) * bshape(Xt,p[0])
+                                      * (d.ga ? std::max(0.0,d.ga->Eval(Xt)) : 1.0);
       // the g.s. and 5/2+ tails, FIXED from this bin's own peak fit
       v += d.gsAmp * shapeGT(X,d.gsMu,d.sgL,d.sgR,d.alL,d.alR)
          + d.e5Amp * shapeGT(X,d.gsMu+0.740,d.sgL,d.sgR,d.alL,d.alR);

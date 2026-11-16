@@ -1654,3 +1654,112 @@ distributions must be stabilised before they can be compared to DWBA.
 **Two method lessons worth keeping.** Never judge a candidate background shape against the
 *already fitted* background -- the s-wave form looked excellent that way and lost in the actual
 fit. And never let two baseline terms of similar shape compete; make each candidate the sole term.
+
+
+# Overnight session: what the vz window does, and what the angular distributions are worth
+
+## The two vz pathologies, both measured
+
+**1. The Ex calibration breaks below vz ~ 300 mm, in BOTH codes.** Slicing the g.s. peak in 100 mm
+vz bins (`scripts/ebzcheck.C`, figure `figures/calibration_vs_vz.png`): the centroid walks 0.212
+MeV in ATTPCROOT and 0.123 in Spyral, and the peak broadens 10-30 %, then both go flat above 300.
+Cutting vz > 300 improves ATTPCROOT's g.s. FWHM from ~1.01 to 0.927 and its centroid to 0.027.
+
+**2. There is an Ex-DEPENDENT acceptance cliff above vz ~ 900.** Measured on the existing Geant4 +
+reconstruction simulation by adding a vz axis to the acceptance (`acceptance3d_C15dd.C`, figure
+`figures/acceptance_cliff.png`) -- no new simulation was needed, the truth vertex was already on
+disk:
+
+```
+  Ex      vz 0-100 ... 800-900   900-1000
+   0.00      0.998 ...   0.998     0.856
+   4.43      0.983 ...   1.000     0.767
+   6.68      0.988 ...   1.000     0.670
+   8.28      0.988 ...   1.000     0.571
+  12.00      0.995 ...   0.991     0.345
+```
+
+Flat at 0.98-1.00 everywhere below 900, then a fall that is strongly Ex-dependent. **This revises
+the earlier claim that the acceptance has a broad vz dependence** -- it does not; it has a sharp
+edge.
+
+**Each code was broken at a different end.** ATTPCROOT's adopted window 0-1100 INCLUDES the cliff,
+so its high-Ex continuum was suppressed by an uncorrected factor up to 2-3. Spyral's 0-400 excludes
+the cliff but cuts at its own median (508) and sits almost entirely in the mis-calibrated region,
+discarding 2.8x the statistics it keeps.
+
+**⇒ The good window is vz in [300,900].**
+
+## The continuum exponent is still not measurable
+
+Three candidate causes were tested and NONE reconciles the two codes (figure
+`figures/continuum_exponent_unstable.png`):
+
+```
+  vz window                        ATTPCROOT n        Spyral n
+  adopted (0-1100 / 0-400)        1.832 +- 0.096    1.220 +- 0.077
+  0-900    (cliff removed only)   1.815 +- 0.097    2.147 +- 0.059
+  300-1000 (calib fixed only)     2.292 +- 0.127    2.879 +- 0.087
+  300-900  (BOTH)                 2.262 +- 0.129    2.895 +- 0.090
+```
+
+- The **acceptance cliff** is not the driver: removing it moves ATTPCROOT 1.832 -> 1.815.
+- The **calibration cut** is the whole effect, and it pushes the two codes APART, not together.
+- The **Ex zero-point** was a genuine bug -- the continuum model is ABSOLUTE in Ex (its denominator
+  is Ex = E_rel + Sn, referenced to the 15C g.s.) while `bshape` was being evaluated at the raw X,
+  so with ATTPCROOT's g.s. at +0.027 and Spyral's at -0.287 the model sat 0.31 MeV apart in the two
+  codes. Fixed in `scripts/resfitC.C`. It changes almost nothing (2.252 -> 2.262 and 2.784 ->
+  2.895) and does NOT explain the disagreement.
+
+In the clean window the two codes disagree by 3.5 sigma on n. **The exponent is not a measurement.**
+What remains robust in every window is the FORM: uniform three-body phase space is excluded by
+589-1943 units of -2lnL, and the continuum is phase space times a steeply falling form factor of
+halo-breakup character.
+
+## The angular distributions: only 6.68 survives
+
+The per-bin resonance amplitudes ARE the physics deliverable, so their reproducibility was measured
+directly (`scripts/tiefig.C`, `scripts/redset.C`): refit under a deliberately SMALL change (VZLO
+300 -> 350, about 5 % of the sample) and look at the spread of the yield ratio across theta_CM bins.
+
+```
+  ATTPCROOT              TIE12 OFF                  TIE12 ON
+   4.43             0.000 ..  1.242     }
+   4.93             0.300 ..  0.979     }   D12   0.448 .. 0.930
+   5.98             0.688 ..  1.136         5.98  0.689 .. 1.393
+   6.68             0.186 .. 52.330         6.68  0.313 .. 1.223
+   7.38             0.000 ..  1.732         7.38  0.000 .. 9.781
+   8.28             0.000 ..  1.367         8.28  0.000 .. 1.134
+```
+
+**TIE12 must be ON.** The 4.43/4.93 pair sits 0.5 MeV apart against a response FWHM of ~0.93, is
+not resolvable, and the two amplitudes trade freely; tying them removes the zeros and collapses
+ATTPCROOT's 6.68 instability from a factor 52 to a factor 1.2.
+
+**7.38 and 8.28 are NOT determined.** Their yields swing through 0.000 in both codes with or
+without TIE12. Carrying an undetermined component lets it absorb whatever the continuum misses.
+
+Dropping them (`redset.C`) makes ATTPCROOT's 6.68 clean in all ten theta_CM bins (0.373 .. 0.934,
+no zeros) -- but the tied doublet then vanishes in half the bins (n = 10 -> 5), which is the fit
+telling us it is under-determined either way.
+
+**⇒ The 6.68 MeV angular distribution is the one per-angle measurement this analysis supports.**
+Figure `figures/angdist_668_adopted.png`, adopted configuration: vz in [300,900], TIE12 ON,
+resonance set D12 + 5.98 + 6.68, continuum p3* q / Ex^n at the corrected Ex zero. The two codes
+agree in shape from 20 to 60 deg within errors that INCLUDE the refit spread (per-bin stability
+runs 5-40 %). Both collapse in the forward two bins (10-20 deg), which is where the statistics are
+HIGHEST and the elastic tail largest -- that is not yet explained and should be looked at before
+the distribution is used.
+
+## Where this leaves the programme
+
+- DWBA / L assignment is startable for **6.68 only**, and only after the forward-bin collapse is
+  understood.
+- The background systematic on the 4.6 MeV state cannot be re-derived against the continuum model
+  while the exponent is window-dependent at the +-0.6 level.
+- The next real lead on the exponent is the **response**: the BW templates are convolved with each
+  bin's measured response but the CONTINUUM is not, and the two codes differ by nearly 2x in
+  resolution (FWHM 0.93 against 0.52) in the direction observed (the wider response flattens the
+  apparent spectrum and lowers n). A second-moment estimate gives only a ~2.5 % differential, so it
+  is probably too small -- but it is the only untested difference left and deserves a proper
+  numerical convolution rather than an estimate.
