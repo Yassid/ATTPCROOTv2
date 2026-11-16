@@ -8,6 +8,7 @@
 | `pp_reference_states.png` | the 15C(p,p') spectrum and its structures — the reference list | `../scripts/ppfind2.C` |
 | `dd_ex_both_codes.png` | both (d,d') Ex spectra, no fit, state positions marked | — |
 | `fivehalf_lineshape.png` | **why the 5/2+ yield is not measurable** — the 5/2+ ratio against the assumed g.s. right-hand width, with the Δ(-2lnL)=1 band; the width is pinned to a few keV but a 10 % width error moves the ratio by 16-30 % | `../scripts/degenfig.C` |
+| `evaporation_excluded.png` | **the background is not fusion evaporation** — evaporation goes forward where the data is backward, and its Ex spectrum rises where the background falls; no temperature fixes either | `../scripts/evapfig.C` |
 | `angdist_final.png` | **the current best** — angular distributions from the Ex 3-9 fit with 5° bins and only the populated resonances; 4.4+4.9 peaks at 18°, 6.68 at 22°, in both codes | `../scripts/finalfig.C` |
 | `angdist_result.png` | the same result from the earlier 10° binning, for comparison | `../scripts/moneyplot.C` |
 | `tied_angdist.png` | **the fix** — angular distributions of the tied-doublet structures; E1 peaks at the most forward angle, E3 one bin out, in both codes | `../scripts/tiedfig.C` |

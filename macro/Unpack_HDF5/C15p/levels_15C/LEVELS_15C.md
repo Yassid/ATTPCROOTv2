@@ -1422,3 +1422,76 @@ Different shapes mean a different angular-momentum transfer.
 This is the first per-structure angular information from this analysis that survives changing the
 reconstruction. 5.98 peaks at 18-22 in both but collapses immediately after; 7.38 stays erratic
 and rises again at large angle, where the statistics are thinnest -- neither is usable yet.
+
+---
+
+# Is the background fusion evaporation?  No (2026-11-16)
+
+`scripts/evap.C`, `evapmc.C`, `evapvsbkg.C`, `evapT.C`, `evapfig.C`
+-> `figures/evaporation_excluded.png`
+
+⚠ Evaporation was already rejected for the FLAT 2-20 MeV continuum (`spyral-15Cd-calibration`:
+that spectrum is flat where a Maxwellian is not, chi2/ndf = 1889). The component tested here is a
+DIFFERENT one -- the background that turns on near 2.5 MeV, decays as exp(-kappa Ex) with
+kappa = 0.24-0.29, lives in the forward theta_CM bins and is made of real deuterons at KE ~ 1.4
+MeV. That had never been tested.
+
+Model: `15C + d -> 17N*` (fusion Q = 15.14 MeV, E* = 37.7 MeV, T = sqrt(E*/a) = 4.21 MeV with
+a = A/8, Coulomb barrier for d = 1.80 MeV), evaporating a deuteron isotropically in the compound
+frame with a surface Maxwellian `(eps-B) exp(-(eps-B)/T)`, boosted to the lab, through the
+analysis' own cuts, with Ex reconstructed by the SAME two-body deuteron hypothesis the data uses.
+
+![evaporation excluded](figures/evaporation_excluded.png)
+
+## It fails on two independent counts, in opposite directions
+
+**Angular.** The compound recoils at beta = 0.1446 while a deuteron evaporated at eps = T has
+beta = 0.0669 -- SLOWER than the compound, so it is focused forward and cannot exceed
+theta_lab = 27.6 deg. Reaching theta_lab 70-85, where the background is, needs eps > 20 MeV.
+
+```
+theta_lab:    0-10   10-20  20-30  30-40  40-50  50-60  60-70  70-80  80-90
+evaporation   5.69%  17.92% 29.05% 24.17% 13.36%  5.90%  2.34%  0.91%  0.36%
+DATA          0.0%    1.5%   2.8%   3.4%   4.3%   6.5%   7.2%  35.4%  38.8%
+```
+
+Essentially inverted: **1.3 % of evaporated deuterons reach theta_lab > 70 deg, where 74 % of the
+data sits.** In theta_CM bins the evaporation yield RISES monotonically from 3.8 % (bin 0) to
+14.6 % (bin 8); the fitted background does the opposite, being nonzero only in bins 0-1.
+
+**Ex shape.** In theta_CM 10-20, normalised at Ex = 4:
+
+```
+ Ex             3      4      5      6      7      8      9
+ evaporation  0.83   1.00   1.35   1.68   1.86   2.18   2.54     RISES
+ exp(-0.29Ex) 1.34   1.00   0.75   0.56   0.42   0.31   0.24     the fitted background, FALLS
+```
+
+## And no temperature rescues it
+
+```
+  T (MeV)      1.0    2.0    3.0   4.21    6.0    8.0   12.0   20.0
+  share in theta_CM 10-20 (%)
+               2.31   5.47   6.85   7.59   7.69   7.47   7.03   6.47     data: ~100 %
+  Ex slope there (/MeV)
+              +0.63  +0.37  +0.22  +0.14  +0.08  +0.05  +0.01  -0.03     data: -0.24 .. -0.29
+```
+
+The slope stays positive up to T = 12 MeV and reaches only -0.03 at T = 20 (which is above E*/2
+and unphysical), against the -0.24 to -0.29 required; the angular share never exceeds 7.7 %.
+
+**⇒ Fusion evaporation is excluded as the low-energy background, independently of temperature and
+for two independent reasons.** Note the underlying cause is the same one that killed it for the
+continuum: the compound is focused forward, and this background is backward.
+
+## What is left
+
+The background is: real deuterons (PID identical to the g.s.), normal track quality, KE ~ 1.4 MeV,
+backward lab angles, falling in Ex, about 1 % of the elastic peak and scaling with it
+(B/gsAmp = 0.0093-0.0155 in the low-KE bins of both codes), partly localised at vz 90-180 mm.
+
+Excluded so far: PID contamination, poor reconstruction, reconstruction efficiency, three-body
+phase space, halo breakup, and now fusion evaporation. **The surviving candidate is an
+instrumental tail of the elastic peak** -- consistent with the ~1 % scaling and with the vz
+localisation -- but the simulation cannot test it, because its resolution is 2-4x too good and
+therefore has no such tail to produce.
