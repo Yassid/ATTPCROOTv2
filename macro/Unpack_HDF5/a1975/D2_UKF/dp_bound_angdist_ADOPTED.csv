@@ -1,11 +1,12 @@
-# ADOPTED 2026-11-09 (Yassid): 16C(d,p)17C bound states (g.s.+0.217+0.331 unresolved), trigger-safe fiducial r_res>=28 mm, vz 200-900, theta_cm 25-45 ONLY.
+# ADOPTED 2026-11-16 (Yassid): 16C(d,p)17C bound states (g.s.+0.217+0.331 unresolved), trigger-safe fiducial r_res>=28 mm, vz 200-900, theta_cm 25-45 ONLY.
+# inputs /mnt/f/a1975/sim_rebuild/trig_hdbtau/ + /mnt/f/a1975/sim_rebuild/r280_hdbtau/p_gs_census.root; data calibrated DPCAL 184.25 11.0 0.18 -3 -0.05 -0.6947
 # Producer D2_UKF/trigger/adopt_fid_dp.py. eps includes the Spyral validity spy_valid; dsdo includes environment loss 0.84; dsdo_noenv does not. Stat errors only; absolute scale open.
-# l=2 sum fit on use=1: S(no env) 0.247(0.020), S(adopted) 0.294(0.024), chi2 0.90/3
+# l=2 sum fit on use=1: S(no env) 0.242(0.019), S(adopted) 0.288(0.023), chi2 4.49/3
 thcm_lo,thcm_hi,thcm_mid,Y,bg,eps_genfit,spy_valid,n_sim_spy,Leff_mb-1,dsdo_noenv_mb_sr,err_noenv_mb_sr,dsdo_mb_sr,err_mb_sr,use
 10,15,12.5,0,0.00,nan,nan,0,nan,nan,nan,nan,nan,0
 15,20,17.5,0,0.00,nan,nan,0,nan,nan,nan,nan,nan,0
 20,25,22.5,0,0.00,nan,nan,0,nan,nan,nan,nan,nan,0
-25,30,27.5,21,0.89,0.9983,1.0000,32,8.617,9.2359,2.1490,10.9952,2.5584,1
-30,35,32.5,67,0.00,0.9760,1.0000,176,40.111,5.8108,0.7099,6.9176,0.8451,1
-35,40,37.5,72,2.67,1.0056,1.0000,324,66.505,3.1066,0.3872,3.6984,0.4610,1
-40,45,42.5,23,8.02,0.8726,0.3201,428,87.160,1.6611,0.6178,1.9775,0.7355,1
+25,30,27.5,15,0.00,0.9983,1.0000,30,8.617,6.8894,1.7788,8.2016,2.1177,1
+30,35,32.5,68,0.89,0.9705,1.0000,175,40.111,5.8536,0.7240,6.9686,0.8619,1
+35,40,37.5,68,1.78,0.9971,0.9970,332,66.505,3.0016,0.3787,3.5733,0.4508,1
+40,45,42.5,35,8.02,0.8584,0.3059,425,87.160,3.1831,0.7740,3.7894,0.9214,1

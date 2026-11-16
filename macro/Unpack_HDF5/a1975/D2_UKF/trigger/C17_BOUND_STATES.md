@@ -1,6 +1,10 @@
 # 16C(d,p)17C bound states: how the angular distribution was resolved
 
-Experiment a1975, D2 target. Adopted 2026-11-09. Supersedes the result adopted on 2026-09-24.
+Experiment a1975, D2 target. Adopted 2026-11-16. Supersedes the results adopted on 2026-11-09 and 2026-09-24.
+
+The 2026-11-16 result uses the same method as 2026-11-09 on new products (see "2026-11-16 update" below): the D2 runs
+re-reconstructed with a floating pulse peaking time (HDBSCAN finder unchanged), the simulation re-reconstructed the same way,
+and a kinematic calibration of the data that makes the bound peak flat in angle.
 
 ## Summary
 
@@ -16,20 +20,43 @@ problem, not to the states.
 
 | theta_cm (deg) | Y | Background | eps (genfit) | Spyral validity | dsigma/dOmega (mb/sr) |
 |---|---|---|---|---|---|
-| 25-30 | 21 | 0.89 | 0.998 | 1.00 | 11.00(2.56) |
-| 30-35 | 67 | 0.00 | 0.976 | 1.00 | 6.92(85) |
-| 35-40 | 72 | 2.67 | 1.006 | 1.00 | 3.70(46) |
-| 40-45 | 23 | 8.02 | 0.873 | 0.32 | 1.98(74) |
+| 25-30 | 15 | 0.00 | 0.998 | 1.00 | 8.20(2.12) |
+| 30-35 | 68 | 0.89 | 0.971 | 1.00 | 6.97(86) |
+| 35-40 | 68 | 1.78 | 0.997 | 1.00 | 3.57(45) |
+| 40-45 | 35 | 8.02 | 0.858 | 0.31 | 3.79(92) |
 
-Errors are statistical only. Values are in `dp_bound_angdist_ADOPTED.csv`.
+Errors are statistical only. Values are in `dp_bound_angdist_ADOPTED.csv`. The 2026-11-09 values (11.00(2.56), 6.92(85),
+3.70(46), 1.98(74)) are kept in `dp_bound_angdist_ADOPTED_2026-11-09.csv`.
 
 Fit of one normalisation S to the FRESCO l=2 sum (state 1 + state 3, equal weight) over the four bins:
 
 | Curve | S | chi2/ndf |
 |---|---|---|
-| l=2, adopted | 0.294(24) | 0.90/3 |
-| l=2, without the environment factor | 0.247(20) | 0.90/3 |
-| l=0 | 17.2(1.6) | 42.0/3 |
+| l=2, adopted | 0.288(23) | 4.49/3 |
+| l=2, without the environment factor | 0.242(19) | 4.49/3 |
+| l=0 | 17.0(1.6) | 43.3/3 |
+
+2026-11-09 for comparison: l=2 0.294(24), chi2 0.90/3.
+
+## 2026-11-16 update
+
+Three changes relative to 2026-11-09; the method (fiducial cut, Spyral term, environment factor) is unchanged.
+
+1. **Data re-reconstructed with a floating pulse peaking time** (AtPSAMultiFit float tau, no chi2 gate), HDBSCAN finder as
+   before (`full_hdbtau_d2.sh` -> `caches/dp_kin_hdbtau.root`). Bound yield +2 %, bound peak sigma 0.272 against 0.282 MeV.
+   The TC finder used for the H2 channels was tested and rejected here: it breaks the long backward proton spirals
+   (run_0017 bound peak 12 events with TC against 36 with HDBSCAN).
+2. **Simulation re-reconstructed the same way** (`trigger/run_sim_hdbtau.sh`). Efficiency per bin and Ex resolution are
+   unchanged within 1-2 %.
+3. **Kinematic calibration of the data** (data only; the simulation shows no tilt). Without it the bound peak moves from
+   +0.23 MeV at 12 deg to -0.33 MeV at 42 deg. With KE + keOff, theta - slope (KE' - pivot), Ebeam(vz) = 184.25 - 11.0 (vz - 500)/1000
+   and a global Ex shift (slope 0.18 deg/MeV, pivot -3 MeV, keOff -0.05 MeV, shift -0.695 MeV, from a grid in
+   `calib_scan_dp.C`; odd and even runs give the same point) the bound centroid is flat within +-0.025 MeV over 10-45 deg.
+   The centroid of the unresolved bound blend is put at 0, so all Ex are about 0.2 MeV low against the literature
+   (estimate from the blend weights; not used here).
+
+Effect on S: 0.294(24) (2026-11-09) -> 0.295(23) (new products, no calibration) -> 0.288(23) (adopted). The 30-40 deg bins
+agree within 2 %; 25-30 and 40-45 deg move by about one error bar each.
 
 ## What was wrong
 
@@ -85,30 +112,33 @@ Two corrections are included:
 
 ## l=0 + l=2 mixture
 
-Fit of the four adopted points (`trigger/fit_lmix_dp.py`, table in `dp_bound_lmix_2026-11-09.txt`):
+Fit of the four adopted points (`trigger/fit_lmix_dp.py`, table in `dp_bound_lmix_2026-11-16.txt`; 2026-11-09 in
+`dp_bound_lmix_2026-11-09.txt`):
 
 | Model | Result | chi2/ndf |
 |---|---|---|
-| l=0 + l=2 sum, free | S0 = -0.13(3.15), S2 = 0.296(46), rho = -0.86 | 0.90/2 |
-| l=2 sum only | S2 = 0.294(24) | 0.90/3 |
-| PLB C2S mix with one free scale | scale 0.709(57) | 0.63/3 |
-| PLB without the l=0 state, one free scale | scale 0.723 | 0.62/3 |
-| d3/2 only / d5/2 only | S 0.812(65) / 0.460(37) | 1.65/3 / 0.60/3 |
+| l=0 + l=2 sum, free | S0 = 0.58(3.08), S2 = 0.281(45), rho = -0.86 | 4.46/2 |
+| l=2 sum only | S2 = 0.288(23) | 4.49/3 |
+| PLB C2S mix with one free scale | scale 0.694(56) | 4.63/3 |
+| PLB without the l=0 state, one free scale | scale 0.708 | 4.70/3 |
+| d3/2 only / d5/2 only | S 0.801(64) / 0.451(36) | 4.26/3 / 4.72/3 |
 
 The data do not determine the l=0 strength. Over 25-45 deg the unit-S l=0 curve is 0.05-0.82 mb/sr against
 8.6-38.5 mb/sr for the unit-S l=2 sum, so a full l=0 state (S0 = 1) adds only 1-8 % to the fitted cross
-section in these bins, below the errors. The result S0 = -0.13(3.15) is consistent with zero and with the
-PLB value 0.64; the 90 % CL upper limit (S0 >= 0) is 3.9, which excludes nothing physical. An l=0 signal
+section in these bins, below the errors. The result S0 = 0.58(3.08) is consistent with zero and with the
+PLB value 0.64; the 90 % CL upper limit (S0 >= 0) is 4.5, which excludes nothing physical. An l=0 signal
 would show at forward angles, which the fiducial cut cannot reach. The l=0-only row (chi2 42/3) shows only
 that l=0 cannot supply the whole yield. Equally, d3/2 and d5/2 cannot be told apart: both describe the
-shape, and a free three-state fit gives unphysical values (1.96(3.85), -1.31(1.70), 1.16(92), chi2 0.01/1).
-S0 varies with the R cut (-4.9(2.2) at R 24, 1.4(7.0) at R 34), possibly from remaining trigger distortion
-of the 25-30 deg bin at small R (not tested); S2 stays at 0.26-0.32.
+shape, and a free three-state fit gives unphysical values (-0.55(3.80), 1.28(1.98), -0.26(1.07), chi2 4.20/1).
+S0 varies with the R cut (-3.6(2.1) at R 24, 10.0(7.1) at R 34), possibly from remaining trigger distortion
+of the 25-30 deg bin at small R (not tested); S2 stays at 0.26-0.29 for R 24-30 (0.18(7) at R 34, three bins).
 
 What the data do establish is that the summed strength has an l=2 angular shape, with a normalisation of
-0.71(6) relative to the PLB C2S on our FRESCO curves (statistical only, absolute scale open).
+0.69(6) relative to the PLB C2S on our FRESCO curves (statistical only, absolute scale open).
 
 ## Stability
+
+*Not redone for the 2026-11-16 products; numbers below are from the 2026-11-09 products.*
 
 The four-bin fit gives S 0.245-0.253 (no environment factor) and chi2 <= 1.8/3 at R 28 and R 30 for each of:
 chi2 < 5, Ex top 1.0 MeV, smear 0.15 and 0.30 MeV, vz 200-700 mm. For vz 300-900 mm, S is 0.23(3).
@@ -119,8 +149,8 @@ Inside the fiducial region data and simulation Spyral efficiencies agree at 25-4
 - Four bins only. Below 25 deg cannot be reached by this cut. The 2026-09-24 points at 20-25 deg are not
   part of this result.
 - The R cut was chosen after looking at the fit.
-- The 25-30 deg bin has 21 counts and has not clearly levelled off: 5.94(1.01) mb/sr at R >= 26 against
-  9.24(2.15) at R >= 28, before the environment factor. R 24 and R 26 give S about 0.207 with chi2 6-8/3.
+- The 25-30 deg bin has 15 counts and has not clearly levelled off: 5.78(95) mb/sr at R >= 26 against
+  6.89(1.78) at R >= 28, before the environment factor and the Spyral term (2026-11-09: 5.94(1.01) against 9.24(2.15)).
 - **The absolute scale is open.** The mesh efficiency is measured only among triggered events, so its
   plateau is assumed to be about 1.
 - S is one number for an equal-weight sum of the state 1 and state 3 curves. It is not a spectroscopic
@@ -140,9 +170,15 @@ Inside the fiducial region data and simulation Spyral efficiencies agree at 25-4
 
     cd macro/Unpack_HDF5/a1975/D2_UKF
     ~/Spyral/venv/bin/python -I trigger/adopt_fid_dp.py $PWD/dp_bound_angdist_ADOPTED
+    ~/Spyral/venv/bin/python -I trigger/fit_lmix_dp.py $PWD/dp_bound_lmix_2026-11-16
 
-`adopt_fid_dp.py` runs `/mnt/f/a1975/sim_rebuild/trig/dsigma_fid.py` (same as `trigger/dsigma_fid.py`) and
-reads `/mnt/f/a1975/sim_rebuild/r280/p_gs_census.root`. The evidence for the Spyral term, the environment
+`adopt_fid_dp.py` runs `/mnt/f/a1975/sim_rebuild/trig_hdbtau/dsigma_fid.py` (same as `trigger/dsigma_fid_dpcal.py`) with
+`DPCAL='184.25 11.0 0.18 -3 -0.05 -0.6947'` and reads `/mnt/f/a1975/sim_rebuild/r280_hdbtau/p_gs_census.root`.
+Its inputs `gf_data.txt` / `gf_sim.txt` come from `trigger/prep_inputs_hdbtau.sh` (the `dump_keys.C` recipe on
+`caches/dp_kin_hdbtau.root` and `r280_hdbtau/p_gs_dump.root`). The products: `full_hdbtau_d2.sh` (reco, find805 genfit on the
+r280 geometry, cache) and `trigger/run_sim_hdbtau.sh` (simulation). The 2026-11-09 result is reproduced row for row with
+`TRIG=/mnt/f/a1975/sim_rebuild/trig/ CENSUS=/mnt/f/a1975/sim_rebuild/r280/p_gs_census.root DPCAL= ADOPT_TAG='ADOPTED 2026-11-09'`
+(the same variables reproduce `dp_bound_lmix_2026-11-09.txt` exactly). The evidence for the Spyral term, the environment
 factor and the stability tests comes from `fid_spy.py`, `census_sv2.py`, `env_rew.py`, `ev_size.C`,
 `fid_spy_sys.py` and `unb_fid.py` in `trigger/`, which are not committed at the time of writing.
-The 2026-09-24 result is kept as `dp_bound_angdist_ADOPTED_2026-09-24.csv`.
+The 2026-09-24 result is kept as `dp_bound_angdist_ADOPTED_2026-09-24.csv`, the 2026-11-09 one as `dp_bound_angdist_ADOPTED_2026-11-09.csv`.

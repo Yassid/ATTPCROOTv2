@@ -1,0 +1,11 @@
+# ADOPTED 2026-11-09 (Yassid): 16C(d,p)17C bound states (g.s.+0.217+0.331 unresolved), trigger-safe fiducial r_res>=28 mm, vz 200-900, theta_cm 25-45 ONLY.
+# Producer D2_UKF/trigger/adopt_fid_dp.py. eps includes the Spyral validity spy_valid; dsdo includes environment loss 0.84; dsdo_noenv does not. Stat errors only; absolute scale open.
+# l=2 sum fit on use=1: S(no env) 0.247(0.020), S(adopted) 0.294(0.024), chi2 0.90/3
+thcm_lo,thcm_hi,thcm_mid,Y,bg,eps_genfit,spy_valid,n_sim_spy,Leff_mb-1,dsdo_noenv_mb_sr,err_noenv_mb_sr,dsdo_mb_sr,err_mb_sr,use
+10,15,12.5,0,0.00,nan,nan,0,nan,nan,nan,nan,nan,0
+15,20,17.5,0,0.00,nan,nan,0,nan,nan,nan,nan,nan,0
+20,25,22.5,0,0.00,nan,nan,0,nan,nan,nan,nan,nan,0
+25,30,27.5,21,0.89,0.9983,1.0000,32,8.617,9.2359,2.1490,10.9952,2.5584,1
+30,35,32.5,67,0.00,0.9760,1.0000,176,40.111,5.8108,0.7099,6.9176,0.8451,1
+35,40,37.5,72,2.67,1.0056,1.0000,324,66.505,3.1066,0.3872,3.6984,0.4610,1
+40,45,42.5,23,8.02,0.8726,0.3201,428,87.160,1.6611,0.6178,1.9775,0.7355,1

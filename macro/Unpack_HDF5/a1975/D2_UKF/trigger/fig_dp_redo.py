@@ -2,7 +2,7 @@
 import numpy as np, uproot, matplotlib
 matplotlib.use('Agg'); import matplotlib.pyplot as plt
 exec(open('/mnt/f/a1975/sim_rebuild/trig/dsigma_fid.py').read().split("K = np.loadtxt")[0])
-T = '/mnt/f/a1975/sim_rebuild/trig_tctau/'
+T = '/mnt/f/a1975/sim_rebuild/trig_hdbtau/'
 def csv(p):
     L = [l for l in open(p) if not l.startswith('#')]; return np.genfromtxt(L, delimiter=',', names=True)
 A = csv('/home/yassid/fair_install/ATTPCROOTv2-OpenKF/macro/Unpack_HDF5/a1975/D2_UKF/dp_bound_angdist_ADOPTED.csv')
@@ -19,7 +19,7 @@ def spec(p, cal=False):
     ex, tc = kine(eb, np.radians(th), ke); ex = ex + (CAL[5] if cal else 0)
     w = (vz >= 100) & (vz < 900) & (c2 <= 13.5) & (th >= 89) & (th < 113) & (ke >= 1.2) & np.isfinite(ex); return ex[w]
 bins = np.arange(-1.5, 5.0001, 0.1)
-for p, cal, lab, c in (('/mnt/f/a1975/caches/.explorer/exp_dp_find805_r280.root', False, 'adopted products (no calib)', 'k'), (T + 'exp_dp_tctau.root', False, 'HDBSCAN + float tau (no calib)', 'C0'), (T + 'exp_dp_tctau.root', True, 'HDBSCAN + float tau, calibrated', 'C3')):
+for p, cal, lab, c in (('/mnt/f/a1975/caches/.explorer/exp_dp_find805_r280.root', False, 'adopted products (no calib)', 'k'), (T + 'exp_dp_hdbtau.root', False, 'HDBSCAN + float tau (no calib)', 'C0'), (T + 'exp_dp_hdbtau.root', True, 'HDBSCAN + float tau, calibrated', 'C3')):
     ax[1].hist(spec(p, cal), bins, histtype='step', color=c, lw=1.5, label=lab)
 for e in (2.763, 3.661, 4.231, 4.841): ax[1].axvline(e, color='gray', ls=':', lw=1)
 ax[1].set_xlabel(r'$E_x$ [MeV]'); ax[1].set_ylabel('counts / 100 keV'); ax[1].set_title(r'$\theta_{lab}$ 89-113, vz 100-900 (literature lines dotted)'); ax[1].legend(fontsize=8); ax[1].grid(alpha=.3)

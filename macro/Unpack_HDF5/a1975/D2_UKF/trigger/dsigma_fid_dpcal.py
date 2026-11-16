@@ -1,8 +1,8 @@
 # Trigger-safe fiducial: keep tracks whose heavy residual is predicted outside the beam hole at the pad plane, where the mesh fires on the residual whatever the proton does. Same cut on generated, reconstructed and data events. No trigger model. Stability against the cut is the test.
-# Repo copy 2026-11-16; the live copy runs from /mnt/f/a1975/sim_rebuild/trig_tctau/ (D there).
+# Repo copy 2026-11-16; the live copy runs from /mnt/f/a1975/sim_rebuild/trig_hdbtau/ (D there).
 import numpy as np
 from scipy.special import ndtr
-D = '/mnt/f/a1975/sim_rebuild/trig_tctau/'; U = 931.49401; M1, M2, M3, M4 = 16.0147013 * U, 2.0135532 * U, 1.00727646688 * U, 17.0225864 * U
+D = '/mnt/f/a1975/sim_rebuild/trig_hdbtau/'; U = 931.49401; M1, M2, M3, M4 = 16.0147013 * U, 2.0135532 * U, 1.00727646688 * U, 17.0225864 * U
 def om(x, y, z): return np.sqrt(np.maximum(x*x + y*y + z*z - 2*x*y - 2*y*z - 2*x*z, 0))
 def kine(Kp, th, Ke):
     Et1 = Kp + M1; Et3 = Ke + M3; Et4 = Et1 + M2 - Et3; s = M1*M1 + M2*M2 + 2*M2*Et1; uu = M2*M2 + M3*M3 - 2*M2*Et3

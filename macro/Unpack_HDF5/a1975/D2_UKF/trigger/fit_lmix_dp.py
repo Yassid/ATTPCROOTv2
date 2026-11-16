@@ -1,6 +1,6 @@
 # 16C(d,p)17C bound states: l=0 + l=2 mixture on the adopted fiducial points, plus stability against R and the l=2 curve.
 # Usage: python -I fit_lmix_dp.py OUT_PREFIX    (writes OUT_PREFIX.txt and OUT_PREFIX.png)
-import sys, io, contextlib, runpy
+import sys, os, io, contextlib, runpy
 import numpy as np, uproot
 from scipy.stats import chi2 as chi2dist
 import matplotlib
@@ -9,12 +9,14 @@ import matplotlib.pyplot as plt
 
 OUT = sys.argv[1]
 ENV = 0.84
+# 2026-11-16: same inputs as adopt_fid_dp.py (adopted 2026-11-16: HDBSCAN+float-tau products, data calibrated). Old: TRIG=/mnt/f/a1975/sim_rebuild/trig/ CENSUS=/mnt/f/a1975/sim_rebuild/r280/p_gs_census.root DPCAL=
+TRIG = os.environ.get('TRIG', '/mnt/f/a1975/sim_rebuild/trig_hdbtau/'); os.environ.setdefault('DPCAL', '184.25 11.0 0.18 -3 -0.05 -0.6947')
 with contextlib.redirect_stdout(io.StringIO()):
-    G = runpy.run_path('/mnt/f/a1975/sim_rebuild/trig/dsigma_fid.py')
+    G = runpy.run_path(TRIG + 'dsigma_fid.py')
 run, TH, TB, rres = G['run'], G['TH'], G['TB'], G['rres']
 L0, D32, D52 = TH[:, 1], TH[:, 0], TH[:, 2]
 mid = .5 * (TB[:-1] + TB[1:])
-X = uproot.open('/mnt/f/a1975/sim_rebuild/r280/p_gs_census.root')['c'].arrays(['thl', 'vz', 'ke', 'ex', 'tcm', 'sv'], library='np')
+X = uproot.open(os.environ.get('CENSUS', '/mnt/f/a1975/sim_rebuild/r280_hdbtau/p_gs_census.root'))['c'].arrays(['thl', 'vz', 'ke', 'ex', 'tcm', 'sv'], library='np')
 
 
 def points(R):
