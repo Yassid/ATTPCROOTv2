@@ -1561,55 +1561,72 @@ denominator is simply Ex^2:
 This differs from the bare sqrt(Ex-Sb)/Ex^2 exactly where that form was failing: p3* turns over
 toward the kinematic limit, pulling down Ex 7-9.
 
-**One instrumental correction first.** `binbuild.C` documents an excess at vz 90-180 mm -- about
-21 % extra events in that slice spread broadly, hence nearly flat, over Ex 1.5-9. A flat admixture
-drags the fitted shape down. It also explains why the two codes disagreed: Spyral's vz ceiling is
-400 mm against ATTPCROOT's 1100, so the spike is a much larger fraction of its sample. Moving
-ATTPCROOT's cuts to Spyral's one at a time:
+**⚠ The exponent is NOT robust -- corrected below.** An earlier version of this section claimed
+both codes return n = 2. That was read off ONE choice of vz window and does not survive the others.
+
+**What the vz window does.** The Ebeam(vz) calibration is flat above vz ~ 300 and breaks below it,
+in BOTH codes: the g.s. centroid walks and the peak broadens.
 
 ```
-  variant                        chi2   vzHi   Ebeam        n
-  ATTPCROOT as adopted            0.2   1100  191.25    1.832
-    chi2 0.2 -> 1.0               1.0   1100  191.25    1.851     no effect
-    Ebeam 191.25 -> 195           0.2   1100  195.00    1.707     small
-    vz ceiling 1100 -> 400        0.2    400  191.25    1.066     <- the whole effect
-    all three, Spyral-like        1.0    400  195.00    1.080     (Spyral itself: 1.220)
+              ATTPCROOT              Spyral
+  vz slice  centroid  FWHM      centroid  FWHM
+    0-100     0.219   1.106      -0.168   0.696
+  100-200     0.159   1.105      -0.197   0.607
+  200-300     0.081   0.985      -0.257   0.531
+  300-400     0.048   0.970      -0.269   0.537
+     ...       flat   ~0.98         flat  ~0.53
+  900-1000    0.060   0.953      -0.289   0.544
+  walk        0.212 MeV                 0.123 MeV
 ```
 
-Not a fitter systematic. Cutting the spike away with `VZLO` makes both codes converge:
+Cutting vz > 300 is therefore right on its own merits: ATTPCROOT's g.s. FWHM improves from ~1.01
+to 0.927 and its centroid from 0.048 to 0.027.
+
+**Spyral's adopted window was wrong.** `vzHi = 400` cuts at Spyral's own median of 508, so it kept
+the lower 37 % of events -- and vz 0-300 of that is the MIS-CALIBRATED region. Opening the window
+to 1000 recovers 2.8x the statistics (72,337 -> 204,607) and costs nothing: the g.s. centroid moves
+0.017 MeV and the FWHM 0.004 MeV. This asymmetry (ATTPCROOT 0-1100 against Spyral 0-400) sat
+underneath every ATTPCROOT-vs-Spyral comparison in this analysis.
+
+**The exponent moves with the window, far beyond its statistical error.**
 
 ```
-  VZLO [mm]    ATTPCROOT n    Spyral n
-     0            1.832         1.220
-   100            2.007         1.716
-   200            2.034         1.867
-   300            2.269         2.023
+            ATTPCROOT                        Spyral
+   0-1100   n = 1.832              0- 400    n = 1.220
+ 200-1100       2.034            200- 400        1.867
+ 300-1000       2.281              0-1000        2.147
+   0- 400       1.066            300-1000        2.768   (statistical error ~ +-0.10)
 ```
 
-**The result.** At VZLO = 200 mm, with the form `p3* q / Ex^n` and the power floated -- one
-parameter, the same count as the empirical exponential:
+**⇒ n is not measured.** It swings over ~1.2 units with the vz acceptance against a +-0.1
+statistical error, so the earlier agreement with the halo value of exactly 2 was a coincidence of
+one cut, not a confirmation.
+
+**What IS robust, in every window tested:** uniform three-body phase space is decisively wrong,
+and multiplying it by a steeply falling form factor fixes it, for no free parameters.
 
 ```
-                        n (free)        from n=2    halo(0 par) vs exp(1 par)   halo vs uniform PS
-  ATTPCROOT         2.034 +- 0.120      0.3 sigma         +8.8                     -608
-  Spyral            1.867 +- 0.120      1.1 sigma         +4.7                     -384
+  vz in [300,1000]      uniform PS (0 par)    p3* q / Ex^2 (0 par)    gain
+  ATTPCROOT                 1343.9                  754.8            -589
+  Spyral                    2926.7                  983.2           -1943
 ```
 
-Both codes return the s-wave halo exponent. They agree with each other (2.034 vs 1.867, a 1.0
-sigma difference) and each agrees with the prediction of exactly 2. The halo form factor buys 608
-and 384 units of -2lnL over uniform three-body phase space **for no free parameters at all**, and
-the fully parameter-free model sits within +8.8 and +4.7 of the best one-parameter empirical form
-while using one parameter fewer. Per-angle chi2/ndf is unchanged bin by bin (ATTPCROOT
-1.63/1.70/1.72/2.37/... empirical against 1.77/1.80/1.70/2.35/... physical), so the physical form
-is a free substitution.
+So the continuum is phase space times a form factor whose character is that of s-wave halo
+breakup, but the exponent itself is not determined by these data as analysed.
 
-See `figures/continuum_model.png`.
+**The limiting systematic is the acceptance.** `accBin` has NO vz dependence, while the real
+acceptance does -- how much of a track is seen depends on where in the chamber it started. That is
+why every extracted shape moves with the vz window. Until the acceptance is made a function of
+(Ex, theta_CM, vz), the continuum exponent cannot be pinned, the two codes cannot be made to agree,
+and the per-angle yields inherit the same systematic.
 
 ### Status of the background
 
-**The background is the non-resonant 15C continuum, and it is direct s-wave halo breakup**:
-`dsigma/dEx ~ p3*(M) q(M) / Ex^2`, no free shape parameter, confirmed independently in two
-analysis codes once the vz 90-180 mm instrumental excess is removed.
+**The background is the non-resonant 15C continuum**, and its shape is phase space times a
+steeply falling form factor, `dsigma/dEx ~ p3*(M) q(M) / Ex^n` with no free NORMALISATION shape
+beyond n. Uniform phase space (n = 0) is excluded in every window by 589-1943 units of -2lnL.
+The halo value n = 2 is of the right character but is NOT confirmed: n is window-dependent at the
++-0.6 level against a +-0.1 statistical error.
 
 Everything measured about it agrees: real deuterons (PID identical to the g.s.), genuine ~2 MeV at
 theta_lab 45-65 deg with track lengths matching that energy, originating from the beam spot more
@@ -1623,9 +1640,16 @@ temperature), double scattering (vertex radius), an instrumental tail of the ela
 radius), and a reaction on a different target nucleus (the gas is pure D2 -- `TargetD2_300` is a
 single-element medium, and `fitUKF_C15d.C` sets `mat.push_back(std::make_tuple(2,1,1))`).
 
-**Consequence for the physics.** The background is no longer empirical, so the 0.15-0.34 MeV
-systematic on the 4.6 MeV state from the choice of background form should be re-derived against
-the physical model rather than a family of arbitrary shapes. That is the next thing to do.
+**Consequence for the physics.** The background shape is now constrained in form but not in
+exponent, and the exponent's spread is set by the acceptance model. Re-deriving the 0.15-0.34 MeV
+systematic on the 4.6 MeV state is therefore blocked behind a vz-dependent acceptance.
+
+**A second blocker, found while testing this.** The per-bin resonance amplitudes -- which ARE the
+angular distributions, the physics deliverable -- are NOT stable. Refitting the same data with a
+different vz cut changed individual yields by factors from 0.00 to 94467, the signature of an
+ill-conditioned fit rather than of physics. The 4.43/4.93 doublet is documented in `resfit.C` as
+unresolvable and visibly trading; `TIE12` exists to tie it and is currently OFF. The angular
+distributions must be stabilised before they can be compared to DWBA.
 
 **Two method lessons worth keeping.** Never judge a candidate background shape against the
 *already fitted* background -- the s-wave form looked excellent that way and lost in the actual
