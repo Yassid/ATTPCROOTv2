@@ -277,7 +277,11 @@ double rhRun(const Cfg& k,int nbin,bool talk,std::vector<std::vector<double>>* o
      const double* q=p+1+b*RH::nper();
      RH::LASTBG[b]=std::max(0.0,q[1]);
      for(int i=0;i<RH::NR;i++) RH::LASTA[b][i]=0;
-     { int jj=0; for(int i=(RH::TIE12?2:0);i<RH::NR;i++){ if(!RH::USE[i]) continue;
+     // ⚠ with TIE12 on, q[2] is the DOUBLET amplitude, so the free resonances start at q[3].
+     // Starting jj at 0 here read every amplitude one slot low.
+     { int jj=(RH::TIE12?1:0);
+       if(RH::TIE12){ RH::LASTA[b][0]=d.in[0]?std::max(0.0,q[2]):0.0; }
+       for(int i=(RH::TIE12?2:0);i<RH::NR;i++){ if(!RH::USE[i]) continue;
          RH::LASTA[b][i]=d.in[i]?std::max(0.0,q[2+jj]):0.0; jj++; } }
      std::vector<double> row; int j=0;
      if(RH::TIE12){ row.push_back(d.in[0]?q[2]*d.T[0].Eval((RH::EPP6[0]-RH::PPGS6)+d.gsMu):0); j=1; }

@@ -1743,18 +1743,54 @@ Dropping them (`redset.C`) makes ATTPCROOT's 6.68 clean in all ten theta_CM bins
 no zeros) -- but the tied doublet then vanishes in half the bins (n = 10 -> 5), which is the fit
 telling us it is under-determined either way.
 
-**⇒ The 6.68 MeV angular distribution is the one per-angle measurement this analysis supports.**
-Figure `figures/angdist_668_adopted.png`, adopted configuration: vz in [300,900], TIE12 ON,
-resonance set D12 + 5.98 + 6.68, continuum p3* q / Ex^n at the corrected Ex zero. The two codes
-agree in shape from 20 to 60 deg within errors that INCLUDE the refit spread (per-bin stability
-runs 5-40 %). Both collapse in the forward two bins (10-20 deg), which is where the statistics are
-HIGHEST and the elastic tail largest -- that is not yet explained and should be looked at before
-the distribution is used.
+### The forward collapse: a SECOND unresolvable pair
+
+The forward two bins collapsed in both codes. The suspect was the ground-state tail -- those bins
+hold the largest elastic peak and the response has exponential tails. **That was wrong**: printing
+the model piece by piece at Ex = 6.68 (`scripts/fwddiag.C`) gives a g.s. tail of 0.00 in every bin.
+
+The actual cause is the **5.98 BW tail**:
+
+```
+  ATTPCROOT     N    data@6.7 | contin. D12 tail 5.98 tail  6.68 BW |  model  resid
+   10-15      8248     19.0   |  15.60     0.01     1.17     0.56   |  17.35   1.65
+   15-20     38490     29.0   |  17.02     0.53    14.32     0.00   |  31.87  -2.87
+   20-25     22199     33.0   |  10.61     0.48    10.62    12.52   |  34.23  -1.23
+   25-30      4852      8.0   |   7.14     0.38     0.00     8.60   |  16.12  -8.12
+```
+
+At theta_CM 15-20 the 5.98 tail supplies 14.32 counts at Ex = 6.68 while the 6.68 itself fits to
+ZERO; at 20-25 they split 10.62 / 12.52; beyond that 5.98 drops to zero and 6.68 carries
+everything. **5.98 and 6.68 are 0.70 MeV apart against a forward-bin response FWHM of 0.93-1.11 --
+below resolution.** It is the same pathology as the 4.43/4.93 doublet, one level up, and it had
+been invisible because it only bites where the statistics are highest.
+
+Dropping 5.98 fixes it (`scripts/pair598.C`):
+
+```
+                           D12 + 5.98 + 6.68        D12 + 6.68 only
+  ATTPCROOT forward bins    0.6   0.0  12.8        2.2  10.3  22.9
+            bins w/ yield     9/10, 1 zero            10/10, 0 zeros
+            refit ratio     0.62 .. 0.94           0.63 .. 0.90  (median 0.84)
+  Spyral    refit ratio     0.39 .. 1.57           0.54 .. 1.24  (median 0.90)
+```
+
+**⇒ ADOPTED CONFIGURATION for the angular distributions:** vz in [300,900], TIE12 ON, resonance
+set **D12 + 6.68 only**, continuum p3* q / Ex^n evaluated at the corrected Ex zero.
+
+**⇒ The 6.68 MeV angular distribution is the one per-angle measurement this analysis supports**
+(`figures/angdist_668_adopted.png`). All ten theta_CM bins are populated in both codes with no
+zeros, the refit spread under a 5 % change in the sample is 0.63-0.90 (ATTPCROOT) and 0.54-1.24
+(Spyral), and the two codes now agree across the WHOLE range 10-60 deg within errors that include
+that spread. The distribution peaks near theta_CM = 22 deg and falls.
+
+One caveat to carry: the median refit ratio is 0.84-0.90 where a 6 % statistics change predicts
+0.94, so there is a residual ~10 % systematic in the absolute yield beyond counting.
 
 ## Where this leaves the programme
 
-- DWBA / L assignment is startable for **6.68 only**, and only after the forward-bin collapse is
-  understood.
+- DWBA / L assignment is **startable now, for 6.68**, using the adopted configuration above. This
+  is the first reproducible angular distribution the analysis has produced.
 - The background systematic on the 4.6 MeV state cannot be re-derived against the continuum model
   while the exponent is window-dependent at the +-0.6 level.
 - The next real lead on the exponent is the **response**: the BW templates are convolved with each
@@ -1763,3 +1799,7 @@ the distribution is used.
   apparent spectrum and lowers n). A second-moment estimate gives only a ~2.5 % differential, so it
   is probably too small -- but it is the only untested difference left and deserves a proper
   numerical convolution rather than an estimate.
+- A bug fixed along the way, worth knowing about: `RH::LASTA` filled the per-bin amplitudes from
+  `q[2+jj]` starting at jj = 0, but with TIE12 ON `q[2]` is the DOUBLET amplitude, so every free
+  resonance was read one slot low. Only the diagnostic path used it (`rhRun`'s own `out` vector
+  was always correct), but it produced one round of wrong anatomy before being caught.
