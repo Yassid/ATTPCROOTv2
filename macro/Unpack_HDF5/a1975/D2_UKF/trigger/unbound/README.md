@@ -8,3 +8,13 @@ Live copies run from `/mnt/f/a1975/sim_rebuild/unb_hdbtau/` (outputs there: `unb
 - `unb_lfit.py` L = 0-3 one-normalisation fits (FRESCO templates of ~/C17_dp_fits, post coupling fix).
 - `fig_unb.py` the figure.
 - Truth for the Ex 3.9 sim: `macro/Simulation/ATTPC/16C_dp/dump_truth_dp.C` (reproduces trig/keys.txt for the g.s. sim).
+
+## 2026-11-17: Breit-Wigner fits (current)
+- `unb_ad3.py` gaussian model with the acceptance in the fit, common shift per bin, Ex 1.3-5 (positions do not drift with angle; the 3-gaussian
+  description is ambiguous, the third peak wanders 3.8-4.5).
+- `unb_bw.py` BW states of the C17_dp_fits table (2.763 1/2-, 2.980 3/2+, 3.661, 4.231 3/2+, 4.841 1/2+, 5.91 3/2+; Gamma fixed, penetrabilities),
+  shared offset/sigma/tilt by Nelder-Mead, per-bin linear Poisson fits. Free offset -0.21.
+- `unb_bw_force.py` / `unb_bw_force32.py` 2.980 forced in (dropped 2.763, or tied at the YSOX/WBP C2S x ADWA ratio), offset free / -0.21 / -0.32.
+  -0.32 = minus the bound-blend centroid (5/2+ carries 93-96 % of the bound peak for YSOX, WBP and PLB 811 C2S).
+- `unb_ad32.py` ADs, L=0-3 fits and shell-model S at offset -0.32 -> unb_ad32.csv; `fig_*.py` the figures. `unb_sm.py` S vs shell model.
+- Shell-model inputs (YSOX, WBP C2S; from Yassid) are NOT in the repo: /mnt/f/a1975/sim_rebuild/unb_hdbtau/shellmodel/.
