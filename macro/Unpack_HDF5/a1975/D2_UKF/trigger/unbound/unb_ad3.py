@@ -8,12 +8,12 @@ import sys, os, numpy as np, uproot
 from scipy.optimize import minimize
 exec(open('/mnt/f/a1975/sim_rebuild/unb_hdbtau/unb_ad2.py').read().split("if MODE == 'val':")[0].replace("MODE = sys.argv[1] if len(sys.argv) > 1 else 'scan'", "MODE = 'lib'"))
 U = '/mnt/f/a1975/sim_rebuild/unb_hdbtau/'
-TB = np.arange(22, 38.001, float(os.environ.get('TBSTEP', 4))); NB = len(TB) - 1; SUF = os.environ.get('SUF', '');   # 2026-11-17: TBSTEP=2 -> 2 deg bins
+TB = np.arange(float(os.environ.get('TBLO', 22)), 38.001, float(os.environ.get('TBSTEP', 4))); NB = len(TB) - 1; SUF = os.environ.get('SUF', '');   # 2026-11-17: TBSTEP=2 -> 2 deg bins
 dO = 2 * np.pi * (np.cos(np.radians(TB[:-1])) - np.cos(np.radians(TB[1:])))
 EXLO, EXHI, BW = 1.3, 5.0, 0.1; edges = np.arange(EXLO, EXHI + 1e-9, BW); cen = .5 * (edges[1:] + edges[:-1])
 d = np.loadtxt(T + 'gf_data.txt'); ke, th, vz, c2 = d.T.copy()
 ke = ke + CAL[4]; th = th - CAL[2] * (ke - CAL[3]); dx, dc = kine(CAL[0] - CAL[1] / 1000 * (vz - 500), np.radians(th), ke); dx = dx + CAL[5]
-dsel = (c2 <= 13.5) & (th >= TLO) & (th < THI) & (ke >= 1.2) & np.isfinite(dx)
+dsel = (c2 <= 13.5) & (th >= TLO) & (th < THI) & (ke >= KEMIN) & np.isfinite(dx)
 
 def acceptance(vz0, vz1):   # A[bin, Ex-bin centre]
    return np.array([eps_state(x, TB, vz0, vz1) for x in cen]).T

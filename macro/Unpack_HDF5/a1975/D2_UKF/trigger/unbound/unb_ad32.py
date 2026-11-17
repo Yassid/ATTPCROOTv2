@@ -29,7 +29,7 @@ for vz0 in (100, 500):
       Sres = {}
       for s, (k, Lsm, jp, ys, wb) in enumerate(TPL):
          x, e = X[:, s], EX[:, s]; u = np.isfinite(x)
-         if s == 2 or s == 3 or s == 4: u = u & (np.array([np.interp(p_, cen, A[i]) for i, p_ in enumerate([ST[s][0] + g[0]] * NB)]) > 0.3)   # drop bins where the state is outside the acceptance
+         if True: u = u & (np.array([np.interp(p_, cen, A[i]) for i, p_ in enumerate([ST[s][0] + g[0]] * NB)]) > 0.3)   # drop bins where the state is outside the acceptance
          line = f'   {ST[s][3]:13s}' + ' '.join(f'{a_:5.2f}({b_:4.2f})' if uu else '    -      ' for a_, b_, uu in zip(x, e, u)) + ' |'
          fits = []
          for Lt in range(4):

@@ -28,7 +28,7 @@ for vz0, col, dx in ((100, 'C0', -.25), (500, 'C3', .25)):
    print(f'=== vz >= {vz0}, bins {TB[0]:.0f}-{TB[-1]:.0f} by {TB[1] - TB[0]:.0f} deg, fit -2lnL {L:.1f}, sigma {g[1]:.3f}')
    for j, (nm, s) in enumerate(PAN):
       if s is None:
-         x, e = low, elow; u = np.ones(NB, bool)
+         x, e = low, elow; u = acc[:, 1] > 0.3
          cands = {f'L1 (2.763 shape)': tpl(1, 1)[0], f'L2 (2.980 shape)': tpl(2, 2)[0]}
          for mn, (a1, a2) in mix.items(): cands[f'{mn} mix'] = a1 * tpl(1, 1)[0] + a2 * tpl(2, 2)[0]
       else:
@@ -39,7 +39,7 @@ for vz0, col, dx in ((100, 'C0', -.25), (500, 'C3', .25)):
       a = ax[j]; a.errorbar(mid[u] + dx, x[u], e[u], fmt='o', color=col, capsize=2, ms=4, label=f'vz $\\geq$ {vz0}')
       if vz0 == 500:
          tt = np.linspace(TB[0], TB[-1], 200); X1, E1, low1, elow1, acc1, _, _ = ad(100)
-         xr, er = (low1, elow1) if s is None else (X1[:, s], E1[:, s]); ur = np.ones(NB, bool) if s is None else acc1[:, s] > 0.3
+         xr, er = (low1, elow1) if s is None else (X1[:, s], E1[:, s]); ur = acc1[:, 1] > 0.3 if s is None else acc1[:, s] > 0.3
          styles = [':', '-', '--', '-.', (0, (5, 1)), (0, (1, 1))]
          for (n, m), ls in zip(cands.items(), styles):
             if s is None: kk = {'L1 (2.763 shape)': [(1, 1, 1.)], 'L2 (2.980 shape)': [(2, 2, 1.)], 'YSOX mix': [(1, 1, .0684), (2, 2, .2043)], 'WBP mix': [(1, 1, .0372), (2, 2, .2029)]}[n]

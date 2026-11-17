@@ -4,12 +4,12 @@
 # efficiency looked up in (true theta_lab, true vz) from the 3.9 sim (genfit + chi2 + reco theta_lab window), times Spyral validity.
 # theta_cm migration ignored (checked below on the sim). VALIDATED on the g.s. sim against the directly counted efficiency (mode 'val').
 #   ~/Spyral/venv/bin/python -I unb_ad2.py val | scan
-import sys, numpy as np, uproot
+import sys, os, numpy as np, uproot
 from scipy.optimize import minimize
 exec(open('/mnt/f/a1975/sim_rebuild/trig/dsigma_fid.py').read().split("K = np.loadtxt")[0])
 T = '/mnt/f/a1975/sim_rebuild/trig_hdbtau/'; U = '/mnt/f/a1975/sim_rebuild/unb_hdbtau/'; R5 = '/mnt/f/a1975/sim_rebuild/r280_hdbtau/'
 CAL = (184.25, 11.0, 0.18, -3, -0.05, -0.6947); LPM = 316.98 / 971.73; ENV = 0.84; MP = 938.272
-TLO, THI = 89, 113
+TLO, THI = 89, float(os.environ.get('THI', 113)); KEMIN = float(os.environ.get('KEMIN', 1.2))   # KEMIN: 2026-11-17, sim shows KE 0.8-1.2 reconstructs as well as > 1.2   # 2026-11-17: THI=137 extends the theta_lab window (acceptance is in the model)
 MODE = sys.argv[1] if len(sys.argv) > 1 else 'scan'
 
 def forward(Kb, tcm_deg, ex):
@@ -29,32 +29,37 @@ assert abs(_x[0] - 3.4) < 1e-6 and abs(_c[0] - 30) < 1e-6, (_x, _c)
 def reco_eff_table(keys, dump, vzb, thb):
    K = np.loadtxt(keys); gz = K[:, 1] + ZOFF
    s = uproot.open(dump)['r'].arrays(['ke', 'th', 'vz', 'c2', 'tth', 'tvz'], library='np')
-   ok = (s['c2'] <= 13.5) & (s['th'] >= TLO) & (s['th'] < THI) & (s['ke'] >= 1.2)
+   ok = (s['c2'] <= 13.5) & (s['th'] >= TLO) & (s['th'] < THI) & (s['ke'] >= KEMIN)
    Ng = np.histogram2d(gz, K[:, 2], [vzb, thb])[0]; Nr = np.histogram2d(s['tvz'][ok] + ZOFF, s['tth'][ok], [vzb, thb])[0]
    return Nr / np.maximum(Ng, 1), Ng
 
-VZB = np.arange(0, 1001, 100.); THB = np.arange(85, 118, 2.)
+VZB = np.arange(0, 1001, 100.); THB = np.arange(85, THI + 5, 2.)
 EFF39, NG39 = reco_eff_table(U + 'keys_ex39.txt', R5 + 'p_ex39_dump.root', VZB, THB)
+# 2026-11-17: where the 3.9 sim has no generated protons (theta_lab >~ 121 cannot be reached by Ex 3.9 with KE >= 1.2) fall back to the g.s. sim
+# table; reco eff is flat 0.85-0.94 above theta_lab 101 in both sims, whatever KE. Inside 89-113 nothing changes (3.9 table populated).
+EFFGS, NGGS = reco_eff_table(T + 'keys.txt', R5 + 'p_gs_dump.root', VZB, THB); EFF39 = np.where(NG39 >= 10, EFF39, EFFGS)
 K39 = np.loadtxt(U + 'keys_ex39.txt'); gz39 = K39[:, 1] + ZOFF; _, gc39 = kine(Eb(gz39), np.radians(K39[:, 2]), K39[:, 3])
 X = uproot.open(R5 + 'p_ex39_census.root')['c'].arrays(['thl', 'vz', 'ke', 'ex', 'sv'], library='np')
-SPB = np.arange(89, 114, 4.); xs = (X['ke'] >= 1.2) & (X['ex'] > 2.0) & (X['ex'] < 6) & (X['vz'] > 0) & (X['vz'] < 1000)
+SPB = np.arange(89, THI + 1.001, 4.); xs = (X['ke'] >= KEMIN) & (X['ex'] > 2.0) & (X['ex'] < 6) & (X['vz'] > 0) & (X['vz'] < 1000)
 SPY = np.array([np.mean(X['sv'][xs & (X['thl'] >= a) & (X['thl'] < b)] > 0) for a, b in zip(SPB[:-1], SPB[1:])])
+XG = uproot.open(R5 + 'p_gs_census.root')['c'].arrays(['thl', 'ke', 'sv'], library='np')   # fallback where the 3.9 census is empty
+SPYGS = np.array([np.mean(XG['sv'][(XG['ke'] >= KEMIN) & (XG['thl'] >= a) & (XG['thl'] < b)] > 0) for a, b in zip(SPB[:-1], SPB[1:])]); SPY = np.where(np.isfinite(SPY), SPY, SPYGS)
 
 def eps_state(ex, TB, vz0, vz1, gz=gz39, gc=gc39, eff=EFF39, spy=True):
    w = (gz >= vz0) & (gz < vz1) & np.isfinite(gc); thl, kp = forward(Eb(gz[w]), gc[w], ex)
    iv = np.clip(np.digitize(gz[w], VZB) - 1, 0, len(VZB) - 2); it = np.digitize(thl, THB) - 1
-   inside = (thl >= TLO) & (thl < THI) & (kp >= 1.2) & (it >= 0) & (it < len(THB) - 1)
+   inside = (thl >= TLO) & (thl < THI) & (kp >= KEMIN) & (it >= 0) & (it < len(THB) - 1)
    wt = np.zeros(w.sum()); wt[inside] = eff[iv[inside], it[inside]]
    if spy: wt[inside] *= SPY[np.clip(np.digitize(thl[inside], SPB) - 1, 0, len(SPY) - 1)]
    return np.histogram(gc[w], TB, weights=wt)[0] / np.maximum(np.histogram(gc[w], TB)[0], 1)
 
 if MODE == 'val':
    # g.s. sim: direct efficiency (reco theta_cm bin, same cuts, no Ex window) vs the transported 3.9 table applied at Ex 0 (no Spyral)
-   TB = np.arange(24, 47, 2.)
+   TB = np.arange(float(os.environ.get('VALLO', 24)), 47, 2.)
    for vz0, vz1 in ((100, 900), (100, 400), (400, 900)):
       K = np.loadtxt(T + 'keys.txt'); gz = K[:, 1] + ZOFF; gx, gc = kine(Eb(gz), np.radians(K[:, 2]), K[:, 3])
       g = np.loadtxt(T + 'gf_sim.txt'); sx, sc = kine(Eb(g[:, 2]), np.radians(g[:, 1]), g[:, 0])
-      sel = (g[:, 3] <= 13.5) & (g[:, 1] >= TLO) & (g[:, 1] < THI) & (g[:, 0] >= 1.2) & np.isfinite(sx) & (g[:, 2] >= vz0) & (g[:, 2] < vz1)
+      sel = (g[:, 3] <= 13.5) & (g[:, 1] >= TLO) & (g[:, 1] < THI) & (g[:, 0] >= KEMIN) & np.isfinite(sx) & (g[:, 2] >= vz0) & (g[:, 2] < vz1)
       direct = np.histogram(sc[sel], TB)[0] / np.maximum(np.histogram(gc[(gz >= vz0) & (gz < vz1) & np.isfinite(gc)], TB)[0], 1)
       transp = eps_state(0.0, TB, vz0, vz1, spy=False)
       own = eps_state(0.0, TB, vz0, vz1, gz=gz, gc=gc, eff=reco_eff_table(T + 'keys.txt', '/mnt/f/a1975/sim_rebuild/r280_hdbtau/p_gs_dump.root', VZB, THB)[0], spy=False)
@@ -63,7 +68,7 @@ if MODE == 'val':
    # theta_cm resolution of the 3.9 sim
    s = uproot.open(R5 + 'p_ex39_dump.root')['r'].arrays(['ke', 'th', 'vz', 'c2', 'tke', 'tth', 'tvz'], library='np')
    _, rc = kine(Eb(s['vz']), np.radians(s['th']), s['ke']); _, tc = kine(Eb(s['tvz'] + ZOFF), np.radians(s['tth']), s['tke'])
-   ok = (s['c2'] <= 13.5) & (s['th'] >= TLO) & (s['th'] < THI) & (s['ke'] >= 1.2) & np.isfinite(rc) & np.isfinite(tc)
+   ok = (s['c2'] <= 13.5) & (s['th'] >= TLO) & (s['th'] < THI) & (s['ke'] >= KEMIN) & np.isfinite(rc) & np.isfinite(tc)
    print('3.9 sim theta_cm reco - true: p16/p50/p84', np.round(np.percentile((rc - tc)[ok], [16, 50, 84]), 2))
    print('Spyral validity by theta_lab', SPB, np.round(SPY, 3))
    sys.exit()
@@ -73,7 +78,7 @@ TB = np.array([22, 26, 30, 34, 38.]); dO = 2 * np.pi * (np.cos(np.radians(TB[:-1
 EXLO, EXHI, BW = 1.0, 5.0, 0.1; edges = np.arange(EXLO, EXHI + 1e-9, BW); cen = .5 * (edges[1:] + edges[:-1])
 d = np.loadtxt(T + 'gf_data.txt'); ke, th, vz, c2 = d.T.copy()
 ke = ke + CAL[4]; th = th - CAL[2] * (ke - CAL[3]); dx, dc = kine(CAL[0] - CAL[1] / 1000 * (vz - 500), np.radians(th), ke); dx = dx + CAL[5]
-dsel = (c2 <= 13.5) & (th >= TLO) & (th < THI) & (ke >= 1.2) & np.isfinite(dx)
+dsel = (c2 <= 13.5) & (th >= TLO) & (th < THI) & (ke >= KEMIN) & np.isfinite(dx)
 def model(p, n):
    m = p[0] * np.sqrt(np.maximum(cen - 0.729, 0)) * (1 + p[1] * (cen - 3))
    for k in range(n): m = m + p[3 + 2 * k] * np.exp(-.5 * ((cen - p[4 + 2 * k]) / p[2]) ** 2)
