@@ -1803,3 +1803,104 @@ One caveat to carry: the median refit ratio is 0.84-0.90 where a 6 % statistics 
   `q[2+jj]` starting at jj = 0, but with TIE12 ON `q[2]` is the DOUBLET amplitude, so every free
   resonance was read one slot low. Only the diagnostic path used it (`rhRun`'s own `out` vector
   was always correct), but it produced one round of wrong anatomy before being caught.
+
+
+# Fit quality, and a seventh component the data demand
+
+## The adopted set under-fitted the richest bin
+
+Drawing the fitted spectra per angle (`scripts/fitq.C`, `figures/fit_quality_adopted.png`) rather
+than quoting chi2 alone: 16 of 20 panels sit at chi2/ndf 1.2-2.6, but theta_CM **15-20 deg is bad
+in BOTH codes** (5.44 and 6.67) -- and that is the bin with the most data (38,490 and 66,030).
+
+Dropping 5.98 is what broke it. Putting it back:
+
+```
+                       D12+6.68    +5.98    change
+  ATTPCROOT 15-20         5.44      3.71     -1.73
+  Spyral    10-15         2.38      1.94     -0.45
+            15-20         6.67      5.08     -1.59
+            20-25         1.45      0.99     -0.46
+  total -2lnL         1309.9 -> 1212.9 (ATTPCROOT) · 1624.6 -> 1548.7 (Spyral), 10 more params
+```
+
+Delta(-2lnL) of 97 and 76 for ten parameters: **5.98 is really there**, and the stable-but-reduced
+set bought reproducibility by deleting a state the data require.
+
+## Both pairs tied, with ONE GLOBAL ratio each
+
+The resolution is the point: 4.43/4.93 are 0.50 MeV apart and 5.98/6.68 are 0.70, against a
+forward-bin response FWHM of 0.93-1.11. **The split inside a pair is the degenerate direction; the
+pair's sum is what the data determine.** Three ways to handle it, all tried:
+
+```
+  internal ratio      per-bin yields            chi2 15-20 (ATTPCROOT)
+  free per bin        swing x50 -- unusable           3.71
+  fixed 1:1           stable                          6.06   (too stiff)
+  ONE GLOBAL ratio    stable                          5.48   <- adopted
+```
+
+With a global ratio the **D34 (5.98+6.68) yield is stable in all ten bins in both codes** --
+refit ratio 0.63-0.91 (ATTPCROOT) and 0.55-1.19 (Spyral) -- which is the best stability reached.
+D12 (4.43+4.93) is populated in only 5-6 bins and stays unstable; it is a forward-angle structure.
+
+## The residuals point at Ex ~ 3.5
+
+Even tied, 15-20 stayed at 5.5-6.7. The pulls there are a systematic WAVE, not a missing peak
+(`scripts/resid1520.C`):
+
+```
+  ATTPCROOT 15-20   Ex 3.05-3.65   data ABOVE model   +2.2 .. +4.2
+                    Ex 4.15-4.95   data BELOW model   -0.8 .. -2.3
+                    Ex 5.35-6.65   data ABOVE model   +2.1 .. +3.3
+```
+
+Strength at Ex ~ 3.0-3.7 that nothing in the model covers. This is the long-standing "unexplained
+strength at Ex ~ 3.4 in BOTH codes": the (p,p') six-resonance scheme has nothing below 4.43, so it
+has never been in this fit.
+
+Adding a seventh component and scanning its energy (`scripts/ex34.C`, `scripts/ex37.C`):
+
+```
+                 -2lnL gain   chi2 15-20          fit from Ex   best Ex    gain
+  ATTPCROOT none      -          5.58               3.0          3.75     398.3
+            3.70    354.8        1.42               2.5          3.45     443.1
+            3.85    371.2        1.68               2.0          3.30     506.4
+  Spyral    none      -          6.85               3.0          3.65     461.8
+            3.70    450.0        3.61               2.5          3.40     310.2
+                                                    2.0          3.55     404.7
+```
+
+**The component is required decisively** -- gain 310-506 in every window and both codes, against a
+threshold of ~25 for ten parameters -- and it fixes the worst bin (ATTPCROOT 5.58 -> 1.42).
+
+**Its energy is NOT pinned.** ATTPCROOT converges as the window opens (3.75 -> 3.45 -> 3.30, steps
+-0.30 then -0.15, so not an edge artefact, which would track the edge 1:1), but Spyral scatters
+(3.65 / 3.40 / 3.55). Taking both, it lies somewhere in **Ex ~ 3.3-3.75** with a spread of ~0.45.
+15C has a known level at **3.103 MeV**; that is the obvious candidate, but our Ex scale is not good
+enough to claim the identification.
+
+## Fit quality with the seventh component
+
+```
+  theta_CM    ATTPCROOT            Spyral
+             before  after      before  after
+   10-15      1.94   1.85        2.38   1.26
+   15-20      5.44   1.39        6.67   3.55
+   20-25      1.98   2.30        1.45   1.62
+   25-30      1.57   1.76        2.17   3.18
+   30-35      2.63   1.72        3.39   1.63
+   35-40      2.16   1.42        3.03   2.65
+   40-45      1.24   0.80        1.81   1.93
+   45-50      1.55   1.25        1.88   1.97
+   50-55      1.45   1.04        1.80   0.69
+   55-60      1.90   1.26        3.14   2.01
+   mean       2.19   1.48        2.77   2.05
+```
+
+`figures/fit_quality_7comp.png`. Spyral's 25-30 bin got worse (2.17 -> 3.18) and is the next thing
+to look at.
+
+**⇒ REVISED adopted configuration:** vz in [300,900] · both pairs tied with one global ratio each ·
+components **D12 + D34 + the ~3.5 state** · continuum p3* q / Ex^n at the corrected Ex zero. This
+supersedes the "D12 + 6.68 only" set, which was stable but wrong.
