@@ -218,7 +218,9 @@ public:
       gSystem->ProcessEvents();
    }
 
-   void Quit() { gApplication->Terminate(0); }
+   /// 2026-11-17: hard exit, as gate_draw_dp.C. Terminate(0) only unwinds a nested event loop, so a launcher that calls
+   /// gApplication->Run() (run_gate_dt.C does) re-executes the macro and RESPAWNS the window when it is closed.
+   void Quit() { gSystem->Exit(0); }
 
 private:
    void Load(TString cache)
@@ -311,6 +313,8 @@ private:
    {
       auto *main = new TGMainFrame(gClient->GetRoot(), 1150, 900);
       main->SetWindowName("a1975 (d,t) PID  --  draw the triton gate");
+      main->Connect("CloseWindow()", "DtGateDraw", this, "Quit()");   // [X] had no handler: invisible ROOT left holding the plane
+      main->DontCallClose();
       auto *bar = new TGHorizontalFrame(main);
       const char *lbl[] = {"Draw new gate", "Evaluate", "Locus check", "Save JSON", "Save PNG", "Redraw", "Quit"};
       const char *slot[] = {"DrawGate()", "Evaluate()", "LocusCheck()", "Save()", "SavePNG()", "Redraw()", "Quit()"};
