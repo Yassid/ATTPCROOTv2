@@ -88,6 +88,18 @@ namespace RK {
    int    RIDX[NR];       // -> GLOBAL ratio parameter for this member; -1 = weight fixed at 1
    int    NGRP = 0, NRAT = 0;
    bool   PAIRS = false;  // true: 0+1 share a slot, 2+3 share a slot
+   // NPERBIN: give the CONTINUUM its shape parameter per bin instead of globally.  That costs
+   // exactly the 10 parameters a new resonance amplitude costs, so the two can be compared
+   // head to head.  If the continuum does the same job, the "state" was continuum freedom.
+   bool   NPERBIN = false;
+   // ONE global shift applied to every state in every bin.  If our Ex scale is offset -- which the
+   // NNDC comparison suggests by ~0.2 -- then every resonance is misplaced by the same amount and
+   // no amount of per-state tuning fixes it.  This is the single parameter that tests that.
+   double DELTA = 0.0;
+   std::vector<double> SEED;     // non-empty and right-sized: used as the starting point
+   std::vector<double> LASTP;    // the converged parameter vector, for seeding the next fit
+   int   ONLYBIN = -1;           // >=0: fit just this bin
+   double FIXRAT[4] = {1,1,1,1}; // pair ratios held at these values when ONLYBIN >= 0
    void setGroups(){
       for(int i=0;i<NR;i++){ GRP[i]=-1; WGT[i]=1.0; RIDX[i]=-1; }
       NGRP=0; NRAT=0;
@@ -145,7 +157,7 @@ namespace RK {
    std::vector<Bin> B;
    // reference response, taken from the highest-statistics bin, for bins whose own fit fails
    bool refValid=false; double refN=0, refSgL=0, refSgR=0, refAlL=0, refAlR=0, refMu=0;
-   int nper() { return 2 + (PAIRS ? NGRP : NUSE - (TIE12 ? 1 : 0)); }
+   int nper() { return 2 + (PAIRS ? NGRP : NUSE - (TIE12 ? 1 : 0)) + (NPERBIN?1:0); }
    double model(int b,double X,const double* p)
    {
       const Bin& d = B[b];
@@ -157,14 +169,15 @@ namespace RK {
       // model was evaluated 0.31 MeV apart in the two codes -- which for 1/Ex^n over Ex 3-9
       // mimics a change in n and is why they disagreed by 3.5 sigma on the exponent.
       const double Xt = X - d.gsMu;          // true excitation energy
+      const double shp = NPERBIN ? q[2 + (PAIRS?NGRP:0) + (PAIRS?0:0)] : p[0];
       double v = (ONETERM ? 0.0 : std::max(0.0,q[0]) * (d.gc ? std::max(0.0,d.gc->Eval(Xt)) : 0.0))
-               + std::max(0.0,q[1]) * bshape(Xt,p[0])
+               + std::max(0.0,q[1]) * bshape(Xt,shp)
                                       * (d.ga ? std::max(0.0,d.ga->Eval(Xt)) : 1.0);
       // the g.s. and 5/2+ tails, FIXED from this bin's own peak fit
       v += d.gsAmp * shapeGT(X,d.gsMu,d.sgL,d.sgR,d.alL,d.alR)
          + d.e5Amp * shapeGT(X,d.gsMu+0.740,d.sgL,d.sgR,d.alL,d.alR);
       if(PAIRS){
-         const double* rb = p + 1 + (int)B.size()*nper();     // the global ratio block
+         const double* rb = (ONLYBIN>=0) ? FIXRAT : p + 1 + (int)B.size()*nper();
          for(int i=0;i<NR;i++) if(GRP[i]>=0 && d.in[i]){
             double w = (RIDX[i]>=0) ? std::max(0.0,rb[RIDX[i]]) : WGT[i];
             v += std::max(0.0,q[2+GRP[i]]) * w * d.T[i].Eval(X); }
@@ -238,7 +251,7 @@ void rkPrep(const Cfg& k,int ib)
       RK::refAlL=d.alL; RK::refAlR=d.alR; RK::refMu=d.gsMu;
    }
    d.T.resize(RK::NR);
-   for(int i=0;i<RK::NR;i++){ double mu=(RK::EPP6[i]-RK::PPGS6)+d.gsMu;
+   for(int i=0;i<RK::NR;i++){ double mu=(RK::EPP6[i]-RK::PPGS6)+d.gsMu+RK::DELTA;
      d.in[i]=(mu>RK::exLo+d.sgR)&&(mu<RK::exHi-d.sgR);
      d.T[i].build(mu,RK::GPP6[i],RK::LPP6[i],d.sgR,RK::exLo-1.5,23.0); }
    RK::EB=k.eb;
@@ -265,11 +278,14 @@ double rkRun(const Cfg& k,int nbin,bool talk,std::vector<std::vector<double>>* o
    RK::NUSE=0; for(int i=0;i<RK::NR;i++) if(RK::USE[i]) RK::NUSE++;
    RK::setGroups();
    int npar=1+nbin*RK::nper()+(RK::PAIRS?RK::NRAT:((RK::TIE12)?1:0));
+   const bool useSeed = ((int)RK::SEED.size()==npar);
+   auto SD=[&](int i,double v){ return useSeed ? RK::SEED[i] : v; };
    auto* m=ROOT::Math::Factory::CreateMinimizer("Minuit2","Migrad");
    m->SetMaxFunctionCalls(2000000); m->SetMaxIterations(400000);
    m->SetTolerance(0.1); m->SetPrintLevel(0); m->SetStrategy(1);
    ROOT::Math::Functor fnc(&RK::fcn,npar); m->SetFunction(fnc);
-   if(RK::BKG==RK::PS||RK::BKG==RK::HALO) m->SetFixedVariable(0,"(none)",0.0);
+   if(RK::NPERBIN) m->SetFixedVariable(0,"(per-bin)",0.0);
+   else if(RK::BKG==RK::PS||RK::BKG==RK::HALO) m->SetFixedVariable(0,"(none)",0.0);
    else if(RK::BKG==RK::HALOF) m->SetLimitedVariable(0,"Sb",1.0,0.01,0.02,6.0);
    else if(RK::BKG==RK::HALON){ if(RK::SBFIX) m->SetFixedVariable(0,"n",RK::SBVAL);
                                 else m->SetLimitedVariable(0,"n",2.0,0.02,0.0,9.0); }
@@ -289,7 +305,9 @@ double rkRun(const Cfg& k,int nbin,bool talk,std::vector<std::vector<double>>* o
      else m->SetLimitedVariable(o+0,Form("C_%d",b), c9>0?0.3*lvl/c9:1e-3, 1e-5, 0, 1e5);
      { double f6=RK::bshape(6.0,(RK::BKG==RK::HALOF)?1.218:((RK::BKG==RK::HALON)?2.0:0.25));
        double sd=(f6>0)? lvl/f6 : lvl*2;
-       m->SetLimitedVariable(o+1,Form("Bg_%d",b), sd, std::max(1e-9,sd*1e-2), 0, sd*1e4); }
+       m->SetLimitedVariable(o+1,Form("Bg_%d",b), SD(o+1,sd), std::max(1e-9,sd*1e-2), 0, sd*1e4); }
+     if(RK::NPERBIN){ int ip=o+2+(RK::PAIRS?RK::NGRP:RK::NUSE);
+       m->SetLimitedVariable(ip,Form("n_%d",b),SD(ip,2.0),0.02,0.0,9.0); }
      if(RK::PAIRS){
        for(int g=0;g<RK::NGRP;g++){
          // seed from the first member of the group that this bin can see
@@ -298,7 +316,8 @@ double rkRun(const Cfg& k,int nbin,bool talk,std::vector<std::vector<double>>* o
            sc=std::max(sc,d.T[i].Eval((RK::EPP6[i]-RK::PPGS6)+d.gsMu)); any=true; }
          if(!any){ m->SetFixedVariable(o+2+g,Form("G%d_%d",g,b),0); continue; }
          double seed=(sc>0)?0.3*lvl/sc:0;
-         m->SetLimitedVariable(o+2+g,Form("G%d_%d",g,b),seed,std::max(1e-6,seed*1e-2),0,seed*300+1e3); }
+         m->SetLimitedVariable(o+2+g,Form("G%d_%d",g,b),SD(o+2+g,seed),
+                               std::max(1e-6,seed*1e-2),0,seed*300+1e3); }
        continue; }
      int j=0;
      for(int i=(RK::TIE12?1:0);i<RK::NR;i++){
@@ -313,11 +332,12 @@ double rkRun(const Cfg& k,int nbin,bool talk,std::vector<std::vector<double>>* o
        if(!d.in[i]) m->SetFixedVariable(o+2+j,Form("a%d_%d",i+1,b),0);
        else m->SetLimitedVariable(o+2+j,Form("a%d_%d",i+1,b),seed,std::max(1e-6,seed*1e-2),0,seed*300+1e3);
        j++; } }
-   if(RK::PAIRS){ for(int r=0;r<RK::NRAT;r++)
-        m->SetLimitedVariable(1+nbin*RK::nper()+r,Form("ratio%d",r),1.0,0.02,0.0,20.0); }
+   if(RK::PAIRS){ for(int r=0;r<RK::NRAT;r++){ int ip=1+nbin*RK::nper()+r;
+        m->SetLimitedVariable(ip,Form("ratio%d",r),SD(ip,1.0),0.02,0.0,20.0); } }
    else if(RK::TIE12) m->SetLimitedVariable(1+nbin*RK::nper(),"r_4.93/4.43",1.0,0.02,0.0,10.0);
    m->Minimize();
    const double* p=m->X(); RK::LASTP0=p[0];
+   RK::LASTP.assign(p,p+npar);
    RK::LASTR = (RK::TIE12 && !RK::PAIRS) ? std::max(0.0,p[1+nbin*RK::nper()]) : 1.0;
    // Extract the per-bin amplitudes ALWAYS -- this used to live inside the `if(talk)` block, so
    // calling with talk = false returned an empty `out` and any figure built from it came out blank.

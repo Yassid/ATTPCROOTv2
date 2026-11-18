@@ -1904,3 +1904,84 @@ to look at.
 **⇒ REVISED adopted configuration:** vz in [300,900] · both pairs tied with one global ratio each ·
 components **D12 + D34 + the ~3.5 state** · continuum p3* q / Ex^n at the corrected Ex zero. This
 supersedes the "D12 + 6.68 only" set, which was stable but wrong.
+
+
+# A background shape PER ANGULAR BIN
+
+## Why one global shape was wrong
+
+The continuum had ONE shape for all ten angular bins, with only its normalisation free per bin.
+But the continuum is the 1n breakup channel, and its Ex dependence is the inelastic form factor,
+which depends on MOMENTUM TRANSFER -- and q varies strongly across theta_CM 10-60. Forcing one
+shape on every angle is wrong, and it produces exactly the symptom that could not be explained:
+chi2 elevated UNIFORMLY in every panel rather than failing in one place. A shape that compromises
+between forward and backward angles is wrong everywhere by a little.
+
+## Two failed attempts, and what was wrong with them
+
+Releasing the exponent per bin inside the simultaneous 73-parameter fit FAILED TWICE, both times
+returning a WORSE likelihood than its own nested baseline -- impossible for a strictly larger
+model, so a minimiser failure, not a result:
+
+```
+  cold start            -2lnL 2361.6 against a baseline of 1313.6
+  seeded from the global fit   2128.1 against 782.3; exponents came back at 10.01, 15.24, 82.83
+                               -- OUTSIDE their own bounds of [0,9]
+```
+
+The fix was structural, not numerical. **With a per-bin shape the angular bins are almost
+independent**: the only thing coupling them is the two global pair ratios. Fix those from the
+global fit and each angle becomes a 6-parameter problem -- continuum normalisation, four group
+amplitudes, and the shape -- instead of one 73-parameter fit that will not converge.
+
+## The result
+
+Every bin improves, and the likelihood now behaves (each per-bin fit beats its own
+global-shape starting point):
+
+```
+                     mean chi2            total -2lnL          gain (10 par)
+  ATTPCROOT      1.62 -> 1.37          782.3 -> 691.5             +90.8
+  Spyral         1.90 -> 1.42          850.3 -> 708.2            +142.1
+```
+
+And the fitted exponent is not noise -- it is a clean trend:
+
+```
+  theta_CM     10-15  15-20  20-25  25-30  30-35  35-40  40-45  45-50  50-55  55-60
+  ATTPCROOT     2.35   3.21   1.99   1.02   0.00   0.00   0.00   0.00   0.00   0.00
+  Spyral        2.90   3.60   2.04   0.00   0.00   0.00   0.00   0.00   0.00   0.00
+```
+
+**Steeply form-factor suppressed at forward angles, PURE PHASE SPACE (n = 0) at backward angles**,
+in both codes, with the transition at theta_CM ~ 25-30. That is what momentum transfer should do:
+at small q the form factor dominates, at large q it washes out.
+
+n = 0 is a genuine minimum, not the bound. Opening the limit to -4 leaves the backward bins at
+-0.06, -0.00, -0.02, -0.05, -0.11 with an identical likelihood gain (+90.7, +141.6). Two bins
+drift to -0.5 and that HURTS chi2 there (ATTPCROOT 50-55: 1.39 -> 4.76) while the likelihood does
+not move, so n >= 0 is adopted -- a form factor rising with Ex is not physical anyway.
+
+**This retires both earlier claims about the continuum exponent.** There is no single n to measure:
+it runs from 3.6 to 0 across the angular range. The "n = 2, the s-wave halo value" of 3f805724 and
+the "n is window-dependent" of 1d73cae1 were both artefacts of averaging a quantity that varies
+with angle.
+
+## The angular distributions
+
+`figures/fit_perangle_bkg.png` (the fits) and `figures/angdist_perangle_bkg.png` (the yields,
+errors including the refit spread under VZLO 300 -> 350).
+
+```
+  P1 (4.43+4.93)  ATTPCROOT   5.9  53.8  26.0   7.7  3.6  0.8  0.6  1.0  0.1  0.0
+                  Spyral      8.5  27.1  20.0   9.7  0.4  1.0  0.8  2.4  0.1  0.0
+  P2 (5.98+6.68)  ATTPCROOT  12.9  26.8  29.2   2.6  4.9  3.8  2.1  0.4  0.8  0.3
+                  Spyral     11.1  19.6  24.6  13.9  0.0  2.6  1.5  3.8  3.0  1.1
+```
+
+**P2 agrees between the codes across the whole range** and peaks near theta_CM = 22 deg. P1 peaks
+near 18 deg but the two codes differ by a factor 2 at that peak (53.8 against 27.1), outside the
+errors -- an unresolved disagreement, and the next thing to chase.
+
+Worst remaining bin is 25-30 in BOTH codes (2.26 and 2.04). That is exactly the bin where the
+exponent transitions from ~1 to 0, so a single power law per bin is probably too rigid there.
