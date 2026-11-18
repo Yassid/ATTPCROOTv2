@@ -61,4 +61,14 @@ echo "=== 7/7  control defaults ==="
 python3 "$PP/set_defaults_C15p.py" "$OUT"
 
 echo; echo "built $OUT  ($(du -h "$OUT" | cut -f1))"
-for k in icSpec keoff ebvz; do printf "  %-8s occurrences: %s\n" "$k" "$(grep -c "$k" "$OUT")"; done
+# ⚠ These must be the identifiers the INJECTORS actually write.  They were icSpec/keoff/ebvz,
+# none of which appear in the page, so a complete build always reported 0/0/0 -- the very false
+# alarm this script exists to prevent.  Verified against a good page: ebzSlope, keOff, "ion
+# chamber", per-run.
+fail=0
+for k in "ion chamber" keOff ebzSlope per-run; do
+   n=$(grep -c -F -- "$k" "$OUT")
+   printf "  %-14s occurrences: %s%s\n" "$k" "$n" "$([[ $n -eq 0 ]] && echo '   <- MISSING' && fail=1)"
+   [[ $n -eq 0 ]] && fail=1
+done
+[[ $fail -eq 0 ]] && echo "  all four injected panels present" || echo "  WARNING: a panel was lost" >&2
