@@ -35,7 +35,7 @@ void two1015(int BIN){
     for(int ord=0;ord<2;ord++){
       int cs = ord==0 ? 1 : 0;              // constrained first, then free seeded from it
       B1::FORM=forms[cs]; B1::NSH=nsh[cs];
-      int npar=3+nsh[cs]+4+2; BN[ic][cs]=npar; B1::NPAR=npar;
+      int npar=3+nsh[cs]+4+(B1::GAUSS?2:0); BN[ic][cs]=npar; B1::NPAR=npar;
       auto* m=ROOT::Math::Factory::CreateMinimizer("Minuit2","Migrad");
       m->SetMaxFunctionCalls(500000); m->SetTolerance(0.01); m->SetPrintLevel(0); m->SetStrategy(2);
       ROOT::Math::Functor fn(&B1::fcn,npar); m->SetFunction(fn);
@@ -55,8 +55,9 @@ void two1015(int BIN){
       } else {
         for(int s=0;s<nsh[cs];s++) m->SetLimitedVariable(3+s,Form("s%d",s),0.5,0.02,0.0,9.0);
         for(int g=0;g<4;g++) m->SetLimitedVariable(3+nsh[cs]+g,Form("A%d",g),20,0.5,0,1e5); }
-      m->SetLimitedVariable(npar-2,"mu",d.gsMu,0.005,d.gsMu-0.6,d.gsMu+0.6);
-      m->SetLimitedVariable(npar-1,"sig",d.sgR,0.005,0.08,1.5);
+      if(B1::GAUSS){
+        m->SetLimitedVariable(npar-2,"mu",d.gsMu,0.005,d.gsMu-0.6,d.gsMu+0.6);
+        m->SetLimitedVariable(npar-1,"sig",d.sgR,0.005,0.08,1.5); }
       m->Minimize();
       std::vector<double> bestp(m->X(),m->X()+npar); double bestL=m->MinValue();
       if(cs==0){
@@ -75,8 +76,9 @@ void two1015(int BIN){
           ms->SetLimitedVariable(4,"s1",haveC?csol[3]:0.5,0.02,0.0,9.0);
           for(int g=0;g<4;g++) ms->SetLimitedVariable(5+g,Form("A%d",g),
               haveC?csol[4+g]:20.0,std::max(1e-3,(haveC?csol[4+g]:20.0)*0.01),0,1e5);
-          ms->SetLimitedVariable(npar-2,"mu",haveC?csol[npar-3]:d.gsMu,0.005,d.gsMu-0.6,d.gsMu+0.6);
-          ms->SetLimitedVariable(npar-1,"sig",haveC?csol[npar-2]:d.sgR,0.005,0.08,1.5);
+          if(B1::GAUSS){
+            ms->SetLimitedVariable(npar-2,"mu",haveC?csol[npar-2]:d.gsMu,0.005,d.gsMu-0.6,d.gsMu+0.6);
+            ms->SetLimitedVariable(npar-1,"sig",haveC?csol[npar-1]:d.sgR,0.005,0.08,1.5); }
           ms->Minimize();
           if(ms->MinValue()<bestL){ bestL=ms->MinValue();
             bestp.assign(ms->X(),ms->X()+npar); }
@@ -101,7 +103,8 @@ void two1015(int BIN){
       TString sh; for(int s=0;s<nsh[cs];s++) sh+=Form("%6.3f ",p[3+s]);
       printf("   %-14s %9.1f %9.2f %16s %9.0f %9.1f %9.1f %9.1f   mu %+.3f  FWHM %.3f\n",
              cs?"constrained":"free",bestL,s2/std::max(1.0,nd-(double)npar),
-             sh.Data(),p[0],h0,h1,h23,p[npar-2],2.355*p[npar-1]);
+             sh.Data(),p[0],h0,h1,h23,B1::GAUSS?p[npar-2]:d.gsMu,
+             2.355*(B1::GAUSS?p[npar-1]:d.sgR));
       delete m;
       // ---- draw
       c->cd(1+cs*2+ic); gPad->SetLeftMargin(0.13); gPad->SetBottomMargin(0.13); gPad->SetLogy();
@@ -119,12 +122,16 @@ void two1015(int BIN){
       for(int kk=0;kk<7;kk++){
         auto* g=new TGraph();
         for(double x=B1::exLo;x<=B1::exHi;x+=0.02){
-          double Xt=x-BP[ic][cs][BN[ic][cs]-2], v=0; const double* aa=BP[ic][cs]+3+nsh[cs];
+          double Xt=x-(B1::GAUSS?BP[ic][cs][BN[ic][cs]-2]:d.gsMu), v=0; const double* aa=BP[ic][cs]+3+nsh[cs];
           if(kk==0) v=B1::model(x,BP[ic][cs]);
-          else if(kk==1){ double mu=BP[ic][cs][BN[ic][cs]-2],sg=std::max(0.05,BP[ic][cs][BN[ic][cs]-1]);
-                          double t=(x-mu)/sg; v=std::max(0.0,BP[ic][cs][0])*std::exp(-0.5*t*t); }
-          else if(kk==2){ double mu=BP[ic][cs][BN[ic][cs]-2],sg=std::max(0.05,BP[ic][cs][BN[ic][cs]-1]);
-                          double t=(x-mu-0.740)/sg; v=std::max(0.0,BP[ic][cs][1])*std::exp(-0.5*t*t); }
+          else if(kk==1){ if(B1::GAUSS){
+                            double mu=BP[ic][cs][BN[ic][cs]-2],sg=std::max(0.05,BP[ic][cs][BN[ic][cs]-1]);
+                            double t=(x-mu)/sg; v=std::max(0.0,BP[ic][cs][0])*std::exp(-0.5*t*t); }
+                          else v=std::max(0.0,BP[ic][cs][0])*shapeGT(x,d.gsMu,d.sgL,d.sgR,d.alL,d.alR); }
+          else if(kk==2){ if(B1::GAUSS){
+                            double mu=BP[ic][cs][BN[ic][cs]-2],sg=std::max(0.05,BP[ic][cs][BN[ic][cs]-1]);
+                            double t=(x-mu-0.740)/sg; v=std::max(0.0,BP[ic][cs][1])*std::exp(-0.5*t*t); }
+                          else v=std::max(0.0,BP[ic][cs][1])*shapeGT(x,d.gsMu+0.740,d.sgL,d.sgR,d.alL,d.alR); }
           else if(kk==3) v=std::max(0.0,BP[ic][cs][2])*B1::shp(Xt,BP[ic][cs]+3)
                            *(B1::ACC?std::max(0.0,B1::ACC->Eval(Xt)):1.0);
           else { int grp=kk-4;

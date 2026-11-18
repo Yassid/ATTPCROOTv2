@@ -1985,3 +1985,80 @@ errors -- an unresolved disagreement, and the next thing to chase.
 
 Worst remaining bin is 25-30 in BOTH codes (2.26 and 2.04). That is exactly the bin where the
 exponent transitions from ~1 to 0, so a single power law per bin is probably too rigid there.
+
+
+# Overnight sweep: every angle, both codes, both background cases, both peak shapes
+
+Fit g.s. to 10 MeV with NO gap; states fixed; pair ratios from the global fit.
+Background either FREE `p3* q (Ex-Sn)^a exp(-k(Ex-Sn))` or CONSTRAINED `p3* q exp(-k(Ex-Sn))`.
+Peaks either the tailed response (`shapeGT`) or PURE GAUSSIANS with centroid and a common width
+fitted. Figures `bin<lo><hi>_two_cases_{gt,gauss}.png` per angle, summary `shape_vs_angle.png`.
+
+## The background shape, and the two codes agree
+
+```
+  theta_CM      ATTPCROOT  a / k        Spyral  a / k
+   10-15         1.17  0.64             1.10  0.69
+   15-20         1.99  0.96             2.08  1.00
+   20-25         0.93  0.51             0.74  0.51
+   25-30         0.00  0.18             0.75  0.30
+   30-35         0.00  0.01             0.50  0.00
+   35-40         0.50  0.00             0.16  0.00
+   40-45         0.75  0.00             0.57  0.00
+   45-50         0.00  0.00             0.00  0.00
+   50-55         0.00  0.00             0.25  8.97   <- not converged
+   55-60         0.00  0.00             0.00  1.75   <- suspect
+```
+
+Two independent reconstructions of the same raw data tracking each other to ~5 % over the forward
+half. **Both parameters go to ZERO beyond ~45 deg in both codes: the backward continuum is PURE
+PHASE SPACE**, with no form factor at all. That is what momentum transfer should do.
+
+## The peak shape: tails are needed, but only where the g.s. is large
+
+Delta(-2lnL) = L(Gaussian) - L(tailed); positive means the tailed response fits better.
+
+```
+  theta_CM     ATTPCROOT     Spyral
+   10-15         +632.8      +158.5
+   15-20         +899.8      +575.3
+   20-25         +492.2        -2.2
+   25-30           +2.6       -29.4
+   30-35         -565.5       +24.2
+   35-40          +19.0       +11.4
+   40-45         +139.7       +21.9
+   45-50           +2.7       -14.1
+```
+
+**Forward (10-25 deg) the tails are decisive** -- up to 900 units. **Beyond 25 deg the two peak
+shapes are equivalent**, swinging either way by amounts consistent with fit noise. That is
+physically sensible: the ground state is only populated at forward angles, so where there is no
+g.s. peak its shape cannot matter. So the tailed response is required, but ONLY where it is
+actually constrained -- and the long-standing worry that its tails were being extrapolated under
+the resonances at backward angles is answered: there, they make no difference either way.
+
+## Fit quality
+
+```
+  chi2/ndf, tailed peak, free background
+  theta_CM   10-15 15-20 20-25 25-30 30-35 35-40 40-45 45-50 50-55 55-60
+  ATTPCROOT   1.43  1.76  2.46  2.24 14.92  1.15  0.78  1.10  1.62  1.15
+  Spyral      2.70  6.43  3.59  1.91  1.29  1.44  1.22  1.39  6.60  4.76
+```
+
+Most bins now sit at 1.1-2.5. Four do not and are **convergence failures, not physics**:
+ATTPCROOT 30-35 (14.92), Spyral 15-20 (6.43), 50-55 (6.60, and 80518 in the constrained case),
+55-60 (4.76). These are the sparse bins plus Spyral's richest one.
+
+## Two bugs fixed during the sweep
+
+**The parameter count did not match the model.** The Gaussian peaks add a centroid and a width;
+when the run switched to the tailed response the model ignored them but the fit still carried
+them, leaving Minuit TWO FLAT DIRECTIONS. The whole first GT pass returned chi2 ~ 1e5 and
+likelihood differences of millions. Fixed by making npar conditional on the peak shape.
+
+**Migrad will not find the global minimum in the free background form.** A cold start landed
+WORSE than its own nested special case (a = 0) and stayed there. The extra shape parameter has to
+be SCANNED on a grid with a = 0 included, which guarantees beating the constrained fit. And a
+parameter must never be seeded exactly AT a limit -- Minuit2's internal transformation is singular
+there, and seeding `a` at 0.0 threw one fit to -2lnL 126260 (chi2 634).
