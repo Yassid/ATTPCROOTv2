@@ -119,7 +119,12 @@ void fitGenfitter_a1975_deuterium(TString fileName = "run_0016", Long64_t nEvent
                                   // otherwise) and the PID gate must have been drawn on the corrected plane.
                                   TString gainTable = "",
                                   // gate on the 3D (AtHelix3D) plane instead of Spyral's
-                                  Bool_t gateFrom3D = kFALSE)
+                                  Bool_t gateFrom3D = kFALSE,
+                                  // >0: apply pidGate to the WIDTH-CORRECTED Spyral dE/dx (hit charge x
+                                  // tau_fit/gateTauNomTB), the "trace integral" plane of make_d2_pid_caches.C
+                                  // (pid_width_dp.C uses 4.5). Needs a float-tau reco (reco_d2_hdbtau).
+                                  // 0 = peak-amplitude gate, every existing call unchanged. (2026-11-18)
+                                  Double_t gateTauNomTB = 0)
 {
    gSystem->Load("libAtReconstruction.so");
    FairLogger::GetLogger()->SetLogScreenLevel("WARNING");
@@ -284,6 +289,11 @@ void fitGenfitter_a1975_deuterium(TString fileName = "run_0016", Long64_t nEvent
       else {
          fitter->SetPIDGate(pidGate.Data());
          std::cout << "  PID gate: " << pidGate << "\n";
+         if (gateTauNomTB > 0) {
+            fitter->SetPIDGateTauScaled(gateTauNomTB);
+            std::cout << "  \033[1;32mPID gate on the TRACE-INTEGRAL plane (charge x tau_fit/" << gateTauNomTB
+                      << " TB)\033[0m\n";
+         }
       }
    } else {
       std::cout << "  PID gate: NONE (fit all tracks; build proton gate from the PID plane afterwards)\n";

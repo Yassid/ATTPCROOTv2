@@ -28,9 +28,13 @@
 HERE="$(cd "$(dirname "$0")" && pwd)"; cd "$HERE"
 NPAR="${1:-6}"
 WORK="${2:-/mnt/f/a1975/caches/.dv1104}"
-OUT=/mnt/f/a1975/caches/dt_kin_dv1104.root
-FIT=/mnt/f/a1975/gf_dt_dv1104/
-EBEAM=184.17
+# 2026-11-18: OUT/FIT/GATE/EBEAM overridable from the environment (defaults = the old dv1104 build).
+# GATE="" means NO re-gating in the cache: use it when genfit already applied a gate on another plane
+# (gf_dt_hdbtau_int: trace-integral gate; re-applying the peak-amplitude gate would cut it twice).
+OUT=${OUT:-/mnt/f/a1975/caches/dt_kin_dv1104.root}
+FIT=${FIT:-/mnt/f/a1975/gf_dt_dv1104/}
+GATE=${GATE-pid/triton_d2_dv1104.json}
+EBEAM=${EBEAM:-184.17}
 mkdir -p "$WORK" /mnt/f/a1975/caches
 # config.sh reads unset vars; under `set -u` it kills the script SILENTLY, zero-byte log,
 # no error. Source it first, then turn -u on. This has now bitten twice.
@@ -41,11 +45,11 @@ export ROOT_INCLUDE_PATH=/home/yassid/fair_install/ATTPCROOTv2-OpenKF/build/incl
 NUMS="0016 0017 0018 0019 0020 0021 0022 0023 0026 0027 0031 0032 0034 0036 0037 0038 0039 0040 0041 0042 0043 0044 0046 0048 0057 0058 0076 0077 0078 0079 0080 0082 0083 0084 0085 0086 0087 0088 0089 0091 0092 0095 0096 0097 0098 0102 0103"
 
 one() {
-  n="$1"; work="$2"; fit="$3"; eb="$4"
+  n="$1"; work="$2"; fit="$3"; eb="$4"; gate="$5"
   out="${work}/run_${n}.root"; log="${work}/log_${n}.txt"
   [ -s "$out" ] && { echo "[skip] run_$n"; return 0; }
   [ -s "${fit}run_${n}_multifit_genfitter_t.root" ] || { echo "[nofit] run_$n"; return 0; }
-  root -b -l -q "ex_dt_a1975.C(\"run_${n}_multifit\",\"${fit}\",\"\",\"pid/triton_d2_dv1104.json\",${eb},1e9,0.0,1e9,0.0,180.0,\"${out}\",\"${work}/plot_${n}.png\")" \
+  root -b -l -q "ex_dt_a1975.C(\"run_${n}_multifit\",\"${fit}\",\"\",\"${gate}\",${eb},1e9,0.0,1e9,0.0,180.0,\"${out}\",\"${work}/plot_${n}.png\")" \
      > "$log" 2>&1
   # the IC file is read over drvfs and fails INTERMITTENTLY under parallelism; a run that
   # silently lost its beam gate is worth ~1.7 MeV on Ex, so it is checked rather than assumed
@@ -54,7 +58,7 @@ one() {
 }
 export -f one
 
-printf '%s\n' $NUMS | xargs -P "$NPAR" -I{} bash -c 'one "$@"' _ {} "$WORK" "$FIT" "$EBEAM"
+printf '%s\n' $NUMS | xargs -P "$NPAR" -I{} bash -c 'one "$@"' _ {} "$WORK" "$FIT" "$EBEAM" "$GATE"
 
 n=$(ls "$WORK"/run_*.root 2>/dev/null | wc -l)
 echo "=== $n per-run caches; merging ==="
