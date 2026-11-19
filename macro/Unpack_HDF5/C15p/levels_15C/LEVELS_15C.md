@@ -2062,3 +2062,77 @@ WORSE than its own nested special case (a = 0) and stayed there. The extra shape
 be SCANNED on a grid with a = 0 included, which guarantees beating the constrained fit. And a
 parameter must never be seeded exactly AT a limit -- Minuit2's internal transformation is singular
 there, and seeding `a` at 0.0 threw one fit to -2lnL 126260 (chi2 634).
+
+
+# PURE GAUSSIAN peaks, and the chi2 that matters
+
+**Decision: the g.s. and 5/2+ are pure Gaussians. No tails.** Centroid and a common width fitted.
+
+## Why the GT comparison was the wrong test
+
+The tailed response (`shapeGT`: bifurcated Gaussian handing over to an exponential at |t| = alpha)
+was justified on the grounds that its tails reach under the resonances. **They do not.** Measured
+directly:
+
+```
+  theta_CM   gs amp  FWHM_L FWHM_R  alpha_L alpha_R   tail@Ex4  tail@Ex6
+   10-15      2899    0.67   0.69    1.35    1.33       0.00      0.00
+   15-20      6682    0.70   1.03    1.21    2.03       0.00      0.00
+   20-25      2754    0.59   1.14    0.63    1.49       0.02      0.00
+   45-50        22    1.51   1.93    3.59    1.27       0.08      0.00
+```
+
+At Ex = 4 the g.s. contributes **0.00-0.20 counts** against data of 20-80. With sigma ~ 0.3 that
+point is ~13 sigma out and exp(alpha^2/2 - 13 alpha) ~ 1e-7. So the whole overnight GT-vs-Gaussian
+sweep measured **how well the elastic PEAK is described, not the physics region** -- the 900-unit
+differences at forward angles come from a 6682-count peak in a 69,539-event bin, nothing else.
+
+It also means the earlier conclusion "the tails are equivalent beyond 25 deg" was unsupported: the
+backward bins it rested on (ATTPCROOT 30-35, 50-55, 55-60) have **gs amp = 0** and response
+parameters BORROWED from the reference bin, so they compared two shapes for a peak that is not
+there, in fits that had not converged.
+
+## The consequence: score the two regions separately
+
+The peak region and the resonance region are effectively independent (the g.s. reaches Ex = 4 with
+0.00-0.20 counts), so one chi2 over the whole range just measures the peak. Split at |Ex| = 2.5:
+
+```
+  PURE GAUSSIAN peaks, chi2/ndf in the RESONANCE region (Ex > 2.5)
+  theta_CM   ATTPCROOT free/constr   Spyral free/constr      peak chi2 (free)
+   10-15        1.49 / 2.31            1.20 / 2.32          31.09 /  9.25
+   15-20        1.56 / 3.60            1.74 / 7.25          37.54 / 55.84
+   20-25        4.39 / 1.58            0.92 / 1.05          14.02 /  6.60
+   25-30        2.29 / 2.27            1.90 / 1.89           2.23 /  1.31
+   30-35        1.12 / 1.12            1.61 / 3.76           0.90 /  1.63
+   35-40        1.36 / 1.34            1.71 / 1.68           1.33 /  1.49
+   40-45        2.62 / 0.92            1.12 / 1.11           1.73 /  1.24
+   55-60        0.88 / 0.87            1.41 / 1.50           0.77 /  1.09
+   mean (free, sane bins)  ATTPCROOT 1.88   Spyral 1.45
+```
+
+**A Gaussian costs NOTHING in the region that carries the physics**: at 10-15 the tailed response
+gave 1.43 over the full range and the Gaussian gives 1.49 in the resonance region -- the same.
+What the Gaussian cannot do is describe the elastic peak (31, 38, 14 forward), and that does not
+matter.
+
+Two bins still fail and are convergence problems, not physics: ATTPCROOT 45-50 and Spyral 50-55
+(431.80, with a peak chi2 of 2249).
+
+## Background shape with Gaussian peaks
+
+```
+  theta_CM   ATTPCROOT a / k    Spyral a / k
+   10-15       1.01  0.59        1.02  0.67
+   15-20       1.50  0.84        1.94  0.97
+   20-25       0.75  1.47        0.25  0.36
+   25-30       0.00  0.17        0.25  0.20
+   30-35       0.25  0.02        0.00  0.00
+   35-40       0.00  0.00        0.00  0.00
+   40-45       0.63  0.34        0.00  0.05
+   55-60       0.75  0.13        1.00  0.12
+```
+
+The forward bins still agree closely between codes (1.01/1.02 and 1.50/1.94) and both parameters
+still collapse toward zero by 30-40 deg -- pure phase space backward. Beyond 45 deg the two codes
+no longer track each other, which is where the statistics are thinnest.

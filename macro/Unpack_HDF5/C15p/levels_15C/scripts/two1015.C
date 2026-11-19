@@ -35,7 +35,7 @@ void two1015(int BIN){
     for(int ord=0;ord<2;ord++){
       int cs = ord==0 ? 1 : 0;              // constrained first, then free seeded from it
       B1::FORM=forms[cs]; B1::NSH=nsh[cs];
-      int npar=3+nsh[cs]+4+(B1::GAUSS?2:0); BN[ic][cs]=npar; B1::NPAR=npar;
+      int npar=3+nsh[cs]+4+2; BN[ic][cs]=npar; B1::NPAR=npar;
       auto* m=ROOT::Math::Factory::CreateMinimizer("Minuit2","Migrad");
       m->SetMaxFunctionCalls(500000); m->SetTolerance(0.01); m->SetPrintLevel(0); m->SetStrategy(2);
       ROOT::Math::Functor fn(&B1::fcn,npar); m->SetFunction(fn);
@@ -55,7 +55,7 @@ void two1015(int BIN){
       } else {
         for(int s=0;s<nsh[cs];s++) m->SetLimitedVariable(3+s,Form("s%d",s),0.5,0.02,0.0,9.0);
         for(int g=0;g<4;g++) m->SetLimitedVariable(3+nsh[cs]+g,Form("A%d",g),20,0.5,0,1e5); }
-      if(B1::GAUSS){
+      {
         m->SetLimitedVariable(npar-2,"mu",d.gsMu,0.005,d.gsMu-0.6,d.gsMu+0.6);
         m->SetLimitedVariable(npar-1,"sig",d.sgR,0.005,0.08,1.5); }
       m->Minimize();
@@ -76,7 +76,7 @@ void two1015(int BIN){
           ms->SetLimitedVariable(4,"s1",haveC?csol[3]:0.5,0.02,0.0,9.0);
           for(int g=0;g<4;g++) ms->SetLimitedVariable(5+g,Form("A%d",g),
               haveC?csol[4+g]:20.0,std::max(1e-3,(haveC?csol[4+g]:20.0)*0.01),0,1e5);
-          if(B1::GAUSS){
+          {
             ms->SetLimitedVariable(npar-2,"mu",haveC?csol[npar-2]:d.gsMu,0.005,d.gsMu-0.6,d.gsMu+0.6);
             ms->SetLimitedVariable(npar-1,"sig",haveC?csol[npar-1]:d.sgR,0.005,0.08,1.5); }
           ms->Minimize();
@@ -86,10 +86,17 @@ void two1015(int BIN){
       const double* p=bestp.data();
       for(int j=0;j<npar;j++) BP[ic][cs][j]=p[j];
       if(cs==1){ for(int j=0;j<npar;j++) csol[j]=p[j]; haveC=true; }
-      double s2=0; int nd=0;
+      // The Gaussian describes the elastic PEAK imperfectly, and that peak carries thousands of
+      // counts -- so a single chi2 over the whole range measures the peak, not the physics.  The
+      // g.s. tail at Ex = 4 is 0.00-0.20 counts, so the peak region and the resonance region are
+      // effectively independent.  Score them separately.
+      double s2=0; int nd=0, ndP=0, ndR=0; double s2P=0,s2R=0;
       for(int i=1;i<=d.h->GetNbinsX();i++){ double x=d.h->GetBinCenter(i),n=d.h->GetBinContent(i);
         if(x<B1::exLo||x>B1::exHi) continue;
-        double mm=B1::model(x,p); if(mm<1e-9) mm=1e-9; s2+=(n-mm)*(n-mm)/std::max(mm,1.0); nd++; }
+        double mm=B1::model(x,p); if(mm<1e-9) mm=1e-9;
+        double c=(n-mm)*(n-mm)/std::max(mm,1.0);
+        s2+=c; nd++;
+        if(x<B1::PKHI){ s2P+=c; ndP++; } else { s2R+=c; ndR++; } }
       // peak heights of each group
       const double* a=p+3+nsh[cs];
       auto grpH=[&](int g){ double mx=0;
@@ -103,8 +110,9 @@ void two1015(int BIN){
       TString sh; for(int s=0;s<nsh[cs];s++) sh+=Form("%6.3f ",p[3+s]);
       printf("   %-14s %9.1f %9.2f %16s %9.0f %9.1f %9.1f %9.1f   mu %+.3f  FWHM %.3f\n",
              cs?"constrained":"free",bestL,s2/std::max(1.0,nd-(double)npar),
-             sh.Data(),p[0],h0,h1,h23,B1::GAUSS?p[npar-2]:d.gsMu,
-             2.355*(B1::GAUSS?p[npar-1]:d.sgR));
+             sh.Data(),p[0],h0,h1,h23,p[npar-2],2.355*p[npar-1]);
+      printf("   %-14s %9s %9s %16s   peak chi2/n %6.2f   RESONANCE chi2/n %6.2f\n",
+             "","","","",s2P/std::max(1.0,ndP-3.0),s2R/std::max(1.0,ndR-(double)npar+3.0));
       delete m;
       // ---- draw
       c->cd(1+cs*2+ic); gPad->SetLeftMargin(0.13); gPad->SetBottomMargin(0.13); gPad->SetLogy();
@@ -122,16 +130,12 @@ void two1015(int BIN){
       for(int kk=0;kk<7;kk++){
         auto* g=new TGraph();
         for(double x=B1::exLo;x<=B1::exHi;x+=0.02){
-          double Xt=x-(B1::GAUSS?BP[ic][cs][BN[ic][cs]-2]:d.gsMu), v=0; const double* aa=BP[ic][cs]+3+nsh[cs];
+          double Xt=x-BP[ic][cs][BN[ic][cs]-2], v=0; const double* aa=BP[ic][cs]+3+nsh[cs];
           if(kk==0) v=B1::model(x,BP[ic][cs]);
-          else if(kk==1){ if(B1::GAUSS){
-                            double mu=BP[ic][cs][BN[ic][cs]-2],sg=std::max(0.05,BP[ic][cs][BN[ic][cs]-1]);
-                            double t=(x-mu)/sg; v=std::max(0.0,BP[ic][cs][0])*std::exp(-0.5*t*t); }
-                          else v=std::max(0.0,BP[ic][cs][0])*shapeGT(x,d.gsMu,d.sgL,d.sgR,d.alL,d.alR); }
-          else if(kk==2){ if(B1::GAUSS){
-                            double mu=BP[ic][cs][BN[ic][cs]-2],sg=std::max(0.05,BP[ic][cs][BN[ic][cs]-1]);
-                            double t=(x-mu-0.740)/sg; v=std::max(0.0,BP[ic][cs][1])*std::exp(-0.5*t*t); }
-                          else v=std::max(0.0,BP[ic][cs][1])*shapeGT(x,d.gsMu+0.740,d.sgL,d.sgR,d.alL,d.alR); }
+          else if(kk==1){ double mu=BP[ic][cs][BN[ic][cs]-2],sg=std::max(0.05,BP[ic][cs][BN[ic][cs]-1]);
+                          double t=(x-mu)/sg; v=std::max(0.0,BP[ic][cs][0])*std::exp(-0.5*t*t); }
+          else if(kk==2){ double mu=BP[ic][cs][BN[ic][cs]-2],sg=std::max(0.05,BP[ic][cs][BN[ic][cs]-1]);
+                          double t=(x-mu-0.740)/sg; v=std::max(0.0,BP[ic][cs][1])*std::exp(-0.5*t*t); }
           else if(kk==3) v=std::max(0.0,BP[ic][cs][2])*B1::shp(Xt,BP[ic][cs]+3)
                            *(B1::ACC?std::max(0.0,B1::ACC->Eval(Xt)):1.0);
           else { int grp=kk-4;
@@ -144,7 +148,8 @@ void two1015(int BIN){
         g->SetLineColor(cols[kk]); g->SetLineStyle(stys[kk]); g->SetLineWidth(kk==0?3:2); g->Draw("L"); }
       hd->Draw("E SAME");
       auto* tx=new TLatex(); tx->SetNDC(); tx->SetTextSize(0.034);
-      tx->DrawLatex(0.46,0.86,Form("#chi^{2}/ndf = %.2f",s2/std::max(1.0,nd-(double)npar)));
+      tx->DrawLatex(0.46,0.86,Form("#chi^{2}/ndf = %.2f  (E_{x}>%.1f)",
+                                   s2R/std::max(1.0,ndR-(double)npar+3.0),B1::PKHI));
       tx->SetTextSize(0.030); tx->SetTextColor(kGreen+3);
       tx->DrawLatex(0.46,0.80,Form("P1 peak = %.1f",h0));
       tx->SetTextColor(kOrange+7);

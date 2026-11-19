@@ -33,20 +33,16 @@ namespace B1 {
   // onsets came from the elastic peak fit and were then EXTRAPOLATED under the resonances --
   // never checked.  Here the centroid and a single COMMON width are fitted instead, and they are
   // the last two parameters of the vector.
-  bool GAUSS=true;
+  bool GAUSS=true;        // kept only so old call sites compile; the peaks are ALWAYS Gaussian
   int  NPAR=0;
+  double PKHI=2.5;        // |Ex| below this is the "peak region", above it the physics region
   double model(double X,const double* p){
     RK::Bin& d=RK::B[BIN];
-    double mu  = GAUSS ? p[NPAR-2] : d.gsMu;
-    double sig = GAUSS ? std::max(0.05,p[NPAR-1]) : d.sgR;
-    double v;
-    if(GAUSS){
-      double t0=(X-mu)/sig, t1=(X-mu-0.740)/sig;
-      v = std::max(0.0,p[0])*std::exp(-0.5*t0*t0)
-        + std::max(0.0,p[1])*std::exp(-0.5*t1*t1);
-    } else {
-      v = std::max(0.0,p[0])*shapeGT(X,d.gsMu,d.sgL,d.sgR,d.alL,d.alR)
-        + std::max(0.0,p[1])*shapeGT(X,d.gsMu+0.740,d.sgL,d.sgR,d.alL,d.alR); }
+    double mu  = p[NPAR-2];
+    double sig = std::max(0.05,p[NPAR-1]);
+    double t0=(X-mu)/sig, t1=(X-mu-0.740)/sig;
+    double v = std::max(0.0,p[0])*std::exp(-0.5*t0*t0)
+             + std::max(0.0,p[1])*std::exp(-0.5*t1*t1);
     double Xt=X-mu;
     v += std::max(0.0,p[2])*shp(Xt,p+3)*(ACC?std::max(0.0,ACC->Eval(Xt)):1.0);
     const double* a=p+3+NSH;
