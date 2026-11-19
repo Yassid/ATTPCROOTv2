@@ -36,18 +36,24 @@ namespace B1 {
   bool GAUSS=true;        // kept only so old call sites compile; the peaks are ALWAYS Gaussian
   int  NPAR=0;
   double PKHI=2.5;        // |Ex| below this is the "peak region", above it the physics region
+  bool PEAKFREE=true;     // false: the peak is outside the fit, so no g.s./5/2+ parameters
+  double MUFIX=0.0;       // the g.s. centroid, measured separately, used when PEAKFREE is false
   double model(double X,const double* p){
     RK::Bin& d=RK::B[BIN];
-    double mu  = p[NPAR-2];
-    double sig = std::max(0.05,p[NPAR-1]);
-    double t0=(X-mu)/sig, t1=(X-mu-0.740)/sig;
-    double v = std::max(0.0,p[0])*std::exp(-0.5*t0*t0)
-             + std::max(0.0,p[1])*std::exp(-0.5*t1*t1);
+    double v=0, mu=MUFIX;
+    if(PEAKFREE){
+      mu = p[NPAR-2];
+      double sig = std::max(0.05,p[NPAR-1]);
+      double t0=(X-mu)/sig, t1=(X-mu-0.740)/sig;
+      v = std::max(0.0,p[0])*std::exp(-0.5*t0*t0)
+        + std::max(0.0,p[1])*std::exp(-0.5*t1*t1); }
     double Xt=X-mu;
-    v += std::max(0.0,p[2])*shp(Xt,p+3)*(ACC?std::max(0.0,ACC->Eval(Xt)):1.0);
-    const double* a=p+3+NSH;
-    for(int r=0;r<RK::NR;r++) if(RK::GRP[r]>=0&&d.in[r])
-      v += std::max(0.0,a[RK::GRP[r]])*((RK::RIDX[r]>=0)?RK::FIXRAT[RK::RIDX[r]]:1.0)*d.T[r].Eval(X);
+    const int o = PEAKFREE ? 2 : 0;
+    v += std::max(0.0,p[o])*shp(Xt,p+o+1)*(ACC?std::max(0.0,ACC->Eval(Xt)):1.0);
+    const double* a=p+o+1+NSH;
+    for(int r=0;r<RK::NR;r++) if(RK::GRP[r]>=0&&d.in[r]){
+      double amp=a[RK::GRP[r]]*a[RK::GRP[r]];          // s^2 : >= 0 and smooth through 0
+      v += amp*((RK::RIDX[r]>=0)?RK::FIXRAT[RK::RIDX[r]]:1.0)*d.T[r].Eval(X); }
     return v;
   }
   double fcn(const double* p){

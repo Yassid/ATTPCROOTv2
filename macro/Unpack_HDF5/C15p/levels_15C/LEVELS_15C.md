@@ -2197,3 +2197,63 @@ came back exactly on the grid. It is now released after the scan locates the bas
 
 Still not done: a closure test. Nothing here is validated against known input, so a yield of 20.6
 could still be the background handing strength to the states.
+
+
+# Convergence: the fits were never converging, and the configuration must not drift
+
+## Minuit status was never checked
+
+Every fit so far was judged on `MinValue()` alone. Asking the minimiser's own verdict:
+
+```
+  ATTPCROOT, per angle      status        EDM     cov   par at limit
+   10-15                         3    1.66e+01      1        7
+   15-20                         2    4.06e-06      0        6
+   20-25                         1    2.61e-06      2        7
+   30-35                         3    4.07e+03      1        5
+   50-55                         3    3.66e+02      0        4
+```
+
+Status 0 means converged. **Not one bin returned 0**, EDM reached 4e+03 where it should be
+~1e-3, and covariance quality was 3 (accurate) in a single bin. Everything reported before this
+point came from unconverged fits -- the chi2 values looked respectable and the two codes agreed on
+a and k, which is exactly why nothing flagged it.
+
+**Always report status, EDM, covariance quality and parameters-at-limit alongside any yield.**
+
+## What actually caused it, and what did not
+
+Three attempts failed before the cause was found, and all three were wrong guesses:
+
+- `std::max(0, A)` on the amplitudes makes the likelihood exactly FLAT for negative A, so a state
+  whose true yield is ~0 sits on a plateau with no gradient. Plausible, but not the cause.
+- Letting A go negative converged better (5/10 clean) but let k rail at its bound, with chi2R up
+  to 7.8.
+- Fitting A = s^2 was worse still: 2/10 clean and one bin at chi2 194.
+
+**The real cause: the fit range and the model had drifted apart.** With the lower limit at
+Ex = 2.0, a Gaussian g.s. at Ex = 0 with sigma ~ 0.33 is 6 sigma away (exp(-18)) and the 5/2+ is
+3.8 sigma (7e-4) -- so the g.s. amplitude, the 5/2+ amplitude, the centroid and the width had NO
+data constraining them. Four exactly-flat directions. No amplitude parametrisation could ever fix
+that.
+
+This is the SECOND time the fit range and the model got out of step: the first was the parameter
+count when switching peak shapes, which left two flat directions and returned chi2 ~ 1e5.
+
+## ⚠ And the configuration must not drift either
+
+Dropping those four parameters did fix convergence (4 forward bins at status 0, EDM ~1e-6,
+covariance 3) -- but only because the peak had been excluded from the fit, which was never the
+agreed configuration. **The specification is: fit g.s. to 10 MeV with NO gap, with the g.s. and
+5/2+ as GAUSSIANS.** Moving the lower limit to 2.0 reinstated the gap and deleting the peak
+components removed the Gaussians.
+
+Both are reverted in `scripts/angfinal.C` and `scripts/fitshow.C`
+(`figures/fits_fullrange.png`). A secondary metric is to be fixed INSIDE the agreed
+configuration: changing HOW the fit is run (seeds, retries, Hesse, scanning, diagnostics) is
+free; changing WHAT is fitted is not.
+
+Still carried from the convergence work and NOT part of the agreed configuration: the state
+amplitudes are currently parametrised as s^2. It degrades the forward bins badly -- chi2/ndf
+11.6 / 13.8 / 10.2 against the 1.43 / 1.76 / 2.46 of the agreed version -- and should be reverted
+to `max(0, A)`.
