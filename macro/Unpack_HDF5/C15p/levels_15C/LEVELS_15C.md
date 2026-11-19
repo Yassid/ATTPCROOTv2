@@ -2136,3 +2136,64 @@ Two bins still fail and are convergence problems, not physics: ATTPCROOT 45-50 a
 The forward bins still agree closely between codes (1.01/1.02 and 1.50/1.94) and both parameters
 still collapse toward zero by 30-40 deg -- pure phase space backward. Beyond 45 deg the two codes
 no longer track each other, which is where the statistics are thinnest.
+
+
+# The angular distributions, and the peak region that was corrupting them
+
+## Fit from Ex = 2.0, not from the g.s.
+
+The background is still DEFINED from Sn -- there is no gap in the model -- but the elastic peak is
+excluded from the FIT. A pure Gaussian describes that peak badly (peak chi2 14-38 at forward
+angles), and with thousands of counts in it that misfit dragged the background.
+
+ATTPCROOT theta_CM 20-25 was the worst surviving bin (chi2R 4.31) and the residuals showed why:
+
+```
+   Ex     data   model   pull     bkg    P1    P2
+   3.50     58    23.2   +7.23   12.2  10.7   0.2     <- first bin of the fit
+   3.70     38    29.7   +1.53    9.5  19.9   0.3
+```
+
+**One bin at the fit boundary contributed 7.23^2 = 52 of the chi2** over ~21 dof; everything above
+3.9 sat within +-2.4. The fit had chosen a = 2.00, k = 2.03, making the background peak at
+Ex ~ 2.2 and die by 3.5 -- while the data there RISE monotonically (16, 19, 31, 42, 58 at
+Ex = 1.5..3.5). Spyral, whose narrower Gaussian fits its peak better, was not dragged and chose
+a = 0.50, k = 0.44 with chi2R 0.85.
+
+Moving the fit's lower limit:
+
+```
+   fit from     ATTPCROOT                           Spyral
+    Ex -1.5   a=2.00 k=2.03 chi2R 4.31 P1 55.5   a=0.50 k=0.44 chi2R 0.85 P1 18.4
+    Ex +1.5   a=1.50 k=0.62 chi2R 1.50 P1 21.6   a=1.25 k=0.60 chi2R 0.84 P1 15.7
+    Ex +2.0   a=1.50 k=0.64 chi2R 1.50 P1 20.6   a=1.50 k=0.64 chi2R 0.84 P1 15.4
+    Ex +3.0   a=0.50 k=8.98 chi2R 5.68 P1 52.4   a=3.00 k=0.84 chi2R 1.04 P1 17.3
+```
+
+**The peak region was inflating ATTPCROOT's state yields by a factor 2.7** (P1 55.5 -> 20.6).
+At Ex >= 2.0 the two codes return IDENTICAL shape parameters. Below 1.5 the peak dominates; above
+3.0 there is too little lever arm left on the background. **Adopt Ex = 2.0.**
+
+## Result
+
+```
+  theta_CM   ATTPCROOT a/k   Spyral a/k    chi2R A/S    P1 A/S        P2 A/S
+   15-20      1.50 0.97      1.50 0.98     1.32/1.53   29.4/17.8    11.9/ 7.4
+   20-25      1.50 0.64      1.50 0.64     1.50/0.84   20.6/15.4    22.2/19.0
+   25-30      1.50 0.40      2.00 0.34     2.33/1.83    6.7/ 9.0     0.4/13.0
+   30-35      2.00 0.19      2.00 0.31     1.11/1.61    6.2/ 0.0     6.4/ 0.0
+```
+
+Every chi2R is now between 0.79 and 2.33 -- Spyral's 50-55 went from 5137 to 2.77 -- and the two
+codes give the same shape parameters at 15-20 and 20-25.
+
+`figures/angdist_final_gauss.png`: **P2 (5.98+6.68) peaks at theta_CM ~ 22 deg** and falls an order
+of magnitude by 40; **P1 (4.43+4.93) falls monotonically from 18 deg**, its maximum at or below our
+forward limit. Both codes overlap within errors at essentially every point, out to ~55 deg. Errors
+are the larger of sqrt(N) and the refit spread (VZLO 300 vs 350).
+
+Also fixed: the scan FIXES `a` at a grid point, so `a` was never actually fitted -- every value
+came back exactly on the grid. It is now released after the scan locates the basin.
+
+Still not done: a closure test. Nothing here is validated against known input, so a yield of 20.6
+could still be the background handing strength to the states.

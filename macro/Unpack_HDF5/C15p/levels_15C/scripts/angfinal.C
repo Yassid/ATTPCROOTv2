@@ -11,6 +11,13 @@ static double QC[2][2][16];        // resonance-region chi2/ndf
 static double SH[2][16][2];        // [code][bin][a,k] from pass 0
 void angfinal(){
   setCM(10,5,60);
+  // ⚠ FIT from Ex = 2.0, not from -1.5.  The background is still DEFINED from Sn -- there is no
+  // gap in the model -- but the elastic peak is excluded from the FIT.  A pure Gaussian describes
+  // that peak badly (peak chi2 ~ 14-38 forward), and with thousands of counts in it that misfit
+  // dragged ATTPCROOT's background steep: a=2.00 k=2.03, chi2R 4.31, and P1 inflated to 55.5
+  // against Spyral's 18.4.  Fitting from 2.0 gives the two codes IDENTICAL shape parameters
+  // (a=1.50, k=0.64) and brings P1 to 20.6 vs 15.4.
+  B1::exLo=2.0;
   RK::exLo=3.5; RK::exHi=9.0; RK::ONETERM=true; RK::BKG=RK::HALON;
   RK::TIE12=false; RK::PAIRS=true; RK::DELTA=0.0;
   for(int i=0;i<RK::NR;i++) RK::USE[i]=(i<6);
@@ -49,6 +56,25 @@ void angfinal(){
           m->Minimize();
           if(m->MinValue()<bestL){ bestL=m->MinValue(); best.assign(m->X(),m->X()+npar); }
           delete m; }
+        // ⚠ the scan FIXES a at a grid point, so a was never actually fitted -- every value
+        // came back exactly on the grid.  Having found the right basin, release it and refit.
+        { auto* mf=ROOT::Math::Factory::CreateMinimizer("Minuit2","Migrad");
+          mf->SetMaxFunctionCalls(500000); mf->SetTolerance(0.01);
+          mf->SetPrintLevel(0); mf->SetStrategy(2);
+          ROOT::Math::Functor fnf(&B1::fcn,npar); mf->SetFunction(fnf);
+          mf->SetLimitedVariable(0,"Ags",best[0],std::max(1e-3,best[0]*0.01),0,pk*10);
+          mf->SetLimitedVariable(1,"A52",best[1],std::max(1e-3,best[1]*0.01+1e-3),0,pk*5);
+          mf->SetLimitedVariable(2,"B",best[2],std::max(1e-3,best[2]*0.01),0,1e7);
+          // seed just OFF the grid point so a starts interior, never on a limit
+          mf->SetLimitedVariable(3,"a",std::max(0.02,best[3]),0.02,0.0,9.0);
+          mf->SetLimitedVariable(4,"k",best[4],0.02,0.0,9.0);
+          for(int g=0;g<4;g++) mf->SetLimitedVariable(5+g,Form("A%d",g),best[5+g],
+                                   std::max(1e-3,best[5+g]*0.01+1e-3),0,1e5);
+          mf->SetLimitedVariable(npar-2,"mu",best[npar-2],0.005,d.gsMu-0.6,d.gsMu+0.6);
+          mf->SetLimitedVariable(npar-1,"sig",best[npar-1],0.005,0.08,1.5);
+          mf->Minimize();
+          if(mf->MinValue()<bestL){ bestL=mf->MinValue(); best.assign(mf->X(),mf->X()+npar); }
+          delete mf; }
         const double* p=best.data();
         // peak heights of the two tied pairs
         auto grpH=[&](int g){ double mx=0; const double* a2=p+5;
