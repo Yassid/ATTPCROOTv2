@@ -2,7 +2,7 @@
 // The fits as they now stand: peak EXCLUDED from the fit (so no g.s./5/2+ parameters -- 7 instead
 // of 11, which is what finally made them converge), background free per angle and defined from
 // Sn, states fixed.  Data drawn over the full range; the model only where it is fitted.
-static double QQ[2][16][12]; static int QST[2][16]; static double QE[2][16], QX[2][16];
+static double QQ[2][16][12]; static int QST[2][16]; static double QE[2][16], QX[2][16], QXP[2][16], QXR[2][16];
 void fitshow(){
   setCM(10,5,60);
   RK::exLo=3.5; RK::exHi=9.0; RK::ONETERM=true; RK::BKG=RK::HALON;
@@ -39,7 +39,7 @@ void fitshow(){
         m->SetLimitedVariable(2,"B",50,1,0,1e7);
         m->SetFixedVariable(3,"a",av);
         m->SetLimitedVariable(4,"k",0.5,0.02,0.0,4.0);
-        for(int g=0;g<4;g++) m->SetLimitedVariable(5+g,Form("s%d",g),4.0,0.05,-80,80);
+        for(int g=0;g<4;g++) m->SetLimitedVariable(5+g,Form("A%d",g),20,0.5,0,1e5);
         m->SetLimitedVariable(npar-2,"mu",d.gsMu,0.005,d.gsMu-0.6,d.gsMu+0.6);
         m->SetLimitedVariable(npar-1,"sig",0.4,0.005,0.08,1.5);
         m->Minimize();
@@ -58,8 +58,8 @@ void fitshow(){
         mf->SetLimitedVariable(2,"B",best[2],std::max(1e-3,best[2]*0.01),0,1e7);
         mf->SetLimitedVariable(3,"a",std::max(0.02,best[3]),0.02,0.0,6.0);
         mf->SetLimitedVariable(4,"k",best[4],0.02,0.0,4.0);
-        for(int g=0;g<4;g++) mf->SetLimitedVariable(5+g,Form("s%d",g),best[5+g],
-                                 std::max(1e-3,std::fabs(best[5+g])*0.01+1e-3),-80,80);
+        for(int g=0;g<4;g++) mf->SetLimitedVariable(5+g,Form("A%d",g),best[5+g],
+                                   std::max(1e-3,best[5+g]*0.01+1e-3),0,1e5);
         mf->SetLimitedVariable(npar-2,"mu",best[npar-2],0.005,d.gsMu-0.6,d.gsMu+0.6);
         mf->SetLimitedVariable(npar-1,"sig",best[npar-1],0.005,0.08,1.5);
         mf->Minimize();
@@ -71,11 +71,20 @@ void fitshow(){
       for(int j=0;j<npar;j++) QQ[ic][b][j]=best[j];
       QST[ic][b]=st; QE[ic][b]=edm;
       const double* p=best.data();
-      double s2=0; int nd=0;
+      // Two numbers, because they measure different things: a Gaussian cannot describe the
+      // elastic PEAK (that is what drives the forward chi2 to ~10-14), while the RESONANCE
+      // region -- which carries the physics -- fits at ~1.5.  The g.s. reaches Ex = 4 with
+      // 0.00-0.20 counts, so the two regions are effectively independent.
+      double s2=0,s2P=0,s2R=0; int nd=0,ndP=0,ndR=0;
       for(int i=1;i<=d.h->GetNbinsX();i++){ double x=d.h->GetBinCenter(i),n=d.h->GetBinContent(i);
         if(x<B1::exLo||x>B1::exHi) continue;
-        double mm=B1::model(x,p); if(mm<1e-9) mm=1e-9; s2+=(n-mm)*(n-mm)/std::max(mm,1.0); nd++; }
-      QX[ic][b]=s2/std::max(1.0,nd-7.0);
+        double mm=B1::model(x,p); if(mm<1e-9) mm=1e-9;
+        double cc=(n-mm)*(n-mm)/std::max(mm,1.0);
+        s2+=cc; nd++;
+        if(x<B1::PKHI){ s2P+=cc; ndP++; } else { s2R+=cc; ndR++; } }
+      QX[ic][b]=s2/std::max(1.0,nd-11.0);
+      QXP[ic][b]=s2P/std::max(1.0,ndP-4.0);
+      QXR[ic][b]=s2R/std::max(1.0,ndR-7.0);
       // ---- draw
       c->cd(1+ic*10+b); gPad->SetLeftMargin(0.13); gPad->SetBottomMargin(0.14); gPad->SetLogy();
       auto* hd=(TH1D*)d.h->Clone(Form("f%d%d",ic,b)); hd->SetDirectory(nullptr);
@@ -104,23 +113,33 @@ void fitshow(){
           else if(kk==0) v=std::max(0.0,p[2])*B1::shp(Xt,p+3)*(B1::ACC?std::max(0.0,B1::ACC->Eval(Xt)):1.0);
           else { int grp=kk-1;
             for(int r=0;r<RK::NR;r++) if(RK::GRP[r]==grp&&d.in[r])
-              v+=a2[grp]*a2[grp]*((RK::RIDX[r]>=0)?RK::FIXRAT[RK::RIDX[r]]:1.0)*d.T[r].Eval(x);
+              v+=std::max(0.0,a2[grp])*((RK::RIDX[r]>=0)?RK::FIXRAT[RK::RIDX[r]]:1.0)*d.T[r].Eval(x);
             if(grp==2) for(int r=0;r<RK::NR;r++) if(RK::GRP[r]==3&&d.in[r])
-              v+=a2[3]*a2[3]*d.T[r].Eval(x); }
+              v+=std::max(0.0,a2[3])*d.T[r].Eval(x); }
           if(v>0) g->SetPoint(g->GetN(),x,v); }
         if(g->GetN()<2) continue;
         g->SetLineColor(cols[kk]); g->SetLineStyle(stys[kk]); g->SetLineWidth(kk==4?3:2); g->Draw("L"); }
       hd->Draw("E SAME");
       auto* tx=new TLatex(); tx->SetNDC(); tx->SetTextSize(0.057);
-      tx->DrawLatex(0.50,0.88,Form("#chi^{2}/ndf %.2f",QX[ic][b]));
-      tx->SetTextSize(0.044);
-      tx->SetTextColor(st==0?kGreen+3:kRed+1);
-      tx->DrawLatex(0.50,0.815,Form("status %d",st));
+      tx->SetTextSize(0.050);
+      tx->DrawLatex(0.42,0.90,Form("#chi^{2}/ndf  all %.2f",QX[ic][b]));
+      tx->SetTextColor(kGreen+3);
+      tx->DrawLatex(0.42,0.845,Form("resonances %.2f",QXR[ic][b]));
       tx->SetTextColor(kGray+2);
-      tx->DrawLatex(0.50,0.755,Form("EDM %.0e",edm));
-      tx->DrawLatex(0.50,0.695,Form("a %.2f  k %.2f",p[3],p[4]));
+      tx->DrawLatex(0.42,0.79,Form("peak %.1f",QXP[ic][b]));
+      tx->SetTextColor(kBlack);
+      tx->SetTextSize(0.042);
+      tx->SetTextColor(st==0?kGreen+3:kRed+1);
+      tx->DrawLatex(0.42,0.735,Form("status %d  EDM %.0e",st,edm));
+      tx->SetTextColor(kGray+2);
+      tx->DrawLatex(0.42,0.685,Form("a %.2f  k %.2f",p[3],p[4]));
       RK::ONLYBIN=-1; }
   }
+  printf("\n   %-10s %-9s %8s %8s %8s %8s %10s\n","code","theta_CM","all","resonan","peak","status","EDM");
+  for(int ic=0;ic<2;ic++) for(int b=0;b<NCM;b++)
+    printf("   %-10s %3.0f-%-5.0f %8.2f %8.2f %8.1f %8d %10.0e\n",
+           CFG[ic].nm,TCM0+b*TCMSTEP,TCM0+(b+1)*TCMSTEP,QX[ic][b],QXR[ic][b],QXP[ic][b],
+           QST[ic][b],QE[ic][b]);
   c->SaveAs("/home/yassid/fair_install/ATTPCROOTv2-OpenKF/macro/Unpack_HDF5/C15p/levels_15C/figures/fits_fullrange.png");
   printf("   wrote fits_fullrange.png\n");
   CFG[0]=b0; CFG[1]=b1; VZLO=0; RK::PAIRS=false; BB_QUIET=true; binbuild();

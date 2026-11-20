@@ -2257,3 +2257,63 @@ Still carried from the convergence work and NOT part of the agreed configuration
 amplitudes are currently parametrised as s^2. It degrades the forward bins badly -- chi2/ndf
 11.6 / 13.8 / 10.2 against the 1.43 / 1.76 / 2.46 of the agreed version -- and should be reverted
 to `max(0, A)`.
+
+
+# Ground state and 5/2+ angular distributions
+
+The g.s. and the 5/2+ at 0.740 are already free parameters of the agreed fit, so their angular
+distributions come straight out of it as the fitted Gaussian INTEGRALS (amplitude x sigma x
+sqrt(2pi)). They carry far more counts than the resonance pairs and are the cleanest thing this
+analysis has produced.
+
+```
+  theta_CM        ATTPCROOT              Spyral
+              g.s.   stab  5/2+  stab   g.s.   stab  5/2+  stab
+   10-15     2172.9  0.97   69.6 0.99  5034.4  0.98   67.8 1.01
+   15-20     6265.2  0.96  217.8 0.92  6126.0  0.98   96.4 0.98
+   20-25     3036.4  0.14!  89.4 28.3! 1577.3  0.98   90.8 0.97
+   25-30      530.7  0.15!   0.0  --     67.8  0.98   18.3 0.95
+   35-40       31.6  0.80    9.1 0.90    30.9  0.80    4.6 0.85
+   40-45       43.1  0.75   11.4 0.68    31.2  0.74    9.3 0.95
+   45-50       27.7  0.86   12.1 0.81    18.7  0.87    6.0 0.88
+   50-55        0.0  --     22.5 0.30!   12.8  0.84    4.3 0.95
+```
+
+`figures/angdist_gs_and_5half.png`. **The g.s. distributions of the two codes lie on top of each
+other from 12 to 58 deg**, peaking at 17.5 deg and falling three orders of magnitude. The 5/2+
+peaks at 17-22 deg and falls two orders; the codes agree at 12 and 22 deg but ATTPCROOT sits ~2x
+above Spyral at 17.5 (218 against 96).
+
+NOT acceptance-corrected. ATTPCROOT 20-25 and 25-30 are missing because they fail the stability
+test (3036 -> 391 under a 5 % change in the sample) -- the same two bins whose resonance yields
+are also unstable.
+
+# Spyral 50-55 fixed: a bad peak fit was mislocating every template
+
+That bin had chi2R 920, EDM 1.5e+05, status 303. The cause:
+
+```
+  N = 932, but only 467 counts in the fit window over 115 bins (~4/bin)
+  gsAmp = 8        -- essentially no elastic peak
+  gsMu  = +0.515   -- should be ~ -0.28
+  FWHM_R = 1.24    -- should be ~ 0.53
+```
+
+With no ground state to fit, the per-bin peak fit returned a centroid **0.8 MeV wrong**. Since the
+resonance templates are placed at `mu = EPP6 - PPGS6 + gsMu`, EVERY state was 0.8 MeV too high and
+8.28 fell out of the window.
+
+`rkPrep` already had a sanity check, but it tested only the response WIDTHS and compared the
+amplitude to the BIN'S OWN maximum -- which in a bin with no peak is just noise, so it passed
+trivially. Added: the centroid must agree with the reference bin to within 0.30 MeV. That caught
+**22 bad peak fits** across the sweep, and 50-55 went to chi2R 0.96, EDM 8.7e-06.
+
+**All 20 panels are now chi2/ndf 0.83-2.98 in the resonance region**, both codes, no failures.
+
+## What is still wrong
+
+ATTPCROOT 20-25 reports status 0 with EDM 9e-08 -- textbook convergence -- and still moves its
+yields by 60 % under a 5 % change in the sample, and fits a = 0.00 where Spyral fits 0.47 on the
+same angular bin. The fits converge reliably to DIFFERENT minima. That is the background/state
+degeneracy, not a minimiser problem, and it is what stands between these yields and quotable
+numbers.

@@ -51,9 +51,8 @@ namespace B1 {
     const int o = PEAKFREE ? 2 : 0;
     v += std::max(0.0,p[o])*shp(Xt,p+o+1)*(ACC?std::max(0.0,ACC->Eval(Xt)):1.0);
     const double* a=p+o+1+NSH;
-    for(int r=0;r<RK::NR;r++) if(RK::GRP[r]>=0&&d.in[r]){
-      double amp=a[RK::GRP[r]]*a[RK::GRP[r]];          // s^2 : >= 0 and smooth through 0
-      v += amp*((RK::RIDX[r]>=0)?RK::FIXRAT[RK::RIDX[r]]:1.0)*d.T[r].Eval(X); }
+    for(int r=0;r<RK::NR;r++) if(RK::GRP[r]>=0&&d.in[r])
+      v += std::max(0.0,a[RK::GRP[r]])*((RK::RIDX[r]>=0)?RK::FIXRAT[RK::RIDX[r]]:1.0)*d.T[r].Eval(X);
     return v;
   }
   double fcn(const double* p){

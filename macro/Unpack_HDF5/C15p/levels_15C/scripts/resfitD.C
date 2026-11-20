@@ -239,7 +239,14 @@ void rkPrep(const Cfg& k,int ib)
    // Ex = 3 where the data has 6 and 1.  That alone produced chi2/ndf of 9.4 and 6.5.
    // If the fit is not credible, drop the g.s. contribution and borrow the response from the
    // reference bin (the one with the most counts), which is what the convolution needs anyway.
-   bool ok = (2.355*d.sgR < 2.0) && (2.355*d.sgL < 2.0) && (d.gsAmp > 0.02*pk);
+   // ⚠ The amplitude test compares against the BIN'S OWN maximum, which in a bin with no
+   // ground state is just noise -- so it passes trivially.  Spyral 50-55 has gsAmp = 8 in a bin
+   // with ~4 counts per bin, and the peak fit returned gsMu = +0.515 against a true -0.28: a
+   // centroid 0.8 MeV wrong, which then placed EVERY resonance template 0.8 MeV too high
+   // (mu = EPP6 - PPGS6 + gsMu) and pushed 8.28 out of the window.  chi2R 920, EDM 1.5e+05.
+   // Also require the centroid to agree with the reference bin, which IS well measured.
+   bool ok = (2.355*d.sgR < 2.0) && (2.355*d.sgL < 2.0) && (d.gsAmp > 0.02*pk)
+             && (!RK::refValid || std::fabs(d.gsMu - RK::refMu) < 0.30);
    if(!ok){
       d.gsAmp = 0; d.e5Amp = 0;
       if(RK::refValid){ d.sgL=RK::refSgL; d.sgR=RK::refSgR; d.alL=RK::refAlL; d.alR=RK::refAlR;

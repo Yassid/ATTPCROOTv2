@@ -9,6 +9,7 @@
 static double YL[2][2][16][2];     // [pass][code][bin][P1,P2]
 static double QC[2][2][16];        // resonance-region chi2/ndf
 static double SH[2][16][2];        // [code][bin][a,k] from pass 0
+static double GS[2][2][16][2];     // [pass][code][bin][g.s., 5/2+] integrals
 static int    BSTAT[2][2][16];     // Minuit status: 0 = converged
 static double BEDM[2][2][16];      // estimated distance to minimum
 static int    BCOV[2][2][16];      // 3 = accurate covariance
@@ -55,7 +56,7 @@ void angfinal(){
           m->SetLimitedVariable(2,"B",50,1,0,1e7);
           m->SetFixedVariable(3,"a",av);
           m->SetLimitedVariable(4,"k",0.5,0.02,0.0,4.0);
-          for(int g=0;g<4;g++) m->SetLimitedVariable(5+g,Form("s%d",g),4.0,0.05,-80,80);
+          for(int g=0;g<4;g++) m->SetLimitedVariable(5+g,Form("A%d",g),20,0.5,0,1e5);
           m->SetLimitedVariable(npar-2,"mu",d.gsMu,0.005,d.gsMu-0.6,d.gsMu+0.6);
           m->SetLimitedVariable(npar-1,"sig",0.4,0.005,0.08,1.5);
           m->Minimize();
@@ -76,8 +77,8 @@ void angfinal(){
           mf->SetLimitedVariable(2,"B",best[2],std::max(1e-3,best[2]*0.01),0,1e7);
           mf->SetLimitedVariable(3,"a",std::max(0.02,best[3]),0.02,0.0,6.0);
           mf->SetLimitedVariable(4,"k",best[4],0.02,0.0,4.0);
-          for(int g=0;g<4;g++) mf->SetLimitedVariable(5+g,Form("s%d",g),best[5+g],
-                                   std::max(1e-3,std::fabs(best[5+g])*0.01+1e-3),-80,80);
+          for(int g=0;g<4;g++) mf->SetLimitedVariable(5+g,Form("A%d",g),best[5+g],
+                                   std::max(1e-3,best[5+g]*0.01+1e-3),0,1e5);
           mf->SetLimitedVariable(npar-2,"mu",best[npar-2],0.005,d.gsMu-0.6,d.gsMu+0.6);
           mf->SetLimitedVariable(npar-1,"sig",best[npar-1],0.005,0.08,1.5);
           mf->Minimize();
@@ -94,16 +95,20 @@ void angfinal(){
             double mu=(RK::EPP6[r]-RK::PPGS6)+d.gsMu, sm=0;
             for(int q=0;q<RK::NR;q++) if(RK::GRP[q]==g&&d.in[q])
               sm+=((RK::RIDX[q]>=0)?RK::FIXRAT[RK::RIDX[q]]:1.0)*d.T[q].Eval(mu);
-            mx=std::max(mx,a2[g]*a2[g]*sm); }
+            mx=std::max(mx,std::max(0.0,a2[g])*sm); }
           return mx; };
         { int nl=0;
           // the bounds actually used, in parameter order
-          double lo[11]={0,0,0, 0.0,0.0, -80,-80,-80,-80, d.gsMu-0.6,0.08};
-          double hi[11]={pk*10,pk*5,1e7, 6.0,4.0, 80,80,80,80, d.gsMu+0.6,1.5};
+          double lo[11]={0,0,0, 0.0,0.0, 0,0,0,0, d.gsMu-0.6,0.08};
+          double hi[11]={pk*10,pk*5,1e7, 6.0,4.0, 1e5,1e5,1e5,1e5, d.gsMu+0.6,1.5};
           for(int j=0;j<npar;j++){
             double rng=hi[j]-lo[j]; if(rng<=0) continue;
             if(p[j]-lo[j]<1e-4*rng || hi[j]-p[j]<1e-4*rng) nl++; }
           BLIM[pass][ic][b]=nl; }
+        { const double SQ2PI=2.5066282746;
+          double sig=std::max(0.05,p[npar-1]);
+          GS[pass][ic][b][0]=std::max(0.0,p[0])*sig*SQ2PI;    // g.s. yield
+          GS[pass][ic][b][1]=std::max(0.0,p[1])*sig*SQ2PI; }  // 5/2+ yield
         YL[pass][ic][b][0]=grpH(0); YL[pass][ic][b][1]=grpH(1);
         if(!pass){ SH[ic][b][0]=p[3]; SH[ic][b][1]=p[4]; }
         double s2R=0; int ndR=0;
@@ -129,6 +134,18 @@ void angfinal(){
              TCM0+b*TCMSTEP,TCM0+(b+1)*TCMSTEP,p10,p11,st(p10,p11).c_str(),
              p20,p21,st(p20,p21).c_str(),QC[0][ic][b],SH[ic][b][0],SH[ic][b][1]); }
     printf("   ! = the two passes disagree by more than a factor 2 -- not a measurement\n");
+    printf("\n   --- GROUND STATE and 5/2+ (0.740), fitted Gaussian integrals ---\n");
+    printf("   %-9s %11s %11s %8s | %10s %10s %8s\n",
+           "theta_CM","g.s.","refit","stab","5/2+","refit","stab");
+    for(int b=0;b<NCM;b++){
+      double g0=GS[0][ic][b][0],g1=GS[1][ic][b][0];
+      double e0=GS[0][ic][b][1],e1=GS[1][ic][b][1];
+      auto st=[&](double x,double y){ if(x<=1||y<=0) return std::string("   --  ");
+        char s2[16]; double r=y/0.94/x; snprintf(s2,16,"%6.2f%s",r,(r<0.5||r>2.0)?"!":" ");
+        return std::string(s2); };
+      printf("   %3.0f-%-5.0f %11.1f %11.1f %8s | %10.1f %10.1f %8s\n",
+             TCM0+b*TCMSTEP,TCM0+(b+1)*TCMSTEP,g0,g1,st(g0,g1).c_str(),
+             e0,e1,st(e0,e1).c_str()); }
     printf("\n   --- did the minimiser actually converge? (pass 0) ---\n");
     printf("   %-9s %8s %12s %8s %12s\n","theta_CM","status","EDM","cov","par at limit");
     for(int b=0;b<NCM;b++)
