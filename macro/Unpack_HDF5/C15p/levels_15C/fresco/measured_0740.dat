@@ -1,0 +1,17 @@
+# theta_CM(projectile)  yield  err   code
+# 5/2+ at 0.740 MeV, fitted Gaussian integrals, NOT acceptance-corrected
+12.5     69.6     8.3   ATTPCROOT
+17.5    217.8    18.0   ATTPCROOT
+37.5      9.1     3.0   ATTPCROOT
+42.5     11.4     3.7   ATTPCROOT
+47.5     12.1     3.5   ATTPCROOT
+57.5      7.0     2.6   ATTPCROOT
+12.5     67.8     8.2   Spyral
+17.5     96.4     9.8   Spyral
+22.5     90.8     9.5   Spyral
+27.5     18.3     4.3   Spyral
+32.5      3.2     1.8   Spyral
+37.5      4.6     2.1   Spyral
+42.5      9.3     3.1   Spyral
+47.5      6.0     2.4   Spyral
+52.5      4.3     2.1   Spyral

@@ -1,0 +1,26 @@
+15C(d,d)15C elastic at 191.25 MeV -- a2091;
+NAMELIST
+&FRESCO hcm=0.05 rmatch=60. rintp=1.00 hnl=0.100 rnl=10.00 centre=0.00
+    jtmin=0.0 jtmax=200 absend=0.0010
+    thmin=0.00 thmax=90.00 thinc=0.5
+    chans=1 smats=1 xstabl=1
+    elab(1)=191.250000 /
+
+! Projectile is the BEAM in this convention (inverse kinematics: 15C on a D2 target),
+! but FRESCO wants the lighter partner as "p".  theta here is the DEUTERON CM angle; the
+! analysis quotes theta_CM in the PROJECTILE convention, so compare at 180 - theta.
+&PARTITION namep="d" massp=2.014101778 zp=1
+           namet="C15" masst=15.010599256 zt=6 qval=0.000 nex=1  /
+&STATES jp=1.0 bandp=1 ep=0.0000 cpot=1 jt=0.5 bandt=1 et=0.0000  /
+&partition /
+
+! Deuteron optical potential -- STARTING VALUES ONLY, taken from a global d parameterisation.
+! These must be searched against the measured elastic distribution (sfrescox) before any
+! inelastic result is believed.
+ &POT kp=1 ap=2.000 at=15.000 rc=1.30  /
+ &POT kp=1 type=1 shape=0 p1=88.0  p2=1.17 p3=0.75 p4=0.0  p5=0.00 p6=0.00 /
+ &POT kp=1 type=2 shape=0 p1=0.00  p2=0.00 p3=0.00 p4=12.0 p5=1.33 p6=0.79 /
+ &POT kp=1 type=3 shape=0 p1=7.00  p2=1.07 p3=0.66 p4=0.0  p5=0.00 p6=0.00 /
+ &pot /
+ &overlap /
+ &coupling /

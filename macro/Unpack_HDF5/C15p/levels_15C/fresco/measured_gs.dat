@@ -1,0 +1,18 @@
+# theta_CM(projectile)  yield  err   code
+# g.s. (elastic), fitted Gaussian integrals, NOT acceptance-corrected
+12.5   2172.9    73.0   ATTPCROOT
+17.5   6265.2   224.7   ATTPCROOT
+32.5     47.5     6.9   ATTPCROOT
+37.5     31.6     6.4   ATTPCROOT
+42.5     43.1    11.5   ATTPCROOT
+47.5     27.7     5.3   ATTPCROOT
+57.5      3.7     1.9   ATTPCROOT
+12.5   5034.4   100.3   Spyral
+17.5   6126.0   122.5   Spyral
+22.5   1577.3    39.7   Spyral
+27.5     67.8     8.2   Spyral
+32.5      9.9     3.1   Spyral
+37.5     30.9     6.0   Spyral
+42.5     31.2     6.4   Spyral
+47.5     18.7     4.3   Spyral
+52.5     12.8     3.6   Spyral
