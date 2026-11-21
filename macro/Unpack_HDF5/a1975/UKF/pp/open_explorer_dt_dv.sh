@@ -21,7 +21,7 @@ set -o pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 EBEAM="${1:-180}"
 PRIMARY="${2:-115}"   # which dv the page opens on
-SCR="${DVSCR:-/tmp/claude-1000/-home-yassid/9b2b9ba6-e9b5-4d13-af2f-ad9750f083fc/scratchpad/dv125}"
+SCR="${DVSCR:-/mnt/f/a1975/caches/dt_dv125}"   # stable; old default was a dead session scratchpad (inputs not kept)
 C115="${SCR}/f8_115g.root"; C125="${SCR}/f8_125.root"
 TMP="${DVTMP:-/tmp}"; OUT="$HOME/a1975_C16_dt_dvscan_explorer.html"
 MK="$HERE/../../../a2091/UKF/pp/make_explorer_html.C"

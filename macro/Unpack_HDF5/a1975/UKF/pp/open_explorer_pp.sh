@@ -13,8 +13,9 @@
 set -o pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CACHE="${PPCACHE:-/tmp/claude-1000/-home-yassid/0335450a-a4bc-427a-9507-0b3184e093bf/scratchpad/ppcache}"
+CACHE="${PPCACHE:-/mnt/f/a1975/caches}"   # stable; the old default was a dead session scratchpad
 EBEAM="${1:-195.5}"
+WK="${PPTMP:-/mnt/f/a1975/caches/.explorer}"; mkdir -p "$WK"   # intermediates, kept out of the cache dir
 OUT="$HOME/a1975_C16_pp_explorer.html"
 # $HERE is .../a1975/UKF/pp, so a2091 is THREE levels up (not two -- that pointed inside a1975)
 MK="$HERE/../../../a2091/UKF/pp/make_explorer_html.C"
@@ -26,6 +27,8 @@ set -u
 
 # genfit is the reference cache; UKF is optional (its per-run pass may still be building)
 GF_IN="$CACHE/pp_kin_genfit.root"; [[ -f "$GF_IN" ]] || GF_IN="$CACHE/partial.root"
+# cache_pp_all.sh writes the full 84-run genfit cache as pp_kin.root
+[[ -f "$GF_IN" ]] || GF_IN="$CACHE/pp_kin.root"
 # prefer the PID-gated UKF cache (pp/cache_pp_gated.C): the genfit production was gated in-fitter,
 # so the ungated pp_kin_ukf.root would compare ~1.9x more tracks against it and is not like-for-like
 UK_IN="$CACHE/pp_kin_ukf_gated.root"
@@ -36,12 +39,12 @@ fi
 [[ -f "$GF_IN" ]] || { echo "ERROR: no genfit cache at $GF_IN"; exit 1; }
 
 echo "genfit cache : $GF_IN"
-root -b -l -q "$HERE/mkexp_pp.C(\"$GF_IN\",\"$CACHE/exp_genfit.root\")"
-CG="$CACHE/exp_genfit.root"
+root -b -l -q "$HERE/mkexp_pp.C(\"$GF_IN\",\"$WK/exp_genfit.root\")"
+CG="$WK/exp_genfit.root"
 if [[ -f "$UK_IN" ]]; then
   echo "UKF cache    : $UK_IN"
-  root -b -l -q "$HERE/mkexp_pp.C(\"$UK_IN\",\"$CACHE/exp_ukf.root\")"
-  CU="$CACHE/exp_ukf.root"
+  root -b -l -q "$HERE/mkexp_pp.C(\"$UK_IN\",\"$WK/exp_ukf.root\")"
+  CU="$WK/exp_ukf.root"
 else
   # make_explorer_html.C hardcodes the two button labels, so a single cache always lands in
   # the slot labelled "UKF". Say so plainly rather than letting the page mislabel silently.

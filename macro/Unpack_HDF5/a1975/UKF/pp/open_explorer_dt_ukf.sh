@@ -17,7 +17,7 @@
 set -o pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 EBEAM="${1:-180}"
-SCR="${UKFSCR:-/tmp/claude-1000/-home-yassid/9b2b9ba6-e9b5-4d13-af2f-ad9750f083fc/scratchpad}"
+SCR="${UKFSCR:-/mnt/f/a1975/caches/dt_ukf_vs_gf}"   # stable; old default was a dead session scratchpad (inputs not kept)
 CUKF="${SCR}/ukf/dt_ukf_d132.root"; CGF="${SCR}/dv1136/dt_1136.root"
 TMP="${UKFTMP:-/tmp}"; OUT="$HOME/a1975_C16_dt_ukf_vs_genfit.html"
 MK="$HERE/../../../a2091/UKF/pp/make_explorer_html.C"

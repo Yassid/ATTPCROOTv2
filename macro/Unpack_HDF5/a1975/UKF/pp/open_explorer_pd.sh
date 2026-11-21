@@ -15,7 +15,7 @@
 set -o pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CACHE="${PDCACHE:-/tmp/claude-1000/-home-yassid/0335450a-a4bc-427a-9507-0b3184e093bf/scratchpad/pdcache}"
+CACHE="${PDCACHE:-/mnt/f/a1975/caches/pdcache}"   # stable; the old default was a dead session scratchpad
 EBEAM="${1:-195.5}"
 OUT="$HOME/a1975_C16_pd_explorer.html"
 MK="$HERE/../../../a2091/UKF/pp/make_explorer_html.C"
@@ -26,7 +26,7 @@ source "$HOME/fair_install/ATTPCROOTv2-OpenKF/build/config.sh" >/dev/null 2>&1
 set -u
 
 T_IN="$CACHE/pd_kin_tight.root"; L_IN="$CACHE/pd_kin_loose.root"
-[[ -f "$T_IN" ]] || { echo "ERROR: no tight cache at $T_IN"; exit 1; }
+[[ -f "$T_IN" ]] || { echo "ERROR: no tight cache at $T_IN (rebuild with cache_pd_run.C, or set PDCACHE)"; exit 1; }
 echo "tight gate : $T_IN"
 root -b -l -q "$HERE/mkexp_pp.C(\"$T_IN\",\"$CACHE/exp_tight.root\")"
 CU="$CACHE/exp_tight.root"; CG=""
